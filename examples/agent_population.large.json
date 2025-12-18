@@ -1,0 +1,7 @@
+{
+  "num_agents": 100,
+  "cluster_distribution": {
+    "weights": [0.5, 0.3, 0.2],
+    "llm_enabled_probability": 0.2
+  }
+}

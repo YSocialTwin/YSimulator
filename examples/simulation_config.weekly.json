@@ -1,0 +1,17 @@
+{
+  "namespace": "social_sim",
+  "server": {
+    "address": null,
+    "port": null
+  },
+  "llm": {
+    "address": "localhost",
+    "port": 11434,
+    "model": "llama3.1",
+    "temperature": 0.8
+  },
+  "simulation": {
+    "num_days": 7,
+    "num_slots_per_day": 24
+  }
+}
