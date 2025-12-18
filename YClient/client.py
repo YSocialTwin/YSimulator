@@ -240,20 +240,22 @@ class SimulationClient:
         )
         print(f"[{self.client_id}] Agent registration complete: {registration_result}")
 
-        # Register client
-        ray.get(self.server.register_client.remote(self.client_id))
-        self.logger.info("Client registered with server")
-        print(f"[{self.client_id}] Client registered. Waiting for sync...")
-
-        # Determine stopping condition
-        max_days = self.num_days if self.num_days > 0 else float("inf")
-        current_day = 0
+        # Register client with the server, passing num_days for progress tracking
+        client_reg = ray.get(self.server.register_client.remote(self.client_id, self.num_days))
+        self.logger.info(
+            "Client registered with server",
+            extra={"extra_data": client_reg},
+        )
+        print(
+            f"[{self.client_id}] Client registered. Starting at day {client_reg['start_day']}, "
+            f"will run for {self.num_days if self.num_days > 0 else '∞'} days."
+        )
 
         slot_count = 0
         last_heartbeat_time = time.time()
 
         try:
-            while current_day < max_days:
+            while True:
                 # Send heartbeat periodically (configurable interval, default: 5 seconds)
                 if time.time() - last_heartbeat_time > self.heartbeat_interval:
                     ray.get(self.server.heartbeat.remote(self.client_id))
@@ -264,17 +266,22 @@ class SimulationClient:
                 if instruction.status == "WAIT":
                     time.sleep(1)
                     continue
-
-                # Check if we've reached the day limit
-                if instruction.day > max_days:
+                elif instruction.status == "COMPLETE":
+                    # Server indicates this client has reached its max day
                     self.logger.info(
-                        "Reached maximum days, stopping",
-                        extra={"extra_data": {"max_days": max_days, "total_slots": slot_count}},
+                        "Reached maximum days (server-controlled)",
+                        extra={
+                            "extra_data": {
+                                "final_day": instruction.day,
+                                "total_slots": slot_count,
+                            }
+                        },
                     )
-                    print(f"[{self.client_id}] Reached max days ({max_days}). Stopping.")
+                    print(
+                        f"[{self.client_id}] Server indicates completion "
+                        f"(day {instruction.day}). Total slots: {slot_count}"
+                    )
                     break
-
-                current_day = instruction.day
 
                 # Process Logic
                 sim_start = time.time()

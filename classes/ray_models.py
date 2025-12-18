@@ -53,7 +53,7 @@ class ActionDTO:
 
 @dataclass
 class SimulationInstruction:
-    status: Literal['WAIT', 'PROCEED']
+    status: Literal['WAIT', 'PROCEED', 'COMPLETE']
     day: int = 0
     slot: int = 0
     recent_post_ids: List[int] = None

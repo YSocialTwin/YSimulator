@@ -546,10 +546,41 @@ The server implements robust synchronization mechanisms to handle multiple concu
 - **Completed**: Finished all planned activities, notified server, no longer blocks others
 - **Stale**: Haven't sent heartbeat within timeout period, automatically removed
 
+### Heartbeat-Based Liveness Detection
+
+The system uses **heartbeat-only** detection to determine if clients are alive:
+
+- **Processing Time Doesn't Matter**: Even if a client takes hours to process a slot (e.g., due to many agents or slow LLM), it won't be marked as stale as long as heartbeats arrive
+- **Heartbeat Interval**: Clients send heartbeats every `heartbeat_interval` seconds (configurable in `simulation_config.json`, default: 5s)
+- **Timeout Detection**: Only clients that **stop sending heartbeats** for more than `timeout_seconds` are marked as stale
+- **Recommendation**: Set `timeout_seconds` to at least 10-12x the `heartbeat_interval` to account for network delays
+
+Example: If `heartbeat_interval = 5` and `timeout_seconds = 60`, a client processing a slot for 10 minutes is fine as long as it sends heartbeats every 5 seconds. Only if heartbeats stop arriving for 60 seconds will it be considered stale.
+
+### Per-Client Progress Tracking and Restarts
+
+Each client's simulation progress is tracked independently:
+
+**On Initial Registration:**
+- Server records the client's entry point (current day/slot) and duration (`num_days`)
+- Client starts from the **current server time**, not from day 1
+
+**On Client Restart:**
+- If a client completes (e.g., 3 days) and is restarted, it resumes from the **current server time**
+- It runs for its full configured duration from that new starting point
+- **Example**: 
+  - Server at day 10
+  - Client joins with `num_days = 3`
+  - Client runs days 10-13
+  - Client restarts when server is at day 20
+  - Client now runs days 20-23 (not immediately completing)
+
+This ensures clients always run for their full configured duration relative to when they join, preventing immediate completion on restarts.
+
 ### Example Scenario
 
 ```
-Initial: 3 clients start (A, B, C)
+Initial: 3 clients start (A, B, C) at Day 1
 Day 1 Slot 1: A, B, C all submit → Server advances to Slot 2
 Day 1 Slot 2: A, B, C all submit → Server advances to Day 2 Slot 1
 ...
@@ -561,7 +592,11 @@ Day 6-7: B and C continue without waiting for A
 Day 7: Client B finishes
   → B calls complete_client()
   → Only C now blocks advancement
-Day 10: Client C finishes
+Day 8: New Client D joins (server at day 8, configured for 3 days)
+  → D starts at day 8, will run until day 11
+  → D participates alongside C
+Day 10: Client C finishes, only D active
+Day 11: Client D finishes
   → Simulation complete
 ```
 
@@ -571,26 +606,40 @@ If Client B crashes on Day 6 without notifying the server:
 1. Client B stops sending heartbeats
 2. After 60 seconds (timeout_seconds), server detects B is stale
 3. Server automatically marks B as completed
-4. Client C continues without being blocked
+4. Clients C and D continue without being blocked
+
+Note: The crashed client's processing time is irrelevant. Even if it was legitimately processing for 10 minutes, as long as heartbeats arrived, it wouldn't be marked as stale.
 
 ### Configuration
 
-Control timeout behavior in `server_config.json`:
-
+**Server Configuration** (`server_config.json`):
 ```json
 {
-  "timeout_seconds": 60  // Adjust based on your network and processing delays
+  "timeout_seconds": 60  // Time without heartbeat before marking client as stale
+}
+```
+
+**Client Configuration** (`simulation_config.json`):
+```json
+{
+  "simulation": {
+    "heartbeat_interval": 5  // Seconds between heartbeat signals
+  }
 }
 ```
 
 **Recommendations:**
-- **Fast local networks**: 30-60 seconds
-- **Slow networks or heavy LLM processing**: 120-300 seconds
-- **Development/debugging**: 600+ seconds to avoid premature timeouts
+- **heartbeat_interval**: 3-10 seconds (lower = faster failure detection, higher = less network overhead)
+- **timeout_seconds**: 10-12x heartbeat_interval minimum
+  - Example: heartbeat_interval=5s → timeout_seconds=60s minimum
+- **High-latency networks**: Increase both values proportionally
+- **Development/debugging**: Set timeout_seconds to 300-600s to avoid interruptions
 
 ### Best Practices
 
 1. **Varied Simulation Durations**: Clients can have different `num_days` settings
-2. **Dynamic Joining**: New clients can join during simulation
-3. **Graceful Shutdown**: Always let the client run() method complete to ensure proper cleanup
-4. **Monitor Logs**: Check for timeout warnings indicating network or processing issues
+2. **Dynamic Joining**: New clients can join mid-simulation and run for their full duration
+3. **Restart Behavior**: Restarting a client doesn't cause immediate completion - it runs for full duration from current server time
+4. **Graceful Shutdown**: Always let the client run() method complete to ensure proper cleanup
+5. **Monitor Logs**: Check for timeout warnings indicating clients that stopped sending heartbeats
+6. **Adjust Timeouts**: If you see false stale detections, increase `timeout_seconds` or decrease `heartbeat_interval`

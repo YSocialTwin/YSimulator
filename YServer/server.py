@@ -62,6 +62,7 @@ class OrchestratorServer:
         self.completed_clients = set()  # Clients that finished their simulation
         self.submitted_clients = set()  # Clients that submitted for current slot
         self.last_heartbeat = {}  # {client_id: timestamp}
+        self.client_progress = {}  # {client_id: {"start_day": int, "start_slot": int, "num_days": int}}
         self.registered_agents = {}  # {agent_id: username}
 
         # Simulation state
@@ -221,24 +222,33 @@ class OrchestratorServer:
             print(f"[Server] ❌ Agent registration error: {e}")
             raise
 
-    def register_client(self, client_id: str) -> bool:
+    def register_client(self, client_id: str, num_days: int = 0) -> dict:
         """
-        Register a new client with the server.
+        Register a new client with the server and track its simulation parameters.
 
-        Dynamic Registration: New clients can join anytime. They effectively 'pause' the
-        current slot until they catch up and submit their action.
+        Dynamic Registration: New clients can join anytime at the current server time.
+        They start from the current day/slot and run for their configured num_days.
 
         Args:
             client_id: Unique identifier for the client
+            num_days: Number of days this client plans to simulate (0 = infinite)
 
         Returns:
-            bool: True if registration successful
+            dict: {"registered": bool, "start_day": int, "start_slot": int, "max_day": int}
         """
         start_time = time.time()
 
         if client_id not in self.registered_clients:
             self.registered_clients.add(client_id)
             self.last_heartbeat[client_id] = time.time()
+            
+            # Track where this client starts and how long it will run
+            self.client_progress[client_id] = {
+                "start_day": self.day,
+                "start_slot": self.slot,
+                "num_days": num_days,
+            }
+            
             execution_time = (time.time() - start_time) * 1000
 
             self.logger.info(
@@ -246,6 +256,9 @@ class OrchestratorServer:
                 extra={
                     "extra_data": {
                         "client_id": client_id,
+                        "start_day": self.day,
+                        "start_slot": self.slot,
+                        "num_days": num_days,
                         "total_clients": len(self.registered_clients),
                         "active_clients": len(self._get_active_clients()),
                         "execution_time_ms": execution_time,
@@ -253,11 +266,21 @@ class OrchestratorServer:
                 },
             )
             print(
-                f"[Server] 🟢 Client {client_id} joined. "
-                f"Total: {len(self.registered_clients)}, "
-                f"Active: {len(self._get_active_clients())}"
+                f"[Server] 🟢 Client {client_id} joined at day {self.day}. "
+                f"Will run for {num_days if num_days > 0 else '∞'} days. "
+                f"Total: {len(self.registered_clients)}, Active: {len(self._get_active_clients())}"
             )
-        return True
+        
+        # Return start point and max day for this client
+        progress = self.client_progress.get(client_id, {"start_day": self.day, "num_days": num_days})
+        max_day = progress["start_day"] + progress["num_days"] if progress["num_days"] > 0 else 0
+        
+        return {
+            "registered": True,
+            "start_day": progress["start_day"],
+            "start_slot": progress.get("start_slot", self.slot),
+            "max_day": max_day,
+        }
 
     def complete_client(self, client_id: str) -> bool:
         """
@@ -324,34 +347,44 @@ class OrchestratorServer:
         """
         Check for clients that haven't sent a heartbeat recently and remove them.
 
-        This prevents deadlocks when clients crash or disconnect abruptly.
+        Heartbeat-based liveness: Clients are only considered stale if they stop
+        sending heartbeats. Processing time doesn't matter - if heartbeats arrive,
+        the client is alive. This prevents false positives on slow/busy clients.
         """
         current_time = time.time()
         stale_clients = []
 
         for client_id in self._get_active_clients():
-            # Use current time as default so newly registered clients aren't immediately stale
-            # (register_client sets initial heartbeat timestamp)
-            last_hb = self.last_heartbeat.get(client_id, current_time)
-            if current_time - last_hb > self.timeout_seconds:
+            # Check if heartbeat was ever received (should be set during registration)
+            if client_id not in self.last_heartbeat:
+                continue
+                
+            last_hb = self.last_heartbeat[client_id]
+            time_since_heartbeat = current_time - last_hb
+            
+            # Only mark as stale if no heartbeat received within timeout
+            # Note: Clients send heartbeat every heartbeat_interval seconds,
+            # so timeout_seconds should be >> heartbeat_interval to account for
+            # network delays and processing variations
+            if time_since_heartbeat > self.timeout_seconds:
                 stale_clients.append(client_id)
 
         for client_id in stale_clients:
+            time_since_heartbeat = current_time - self.last_heartbeat.get(client_id, 0)
             self.logger.warning(
                 "Removing stale client (no heartbeat)",
                 extra={
                     "extra_data": {
                         "client_id": client_id,
                         "timeout_seconds": self.timeout_seconds,
-                        "last_heartbeat_ago": current_time - self.last_heartbeat.get(client_id, 0),
+                        "last_heartbeat_ago": time_since_heartbeat,
                     }
                 },
             )
             print(
                 f"[Server] ⚠️  Removing stale client {client_id} "
-                f"(no heartbeat for {self.timeout_seconds}s)"
+                f"(no heartbeat for {time_since_heartbeat:.1f}s)"
             )
-            # Mark as completed to not block others
             self._mark_client_as_completed(client_id)
 
     def _mark_client_as_completed(self, client_id: str):
@@ -385,6 +418,7 @@ class OrchestratorServer:
             self.submitted_clients.discard(client_id)
             self.completed_clients.discard(client_id)
             self.last_heartbeat.pop(client_id, None)
+            self.client_progress.pop(client_id, None)
 
             self.logger.info(
                 "Client deregistered",
@@ -405,14 +439,28 @@ class OrchestratorServer:
         """
         Get the next simulation instruction for a client.
 
+        Checks if client has reached its personal max day based on when it joined
+        and how many days it configured to run.
+
         Args:
             client_id: Unique identifier for the client
 
         Returns:
-            SimulationInstruction: Instruction with status (WAIT/PROCEED) and simulation state
+            SimulationInstruction: Instruction with status (WAIT/PROCEED/COMPLETE) and simulation state
         """
         # Check for stale clients before processing
         self._check_for_stale_clients()
+
+        # Check if this client has reached its personal max day
+        if client_id in self.client_progress:
+            progress = self.client_progress[client_id]
+            num_days = progress.get("num_days", 0)
+            if num_days > 0:  # 0 means infinite
+                start_day = progress["start_day"]
+                max_day = start_day + num_days
+                if self.day > max_day:
+                    # Client has completed its configured duration
+                    return SimulationInstruction(status="COMPLETE", day=self.day, slot=self.slot)
 
         # 1. Pause if not enough players
         active_clients = self._get_active_clients()
