@@ -53,7 +53,13 @@ class ActionDTO:
 
 @dataclass
 class SimulationInstruction:
-    status: Literal['WAIT', 'PROCEED', 'COMPLETE']
+    """
+    Instruction from server to client for simulation coordination.
+    
+    Server provides current state (day/slot) and coordination status.
+    Client handles its own progress tracking and completion logic.
+    """
+    status: Literal['WAIT', 'PROCEED']  # COMPLETE removed - client handles completion
     day: int = 0
     slot: int = 0
     recent_post_ids: List[int] = None

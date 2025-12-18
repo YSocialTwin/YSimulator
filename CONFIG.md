@@ -557,25 +557,34 @@ The system uses **heartbeat-only** detection to determine if clients are alive:
 
 Example: If `heartbeat_interval = 5` and `timeout_seconds = 60`, a client processing a slot for 10 minutes is fine as long as it sends heartbeats every 5 seconds. Only if heartbeats stop arriving for 60 seconds will it be considered stale.
 
-### Per-Client Progress Tracking and Restarts
+### Client-Side Simulation Step Management
 
-Each client's simulation progress is tracked independently:
+**Design Philosophy**: The client handles its own simulation progression, while the server provides coordination.
 
-**On Initial Registration:**
-- Server records the client's entry point (current day/slot) and duration (`num_days`)
-- Client starts from the **current server time**, not from day 1
+**Registration Flow:**
+1. Client registers with server, specifying `num_days` (informational only)
+2. Server responds with current `start_day` and `start_slot` as the starting point
+3. Client tracks progress locally from this starting point
+4. Client exits when `current_day >= start_day + num_days`
 
 **On Client Restart:**
-- If a client completes (e.g., 3 days) and is restarted, it resumes from the **current server time**
-- It runs for its full configured duration from that new starting point
+- Client re-registers and receives the **current server time** as new starting point
+- Client runs for its full configured duration from that new starting point
 - **Example**: 
   - Server at day 10
   - Client joins with `num_days = 3`
-  - Client runs days 10-13
-  - Client restarts when server is at day 20
-  - Client now runs days 20-23 (not immediately completing)
+  - Server returns: `start_day = 10, start_slot = 5`
+  - Client tracks: will run while `current_day < 10 + 3` (i.e., days 10, 11, 12)
+  - Client exits when server advances to day 13
+  - If client restarts when server is at day 20:
+    - Server returns: `start_day = 20, start_slot = 1`
+    - Client runs days 20-23 (full 3-day duration from new start)
 
-This ensures clients always run for their full configured duration relative to when they join, preventing immediate completion on restarts.
+**Benefits:**
+- Simpler server logic - no per-client completion state tracking
+- Client autonomy - each client manages its own simulation timeline
+- Easier to understand - day counting happens where simulation runs
+- Better separation of concerns - server coordinates, client simulates
 
 ### Example Scenario
 
@@ -584,19 +593,21 @@ Initial: 3 clients start (A, B, C) at Day 1
 Day 1 Slot 1: A, B, C all submit → Server advances to Slot 2
 Day 1 Slot 2: A, B, C all submit → Server advances to Day 2 Slot 1
 ...
-Day 5: Client A finishes (only planned 5 days)
+Day 5: Client A reaches its personal max (started day 1, num_days=5)
+  → A exits its simulation loop
   → A calls complete_client()
   → Server marks A as "completed"
   → Only B and C now block advancement
 Day 6-7: B and C continue without waiting for A
-Day 7: Client B finishes
-  → B calls complete_client()
+Day 7: Client B reaches its max
+  → B exits and calls complete_client()
   → Only C now blocks advancement
 Day 8: New Client D joins (server at day 8, configured for 3 days)
-  → D starts at day 8, will run until day 11
+  → D receives start_day=8 from server
+  → D will run until day 11 (local check: day < 8 + 3)
   → D participates alongside C
 Day 10: Client C finishes, only D active
-Day 11: Client D finishes
+Day 11: Client D finishes (day 11 >= 8 + 3)
   → Simulation complete
 ```
 

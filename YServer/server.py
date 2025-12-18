@@ -62,7 +62,6 @@ class OrchestratorServer:
         self.completed_clients = set()  # Clients that finished their simulation
         self.submitted_clients = set()  # Clients that submitted for current slot
         self.last_heartbeat = {}  # {client_id: timestamp}
-        self.client_progress = {}  # {client_id: {"start_day": int, "start_slot": int, "num_days": int}}
         self.registered_agents = {}  # {agent_id: username}
 
         # Simulation state
@@ -224,30 +223,23 @@ class OrchestratorServer:
 
     def register_client(self, client_id: str, num_days: int = 0) -> dict:
         """
-        Register a new client with the server and track its simulation parameters.
+        Register a new client with the server.
 
-        Dynamic Registration: New clients can join anytime at the current server time.
-        They start from the current day/slot and run for their configured num_days.
+        Provides the current server state (day and slot) as the starting point.
+        The client will handle its own simulation step counting from this point.
 
         Args:
             client_id: Unique identifier for the client
-            num_days: Number of days this client plans to simulate (0 = infinite)
+            num_days: Number of days this client plans to simulate (informational only)
 
         Returns:
-            dict: {"registered": bool, "start_day": int, "start_slot": int, "max_day": int}
+            dict: {"registered": bool, "start_day": int, "start_slot": int}
         """
         start_time = time.time()
 
         if client_id not in self.registered_clients:
             self.registered_clients.add(client_id)
             self.last_heartbeat[client_id] = time.time()
-            
-            # Track where this client starts and how long it will run
-            self.client_progress[client_id] = {
-                "start_day": self.day,
-                "start_slot": self.slot,
-                "num_days": num_days,
-            }
             
             execution_time = (time.time() - start_time) * 1000
 
@@ -266,31 +258,16 @@ class OrchestratorServer:
                 },
             )
             print(
-                f"[Server] 🟢 Client {client_id} joined at day {self.day}. "
+                f"[Server] 🟢 Client {client_id} joined at day {self.day}, slot {self.slot}. "
                 f"Will run for {num_days if num_days > 0 else '∞'} days. "
                 f"Total: {len(self.registered_clients)}, Active: {len(self._get_active_clients())}"
             )
         
-        # Return start point and max day for this client
-        # Always use existing progress data if client was already registered
-        if client_id in self.client_progress:
-            progress = self.client_progress[client_id]
-        else:
-            # This shouldn't happen since we just set it above, but handle defensively
-            self.logger.warning(
-                f"Client {client_id} registered but progress not found, using current time",
-                extra={"extra_data": {"client_id": client_id}}
-            )
-            progress = {"start_day": self.day, "start_slot": self.slot, "num_days": num_days}
-        
-        # Calculate max_day: use float('inf') for infinite simulations (num_days=0)
-        max_day = progress["start_day"] + progress["num_days"] if progress["num_days"] > 0 else float('inf')
-        
+        # Return current server state as starting point for client
         return {
             "registered": True,
-            "start_day": progress["start_day"],
-            "start_slot": progress["start_slot"],  # Always present in progress dict
-            "max_day": max_day,
+            "start_day": self.day,
+            "start_slot": self.slot,
         }
 
     def complete_client(self, client_id: str) -> bool:
@@ -437,7 +414,6 @@ class OrchestratorServer:
             self.submitted_clients.discard(client_id)
             self.completed_clients.discard(client_id)
             self.last_heartbeat.pop(client_id, None)
-            self.client_progress.pop(client_id, None)
 
             self.logger.info(
                 "Client deregistered",
@@ -458,30 +434,18 @@ class OrchestratorServer:
         """
         Get the next simulation instruction for a client.
 
-        Checks if client has reached its personal max day based on when it joined
-        and how many days it configured to run.
+        The server provides the current day/slot. The client is responsible for
+        tracking its own progress and deciding when to stop based on its start point
+        and configured duration.
 
         Args:
             client_id: Unique identifier for the client
 
         Returns:
-            SimulationInstruction: Instruction with status (WAIT/PROCEED/COMPLETE) and simulation state
+            SimulationInstruction: Instruction with status (WAIT/PROCEED) and current simulation state
         """
         # Check for stale clients before processing
         self._check_for_stale_clients()
-
-        # Check if this client has reached its personal max day
-        if client_id in self.client_progress:
-            progress = self.client_progress[client_id]
-            num_days = progress.get("num_days", 0)
-            if num_days > 0:  # 0 means infinite
-                start_day = progress["start_day"]
-                max_day = start_day + num_days
-                # Client runs from start_day to (start_day + num_days - 1) inclusive
-                # Example: start_day=10, num_days=3 → runs days 10, 11, 12 → completes at day 13
-                if self.day >= max_day:
-                    # Client has completed its configured duration
-                    return SimulationInstruction(status="COMPLETE", day=self.day, slot=self.slot)
 
         # 1. Pause if not enough players
         active_clients = self._get_active_clients()
@@ -492,7 +456,7 @@ class OrchestratorServer:
         if client_id in self.submitted_clients:
             return SimulationInstruction(status="WAIT")
 
-        # 3. Proceed
+        # 3. Proceed with current server state
         return SimulationInstruction(
             status="PROCEED", day=self.day, slot=self.slot, recent_post_ids=self.recent_posts_cache
         )

@@ -240,11 +240,11 @@ class SimulationClient:
         )
         print(f"[{self.client_id}] Agent registration complete: {registration_result}")
 
-        # Register client with the server, passing num_days for progress tracking
+        # Register client with the server, passing num_days for informational purposes
         client_reg = ray.get(self.server.register_client.remote(self.client_id, self.num_days))
         
         # Validate registration response has all required fields
-        required_fields = ["registered", "start_day", "start_slot", "max_day"]
+        required_fields = ["registered", "start_day", "start_slot"]
         if not isinstance(client_reg, dict):
             raise RuntimeError(f"Client registration failed: expected dict, got {type(client_reg)}")
         
@@ -255,16 +255,27 @@ class SimulationClient:
         if not client_reg["registered"]:
             raise RuntimeError(f"Client registration failed: {client_reg}")
         
+        # Server tells us where to start - we count from here
         start_day = client_reg["start_day"]
-        max_day_str = "∞" if client_reg["max_day"] == float('inf') else str(client_reg["max_day"])
+        start_slot = client_reg["start_slot"]
+        
+        # Calculate our personal max_day for local tracking
+        # num_days=0 means infinite simulation
+        max_day = start_day + self.num_days if self.num_days > 0 else float('inf')
+        max_day_str = "∞" if max_day == float('inf') else str(max_day)
         
         self.logger.info(
             "Client registered with server",
-            extra={"extra_data": client_reg},
+            extra={"extra_data": {
+                "start_day": start_day,
+                "start_slot": start_slot,
+                "num_days": self.num_days,
+                "max_day": max_day,
+            }},
         )
         print(
-            f"[{self.client_id}] Client registered. Starting at day {start_day}, "
-            f"max day: {max_day_str}, will run for {self.num_days if self.num_days > 0 else '∞'} days."
+            f"[{self.client_id}] Client registered. Starting at day {start_day}, slot {start_slot}. "
+            f"Will run for {self.num_days if self.num_days > 0 else '∞'} days (until day {max_day_str})."
         )
 
         slot_count = 0
@@ -282,20 +293,23 @@ class SimulationClient:
                 if instruction.status == "WAIT":
                     time.sleep(1)
                     continue
-                elif instruction.status == "COMPLETE":
-                    # Server indicates this client has reached its max day
+
+                # Check if we've reached our personal maximum day (client-side tracking)
+                if self.num_days > 0 and instruction.day >= max_day:
                     self.logger.info(
-                        "Reached maximum days (server-controlled)",
+                        "Reached maximum days (client-side check)",
                         extra={
                             "extra_data": {
                                 "final_day": instruction.day,
+                                "start_day": start_day,
+                                "num_days": self.num_days,
                                 "total_slots": slot_count,
                             }
                         },
                     )
                     print(
-                        f"[{self.client_id}] Server indicates completion "
-                        f"(day {instruction.day}). Total slots: {slot_count}"
+                        f"[{self.client_id}] Completed {self.num_days} days "
+                        f"(day {start_day} to {instruction.day - 1}). Total slots: {slot_count}"
                     )
                     break
 
