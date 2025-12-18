@@ -1,16 +1,17 @@
 {
-  "server_name": "orchestrator_server",
-  "namespace": "social_sim",
-  "address": "auto",
-  "port": null,
-  "database_file": "simulation.db",
-  "min_to_start": 1,
-  "redis": {
-    "enabled": false,
-    "host": "localhost",
-    "port": 6379,
-    "db": 0,
-    "password": null,
-    "note": "Set enabled=true to use Redis, otherwise SQLite will be used"
-  }
+    "server_name": "orchestrator_server",
+    "namespace": "social_sim",
+    "address": "auto",
+    "port": null,
+    "database_file": "simulation.db",
+    "min_to_start": 1,
+    "redis": {
+        "enabled": false,
+        "host": "localhost",
+        "port": 6379,
+        "db": 0,
+        "password": null,
+        "sliding_window_days": 2,
+        "note": "Set enabled=true to use Redis, otherwise SQLite will be used. sliding_window_days controls how many days of data to keep in Redis.",
+    },
 }

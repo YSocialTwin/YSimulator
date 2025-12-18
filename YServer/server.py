@@ -394,9 +394,46 @@ class OrchestratorServer:
             self.submitted_clients.clear()
             self.slot += 1
 
+            # Check if day is complete and consolidate Redis data if needed
+            day_completed = False
             if self.slot > 24:
+                day_completed = True
+                completed_day = self.day
                 self.slot = 1
                 self.day += 1
+
+                # Consolidate Redis data to SQLite at end of day
+                consolidation_result = self.db.consolidate_redis_to_sqlite(completed_day)
+                if (
+                    consolidation_result.get("posts", 0) > 0
+                    or consolidation_result.get("interactions", 0) > 0
+                    or consolidation_result.get("removed_posts", 0) > 0
+                ):
+                    self.logger.info(
+                        f"Day {completed_day} complete - data consolidated to SQLite",
+                        extra={
+                            "extra_data": {
+                                "completed_day": completed_day,
+                                "posts_consolidated": consolidation_result.get("posts", 0),
+                                "interactions_consolidated": consolidation_result.get(
+                                    "interactions", 0
+                                ),
+                                "posts_removed_from_redis": consolidation_result.get(
+                                    "removed_posts", 0
+                                ),
+                                "interactions_removed_from_redis": consolidation_result.get(
+                                    "removed_interactions", 0
+                                ),
+                            }
+                        },
+                    )
+                    print(
+                        f"[Server] 💾 Day {completed_day} complete - "
+                        f"Consolidated {consolidation_result.get('posts', 0)} posts, "
+                        f"{consolidation_result.get('interactions', 0)} interactions to SQLite. "
+                        f"Removed {consolidation_result.get('removed_posts', 0)} old posts, "
+                        f"{consolidation_result.get('removed_interactions', 0)} old interactions from Redis"
+                    )
 
             execution_time = (time.time() - execution_start) * 1000
 
@@ -407,6 +444,7 @@ class OrchestratorServer:
                         "new_day": self.day,
                         "new_slot": self.slot,
                         "num_clients": current_count,
+                        "day_completed": day_completed,
                         "execution_time_ms": execution_time,
                     }
                 },

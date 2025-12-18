@@ -7,13 +7,14 @@ Base = declarative_base()
 class User_mgmt(Base):
     """
     User management model for experiment participants.
-    
+
     Stores user profile information including personality traits (Big Five),
     demographic information, preferences, and activity settings. Used in
     experimental simulations to represent both human and AI-driven agents.
     """
-    __tablename__ = 'user_mgmt'
-    
+
+    __tablename__ = "user_mgmt"
+
     id = Column(Integer, primary_key=True)
     username = Column(String(15), nullable=False, unique=True)
     email = Column(String(50), nullable=True, default="")
@@ -46,8 +47,15 @@ class User_mgmt(Base):
 
 
 class PostModel(Base):
-    __tablename__ = 'posts'
-    id = Column(Integer, primary_key=True, autoincrement=True)
+    """
+    Post model for social media posts.
+
+    Uses UUID as primary key for globally unique identification across
+    distributed systems and database backends (Redis/SQLite).
+    """
+
+    __tablename__ = "posts"
+    id = Column(String(36), primary_key=True)  # UUID string
     agent_id = Column(Integer)
     cluster_id = Column(Integer)
     content = Column(String)
@@ -56,10 +64,16 @@ class PostModel(Base):
 
 
 class InteractionModel(Base):
-    __tablename__ = 'interactions'
-    id = Column(Integer, primary_key=True, autoincrement=True)
+    """
+    Interaction model for user interactions with posts.
+
+    Uses UUID as primary key for globally unique identification across
+    distributed systems and database backends (Redis/SQLite).
+    """
+
+    __tablename__ = "interactions"
+    id = Column(String(36), primary_key=True)  # UUID string
     agent_id = Column(Integer)
-    post_id = Column(Integer)
+    post_id = Column(String(36))  # References PostModel.id (UUID)
     type = Column(String)
     content = Column(String, nullable=True)
-

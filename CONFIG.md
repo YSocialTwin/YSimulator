@@ -75,7 +75,8 @@ Controls the Ray server parameters:
     "host": "localhost",                  // Redis server host
     "port": 6379,                         // Redis server port
     "db": 0,                              // Redis database number
-    "password": null                      // Redis password (null if no auth)
+    "password": null,                     // Redis password (null if no auth)
+    "sliding_window_days": 2              // Days of data to keep in Redis cache
   }
 }
 ```
@@ -89,18 +90,37 @@ Controls the Ray server parameters:
 - `min_to_start`: Minimum number of connected clients before simulation begins (default: 1)
 - `redis`: Redis configuration object (optional)
   - `enabled`: Set to `true` to use Redis, `false` to use SQLite (default: false)
-  - `host`: Redis server hostname or IP address
+  - `host`: Redis server hostname or IP address (required if enabled)
   - `port`: Redis server port number  
   - `db`: Redis database number (0-15)
   - `password`: Redis authentication password (set to `null` if no password required)
+  - `sliding_window_days`: Number of simulation days to keep in Redis cache (default: 2)
 
 **Database Backend:**
 
 The server supports two database backends:
 - **SQLite** (default): File-based database stored in the configuration directory
-- **Redis** (optional): In-memory data store for better performance
+- **Redis** (optional): In-memory data store for better performance with sliding window cache
 
-If Redis is enabled and the connection succeeds, it will be used for all database operations. If Redis connection fails or is disabled, the system automatically falls back to SQLite.
+**Redis Sliding Window:**
+When Redis is enabled, the system maintains a sliding window of recent data in Redis for fast access:
+- At the end of each simulation day, all data is consolidated to SQLite for persistence
+- Data older than `sliding_window_days` is removed from Redis to manage memory
+- Recent data (within the sliding window) remains in Redis for fast queries
+- Example: With `sliding_window_days: 2`, Redis keeps the current day and previous day's data
+
+This approach provides:
+- **Fast access** to recent data via Redis
+- **Long-term persistence** of all data in SQLite
+- **Memory efficiency** by automatically pruning old data from Redis
+- **Data safety** with everything backed up to SQLite
+
+**ID System:**
+- **User IDs**: Integer values from configuration (agent profiles)
+- **Post IDs**: UUIDs (universally unique identifiers) for cross-system compatibility
+- **Interaction IDs**: UUIDs for global uniqueness
+
+If Redis connection fails or is disabled, the system automatically falls back to SQLite for all operations.
 
 **Note**: The database file is created in the same directory as the configuration file, and SQLite is always initialized as a fallback even when Redis is enabled.
 

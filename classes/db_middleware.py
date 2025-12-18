@@ -8,6 +8,7 @@ to allow seamless switching between backends.
 
 import json
 import logging
+import uuid
 from typing import Any, Dict, List, Optional
 
 try:
@@ -43,15 +44,19 @@ class DatabaseMiddleware:
 
         Args:
             sqlite_db_path: Path to SQLite database file (always required as fallback)
-            redis_config: Redis configuration dict with keys: host, port, db, password (optional)
+            redis_config: Redis configuration dict with keys: host, port, db, password, sliding_window_days (optional)
             logger: Logger instance for logging operations
         """
         self.logger = logger or logging.getLogger(__name__)
         self.use_redis = False
         self.redis_client = None
+        self.redis_sliding_window_days = 2  # Default: keep last 2 days in Redis
 
         # Try to initialize Redis if explicitly configured with enabled=true and host specified
         if redis_config and isinstance(redis_config, dict) and redis_config.get("enabled", False):
+            # Get sliding window configuration (default to 2 days)
+            self.redis_sliding_window_days = redis_config.get("sliding_window_days", 2)
+
             # Validate that Redis host is provided
             if not redis_config.get("host"):
                 self.logger.info(
@@ -187,7 +192,7 @@ class DatabaseMiddleware:
             self.logger.error(f"Error getting user: {e}", extra={"extra_data": {"error": str(e)}})
             return None
 
-    def add_post(self, post_data: Dict[str, Any]) -> Optional[int]:
+    def add_post(self, post_data: Dict[str, Any]) -> Optional[str]:
         """
         Add a post to the database.
 
@@ -195,14 +200,14 @@ class DatabaseMiddleware:
             post_data: Dictionary containing post data
 
         Returns:
-            int: Post ID if successful, None otherwise
+            str: Post UUID if successful, None otherwise
         """
         try:
-            if self.use_redis:
-                # Generate post ID
-                post_id = self.redis_client.incr(self._redis_key("posts", "counter"))
-                post_data["id"] = post_id
+            # Generate UUID for post
+            post_id = str(uuid.uuid4())
+            post_data["id"] = post_id
 
+            if self.use_redis:
                 # Store post
                 key = self._redis_key("posts", post_id)
                 self.redis_client.hset(key, mapping=post_data)
@@ -218,8 +223,6 @@ class DatabaseMiddleware:
                 try:
                     post = PostModel(**post_data)
                     session.add(post)
-                    session.flush()
-                    post_id = post.id
                     session.commit()
                     return post_id
                 finally:
@@ -239,11 +242,11 @@ class DatabaseMiddleware:
             bool: True if successful, False otherwise
         """
         try:
-            if self.use_redis:
-                # Generate interaction ID
-                interaction_id = self.redis_client.incr(self._redis_key("interactions", "counter"))
-                interaction_data["id"] = interaction_id
+            # Generate UUID for interaction
+            interaction_id = str(uuid.uuid4())
+            interaction_data["id"] = interaction_id
 
+            if self.use_redis:
                 # Store interaction
                 key = self._redis_key("interactions", interaction_id)
                 self.redis_client.hset(key, mapping=interaction_data)
@@ -263,7 +266,7 @@ class DatabaseMiddleware:
             )
             return False
 
-    def get_recent_posts(self, limit: int = 50) -> List[int]:
+    def get_recent_posts(self, limit: int = 50) -> List[str]:
         """
         Get recent post IDs.
 
@@ -271,14 +274,14 @@ class DatabaseMiddleware:
             limit: Maximum number of posts to return
 
         Returns:
-            List of post IDs
+            List of post UUIDs (as strings)
         """
         try:
             if self.use_redis:
                 post_ids = self.redis_client.lrange(
                     self._redis_key("posts", "recent"), 0, limit - 1
                 )
-                return [int(pid) for pid in post_ids]
+                return [str(pid) for pid in post_ids]
             else:
                 session = Session(self.engine)
                 try:
@@ -293,3 +296,171 @@ class DatabaseMiddleware:
                 f"Error getting recent posts: {e}", extra={"extra_data": {"error": str(e)}}
             )
             return []
+
+    def consolidate_redis_to_sqlite(self, day: int) -> dict:
+        """
+        Consolidate Redis data to SQLite at the end of a simulation day.
+
+        This method transfers all posts and interactions from Redis to SQLite.
+        It then removes data older than the sliding window from Redis to manage memory.
+
+        Args:
+            day: The simulation day being consolidated
+
+        Returns:
+            dict: Summary with counts of posts and interactions transferred and removed
+        """
+        if not self.use_redis:
+            return {
+                "posts": 0,
+                "interactions": 0,
+                "removed_posts": 0,
+                "removed_interactions": 0,
+                "message": "Not using Redis",
+            }
+
+        try:
+            session = Session(self.engine)
+            posts_count = 0
+            interactions_count = 0
+            removed_posts_count = 0
+            removed_interactions_count = 0
+
+            try:
+                # Get all post keys
+                post_pattern = self._redis_key("posts", "*")
+                post_keys = [
+                    k
+                    for k in self.redis_client.keys(post_pattern)
+                    if not k.endswith(":recent") and not k.endswith(":counter")
+                ]
+
+                # Transfer posts and track old ones for removal
+                posts_to_remove = []
+                cutoff_day = day - self.redis_sliding_window_days
+
+                for key in post_keys:
+                    post_data = self.redis_client.hgetall(key)
+                    if post_data and "id" in post_data:
+                        post_day = int(post_data.get("day", 0))
+
+                        # Check if post already exists in SQLite
+                        existing = session.query(PostModel).filter_by(id=post_data["id"]).first()
+                        if not existing:
+                            post = PostModel(
+                                id=post_data["id"],
+                                agent_id=int(post_data.get("agent_id", 0)),
+                                cluster_id=int(post_data.get("cluster_id", 0)),
+                                content=post_data.get("content", ""),
+                                day=post_day,
+                                slot=int(post_data.get("slot", 0)),
+                            )
+                            session.add(post)
+                            posts_count += 1
+
+                        # Mark for removal if outside sliding window
+                        if post_day < cutoff_day:
+                            posts_to_remove.append(key)
+
+                # Get all interaction keys
+                interaction_pattern = self._redis_key("interactions", "*")
+                interaction_keys = [
+                    k
+                    for k in self.redis_client.keys(interaction_pattern)
+                    if not k.endswith(":counter")
+                ]
+
+                # Transfer interactions and identify which belong to old posts
+                interactions_to_remove = []
+                old_post_ids = set()
+
+                # First pass: identify old post IDs
+                for key in posts_to_remove:
+                    post_data = self.redis_client.hgetall(key)
+                    if post_data and "id" in post_data:
+                        old_post_ids.add(post_data["id"])
+
+                # Second pass: transfer interactions and mark old ones for removal
+                for key in interaction_keys:
+                    interaction_data = self.redis_client.hgetall(key)
+                    if interaction_data and "id" in interaction_data:
+                        # Check if interaction already exists in SQLite
+                        existing = (
+                            session.query(InteractionModel)
+                            .filter_by(id=interaction_data["id"])
+                            .first()
+                        )
+                        if not existing:
+                            interaction = InteractionModel(
+                                id=interaction_data["id"],
+                                agent_id=int(interaction_data.get("agent_id", 0)),
+                                post_id=interaction_data.get("post_id", ""),
+                                type=interaction_data.get("type", ""),
+                                content=interaction_data.get("content"),
+                            )
+                            session.add(interaction)
+                            interactions_count += 1
+
+                        # Mark for removal if it references an old post
+                        if interaction_data.get("post_id") in old_post_ids:
+                            interactions_to_remove.append(key)
+
+                # Commit all to SQLite
+                session.commit()
+
+                # Remove old data from Redis (outside sliding window)
+                if posts_to_remove:
+                    self.redis_client.delete(*posts_to_remove)
+                    removed_posts_count = len(posts_to_remove)
+
+                if interactions_to_remove:
+                    self.redis_client.delete(*interactions_to_remove)
+                    removed_interactions_count = len(interactions_to_remove)
+
+                # Clean up recent posts list - remove references to deleted posts
+                if old_post_ids:
+                    recent_key = self._redis_key("posts", "recent")
+                    for old_post_id in old_post_ids:
+                        self.redis_client.lrem(recent_key, 0, old_post_id)
+
+                self.logger.info(
+                    f"Consolidated Redis data for day {day}",
+                    extra={
+                        "extra_data": {
+                            "day": day,
+                            "posts_saved": posts_count,
+                            "interactions_saved": interactions_count,
+                            "posts_removed": removed_posts_count,
+                            "interactions_removed": removed_interactions_count,
+                            "sliding_window_days": self.redis_sliding_window_days,
+                            "cutoff_day": cutoff_day,
+                        }
+                    },
+                )
+
+                return {
+                    "posts": posts_count,
+                    "interactions": interactions_count,
+                    "removed_posts": removed_posts_count,
+                    "removed_interactions": removed_interactions_count,
+                    "message": "Consolidation successful",
+                }
+
+            except Exception as e:
+                session.rollback()
+                raise e
+            finally:
+                session.close()
+
+        except Exception as e:
+            self.logger.error(
+                f"Error consolidating Redis to SQLite: {e}",
+                extra={"extra_data": {"error": str(e), "day": day}},
+            )
+            return {
+                "posts": 0,
+                "interactions": 0,
+                "removed_posts": 0,
+                "removed_interactions": 0,
+                "message": f"Consolidation failed: {str(e)}",
+            }
