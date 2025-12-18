@@ -15,7 +15,7 @@ import ray
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
-from classes.models import ActionDTO, AgentProfile, SimulationInstruction
+from classes.ray_models import SimulationInstruction
 
 
 @ray.remote

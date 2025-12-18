@@ -15,7 +15,7 @@ from pathlib import Path
 
 import ray
 
-from classes.models import ActionDTO, AgentProfile
+from classes.ray_models import ActionDTO, AgentProfile
 
 
 @ray.remote
