@@ -18,6 +18,7 @@ import ray
 
 from YSimulator.common_utils import validate_config_directory
 from YSimulator.YServer.server import OrchestratorServer
+from init_db import initialize_database, database_exists
 
 
 def setup_logging(config_path: Path, server_name: str) -> logging.Logger:
@@ -109,7 +110,7 @@ if __name__ == "__main__":
     min_to_start = config.get("min_to_start", 1)  # Minimum clients before simulation starts
     timeout_seconds = config.get("timeout_seconds", 60)  # Stale client timeout (default: 60s)
     
-    # Database configuration
+    # Database configuration - make database unique per server instance
     db_config = config.get("database", {})
     # Support legacy database_file parameter for backward compatibility
     if "database_file" in config:
@@ -117,12 +118,43 @@ if __name__ == "__main__":
     elif not db_config:
         db_config = {"type": "sqlite", "sqlite": {"filename": "simulation.db"}}
     
+    # Make database name unique per server instance
+    # This ensures each server instance has its own database
+    if db_config.get("type") == "sqlite":
+        sqlite_config = db_config.get("sqlite", {})
+        base_filename = sqlite_config.get("filename", "simulation.db")
+        # Add server_name to filename to make it unique
+        name_parts = base_filename.rsplit(".", 1)
+        if len(name_parts) == 2:
+            unique_filename = f"{name_parts[0]}_{server_name}.{name_parts[1]}"
+        else:
+            unique_filename = f"{base_filename}_{server_name}"
+        db_config["sqlite"]["filename"] = unique_filename
+    elif db_config.get("type") in ["postgresql", "mysql"]:
+        # For PostgreSQL/MySQL, append server_name to database name
+        db_type = db_config["type"]
+        type_config = db_config.get(db_type, {})
+        base_db_name = type_config.get("database", "ysimulator")
+        unique_db_name = f"{base_db_name}_{server_name}"
+        db_config[db_type]["database"] = unique_db_name
+    
     redis_config = config.get("redis")  # Redis configuration (optional)
 
     # Set up logging in config directory
     logger = setup_logging(config_dir, server_name)
 
     load_time = (time.time() - start_time) * 1000
+    
+    # Get database name for logging
+    if db_config.get("type") == "sqlite":
+        db_name = db_config["sqlite"]["filename"]
+    elif db_config.get("type") == "postgresql":
+        db_name = db_config["postgresql"]["database"]
+    elif db_config.get("type") == "mysql":
+        db_name = db_config["mysql"]["database"]
+    else:
+        db_name = "unknown"
+    
     logger.info(
         "Server configuration loaded",
         extra={
@@ -130,10 +162,37 @@ if __name__ == "__main__":
                 "server_name": server_name,
                 "config_file": str(config_file),
                 "db_type": db_config.get("type", "sqlite"),
+                "db_name": db_name,
                 "execution_time_ms": load_time,
             }
         },
     )
+    
+    # Check if database exists, if not initialize it
+    db_init_start = time.time()
+    if not database_exists(db_config, config_dir):
+        logger.info(
+            f"Database does not exist. Initializing new database: {db_name}",
+            extra={"extra_data": {"db_type": db_config.get("type", "sqlite")}}
+        )
+        print(f"--- 🔧 Initializing new database: {db_name} ---")
+        
+        if not initialize_database(db_config, config_dir, logger):
+            logger.error("Failed to initialize database. Exiting.")
+            sys.exit(1)
+        
+        db_init_time = (time.time() - db_init_start) * 1000
+        logger.info(
+            "Database initialized successfully",
+            extra={"extra_data": {"db_name": db_name, "execution_time_ms": db_init_time}}
+        )
+        print(f"--- ✅ Database initialized: {db_name} ---")
+    else:
+        logger.info(
+            f"Using existing database: {db_name}",
+            extra={"extra_data": {"db_type": db_config.get("type", "sqlite")}}
+        )
+        print(f"--- 💾 Using existing database: {db_name} ---")
 
     # Build ray.init() arguments
     init_kwargs = {"include_dashboard": False, "namespace": namespace}
