@@ -13,14 +13,28 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     # Load configuration files
-    with open("simulation_config.json", "r") as f:
-        sim_config = json.load(f)
+    config_files = {
+        "simulation_config.json": "simulation configuration",
+        "agent_population.json": "agent population",
+        "llm_prompts.json": "LLM prompts"
+    }
     
-    with open("agent_population.json", "r") as f:
-        agent_config = json.load(f)
+    configs = {}
+    for filename, description in config_files.items():
+        try:
+            with open(filename, "r") as f:
+                configs[filename] = json.load(f)
+        except FileNotFoundError:
+            print(f"❌ Error: '{filename}' not found. Please create the {description} file.")
+            print("See CONFIG.md for configuration details.")
+            sys.exit(1)
+        except json.JSONDecodeError as e:
+            print(f"❌ Error: Invalid JSON in '{filename}': {e}")
+            sys.exit(1)
     
-    with open("llm_prompts.json", "r") as f:
-        prompts_config = json.load(f)
+    sim_config = configs["simulation_config.json"]
+    agent_config = configs["agent_population.json"]
+    prompts_config = configs["llm_prompts.json"]
 
     # Get server address from temp file or config
     server_address = sim_config["server"].get("address")

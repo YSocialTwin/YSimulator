@@ -84,7 +84,7 @@ class SimulationClient:
             defaults = gen_config.get("default_settings", {})
             age_range = gen_config.get("age_range", [18, 65])
             
-            start_id = max([a.id for a in agents]) + 1 if agents else 1
+            start_id = (max((a.id for a in agents), default=0) + 1) if agents else 1
             
             archetypes = ["Validator", "Broadcaster", "Explorer"]
             activity_profiles = ["Always On", "Morning Active", "Evening Active", "Weekend Warrior"]

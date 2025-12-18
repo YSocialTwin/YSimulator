@@ -1,13 +1,22 @@
 import ray
 import time
 import os
+import sys
 import json
 from YServer.server import OrchestratorServer
 
 if __name__ == "__main__":
     # Load server configuration
-    with open("server_config.json", "r") as f:
-        config = json.load(f)
+    try:
+        with open("server_config.json", "r") as f:
+            config = json.load(f)
+    except FileNotFoundError:
+        print("❌ Error: 'server_config.json' not found. Please create the configuration file.")
+        print("See CONFIG.md for configuration details.")
+        sys.exit(1)
+    except json.JSONDecodeError as e:
+        print(f"❌ Error: Invalid JSON in 'server_config.json': {e}")
+        sys.exit(1)
     
     namespace = config.get("namespace", "social_sim")
     address = config.get("address", "auto")
