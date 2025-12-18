@@ -17,6 +17,7 @@ from pathlib import Path
 
 import ray
 
+from common_utils import validate_config_directory
 from YServer.server import OrchestratorServer
 
 
@@ -86,25 +87,11 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    # Determine config directory path
-    config_dir = Path(args.config)
-    if not config_dir.exists():
-        print(f"❌ Error: Configuration directory '{config_dir}' not found.")
-        print("See CONFIG.md for configuration details.")
-        sys.exit(1)
-
-    if not config_dir.is_dir():
-        print(f"❌ Error: '{config_dir}' is not a directory.")
-        print("Please provide a directory path containing server_config.json")
-        sys.exit(1)
+    # Validate config directory and check for required file
+    config_dir = validate_config_directory(args.config, required_files=["server_config.json"])
 
     # Use conventional file name
     config_file = config_dir / "server_config.json"
-    if not config_file.exists():
-        print(f"❌ Error: Configuration file '{config_file}' not found.")
-        print("Please ensure server_config.json exists in the configuration directory.")
-        print("See CONFIG.md for configuration details.")
-        sys.exit(1)
 
     # Load server configuration
     start_time = time.time()

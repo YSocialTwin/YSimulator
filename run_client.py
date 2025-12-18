@@ -17,6 +17,7 @@ from pathlib import Path
 
 import ray
 
+from common_utils import validate_config_directory
 from LLM_interactions.llm_service import LLMService
 from YClient.client import SimulationClient
 
@@ -87,17 +88,15 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    # Determine config directory path
-    config_dir = Path(args.config)
-    if not config_dir.exists():
-        print(f"❌ Error: Configuration directory '{config_dir}' not found.")
-        print("See CONFIG.md for configuration details.")
-        sys.exit(1)
-
-    if not config_dir.is_dir():
-        print(f"❌ Error: '{config_dir}' is not a directory.")
-        print("Please provide a directory path containing configuration files.")
-        sys.exit(1)
+    # Validate config directory and check for required files
+    config_dir = validate_config_directory(
+        args.config,
+        required_files=[
+            "simulation_config.json",
+            "agent_population.json",
+            "llm_prompts.json",
+        ],
+    )
 
     # Use conventional file names
     sim_config_file = config_dir / "simulation_config.json"
@@ -114,11 +113,6 @@ if __name__ == "__main__":
 
     configs = {}
     for filename, description in config_files.items():
-        if not Path(filename).exists():
-            print(f"❌ Error: '{filename}' not found.")
-            print(f"Please ensure {description} file exists in the configuration directory.")
-            print("See CONFIG.md for configuration details.")
-            sys.exit(1)
         try:
             with open(filename, "r") as f:
                 configs[filename] = json.load(f)
