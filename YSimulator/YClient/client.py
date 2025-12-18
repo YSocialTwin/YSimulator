@@ -15,7 +15,7 @@ from pathlib import Path
 
 import ray
 
-from YSimulator.classes.ray_models import ActionDTO, AgentProfile
+from YSimulator.YClient.classes.ray_models import ActionDTO, AgentProfile
 
 
 @ray.remote

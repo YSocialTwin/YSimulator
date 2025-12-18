@@ -21,7 +21,7 @@ except ImportError:
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
-from YSimulator.classes.models import Base, InteractionModel, PostModel, User_mgmt
+from YSimulator.YServer.classes.models import Base, InteractionModel, PostModel, User_mgmt
 
 
 class DatabaseMiddleware:
