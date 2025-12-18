@@ -17,6 +17,7 @@ from pathlib import Path
 
 import ray
 
+from common_utils import validate_config_directory
 from YServer.server import OrchestratorServer
 
 
@@ -81,19 +82,16 @@ if __name__ == "__main__":
     parser.add_argument(
         "--config",
         type=str,
-        default="server_config.json",
-        help="Path to server configuration file (default: server_config.json)",
+        default=".",
+        help="Path to configuration directory containing server_config.json (default: current directory)",
     )
     args = parser.parse_args()
 
-    # Determine config file path
-    config_file = Path(args.config)
-    if not config_file.exists():
-        print(f"❌ Error: Configuration file '{config_file}' not found.")
-        print("See CONFIG.md for configuration details.")
-        sys.exit(1)
+    # Validate config directory and check for required file
+    config_dir = validate_config_directory(args.config, required_files=["server_config.json"])
 
-    config_path = config_file.parent if config_file.parent != Path(".") else Path.cwd()
+    # Use conventional file name
+    config_file = config_dir / "server_config.json"
 
     # Load server configuration
     start_time = time.time()
@@ -112,12 +110,12 @@ if __name__ == "__main__":
     db_filename = config.get("database_file", "simulation.db")
     min_to_start = config.get("min_to_start", 1)  # Minimum clients before simulation starts
 
-    # Create database in config path
-    db_path = config_path / db_filename
+    # Create database in config directory
+    db_path = config_dir / db_filename
     db_name = str(db_path)
 
-    # Set up logging
-    logger = setup_logging(config_path, server_name)
+    # Set up logging in config directory
+    logger = setup_logging(config_dir, server_name)
 
     load_time = (time.time() - start_time) * 1000
     logger.info(
@@ -158,8 +156,8 @@ if __name__ == "__main__":
         },
     )
 
-    # Save address for clients
-    ray_config_file = config_path / "ray_config.temp"
+    # Save address for clients in config directory
+    ray_config_file = config_dir / "ray_config.temp"
     with open(ray_config_file, "w") as f:
         f.write(ray_address)
 
@@ -167,7 +165,7 @@ if __name__ == "__main__":
     print(f"--- 📝 Server Name: {server_name} ---")
     print(f"--- 📝 Namespace: {namespace} ---")
     print(f"--- 💾 Database: {db_name} ---")
-    print(f"--- 📋 Logs: {config_path / 'logs'} ---")
+    print(f"--- 📋 Logs: {config_dir / 'logs'} ---")
     print(f"--- 💾 Waiting for clients... ---")
 
     # Start orchestrator actor
@@ -175,7 +173,7 @@ if __name__ == "__main__":
     server = OrchestratorServer.options(name="Orchestrator").remote(
         db_name=db_name,
         min_to_start=min_to_start,
-        config_path=str(config_path),
+        config_path=str(config_dir),
         server_name=server_name,
     )
     actor_time = (time.time() - actor_start) * 1000

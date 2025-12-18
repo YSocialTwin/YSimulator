@@ -17,6 +17,7 @@ from pathlib import Path
 
 import ray
 
+from common_utils import validate_config_directory
 from LLM_interactions.llm_service import LLMService
 from YClient.client import SimulationClient
 
@@ -82,26 +83,32 @@ if __name__ == "__main__":
     parser.add_argument(
         "--config",
         type=str,
-        default="simulation_config.json",
-        help="Path to simulation configuration file (default: simulation_config.json)",
+        default=".",
+        help="Path to configuration directory containing simulation_config.json (default: current directory)",
     )
     args = parser.parse_args()
 
-    # Determine config file path
-    config_file = Path(args.config)
-    if not config_file.exists():
-        print(f"❌ Error: Configuration file '{config_file}' not found.")
-        print("See CONFIG.md for configuration details.")
-        sys.exit(1)
+    # Validate config directory and check for required files
+    config_dir = validate_config_directory(
+        args.config,
+        required_files=[
+            "simulation_config.json",
+            "agent_population.json",
+            "llm_prompts.json",
+        ],
+    )
 
-    config_path = config_file.parent if config_file.parent != Path(".") else Path.cwd()
+    # Use conventional file names
+    sim_config_file = config_dir / "simulation_config.json"
+    agent_config_file = config_dir / "agent_population.json"
+    prompts_config_file = config_dir / "llm_prompts.json"
 
     # Load configuration files
     start_time = time.time()
     config_files = {
-        args.config: "simulation configuration",
-        str(config_path / "agent_population.json"): "agent population",
-        str(config_path / "llm_prompts.json"): "LLM prompts",
+        str(sim_config_file): "simulation configuration",
+        str(agent_config_file): "agent population",
+        str(prompts_config_file): "LLM prompts",
     }
 
     configs = {}
@@ -109,23 +116,19 @@ if __name__ == "__main__":
         try:
             with open(filename, "r") as f:
                 configs[filename] = json.load(f)
-        except FileNotFoundError:
-            print(f"❌ Error: '{filename}' not found. Please create the {description} file.")
-            print("See CONFIG.md for configuration details.")
-            sys.exit(1)
         except json.JSONDecodeError as e:
             print(f"❌ Error: Invalid JSON in '{filename}': {e}")
             sys.exit(1)
 
-    sim_config = configs[args.config]
-    agent_config = configs[str(config_path / "agent_population.json")]
-    prompts_config = configs[str(config_path / "llm_prompts.json")]
+    sim_config = configs[str(sim_config_file)]
+    agent_config = configs[str(agent_config_file)]
+    prompts_config = configs[str(prompts_config_file)]
 
     # Extract client name from config (not argparse)
     client_name = sim_config.get("client_name", "client_1")
 
-    # Set up logging
-    logger = setup_logging(config_path, client_name)
+    # Set up logging in config directory
+    logger = setup_logging(config_dir, client_name)
 
     load_time = (time.time() - start_time) * 1000
     logger.info(
@@ -133,7 +136,7 @@ if __name__ == "__main__":
         extra={
             "extra_data": {
                 "client_name": client_name,
-                "config_file": str(config_file),
+                "config_dir": str(config_dir),
                 "execution_time_ms": load_time,
             }
         },
@@ -142,8 +145,8 @@ if __name__ == "__main__":
     # Get server address from temp file or config
     server_address = sim_config["server"].get("address")
     if not server_address:
-        # Fallback to temp file
-        ray_config_file = config_path / "ray_config.temp"
+        # Fallback to temp file in config directory
+        ray_config_file = config_dir / "ray_config.temp"
         if not ray_config_file.exists():
             print(f"❌ Error: '{ray_config_file}' not found and no server address in config.")
             print("Start run_server.py first.")
@@ -171,7 +174,7 @@ if __name__ == "__main__":
     print(f"--- Launching Client {client_name} ---")
     print(f"--- Namespace: {namespace} ---")
     print(f"--- LLM Model: {sim_config['llm']['model']} ---")
-    print(f"--- 📋 Logs: {config_path / 'logs'} ---")
+    print(f"--- 📋 Logs: {config_dir / 'logs'} ---")
 
     # Calculate total number of agents
     num_predefined = len(agent_config.get("agents", []))
@@ -194,7 +197,7 @@ if __name__ == "__main__":
     # Create client with all configurations
     client_start = time.time()
     client = SimulationClient.remote(
-        client_name, llm_service, agent_config, sim_config, str(config_path), logger
+        client_name, llm_service, agent_config, sim_config, str(config_dir), logger
     )
     client_time = (time.time() - client_start) * 1000
 
