@@ -283,12 +283,13 @@ class OrchestratorServer:
             )
             progress = {"start_day": self.day, "start_slot": self.slot, "num_days": num_days}
         
-        max_day = progress["start_day"] + progress["num_days"] if progress["num_days"] > 0 else 0
+        # Calculate max_day: use float('inf') for infinite simulations (num_days=0)
+        max_day = progress["start_day"] + progress["num_days"] if progress["num_days"] > 0 else float('inf')
         
         return {
             "registered": True,
             "start_day": progress["start_day"],
-            "start_slot": progress.get("start_slot", self.slot),
+            "start_slot": progress["start_slot"],  # Always present in progress dict
             "max_day": max_day,
         }
 

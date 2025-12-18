@@ -243,18 +243,28 @@ class SimulationClient:
         # Register client with the server, passing num_days for progress tracking
         client_reg = ray.get(self.server.register_client.remote(self.client_id, self.num_days))
         
-        # Validate registration response
-        if not isinstance(client_reg, dict) or not client_reg.get("registered"):
+        # Validate registration response has all required fields
+        required_fields = ["registered", "start_day", "start_slot", "max_day"]
+        if not isinstance(client_reg, dict):
+            raise RuntimeError(f"Client registration failed: expected dict, got {type(client_reg)}")
+        
+        missing_fields = [f for f in required_fields if f not in client_reg]
+        if missing_fields:
+            raise RuntimeError(f"Client registration response missing fields: {missing_fields}")
+        
+        if not client_reg["registered"]:
             raise RuntimeError(f"Client registration failed: {client_reg}")
         
-        start_day = client_reg.get("start_day", "unknown")
+        start_day = client_reg["start_day"]
+        max_day_str = "∞" if client_reg["max_day"] == float('inf') else str(client_reg["max_day"])
+        
         self.logger.info(
             "Client registered with server",
             extra={"extra_data": client_reg},
         )
         print(
             f"[{self.client_id}] Client registered. Starting at day {start_day}, "
-            f"will run for {self.num_days if self.num_days > 0 else '∞'} days."
+            f"max day: {max_day_str}, will run for {self.num_days if self.num_days > 0 else '∞'} days."
         )
 
         slot_count = 0
