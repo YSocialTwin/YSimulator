@@ -30,7 +30,8 @@ Controls the Ray server parameters:
   "namespace": "social_sim",              // Ray namespace for the cluster
   "address": "auto",                      // "auto" for local, or specific address
   "port": null,                           // Port number (null for default)
-  "database_file": "simulation.db"        // SQLite database filename
+  "database_file": "simulation.db",       // SQLite database filename
+  "min_to_start": 1                       // Minimum clients before simulation starts
 }
 ```
 
@@ -40,6 +41,7 @@ Controls the Ray server parameters:
 - `address`: Server address ("auto" for automatic local setup, or a specific address)
 - `port`: Reserved for future use. Ray port is currently managed through Ray's internal mechanisms or environment variables
 - `database_file`: Path to the SQLite database file (relative to config directory)
+- `min_to_start`: Minimum number of connected clients before simulation begins (default: 1)
 
 **Note**: The database file and logs are created in the same directory as the configuration file.
 

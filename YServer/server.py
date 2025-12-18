@@ -45,7 +45,7 @@ class OrchestratorServer:
             db_name: Path to SQLite database file
             min_to_start: Minimum number of clients before simulation starts
             config_path: Path to configuration directory for logs
-            server_name: Name of this server instance
+            server_name: Name of this server instance (str)
         """
         from classes.models import Base
 

@@ -3,5 +3,6 @@
   "namespace": "social_sim",
   "address": "auto",
   "port": null,
-  "database_file": "simulation.db"
+  "database_file": "simulation.db",
+  "min_to_start": 1
 }
