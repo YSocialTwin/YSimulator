@@ -1,0 +1,7 @@
+{
+  "server_name": "orchestrator_server",
+  "namespace": "social_sim",
+  "address": "auto",
+  "port": null,
+  "database_file": "simulation.db"
+}

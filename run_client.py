@@ -1,24 +1,109 @@
+"""
+Client entry point for YSimulator.
+
+This module initializes and runs a simulation client that connects to the
+Ray orchestration server and executes agent behaviors.
+"""
+
 import argparse
-import ray
+import json
+import logging
 import os
 import sys
-import json
+import time
+from datetime import datetime
+from logging.handlers import RotatingFileHandler
+from pathlib import Path
+
+import ray
+
 from LLM_interactions.llm_service import LLMService
 from YClient.client import SimulationClient
 
-# --- Execution Entry Point ---
+
+def setup_logging(config_path: Path, client_name: str) -> logging.Logger:
+    """
+    Set up rotating JSON logging for the client.
+
+    Args:
+        config_path: Path to the configuration directory
+        client_name: Name of the client instance
+
+    Returns:
+        Configured logger instance
+    """
+    log_dir = config_path / "logs"
+    log_dir.mkdir(exist_ok=True)
+
+    log_file = log_dir / f"{client_name}_client.log"
+
+    # Create logger
+    logger = logging.getLogger(f"YSimulator.Client.{client_name}")
+    logger.setLevel(logging.INFO)
+
+    # Create rotating file handler (10MB per file, keep 5 backups)
+    handler = RotatingFileHandler(log_file, maxBytes=10 * 1024 * 1024, backupCount=5)  # 10MB
+
+    # Create JSON formatter
+    class JsonFormatter(logging.Formatter):
+        def format(self, record):
+            log_data = {
+                "timestamp": datetime.utcnow().isoformat(),
+                "level": record.levelname,
+                "message": record.getMessage(),
+                "module": record.module,
+                "function": record.funcName,
+                "line": record.lineno,
+            }
+            if hasattr(record, "execution_time"):
+                log_data["execution_time_ms"] = record.execution_time
+            if hasattr(record, "extra_data"):
+                log_data.update(record.extra_data)
+            return json.dumps(log_data)
+
+    handler.setFormatter(JsonFormatter())
+    logger.addHandler(handler)
+
+    # Also log to console
+    console_handler = logging.StreamHandler()
+    console_handler.setFormatter(
+        logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+    )
+    logger.addHandler(console_handler)
+
+    return logger
+
+
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--id", type=str, default="client_1")
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(
+        description="YSimulator Client - Simulation client for social media agents"
+    )
+    parser.add_argument(
+        "--config",
+        type=str,
+        default="simulation_config.json",
+        help="Path to simulation configuration file (default: simulation_config.json)",
+    )
     args = parser.parse_args()
 
+    # Determine config file path
+    config_file = Path(args.config)
+    if not config_file.exists():
+        print(f"❌ Error: Configuration file '{config_file}' not found.")
+        print("See CONFIG.md for configuration details.")
+        sys.exit(1)
+
+    config_path = config_file.parent if config_file.parent != Path(".") else Path.cwd()
+
     # Load configuration files
+    start_time = time.time()
     config_files = {
-        "simulation_config.json": "simulation configuration",
-        "agent_population.json": "agent population",
-        "llm_prompts.json": "LLM prompts"
+        args.config: "simulation configuration",
+        str(config_path / "agent_population.json"): "agent population",
+        str(config_path / "llm_prompts.json"): "LLM prompts",
     }
-    
+
     configs = {}
     for filename, description in config_files.items():
         try:
@@ -31,44 +116,103 @@ if __name__ == "__main__":
         except json.JSONDecodeError as e:
             print(f"❌ Error: Invalid JSON in '{filename}': {e}")
             sys.exit(1)
-    
-    sim_config = configs["simulation_config.json"]
-    agent_config = configs["agent_population.json"]
-    prompts_config = configs["llm_prompts.json"]
+
+    sim_config = configs[args.config]
+    agent_config = configs[str(config_path / "agent_population.json")]
+    prompts_config = configs[str(config_path / "llm_prompts.json")]
+
+    # Extract client name from config (not argparse)
+    client_name = sim_config.get("client_name", "client_1")
+
+    # Set up logging
+    logger = setup_logging(config_path, client_name)
+
+    load_time = (time.time() - start_time) * 1000
+    logger.info(
+        "Client configuration loaded",
+        extra={
+            "extra_data": {
+                "client_name": client_name,
+                "config_file": str(config_file),
+                "execution_time_ms": load_time,
+            }
+        },
+    )
 
     # Get server address from temp file or config
     server_address = sim_config["server"].get("address")
     if not server_address:
         # Fallback to temp file
-        if not os.path.exists("ray_config.temp"):
-            print("❌ Error: 'ray_config.temp' not found and no server address in config. Start run_server.py first.")
+        ray_config_file = config_path / "ray_config.temp"
+        if not ray_config_file.exists():
+            print(f"❌ Error: '{ray_config_file}' not found and no server address in config.")
+            print("Start run_server.py first.")
             sys.exit(1)
-        with open("ray_config.temp", "r") as f:
+        with open(ray_config_file, "r") as f:
             server_address = f.read().strip()
+
+    logger.info(
+        "Connecting to Ray cluster", extra={"extra_data": {"server_address": server_address}}
+    )
 
     print(f"--- Connecting to Cluster at {server_address} ---")
 
     # Initialize with namespace from config
     namespace = sim_config.get("namespace", "social_sim")
+    connect_start = time.time()
     ray.init(address=server_address, namespace=namespace, ignore_reinit_error=True)
+    connect_time = (time.time() - connect_start) * 1000
 
-    print(f"--- Launching Client {args.id} ---")
+    logger.info(
+        "Connected to Ray cluster",
+        extra={"extra_data": {"namespace": namespace, "execution_time_ms": connect_time}},
+    )
+
+    print(f"--- Launching Client {client_name} ---")
     print(f"--- Namespace: {namespace} ---")
     print(f"--- LLM Model: {sim_config['llm']['model']} ---")
-    
+    print(f"--- 📋 Logs: {config_path / 'logs'} ---")
+
     # Calculate total number of agents
-    num_predefined = len(agent_config.get('agents', []))
-    num_generated = agent_config.get('generation_config', {}).get('num_additional_agents', 0)
+    num_predefined = len(agent_config.get("agents", []))
+    num_generated = agent_config.get("generation_config", {}).get("num_additional_agents", 0)
     total_agents = num_predefined + num_generated
-    print(f"--- Number of Agents: {total_agents} ({num_predefined} predefined + {num_generated} generated) ---")
+    print(
+        f"--- Number of Agents: {total_agents} ({num_predefined} predefined + {num_generated} generated) ---"
+    )
+
+    logger.info(
+        "Creating LLM service and client actors",
+        extra={"extra_data": {"num_agents": total_agents, "llm_model": sim_config["llm"]["model"]}},
+    )
 
     # Create LLM service with configuration
+    llm_start = time.time()
     llm_service = LLMService.remote(sim_config["llm"], prompts_config)
-    
+    llm_time = (time.time() - llm_start) * 1000
+
     # Create client with all configurations
-    client = SimulationClient.remote(args.id, llm_service, agent_config, sim_config)
+    client_start = time.time()
+    client = SimulationClient.remote(
+        client_name, llm_service, agent_config, sim_config, str(config_path), logger
+    )
+    client_time = (time.time() - client_start) * 1000
+
+    logger.info(
+        "Client actors created",
+        extra={
+            "extra_data": {"llm_creation_time_ms": llm_time, "client_creation_time_ms": client_time}
+        },
+    )
 
     try:
+        logger.info("Starting simulation")
         ray.get(client.run.remote())
     except KeyboardInterrupt:
+        logger.info("Client stopping by user request")
         print("Client stopping...")
+    except Exception as e:
+        logger.error(f"Client error: {e}", extra={"extra_data": {"error": str(e)}})
+        raise
+    finally:
+        logger.info("Client shutdown complete")
