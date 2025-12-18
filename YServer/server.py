@@ -353,6 +353,7 @@ class OrchestratorServer:
         """
         current_time = time.time()
         stale_clients = []
+        stale_clients_info = {}  # Store time_since_heartbeat for each stale client
 
         for client_id in self._get_active_clients():
             # Check if heartbeat was ever received (should be set during registration)
@@ -368,9 +369,10 @@ class OrchestratorServer:
             # network delays and processing variations
             if time_since_heartbeat > self.timeout_seconds:
                 stale_clients.append(client_id)
+                stale_clients_info[client_id] = time_since_heartbeat
 
         for client_id in stale_clients:
-            time_since_heartbeat = current_time - self.last_heartbeat.get(client_id, 0)
+            time_since_heartbeat = stale_clients_info[client_id]
             self.logger.warning(
                 "Removing stale client (no heartbeat)",
                 extra={
@@ -458,7 +460,9 @@ class OrchestratorServer:
             if num_days > 0:  # 0 means infinite
                 start_day = progress["start_day"]
                 max_day = start_day + num_days
-                if self.day > max_day:
+                # Client runs from start_day to (start_day + num_days - 1) inclusive
+                # Example: start_day=10, num_days=3 → runs days 10, 11, 12 → completes at day 13
+                if self.day >= max_day:
                     # Client has completed its configured duration
                     return SimulationInstruction(status="COMPLETE", day=self.day, slot=self.slot)
 
