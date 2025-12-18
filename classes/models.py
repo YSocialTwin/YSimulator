@@ -1,5 +1,5 @@
 # models.py
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import List, Literal, Optional
 from sqlalchemy import Column, Integer, String
 from sqlalchemy.orm import declarative_base
