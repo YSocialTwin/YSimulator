@@ -107,13 +107,17 @@ if __name__ == "__main__":
     namespace = config.get("namespace", "social_sim")
     address = config.get("address", "auto")
     port = config.get("port")
-    db_filename = config.get("database_file", "simulation.db")
     min_to_start = config.get("min_to_start", 1)  # Minimum clients before simulation starts
+    
+    # Database configuration
+    db_config = config.get("database", {})
+    # Support legacy database_file parameter for backward compatibility
+    if "database_file" in config:
+        db_config = {"type": "sqlite", "sqlite": {"filename": config["database_file"]}}
+    elif not db_config:
+        db_config = {"type": "sqlite", "sqlite": {"filename": "simulation.db"}}
+    
     redis_config = config.get("redis")  # Redis configuration (optional)
-
-    # Create database in config directory
-    db_path = config_dir / db_filename
-    db_name = str(db_path)
 
     # Set up logging in config directory
     logger = setup_logging(config_dir, server_name)
@@ -125,6 +129,7 @@ if __name__ == "__main__":
             "extra_data": {
                 "server_name": server_name,
                 "config_file": str(config_file),
+                "db_type": db_config.get("type", "sqlite"),
                 "execution_time_ms": load_time,
             }
         },
@@ -165,16 +170,16 @@ if __name__ == "__main__":
     print(f"--- 🚀 Server Running on {ray_address} ---")
     print(f"--- 📝 Server Name: {server_name} ---")
     print(f"--- 📝 Namespace: {namespace} ---")
-    print(f"--- 💾 Database: {db_name} ---")
+    print(f"--- 💾 Database Type: {db_config.get('type', 'sqlite').upper()} ---")
     print(f"--- 📋 Logs: {config_dir / 'logs'} ---")
     print(f"--- 💾 Waiting for clients... ---")
 
     # Start orchestrator actor
     actor_start = time.time()
     server = OrchestratorServer.options(name="Orchestrator").remote(
-        db_name=db_name,
-        min_to_start=min_to_start,
+        db_config=db_config,
         config_path=str(config_dir),
+        min_to_start=min_to_start,
         server_name=server_name,
         redis_config=redis_config,
     )

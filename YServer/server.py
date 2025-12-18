@@ -31,9 +31,9 @@ class OrchestratorServer:
 
     def __init__(
         self,
-        db_name: str,
-        min_to_start: int = 1,
+        db_config: dict,
         config_path: str = ".",
+        min_to_start: int = 1,
         server_name: str = "orchestrator",
         redis_config: dict = None,
     ):
@@ -41,9 +41,9 @@ class OrchestratorServer:
         Initialize the orchestrator server.
 
         Args:
-            db_name: Path to SQLite database file
-            min_to_start: Minimum number of clients before simulation starts
+            db_config: Database configuration dict with type and connection details
             config_path: Path to configuration directory for logs
+            min_to_start: Minimum number of clients before simulation starts
             server_name: Name of this server instance (str)
             redis_config: Redis configuration dict (optional)
         """
@@ -69,14 +69,17 @@ class OrchestratorServer:
 
         # Initialize database middleware
         self.db = DatabaseMiddleware(
-            sqlite_db_path=db_name, redis_config=redis_config, logger=self.logger
+            db_config=db_config,
+            config_path=str(self.config_path),
+            redis_config=redis_config,
+            logger=self.logger,
         )
 
         self.logger.info(
             "Orchestrator server initialized",
             extra={
                 "extra_data": {
-                    "db_name": db_name,
+                    "db_type": db_config.get("type", "sqlite"),
                     "min_to_start": min_to_start,
                     "redis_enabled": self.db.use_redis,
                 }

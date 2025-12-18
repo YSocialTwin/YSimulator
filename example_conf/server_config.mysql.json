@@ -4,23 +4,13 @@
     "address": "auto",
     "port": null,
     "database": {
-        "type": "sqlite",
-        "sqlite": {
-            "filename": "simulation.db"
-        },
-        "postgresql": {
-            "host": "localhost",
-            "port": 5432,
-            "database": "ysimulator",
-            "username": "postgres",
-            "password": "password"
-        },
+        "type": "mysql",
         "mysql": {
             "host": "localhost",
             "port": 3306,
             "database": "ysimulator",
             "username": "root",
-            "password": "password"
+            "password": "your_password_here"
         }
     },
     "min_to_start": 1,

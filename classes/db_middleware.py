@@ -27,15 +27,16 @@ from classes.models import Base, InteractionModel, PostModel, User_mgmt
 
 class DatabaseMiddleware:
     """
-    Database middleware that supports both Redis and SQLite backends.
+    Database middleware that supports multiple SQLAlchemy-compatible backends.
 
-    If Redis is available and configured, it will be used as the primary storage.
-    Otherwise, SQLite will be used as a fallback.
+    Supports SQLite, PostgreSQL, and MySQL as database backends.
+    If Redis is available and configured, it will be used as a high-performance cache.
     """
 
     def __init__(
         self,
-        sqlite_db_path: str,
+        db_config: Dict[str, Any],
+        config_path: str = ".",
         redis_config: Optional[Dict[str, Any]] = None,
         logger: Optional[logging.Logger] = None,
     ):
@@ -43,14 +44,19 @@ class DatabaseMiddleware:
         Initialize the database middleware.
 
         Args:
-            sqlite_db_path: Path to SQLite database file (always required as fallback)
+            db_config: Database configuration dict with 'type' and backend-specific settings
+            config_path: Path to configuration directory (for SQLite database file)
             redis_config: Redis configuration dict with keys: host, port, db, password, sliding_window_days (optional)
             logger: Logger instance for logging operations
         """
+        from pathlib import Path
+
         self.logger = logger or logging.getLogger(__name__)
         self.use_redis = False
         self.redis_client = None
         self.redis_sliding_window_days = 2  # Default: keep last 2 days in Redis
+        self.db_type = db_config.get("type", "sqlite").lower()
+        self.config_path = Path(config_path)
 
         # Try to initialize Redis if explicitly configured with enabled=true and host specified
         if redis_config and isinstance(redis_config, dict) and redis_config.get("enabled", False):
@@ -60,7 +66,7 @@ class DatabaseMiddleware:
             # Validate that Redis host is provided
             if not redis_config.get("host"):
                 self.logger.info(
-                    "Redis is enabled but no host specified in config, using SQLite only"
+                    "Redis is enabled but no host specified in config, using SQL database only"
                 )
             elif not REDIS_AVAILABLE:
                 self.logger.warning(
@@ -90,19 +96,94 @@ class DatabaseMiddleware:
                     )
                 except Exception as e:
                     self.logger.warning(
-                        f"Redis connection failed, falling back to SQLite: {e}",
+                        f"Redis connection failed, falling back to SQL database: {e}",
                         extra={"extra_data": {"error": str(e)}},
                     )
                     self.use_redis = False
                     self.redis_client = None
 
-        # Always initialize SQLite as fallback
-        self.engine = create_engine(f"sqlite:///{sqlite_db_path}")
+        # Build SQLAlchemy connection string based on database type
+        connection_string = self._build_connection_string(db_config)
+
+        # Initialize SQL database backend
+        self.engine = create_engine(connection_string)
         Base.metadata.create_all(self.engine)
         self.logger.info(
-            "SQLite database initialized",
-            extra={"extra_data": {"db_path": sqlite_db_path, "redis_enabled": self.use_redis}},
+            "SQL database initialized",
+            extra={
+                "extra_data": {
+                    "db_type": self.db_type,
+                    "redis_enabled": self.use_redis,
+                }
+            },
         )
+
+    def _build_connection_string(self, db_config: Dict[str, Any]) -> str:
+        """
+        Build SQLAlchemy connection string based on database configuration.
+
+        Args:
+            db_config: Database configuration dict
+
+        Returns:
+            SQLAlchemy connection string
+
+        Raises:
+            ValueError: If database type is not supported or required parameters are missing
+        """
+        from urllib.parse import quote_plus
+
+        db_type = db_config.get("type", "sqlite").lower()
+
+        if db_type == "sqlite":
+            sqlite_config = db_config.get("sqlite", {})
+            filename = sqlite_config.get("filename", "simulation.db")
+            # Create database file in config directory
+            db_path = self.config_path / filename
+            return f"sqlite:///{db_path}"
+
+        elif db_type == "postgresql":
+            pg_config = db_config.get("postgresql", {})
+            host = pg_config.get("host", "localhost")
+            port = pg_config.get("port", 5432)
+            database = pg_config.get("database")
+            username = pg_config.get("username")
+            password = pg_config.get("password")
+
+            if not all([database, username]):
+                raise ValueError(
+                    "PostgreSQL requires 'database' and 'username' in configuration"
+                )
+
+            # URL encode password to handle special characters
+            if password:
+                encoded_password = quote_plus(password)
+                return f"postgresql://{username}:{encoded_password}@{host}:{port}/{database}"
+            else:
+                return f"postgresql://{username}@{host}:{port}/{database}"
+
+        elif db_type == "mysql":
+            mysql_config = db_config.get("mysql", {})
+            host = mysql_config.get("host", "localhost")
+            port = mysql_config.get("port", 3306)
+            database = mysql_config.get("database")
+            username = mysql_config.get("username")
+            password = mysql_config.get("password")
+
+            if not all([database, username]):
+                raise ValueError("MySQL requires 'database' and 'username' in configuration")
+
+            # URL encode password to handle special characters
+            if password:
+                encoded_password = quote_plus(password)
+                return f"mysql+pymysql://{username}:{encoded_password}@{host}:{port}/{database}"
+            else:
+                return f"mysql+pymysql://{username}@{host}:{port}/{database}"
+
+        else:
+            raise ValueError(
+                f"Unsupported database type: {db_type}. Supported types: sqlite, postgresql, mysql"
+            )
 
     def _redis_key(self, table: str, id: Any = None) -> str:
         """Generate Redis key for a table and optional ID."""

@@ -60,7 +60,7 @@ config_directory/
 
 ### 1. `server_config.json` - Server Configuration
 
-Controls the Ray server parameters:
+Controls the Ray server parameters and database backend:
 
 ```json
 {
@@ -68,7 +68,26 @@ Controls the Ray server parameters:
   "namespace": "social_sim",              // Ray namespace for the cluster
   "address": "auto",                      // "auto" for local, or specific address
   "port": null,                           // Port number (null for default)
-  "database_file": "simulation.db",       // SQLite database filename
+  "database": {                           // Database configuration
+    "type": "sqlite",                     // Database type: sqlite, postgresql, or mysql
+    "sqlite": {                           // SQLite-specific configuration
+      "filename": "simulation.db"         // Database filename (created in config directory)
+    },
+    "postgresql": {                       // PostgreSQL-specific configuration
+      "host": "localhost",                // PostgreSQL server host
+      "port": 5432,                       // PostgreSQL server port
+      "database": "ysimulator",           // Database name
+      "username": "postgres",             // Database username
+      "password": "password"              // Database password
+    },
+    "mysql": {                            // MySQL-specific configuration
+      "host": "localhost",                // MySQL server host
+      "port": 3306,                       // MySQL server port
+      "database": "ysimulator",           // Database name
+      "username": "root",                 // Database username
+      "password": "password"              // Database password
+    }
+  },
   "min_to_start": 1,                      // Minimum clients before simulation starts
   "redis": {                              // Redis configuration (optional)
     "enabled": false,                     // Set to true to use Redis
@@ -86,10 +105,25 @@ Controls the Ray server parameters:
 - `namespace`: The Ray namespace used for actor isolation
 - `address`: Server address ("auto" for automatic local setup, or a specific address)
 - `port`: Reserved for future use. Ray port is currently managed through Ray's internal mechanisms or environment variables
-- `database_file`: Path to the SQLite database file (relative to config directory)
+- `database`: Database configuration object
+  - `type`: Database backend type - `"sqlite"`, `"postgresql"`, or `"mysql"`
+  - `sqlite`: SQLite-specific settings (used when type is "sqlite")
+    - `filename`: Database filename (stored in config directory)
+  - `postgresql`: PostgreSQL-specific settings (used when type is "postgresql")
+    - `host`: PostgreSQL server hostname or IP address
+    - `port`: PostgreSQL server port (default: 5432)
+    - `database`: Database name (required)
+    - `username`: Database username (required)
+    - `password`: Database password (optional, can be null for trusted connections)
+  - `mysql`: MySQL-specific settings (used when type is "mysql")
+    - `host`: MySQL server hostname or IP address
+    - `port`: MySQL server port (default: 3306)
+    - `database`: Database name (required)
+    - `username`: Database username (required)
+    - `password`: Database password (optional, can be null for trusted connections)
 - `min_to_start`: Minimum number of connected clients before simulation begins (default: 1)
 - `redis`: Redis configuration object (optional)
-  - `enabled`: Set to `true` to use Redis, `false` to use SQLite (default: false)
+  - `enabled`: Set to `true` to use Redis, `false` to use SQL database only (default: false)
   - `host`: Redis server hostname or IP address (required if enabled)
   - `port`: Redis server port number  
   - `db`: Redis database number (0-15)
@@ -98,31 +132,76 @@ Controls the Ray server parameters:
 
 **Database Backend:**
 
+The server supports three SQL database backends via SQLAlchemy:
+
+1. **SQLite** (default): 
+   - File-based database stored in the configuration directory
+   - No additional setup required
+   - Best for: Single-machine deployments, development, testing
+   - Connection string: `sqlite:///path/to/simulation.db`
+
+2. **PostgreSQL**:
+   - Robust, production-ready database server
+   - Requires PostgreSQL server to be running and accessible
+   - Best for: Production deployments, multi-client simulations, concurrent access
+   - Requires Python package: `pip install psycopg2-binary`
+   - Connection string: `postgresql://username:password@host:port/database`
+
+3. **MySQL**:
+   - Popular open-source database server
+   - Requires MySQL server to be running and accessible
+   - Best for: Production deployments with existing MySQL infrastructure
+   - Requires Python package: `pip install pymysql`
+   - Connection string: `mysql+pymysql://username:password@host:port/database`
+
+**Choosing a Database:**
+- **SQLite**: Simple file-based storage, no server needed. Good for development and single-machine deployments.
+- **PostgreSQL**: Enterprise-grade features, excellent for production with high concurrency and complex queries.
+- **MySQL**: Wide adoption, good performance, excellent for production with existing MySQL infrastructure.
+
+**Database Setup:**
+For PostgreSQL or MySQL, you must:
+1. Install and run the database server
+2. Create the database: `CREATE DATABASE ysimulator;`
+3. Create a user with appropriate permissions
+4. Install the required Python driver (psycopg2-binary for PostgreSQL, pymysql for MySQL)
+5. Configure the connection details in `server_config.json`
+
+The database tables will be automatically created by SQLAlchemy when the server starts.
+
+**Example Configurations:**
+The `example_conf/` directory provides example server configurations for each database type:
+- `server_config.json` - Default SQLite configuration
+- `server_config.postgresql.json` - PostgreSQL configuration example
+- `server_config.mysql.json` - MySQL configuration example
+
+To use a specific database type, copy the appropriate example file to your configuration directory and rename it to `server_config.json`, then update the connection parameters.
+
 The server supports two database backends:
-- **SQLite** (default): File-based database stored in the configuration directory
-- **Redis** (optional): In-memory data store for better performance with sliding window cache
+- **SQL Database** (SQLite/PostgreSQL/MySQL): Persistent storage for all simulation data
+- **Redis** (optional): In-memory cache for better performance with sliding window
 
 **Redis Sliding Window:**
 When Redis is enabled, the system maintains a sliding window of recent data in Redis for fast access:
-- At the end of each simulation day, all data is consolidated to SQLite for persistence
+- At the end of each simulation day, all data is consolidated to the SQL database for persistence
 - Data older than `sliding_window_days` is removed from Redis to manage memory
 - Recent data (within the sliding window) remains in Redis for fast queries
 - Example: With `sliding_window_days: 2`, Redis keeps the current day and previous day's data
 
 This approach provides:
 - **Fast access** to recent data via Redis
-- **Long-term persistence** of all data in SQLite
+- **Long-term persistence** of all data in SQL database
 - **Memory efficiency** by automatically pruning old data from Redis
-- **Data safety** with everything backed up to SQLite
+- **Data safety** with everything backed up to SQL database
 
 **ID System:**
 - **User IDs**: Integer values from configuration (agent profiles)
 - **Post IDs**: UUIDs (universally unique identifiers) for cross-system compatibility
 - **Interaction IDs**: UUIDs for global uniqueness
 
-If Redis connection fails or is disabled, the system automatically falls back to SQLite for all operations.
+If Redis connection fails or is disabled, the system automatically uses the SQL database for all operations.
 
-**Note**: The database file is created in the same directory as the configuration file, and SQLite is always initialized as a fallback even when Redis is enabled.
+**Note**: For SQLite, the database file is created in the same directory as the configuration file. For PostgreSQL and MySQL, the database must already exist on the server.
 
 ### 2. `agent_population.json` - Agent Population Configuration
 
