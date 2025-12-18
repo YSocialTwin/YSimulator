@@ -337,6 +337,7 @@ class DatabaseMiddleware:
 
                 # Transfer posts and track old ones for removal
                 posts_to_remove = []
+                old_post_ids = set()  # Collect old post IDs during first pass
                 cutoff_day = day - self.redis_sliding_window_days
 
                 for key in post_keys:
@@ -358,9 +359,11 @@ class DatabaseMiddleware:
                             session.add(post)
                             posts_count += 1
 
-                        # Mark for removal if outside sliding window
+                        # Mark for removal if outside sliding window (strictly less than cutoff)
+                        # Keep posts from cutoff_day onwards (inclusive)
                         if post_day < cutoff_day:
                             posts_to_remove.append(key)
+                            old_post_ids.add(post_data["id"])
 
                 # Get all interaction keys
                 interaction_pattern = self._redis_key("interactions", "*")
@@ -370,17 +373,9 @@ class DatabaseMiddleware:
                     if not k.endswith(":counter")
                 ]
 
-                # Transfer interactions and identify which belong to old posts
+                # Transfer interactions and mark old ones for removal
                 interactions_to_remove = []
-                old_post_ids = set()
 
-                # First pass: identify old post IDs
-                for key in posts_to_remove:
-                    post_data = self.redis_client.hgetall(key)
-                    if post_data and "id" in post_data:
-                        old_post_ids.add(post_data["id"])
-
-                # Second pass: transfer interactions and mark old ones for removal
                 for key in interaction_keys:
                     interaction_data = self.redis_client.hgetall(key)
                     if interaction_data and "id" in interaction_data:
