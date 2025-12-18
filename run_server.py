@@ -8,7 +8,6 @@ the simulation, coordinates clients, and handles agent registration.
 import argparse
 import json
 import logging
-import os
 import sys
 import time
 from datetime import datetime
@@ -18,7 +17,7 @@ from pathlib import Path
 import ray
 
 from common_utils import validate_config_directory
-from YServer.server import OrchestratorServer
+from YSimulator.YServer.server import OrchestratorServer
 
 
 def setup_logging(config_path: Path, server_name: str) -> logging.Logger:

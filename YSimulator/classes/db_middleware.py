@@ -6,7 +6,6 @@ or SQLite as the database backend. The middleware abstracts database operations
 to allow seamless switching between backends.
 """
 
-import json
 import logging
 import uuid
 from typing import Any, Dict, List, Optional
@@ -22,7 +21,7 @@ except ImportError:
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
-from classes.models import Base, InteractionModel, PostModel, User_mgmt
+from YSimulator.classes.models import Base, InteractionModel, PostModel, User_mgmt
 
 
 class DatabaseMiddleware:

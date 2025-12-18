@@ -13,7 +13,7 @@ from pathlib import Path
 
 import ray
 
-from classes.ray_models import SimulationInstruction
+from YSimulator.classes.ray_models import SimulationInstruction
 
 
 @ray.remote
@@ -49,7 +49,7 @@ class OrchestratorServer:
             redis_config: Redis configuration dict (optional)
             timeout_seconds: Seconds before considering a client stale (default: 60)
         """
-        from classes.db_middleware import DatabaseMiddleware
+        from YSimulator.classes.db_middleware import DatabaseMiddleware
 
         # Server configuration
         self.min_to_start = min_to_start

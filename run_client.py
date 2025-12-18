@@ -8,7 +8,6 @@ Ray orchestration server and executes agent behaviors.
 import argparse
 import json
 import logging
-import os
 import sys
 import time
 from datetime import datetime
@@ -18,8 +17,8 @@ from pathlib import Path
 import ray
 
 from common_utils import validate_config_directory
-from LLM_interactions.llm_service import LLMService
-from YClient.client import SimulationClient
+from YSimulator.YClient.LLM_interactions.llm_service import LLMService
+from YSimulator.YClient.client import SimulationClient
 
 
 def setup_logging(config_path: Path, client_name: str) -> logging.Logger:
