@@ -223,6 +223,8 @@ class SimulationClient:
         1. Registers agents with the server
         2. Registers the client
         3. Runs the simulation loop until completion or max days reached
+        4. Sends periodic heartbeats to prevent being marked as stale
+        5. Notifies server on completion
         """
         # Register agents with the server
         start_time = time.time()
@@ -247,54 +249,73 @@ class SimulationClient:
         current_day = 0
 
         slot_count = 0
+        last_heartbeat_time = time.time()
 
-        while current_day < max_days:
-            instruction = ray.get(self.server.get_instruction.remote(self.client_id))
+        try:
+            while current_day < max_days:
+                # Send heartbeat every 5 seconds
+                if time.time() - last_heartbeat_time > 5:
+                    ray.get(self.server.heartbeat.remote(self.client_id))
+                    last_heartbeat_time = time.time()
 
-            if instruction.status == "WAIT":
-                time.sleep(1)
-                continue
+                instruction = ray.get(self.server.get_instruction.remote(self.client_id))
 
-            # Check if we've reached the day limit
-            if instruction.day > max_days:
+                if instruction.status == "WAIT":
+                    time.sleep(1)
+                    continue
+
+                # Check if we've reached the day limit
+                if instruction.day > max_days:
+                    self.logger.info(
+                        "Reached maximum days, stopping",
+                        extra={"extra_data": {"max_days": max_days, "total_slots": slot_count}},
+                    )
+                    print(f"[{self.client_id}] Reached max days ({max_days}). Stopping.")
+                    break
+
+                current_day = instruction.day
+
+                # Process Logic
+                sim_start = time.time()
+                actions = self._simulate(instruction.day, instruction.slot, instruction.recent_post_ids)
+                sim_time = (time.time() - sim_start) * 1000
+
+                # Submit
+                submit_start = time.time()
+                ray.get(self.server.submit_actions.remote(self.client_id, actions))
+                submit_time = (time.time() - submit_start) * 1000
+
+                slot_count += 1
+
                 self.logger.info(
-                    "Reached maximum days, stopping",
-                    extra={"extra_data": {"max_days": max_days, "total_slots": slot_count}},
+                    "Slot completed",
+                    extra={
+                        "extra_data": {
+                            "day": instruction.day,
+                            "slot": instruction.slot,
+                            "num_actions": len(actions),
+                            "simulation_time_ms": sim_time,
+                            "submit_time_ms": submit_time,
+                        }
+                    },
                 )
-                print(f"[{self.client_id}] Reached max days ({max_days}). Stopping.")
-                break
 
-            current_day = instruction.day
+                print(
+                    f"[{self.client_id}] Day {instruction.day} Slot {instruction.slot} -> "
+                    f"Submitted {len(actions)} actions."
+                )
 
-            # Process Logic
-            sim_start = time.time()
-            actions = self._simulate(instruction.day, instruction.slot, instruction.recent_post_ids)
-            sim_time = (time.time() - sim_start) * 1000
-
-            # Submit
-            submit_start = time.time()
-            ray.get(self.server.submit_actions.remote(self.client_id, actions))
-            submit_time = (time.time() - submit_start) * 1000
-
-            slot_count += 1
-
-            self.logger.info(
-                "Slot completed",
-                extra={
-                    "extra_data": {
-                        "day": instruction.day,
-                        "slot": instruction.slot,
-                        "num_actions": len(actions),
-                        "simulation_time_ms": sim_time,
-                        "submit_time_ms": submit_time,
-                    }
-                },
-            )
-
-            print(
-                f"[{self.client_id}] Day {instruction.day} Slot {instruction.slot} -> "
-                f"Submitted {len(actions)} actions."
-            )
+        finally:
+            # Notify server that this client has completed all activities
+            try:
+                ray.get(self.server.complete_client.remote(self.client_id))
+                self.logger.info("Notified server of completion")
+                print(f"[{self.client_id}] ✅ Simulation complete. Server notified.")
+            except Exception as e:
+                self.logger.warning(
+                    f"Failed to notify server of completion: {e}",
+                    extra={"extra_data": {"error": str(e)}},
+                )
 
     def _simulate(self, day: int, slot: int, recent_posts: list) -> list:
         """

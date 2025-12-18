@@ -24,6 +24,7 @@
         }
     },
     "min_to_start": 1,
+    "timeout_seconds": 60,
     "redis": {
         "enabled": false,
         "host": "localhost",

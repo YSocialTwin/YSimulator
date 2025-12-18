@@ -89,6 +89,7 @@ Controls the Ray server parameters and database backend:
     }
   },
   "min_to_start": 1,                      // Minimum clients before simulation starts
+  "timeout_seconds": 60,                  // Seconds before considering a client stale (default: 60)
   "redis": {                              // Redis configuration (optional)
     "enabled": false,                     // Set to true to use Redis
     "host": "localhost",                  // Redis server host
@@ -122,6 +123,7 @@ Controls the Ray server parameters and database backend:
     - `username`: Database username (required)
     - `password`: Database password (optional, can be null for trusted connections)
 - `min_to_start`: Minimum number of connected clients before simulation begins (default: 1)
+- `timeout_seconds`: Seconds before considering a client stale/inactive and automatically removing it to prevent deadlocks (default: 60)
 - `redis`: Redis configuration object (optional)
   - `enabled`: Set to `true` to use Redis, `false` to use SQL database only (default: false)
   - `host`: Redis server hostname or IP address (required if enabled)
@@ -526,3 +528,69 @@ Edit `llm_prompts.json`:
   }
 }
 ```
+
+## Multi-Client Synchronization
+
+The server implements robust synchronization mechanisms to handle multiple concurrent clients with different simulation durations and potential failures.
+
+### How It Works
+
+1. **Barrier Synchronization**: The server waits for all **active** clients to submit their actions before advancing the simulation slot
+2. **Graceful Completion**: When a client finishes its planned activities, it notifies the server and no longer blocks progression
+3. **Heartbeat Mechanism**: Clients send periodic heartbeats (every 5 seconds) to signal they're alive
+4. **Timeout Detection**: If a client doesn't send a heartbeat for `timeout_seconds` (default: 60s), it's automatically removed
+
+### Client States
+
+- **Active**: Registered and still participating in simulation
+- **Completed**: Finished all planned activities, notified server, no longer blocks others
+- **Stale**: Haven't sent heartbeat within timeout period, automatically removed
+
+### Example Scenario
+
+```
+Initial: 3 clients start (A, B, C)
+Day 1 Slot 1: A, B, C all submit → Server advances to Slot 2
+Day 1 Slot 2: A, B, C all submit → Server advances to Day 2 Slot 1
+...
+Day 5: Client A finishes (only planned 5 days)
+  → A calls complete_client()
+  → Server marks A as "completed"
+  → Only B and C now block advancement
+Day 6-7: B and C continue without waiting for A
+Day 7: Client B finishes
+  → B calls complete_client()
+  → Only C now blocks advancement
+Day 10: Client C finishes
+  → Simulation complete
+```
+
+### Handling Crashed Clients
+
+If Client B crashes on Day 6 without notifying the server:
+1. Client B stops sending heartbeats
+2. After 60 seconds (timeout_seconds), server detects B is stale
+3. Server automatically marks B as completed
+4. Client C continues without being blocked
+
+### Configuration
+
+Control timeout behavior in `server_config.json`:
+
+```json
+{
+  "timeout_seconds": 60  // Adjust based on your network and processing delays
+}
+```
+
+**Recommendations:**
+- **Fast local networks**: 30-60 seconds
+- **Slow networks or heavy LLM processing**: 120-300 seconds
+- **Development/debugging**: 600+ seconds to avoid premature timeouts
+
+### Best Practices
+
+1. **Varied Simulation Durations**: Clients can have different `num_days` settings
+2. **Dynamic Joining**: New clients can join during simulation
+3. **Graceful Shutdown**: Always let the client run() method complete to ensure proper cleanup
+4. **Monitor Logs**: Check for timeout warnings indicating network or processing issues

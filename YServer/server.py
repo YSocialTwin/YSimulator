@@ -36,6 +36,7 @@ class OrchestratorServer:
         min_to_start: int = 1,
         server_name: str = "orchestrator",
         redis_config: dict = None,
+        timeout_seconds: int = 60,
     ):
         """
         Initialize the orchestrator server.
@@ -46,6 +47,7 @@ class OrchestratorServer:
             min_to_start: Minimum number of clients before simulation starts
             server_name: Name of this server instance (str)
             redis_config: Redis configuration dict (optional)
+            timeout_seconds: Seconds before considering a client stale (default: 60)
         """
         from classes.db_middleware import DatabaseMiddleware
 
@@ -53,10 +55,13 @@ class OrchestratorServer:
         self.min_to_start = min_to_start
         self.server_name = server_name
         self.config_path = Path(config_path)
+        self.timeout_seconds = timeout_seconds
 
         # Client tracking
-        self.registered_clients = set()
-        self.submitted_clients = set()
+        self.registered_clients = set()  # All registered clients
+        self.completed_clients = set()  # Clients that finished their simulation
+        self.submitted_clients = set()  # Clients that submitted for current slot
+        self.last_heartbeat = {}  # {client_id: timestamp}
         self.registered_agents = {}  # {agent_id: username}
 
         # Simulation state
@@ -82,6 +87,7 @@ class OrchestratorServer:
                     "db_type": db_config.get("type", "sqlite"),
                     "min_to_start": min_to_start,
                     "redis_enabled": self.db.use_redis,
+                    "timeout_seconds": timeout_seconds,
                 }
             },
         )
@@ -232,6 +238,7 @@ class OrchestratorServer:
 
         if client_id not in self.registered_clients:
             self.registered_clients.add(client_id)
+            self.last_heartbeat[client_id] = time.time()
             execution_time = (time.time() - start_time) * 1000
 
             self.logger.info(
@@ -240,12 +247,112 @@ class OrchestratorServer:
                     "extra_data": {
                         "client_id": client_id,
                         "total_clients": len(self.registered_clients),
+                        "active_clients": len(self._get_active_clients()),
                         "execution_time_ms": execution_time,
                     }
                 },
             )
-            print(f"[Server] 🟢 Client {client_id} joined. Total: {len(self.registered_clients)}")
+            print(
+                f"[Server] 🟢 Client {client_id} joined. "
+                f"Total: {len(self.registered_clients)}, "
+                f"Active: {len(self._get_active_clients())}"
+            )
         return True
+
+    def complete_client(self, client_id: str) -> bool:
+        """
+        Mark a client as completed (finished all planned activities).
+
+        Completed clients no longer block barrier advancement. This allows
+        clients with different simulation durations to coexist without deadlocks.
+
+        Args:
+            client_id: Unique identifier for the client
+
+        Returns:
+            bool: True if successfully marked as complete
+        """
+        if client_id in self.registered_clients:
+            self.completed_clients.add(client_id)
+            self.submitted_clients.discard(client_id)
+
+            self.logger.info(
+                "Client completed all activities",
+                extra={
+                    "extra_data": {
+                        "client_id": client_id,
+                        "remaining_active": len(self._get_active_clients()),
+                        "total_completed": len(self.completed_clients),
+                    }
+                },
+            )
+            print(
+                f"[Server] 🏁 Client {client_id} completed. "
+                f"Active: {len(self._get_active_clients())}, "
+                f"Completed: {len(self.completed_clients)}"
+            )
+
+            # Check if completing this client unblocks the barrier
+            self._check_barrier_and_advance()
+        return True
+
+    def heartbeat(self, client_id: str) -> bool:
+        """
+        Record a heartbeat from a client to indicate it's still alive.
+
+        Prevents the server from considering the client stale and removing it.
+
+        Args:
+            client_id: Unique identifier for the client
+
+        Returns:
+            bool: True if heartbeat recorded
+        """
+        if client_id in self.registered_clients:
+            self.last_heartbeat[client_id] = time.time()
+        return True
+
+    def _get_active_clients(self) -> set:
+        """
+        Get the set of active clients (registered but not completed).
+
+        Returns:
+            set: Set of active client IDs
+        """
+        return self.registered_clients - self.completed_clients
+
+    def _check_for_stale_clients(self):
+        """
+        Check for clients that haven't sent a heartbeat recently and remove them.
+
+        This prevents deadlocks when clients crash or disconnect abruptly.
+        """
+        current_time = time.time()
+        stale_clients = []
+
+        for client_id in self._get_active_clients():
+            last_hb = self.last_heartbeat.get(client_id, 0)
+            if current_time - last_hb > self.timeout_seconds:
+                stale_clients.append(client_id)
+
+        for client_id in stale_clients:
+            self.logger.warning(
+                "Removing stale client (no heartbeat)",
+                extra={
+                    "extra_data": {
+                        "client_id": client_id,
+                        "timeout_seconds": self.timeout_seconds,
+                        "last_heartbeat_ago": current_time - self.last_heartbeat.get(client_id, 0),
+                    }
+                },
+            )
+            print(
+                f"[Server] ⚠️  Removing stale client {client_id} "
+                f"(no heartbeat for {self.timeout_seconds}s)"
+            )
+            # Mark as completed to not block others
+            self.completed_clients.add(client_id)
+            self.submitted_clients.discard(client_id)
 
     def deregister_client(self, client_id: str) -> bool:
         """
@@ -290,8 +397,12 @@ class OrchestratorServer:
         Returns:
             SimulationInstruction: Instruction with status (WAIT/PROCEED) and simulation state
         """
+        # Check for stale clients before processing
+        self._check_for_stale_clients()
+
         # 1. Pause if not enough players
-        if len(self.registered_clients) < self.min_to_start:
+        active_clients = self._get_active_clients()
+        if len(active_clients) < self.min_to_start:
             return SimulationInstruction(status="WAIT")
 
         # 2. Wait if this client already finished the current slot
@@ -376,22 +487,28 @@ class OrchestratorServer:
 
     def _check_barrier_and_advance(self) -> None:
         """
-        Check if all clients have submitted actions and advance simulation state.
+        Check if all active clients have submitted actions and advance simulation state.
 
         This implements the core dynamic barrier synchronization mechanism.
+        Only waits for active clients (not completed ones).
         """
-        current_count = len(self.registered_clients)
+        active_clients = self._get_active_clients()
+        active_count = len(active_clients)
 
-        # Do not advance if no one is connected
-        if current_count == 0:
+        # Do not advance if no one is active
+        if active_count == 0:
             return
 
-        # If everyone who is CURRENTLY registered has submitted, advance.
-        if len(self.submitted_clients) >= current_count:
+        # Count how many active clients have submitted
+        active_submitted = len(self.submitted_clients & active_clients)
+
+        # If all active clients have submitted, advance.
+        if active_submitted >= active_count:
             execution_start = time.time()
 
             print(
-                f"[Server] ✅ Day {self.day} Slot {self.slot} complete (Agents: {current_count}). Advancing..."
+                f"[Server] ✅ Day {self.day} Slot {self.slot} complete "
+                f"(Active clients: {active_count}). Advancing..."
             )
 
             self.submitted_clients.clear()
@@ -446,7 +563,7 @@ class OrchestratorServer:
                     "extra_data": {
                         "new_day": self.day,
                         "new_slot": self.slot,
-                        "num_clients": current_count,
+                        "num_active_clients": active_count,
                         "day_completed": day_completed,
                         "execution_time_ms": execution_time,
                     }

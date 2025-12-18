@@ -108,6 +108,7 @@ if __name__ == "__main__":
     address = config.get("address", "auto")
     port = config.get("port")
     min_to_start = config.get("min_to_start", 1)  # Minimum clients before simulation starts
+    timeout_seconds = config.get("timeout_seconds", 60)  # Stale client timeout (default: 60s)
     
     # Database configuration
     db_config = config.get("database", {})
@@ -182,6 +183,7 @@ if __name__ == "__main__":
         min_to_start=min_to_start,
         server_name=server_name,
         redis_config=redis_config,
+        timeout_seconds=timeout_seconds,
     )
     actor_time = (time.time() - actor_start) * 1000
 
