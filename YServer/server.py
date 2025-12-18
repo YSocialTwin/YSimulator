@@ -12,8 +12,6 @@ from datetime import datetime
 from pathlib import Path
 
 import ray
-from sqlalchemy import create_engine
-from sqlalchemy.orm import Session
 
 from classes.ray_models import SimulationInstruction
 
@@ -37,6 +35,7 @@ class OrchestratorServer:
         min_to_start: int = 1,
         config_path: str = ".",
         server_name: str = "orchestrator",
+        redis_config: dict = None,
     ):
         """
         Initialize the orchestrator server.
@@ -46,12 +45,9 @@ class OrchestratorServer:
             min_to_start: Minimum number of clients before simulation starts
             config_path: Path to configuration directory for logs
             server_name: Name of this server instance (str)
+            redis_config: Redis configuration dict (optional)
         """
-        from classes.models import Base
-
-        # Initialize database
-        self.engine = create_engine(f"sqlite:///{db_name}")
-        Base.metadata.create_all(self.engine)
+        from classes.db_middleware import DatabaseMiddleware
 
         # Server configuration
         self.min_to_start = min_to_start
@@ -68,11 +64,23 @@ class OrchestratorServer:
         self.slot = 1
         self.recent_posts_cache = []
 
-        # Set up logging
+        # Set up logging first
         self._setup_logging()
+
+        # Initialize database middleware
+        self.db = DatabaseMiddleware(
+            sqlite_db_path=db_name, redis_config=redis_config, logger=self.logger
+        )
+
         self.logger.info(
             "Orchestrator server initialized",
-            extra={"extra_data": {"db_name": db_name, "min_to_start": min_to_start}},
+            extra={
+                "extra_data": {
+                    "db_name": db_name,
+                    "min_to_start": min_to_start,
+                    "redis_enabled": self.db.use_redis,
+                }
+            },
         )
 
     def _setup_logging(self):
@@ -123,64 +131,56 @@ class OrchestratorServer:
         Returns:
             dict: Summary of registration results with counts
         """
-        from classes.models import User_mgmt
-
         start_time = time.time()
-        session = Session(self.engine)
         registered_count = 0
         skipped_count = 0
 
         try:
             for agent_profile in agents:
-                # Check if agent already exists
-                existing = session.query(User_mgmt).filter_by(id=agent_profile.id).first()
-
-                if existing:
-                    skipped_count += 1
-                    self.registered_agents[agent_profile.id] = agent_profile.username
-                    continue
-
-                # Set joined_on if not set
+                # Prepare user data
                 joined_on = agent_profile.joined_on
                 if joined_on == 0:
                     joined_on = int(time.time())
 
-                # Create new user record
-                user = User_mgmt(
-                    id=agent_profile.id,
-                    username=agent_profile.username,
-                    email=agent_profile.email,
-                    password=agent_profile.password,
-                    leaning=agent_profile.leaning,
-                    user_type=agent_profile.user_type,
-                    age=agent_profile.age,
-                    oe=agent_profile.oe,
-                    co=agent_profile.co,
-                    ex=agent_profile.ex,
-                    ag=agent_profile.ag,
-                    ne=agent_profile.ne,
-                    recsys_type=agent_profile.recsys_type,
-                    frecsys_type=agent_profile.frecsys_type,
-                    language=agent_profile.language,
-                    owner=agent_profile.owner,
-                    education_level=agent_profile.education_level,
-                    joined_on=joined_on,
-                    gender=agent_profile.gender,
-                    nationality=agent_profile.nationality,
-                    round_actions=agent_profile.round_actions,
-                    toxicity=agent_profile.toxicity,
-                    is_page=agent_profile.is_page,
-                    left_on=agent_profile.left_on,
-                    daily_activity_level=agent_profile.daily_activity_level,
-                    profession=agent_profile.profession,
-                    activity_profile=agent_profile.activity_profile,
-                    archetype=agent_profile.archetype,
-                )
-                session.add(user)
-                registered_count += 1
-                self.registered_agents[agent_profile.id] = agent_profile.username
+                user_data = {
+                    "id": agent_profile.id,
+                    "username": agent_profile.username,
+                    "email": agent_profile.email,
+                    "password": agent_profile.password,
+                    "leaning": agent_profile.leaning,
+                    "user_type": agent_profile.user_type,
+                    "age": agent_profile.age,
+                    "oe": agent_profile.oe,
+                    "co": agent_profile.co,
+                    "ex": agent_profile.ex,
+                    "ag": agent_profile.ag,
+                    "ne": agent_profile.ne,
+                    "recsys_type": agent_profile.recsys_type,
+                    "frecsys_type": agent_profile.frecsys_type,
+                    "language": agent_profile.language,
+                    "owner": agent_profile.owner,
+                    "education_level": agent_profile.education_level,
+                    "joined_on": joined_on,
+                    "gender": agent_profile.gender,
+                    "nationality": agent_profile.nationality,
+                    "round_actions": agent_profile.round_actions,
+                    "toxicity": agent_profile.toxicity,
+                    "is_page": agent_profile.is_page,
+                    "left_on": agent_profile.left_on,
+                    "daily_activity_level": agent_profile.daily_activity_level,
+                    "profession": agent_profile.profession,
+                    "activity_profile": agent_profile.activity_profile,
+                    "archetype": agent_profile.archetype,
+                }
 
-            session.commit()
+                # Try to register user
+                if self.db.register_user(user_data):
+                    registered_count += 1
+                    self.registered_agents[agent_profile.id] = agent_profile.username
+                else:
+                    skipped_count += 1
+                    self.registered_agents[agent_profile.id] = agent_profile.username
+
             execution_time = (time.time() - start_time) * 1000
 
             self.logger.info(
@@ -206,14 +206,11 @@ class OrchestratorServer:
             }
 
         except Exception as e:
-            session.rollback()
             self.logger.error(
                 f"Agent registration error: {e}", extra={"extra_data": {"error": str(e)}}
             )
             print(f"[Server] ❌ Agent registration error: {e}")
             raise
-        finally:
-            session.close()
 
     def register_client(self, client_id: str) -> bool:
         """
@@ -312,35 +309,29 @@ class OrchestratorServer:
             actions: List of ActionDTO objects representing agent actions
         """
         start_time = time.time()
-        from classes.models import InteractionModel, PostModel
-
-        session = Session(self.engine)
         new_ids = []
 
         try:
             for act in actions:
                 if act.action_type == "POST":
-                    p = PostModel(
-                        agent_id=act.agent_id,
-                        cluster_id=act.cluster_id,
-                        content=act.content,
-                        day=self.day,
-                        slot=self.slot,
-                    )
-                    session.add(p)
-                    session.flush()
-                    new_ids.append(p.id)
+                    post_data = {
+                        "agent_id": act.agent_id,
+                        "cluster_id": act.cluster_id,
+                        "content": act.content,
+                        "day": self.day,
+                        "slot": self.slot,
+                    }
+                    post_id = self.db.add_post(post_data)
+                    if post_id:
+                        new_ids.append(post_id)
                 else:
-                    session.add(
-                        InteractionModel(
-                            agent_id=act.agent_id,
-                            post_id=act.target_post_id,
-                            type=act.action_type,
-                            content=act.content,
-                        )
-                    )
-
-            session.commit()
+                    interaction_data = {
+                        "agent_id": act.agent_id,
+                        "post_id": act.target_post_id,
+                        "type": act.action_type,
+                        "content": act.content,
+                    }
+                    self.db.add_interaction(interaction_data)
 
             if new_ids:
                 self.recent_posts_cache.extend(new_ids)
@@ -368,8 +359,6 @@ class OrchestratorServer:
                 extra={"extra_data": {"client_id": client_id, "error": str(e)}},
             )
             print(f"DB Error: {e}")
-        finally:
-            session.close()
 
         # Mark this specific client as done
         self.submitted_clients.add(client_id)

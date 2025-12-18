@@ -4,5 +4,13 @@
   "address": "auto",
   "port": null,
   "database_file": "simulation.db",
-  "min_to_start": 1
+  "min_to_start": 1,
+  "redis": {
+    "enabled": false,
+    "host": "localhost",
+    "port": 6379,
+    "db": 0,
+    "password": null,
+    "note": "Set enabled=true to use Redis, otherwise SQLite will be used"
+  }
 }

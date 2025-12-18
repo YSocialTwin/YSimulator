@@ -69,7 +69,14 @@ Controls the Ray server parameters:
   "address": "auto",                      // "auto" for local, or specific address
   "port": null,                           // Port number (null for default)
   "database_file": "simulation.db",       // SQLite database filename
-  "min_to_start": 1                       // Minimum clients before simulation starts
+  "min_to_start": 1,                      // Minimum clients before simulation starts
+  "redis": {                              // Redis configuration (optional)
+    "enabled": false,                     // Set to true to use Redis
+    "host": "localhost",                  // Redis server host
+    "port": 6379,                         // Redis server port
+    "db": 0,                              // Redis database number
+    "password": null                      // Redis password (null if no auth)
+  }
 }
 ```
 
@@ -80,8 +87,22 @@ Controls the Ray server parameters:
 - `port`: Reserved for future use. Ray port is currently managed through Ray's internal mechanisms or environment variables
 - `database_file`: Path to the SQLite database file (relative to config directory)
 - `min_to_start`: Minimum number of connected clients before simulation begins (default: 1)
+- `redis`: Redis configuration object (optional)
+  - `enabled`: Set to `true` to use Redis, `false` to use SQLite (default: false)
+  - `host`: Redis server hostname or IP address
+  - `port`: Redis server port number  
+  - `db`: Redis database number (0-15)
+  - `password`: Redis authentication password (set to `null` if no password required)
 
-**Note**: The database file and logs are created in the same directory as the configuration file.
+**Database Backend:**
+
+The server supports two database backends:
+- **SQLite** (default): File-based database stored in the configuration directory
+- **Redis** (optional): In-memory data store for better performance
+
+If Redis is enabled and the connection succeeds, it will be used for all database operations. If Redis connection fails or is disabled, the system automatically falls back to SQLite.
+
+**Note**: The database file is created in the same directory as the configuration file, and SQLite is always initialized as a fallback even when Redis is enabled.
 
 ### 2. `agent_population.json` - Agent Population Configuration
 

@@ -109,6 +109,7 @@ if __name__ == "__main__":
     port = config.get("port")
     db_filename = config.get("database_file", "simulation.db")
     min_to_start = config.get("min_to_start", 1)  # Minimum clients before simulation starts
+    redis_config = config.get("redis")  # Redis configuration (optional)
 
     # Create database in config directory
     db_path = config_dir / db_filename
@@ -175,6 +176,7 @@ if __name__ == "__main__":
         min_to_start=min_to_start,
         config_path=str(config_dir),
         server_name=server_name,
+        redis_config=redis_config,
     )
     actor_time = (time.time() - actor_start) * 1000
 
