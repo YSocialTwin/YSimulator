@@ -7,16 +7,54 @@ This guide explains the JSON configuration files used by YSimulator.
 ### Running the Server
 
 ```bash
-python run_server.py --config path/to/server_config.json
+python run_server.py --config path/to/config_directory
 ```
+
+The configuration directory must contain `server_config.json`.
 
 ### Running the Client
 
 ```bash
-python run_client.py --config path/to/simulation_config.json
+python run_client.py --config path/to/config_directory
 ```
 
-Example configurations are provided in the `example_conf/` directory.
+The configuration directory must contain:
+- `simulation_config.json`
+- `agent_population.json`
+- `llm_prompts.json`
+
+### Default Behavior
+
+If no `--config` argument is provided, both server and client will look for configuration files in the current directory.
+
+Example configurations are provided in the `example_conf/` directory:
+
+```bash
+# Run server with example config
+python run_server.py --config example_conf
+
+# Run client with example config
+python run_client.py --config example_conf
+```
+
+## File Structure
+
+All configuration files, database, and logs are kept in the same directory:
+
+```
+config_directory/
+├── server_config.json          # Server configuration
+├── simulation_config.json      # Client simulation configuration
+├── agent_population.json       # Agent profiles
+├── llm_prompts.json           # LLM prompts and personas
+├── simulation.db              # Database (auto-created)
+├── ray_config.temp            # Ray address (auto-created)
+└── logs/                      # Log files (auto-created)
+    ├── {server_name}_server.log
+    ├── {server_name}_actor.log
+    ├── {client_name}_client.log
+    └── {client_name}_actor.log
+```
 
 ## Configuration Files
 
@@ -191,28 +229,47 @@ Defines personas and prompt templates for LLM interactions:
 
 ## Usage
 
-### Starting the Server
+To use YSimulator with a custom configuration directory:
+
+1. **Create a configuration directory** with all required files:
+   ```bash
+   mkdir my_simulation
+   cp example_conf/*.json my_simulation/
+   ```
+
+2. **Edit configurations** as needed:
+   ```bash
+   nano my_simulation/server_config.json
+   nano my_simulation/simulation_config.json
+   ```
+
+3. **Run the server** pointing to the directory:
+   ```bash
+   python run_server.py --config my_simulation
+   ```
+
+4. **Run the client** in another terminal:
+   ```bash
+   python run_client.py --config my_simulation
+   ```
+
+All generated files (database, logs, temporary files) will be created in the same configuration directory.
+
+### Default Configuration
+
+If no `--config` argument is provided, the server and client will look for configuration files in the current directory:
 
 ```bash
+# Server looks for ./server_config.json
 python run_server.py
+
+# Client looks for ./simulation_config.json, ./agent_population.json, ./llm_prompts.json
+python run_client.py
 ```
-
-The server will read `server_config.json` and start with the specified configuration.
-
-### Starting the Client
-
-```bash
-python run_client.py --id client_1
-```
-
-The client will read:
-- `simulation_config.json` - for simulation and LLM parameters
-- `agent_population.json` - for agent population settings
-- `llm_prompts.json` - for LLM prompt templates
 
 ### Customizing Configuration
 
-1. Edit the JSON files to customize parameters
+1. Edit the JSON files in your configuration directory
 2. No code changes required
 3. Restart server/client to apply changes
 
