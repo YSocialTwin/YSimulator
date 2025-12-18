@@ -2,6 +2,22 @@
 
 This guide explains the JSON configuration files used by YSimulator.
 
+## Quick Start
+
+### Running the Server
+
+```bash
+python run_server.py --config path/to/server_config.json
+```
+
+### Running the Client
+
+```bash
+python run_client.py --config path/to/simulation_config.json
+```
+
+Example configurations are provided in the `example_conf/` directory.
+
 ## Configuration Files
 
 ### 1. `server_config.json` - Server Configuration
@@ -10,18 +26,22 @@ Controls the Ray server parameters:
 
 ```json
 {
-  "namespace": "social_sim",      // Ray namespace for the cluster
-  "address": "auto",               // "auto" for local, or specific address
-  "port": null,                    // Port number (null for default)
-  "database_file": "simulation.db" // SQLite database filename
+  "server_name": "orchestrator_server",  // Name for this server instance
+  "namespace": "social_sim",              // Ray namespace for the cluster
+  "address": "auto",                      // "auto" for local, or specific address
+  "port": null,                           // Port number (null for default)
+  "database_file": "simulation.db"        // SQLite database filename
 }
 ```
 
 **Parameters:**
+- `server_name`: Unique name for this server instance (used in logs)
 - `namespace`: The Ray namespace used for actor isolation
 - `address`: Server address ("auto" for automatic local setup, or a specific address)
 - `port`: Reserved for future use. Ray port is currently managed through Ray's internal mechanisms or environment variables
-- `database_file`: Path to the SQLite database file
+- `database_file`: Path to the SQLite database file (relative to config directory)
+
+**Note**: The database file and logs are created in the same directory as the configuration file.
 
 ### 2. `agent_population.json` - Agent Population Configuration
 
@@ -103,6 +123,7 @@ Main configuration for client simulation parameters:
 
 ```json
 {
+  "client_name": "client_1",         // Name for this client instance
   "namespace": "social_sim",
   "server": {
     "address": null,
@@ -122,6 +143,7 @@ Main configuration for client simulation parameters:
 ```
 
 **Parameters:**
+- `client_name`: Unique name for this client instance (used in logs, not from command line)
 - `namespace`: Ray namespace (must match server)
 - `server.address`: Server address (null to use ray_config.temp file)
 - `server.port`: Server port (null for default)
@@ -191,6 +213,55 @@ The client will read:
 1. Edit the JSON files to customize parameters
 2. No code changes required
 3. Restart server/client to apply changes
+
+## Logging
+
+Both server and client generate rotating JSON logs in the `logs/` directory (created in the same location as the configuration file).
+
+### Log Files
+
+- **Server logs**: `logs/{server_name}_server.log` - Main server process
+- **Server actor logs**: `logs/{server_name}_actor.log` - Orchestrator actor
+- **Client logs**: `logs/{client_name}_client.log` - Main client process
+- **Client actor logs**: `logs/{client_name}_actor.log` - Simulation actor
+
+### Log Format
+
+Logs are in JSON format with the following structure:
+
+```json
+{
+  "timestamp": "2025-12-18T10:47:47.123Z",
+  "level": "INFO",
+  "message": "Agent registration complete",
+  "module": "server",
+  "function": "register_agents",
+  "line": 150,
+  "registered": 50,
+  "skipped": 0,
+  "execution_time_ms": 125.5
+}
+```
+
+### Log Rotation
+
+- Maximum log file size: 10MB
+- Number of backup files: 5
+- Old logs are automatically rotated to `.log.1`, `.log.2`, etc.
+
+## Code Formatting
+
+This project uses automatic code formatting with:
+- **black**: Code formatter
+- **isort**: Import sorter
+
+A pre-commit hook automatically formats Python files before each commit. Install formatting tools:
+
+```bash
+pip install black isort
+```
+
+The formatting is enforced automatically on commit.
 
 ## Examples
 
