@@ -324,6 +324,11 @@ class OrchestratorServer:
                     post_id = self.db.add_post(post_data)
                     if post_id:
                         new_ids.append(post_id)
+                    else:
+                        self.logger.warning(
+                            f"Failed to add post for agent {act.agent_id}",
+                            extra={"extra_data": {"agent_id": act.agent_id}},
+                        )
                 else:
                     interaction_data = {
                         "agent_id": act.agent_id,

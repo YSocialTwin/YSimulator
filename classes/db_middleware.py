@@ -10,6 +10,14 @@ import json
 import logging
 from typing import Any, Dict, List, Optional
 
+try:
+    import redis
+
+    REDIS_AVAILABLE = True
+except ImportError:
+    REDIS_AVAILABLE = False
+    redis = None
+
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
@@ -42,37 +50,46 @@ class DatabaseMiddleware:
         self.use_redis = False
         self.redis_client = None
 
-        # Try to initialize Redis if configured
-        if redis_config and redis_config.get("enabled", False):
-            try:
-                import redis
-
-                self.redis_client = redis.Redis(
-                    host=redis_config.get("host", "localhost"),
-                    port=redis_config.get("port", 6379),
-                    db=redis_config.get("db", 0),
-                    password=redis_config.get("password"),
-                    decode_responses=True,
-                )
-                # Test connection
-                self.redis_client.ping()
-                self.use_redis = True
+        # Try to initialize Redis if explicitly configured with enabled=true and host specified
+        if redis_config and isinstance(redis_config, dict) and redis_config.get("enabled", False):
+            # Validate that Redis host is provided
+            if not redis_config.get("host"):
                 self.logger.info(
-                    "Redis connection established",
-                    extra={
-                        "extra_data": {
-                            "host": redis_config.get("host"),
-                            "port": redis_config.get("port"),
-                        }
-                    },
+                    "Redis is enabled but no host specified in config, using SQLite only"
                 )
-            except Exception as e:
+            elif not REDIS_AVAILABLE:
                 self.logger.warning(
-                    f"Redis connection failed, falling back to SQLite: {e}",
-                    extra={"extra_data": {"error": str(e)}},
+                    "Redis is enabled in config but redis module is not installed. "
+                    "Install with: pip install redis"
                 )
-                self.use_redis = False
-                self.redis_client = None
+            else:
+                try:
+                    self.redis_client = redis.Redis(
+                        host=redis_config.get("host"),
+                        port=redis_config.get("port", 6379),
+                        db=redis_config.get("db", 0),
+                        password=redis_config.get("password"),
+                        decode_responses=True,
+                    )
+                    # Test connection
+                    self.redis_client.ping()
+                    self.use_redis = True
+                    self.logger.info(
+                        "Redis connection established",
+                        extra={
+                            "extra_data": {
+                                "host": redis_config.get("host"),
+                                "port": redis_config.get("port"),
+                            }
+                        },
+                    )
+                except Exception as e:
+                    self.logger.warning(
+                        f"Redis connection failed, falling back to SQLite: {e}",
+                        extra={"extra_data": {"error": str(e)}},
+                    )
+                    self.use_redis = False
+                    self.redis_client = None
 
         # Always initialize SQLite as fallback
         self.engine = create_engine(f"sqlite:///{sqlite_db_path}")
@@ -155,7 +172,15 @@ class DatabaseMiddleware:
                     user = session.query(User_mgmt).filter_by(id=user_id).first()
                     if not user:
                         return None
-                    return {c.name: getattr(user, c.name) for c in user.__table__.columns}
+                    # Convert to dict with proper type handling
+                    return {
+                        c.name: (
+                            str(getattr(user, c.name))
+                            if getattr(user, c.name) is not None
+                            else None
+                        )
+                        for c in user.__table__.columns
+                    }
                 finally:
                     session.close()
         except Exception as e:
