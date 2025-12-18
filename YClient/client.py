@@ -8,13 +8,41 @@ from classes.models import ActionDTO
 # --- Client Actor ---
 @ray.remote
 class SimulationClient:
-    def __init__(self, client_id, llm_handle, num_agents):
+    def __init__(self, client_id, llm_handle, agent_config=None, simulation_config=None):
         self.client_id = client_id
         self.llm = llm_handle
+        
+        # Load agent configuration with defaults
+        if agent_config is None:
+            agent_config = {
+                "num_agents": 50,
+                "cluster_distribution": {
+                    "weights": [0.4, 0.3, 0.3],
+                    "llm_enabled_probability": 0.1
+                }
+            }
+        
+        # Load simulation configuration with defaults
+        if simulation_config is None:
+            simulation_config = {
+                "simulation": {
+                    "num_days": 0,
+                    "num_slots_per_day": 24
+                }
+            }
+        
+        self.num_days = simulation_config["simulation"]["num_days"]
+        self.num_slots_per_day = simulation_config["simulation"]["num_slots_per_day"]
+        
+        # Create agents based on configuration
+        num_agents = agent_config["num_agents"]
+        cluster_weights = agent_config["cluster_distribution"]["weights"]
+        llm_prob = agent_config["cluster_distribution"]["llm_enabled_probability"]
+        
         self.agents = []
         for i in range(num_agents):
-            cluster = random.choices([0, 1, 2], weights=[0.4, 0.3, 0.3])[0]
-            self.agents.append({'id': i, 'cluster': cluster, 'llm': random.random() < 0.1})
+            cluster = random.choices([0, 1, 2], weights=cluster_weights)[0]
+            self.agents.append({'id': i, 'cluster': cluster, 'llm': random.random() < llm_prob})
 
         # Connect to the Named Server Actor
         self.server = ray.get_actor("Orchestrator")
@@ -23,12 +51,23 @@ class SimulationClient:
         ray.get(self.server.register_client.remote(self.client_id))
         print(f"[{self.client_id}] Registered. Waiting for sync...")
 
-        while True:
+        # Determine stopping condition
+        max_days = self.num_days if self.num_days > 0 else float('inf')
+        current_day = 0
+
+        while current_day < max_days:
             instruction = ray.get(self.server.get_instruction.remote(self.client_id))
 
             if instruction.status == 'WAIT':
                 time.sleep(1)
                 continue
+
+            # Check if we've reached the day limit
+            if instruction.day > max_days:
+                print(f"[{self.client_id}] Reached max days ({max_days}). Stopping.")
+                break
+            
+            current_day = instruction.day
 
             # Process Logic
             actions = self._simulate(instruction.day, instruction.slot, instruction.recent_post_ids)
