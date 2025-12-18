@@ -16,7 +16,7 @@ from pathlib import Path
 
 import ray
 
-from common_utils import validate_config_directory
+from YSimulator.common_utils import validate_config_directory
 from YSimulator.YServer.server import OrchestratorServer
 
 

@@ -16,7 +16,7 @@ from pathlib import Path
 
 import ray
 
-from common_utils import validate_config_directory
+from YSimulator.common_utils import validate_config_directory
 from YSimulator.YClient.LLM_interactions.llm_service import LLMService
 from YSimulator.YClient.client import SimulationClient
 
