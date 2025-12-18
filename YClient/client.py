@@ -2,7 +2,7 @@
 import ray
 import time
 import random
-from classes.models import ActionDTO, AgentProfile
+from classes.ray_models import ActionDTO, AgentProfile
 
 
 # --- Client Actor ---
@@ -224,6 +224,7 @@ class SimulationClient:
                     actions.append(ActionDTO(a_id, cid, res_act, target_post_id=target))
 
         return actions
+
     def shutdown(self):
         ray.get(self.server.deregister_client.remote(self.client_id))
 
