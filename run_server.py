@@ -24,9 +24,8 @@ if __name__ == "__main__":
     if address and address != "auto":
         init_kwargs["address"] = address
     
-    # Add port if specified
-    if port:
-        init_kwargs["_node_ip_address"] = f"0.0.0.0:{port}"
+    # Note: Port configuration is handled by Ray's internal mechanisms
+    # Use RAY_ADDRESS environment variable or ray start --port for custom ports
     
     # Start Cluster
     context = ray.init(**init_kwargs)

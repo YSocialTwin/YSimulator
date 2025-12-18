@@ -63,7 +63,7 @@ class SimulationClient:
                 continue
 
             # Check if we've reached the day limit
-            if instruction.day > max_days:
+            if instruction.day >= max_days:
                 print(f"[{self.client_id}] Reached max days ({max_days}). Stopping.")
                 break
             

@@ -20,7 +20,7 @@ Controls the Ray server parameters:
 **Parameters:**
 - `namespace`: The Ray namespace used for actor isolation
 - `address`: Server address ("auto" for automatic local setup, or a specific address)
-- `port`: Port for Ray server (null uses default)
+- `port`: Reserved for future use. Ray port is currently managed through Ray's internal mechanisms or environment variables
 - `database_file`: Path to the SQLite database file
 
 ### 2. `agent_population.json` - Agent Population Configuration
@@ -77,7 +77,7 @@ Main configuration for client simulation parameters:
 - `llm.port`: LLM server port (e.g., 11434 for Ollama)
 - `llm.model`: LLM model name (e.g., "llama3.2")
 - `llm.temperature`: LLM temperature for generation (0.0-1.0)
-- `simulation.num_days`: Number of days to simulate (0 = infinite)
+- `simulation.num_days`: Number of days to simulate (0 = infinite, continues until manually stopped)
 - `simulation.num_slots_per_day`: Time slots per day (typically 24)
 
 ### 4. `llm_prompts.json` - LLM Prompt Templates

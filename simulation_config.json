@@ -12,6 +12,7 @@
   },
   "simulation": {
     "num_days": 0,
-    "num_slots_per_day": 24
+    "num_slots_per_day": 24,
+    "note": "num_days=0 means infinite simulation, set to a positive number to limit duration"
   }
 }
