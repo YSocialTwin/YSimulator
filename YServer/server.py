@@ -5,7 +5,7 @@ import sys
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 # Local import prevents pickling errors
-from classes.models import ActionDTO, SimulationInstruction
+from classes.models import ActionDTO, SimulationInstruction, AgentProfile
 
 
 # --- Server Actor Definition ---
@@ -19,10 +19,95 @@ class OrchestratorServer:
         self.min_to_start = min_to_start
         self.registered_clients = set()
         self.submitted_clients = set()
+        self.registered_agents = {}  # Track registered agents: {agent_id: username}
 
         self.day = 1
         self.slot = 1
         self.recent_posts_cache = []
+    
+    def register_agents(self, agents: list):
+        """
+        Register agent profiles in the database if they don't already exist.
+        
+        Args:
+            agents: List of AgentProfile dataclass instances
+        
+        Returns:
+            dict: Summary of registration results
+        """
+        from classes.models import User_mgmt
+        import time
+        
+        session = Session(self.engine)
+        registered_count = 0
+        updated_count = 0
+        skipped_count = 0
+        
+        try:
+            for agent_profile in agents:
+                # Check if agent already exists
+                existing = session.query(User_mgmt).filter_by(id=agent_profile.id).first()
+                
+                if existing:
+                    skipped_count += 1
+                    self.registered_agents[agent_profile.id] = agent_profile.username
+                    continue
+                
+                # Set joined_on if not set
+                joined_on = agent_profile.joined_on
+                if joined_on == 0:
+                    joined_on = int(time.time())
+                
+                # Create new user record
+                user = User_mgmt(
+                    id=agent_profile.id,
+                    username=agent_profile.username,
+                    email=agent_profile.email,
+                    password=agent_profile.password,
+                    leaning=agent_profile.leaning,
+                    user_type=agent_profile.user_type,
+                    age=agent_profile.age,
+                    oe=agent_profile.oe,
+                    co=agent_profile.co,
+                    ex=agent_profile.ex,
+                    ag=agent_profile.ag,
+                    ne=agent_profile.ne,
+                    recsys_type=agent_profile.recsys_type,
+                    frecsys_type=agent_profile.frecsys_type,
+                    language=agent_profile.language,
+                    owner=agent_profile.owner,
+                    education_level=agent_profile.education_level,
+                    joined_on=joined_on,
+                    gender=agent_profile.gender,
+                    nationality=agent_profile.nationality,
+                    round_actions=agent_profile.round_actions,
+                    toxicity=agent_profile.toxicity,
+                    is_page=agent_profile.is_page,
+                    left_on=agent_profile.left_on,
+                    daily_activity_level=agent_profile.daily_activity_level,
+                    profession=agent_profile.profession,
+                    activity_profile=agent_profile.activity_profile,
+                    archetype=agent_profile.archetype
+                )
+                session.add(user)
+                registered_count += 1
+                self.registered_agents[agent_profile.id] = agent_profile.username
+            
+            session.commit()
+            print(f"[Server] 👥 Agent Registration: {registered_count} new, {skipped_count} existing")
+            
+            return {
+                "registered": registered_count,
+                "skipped": skipped_count,
+                "total": len(self.registered_agents)
+            }
+            
+        except Exception as e:
+            session.rollback()
+            print(f"[Server] ❌ Agent registration error: {e}")
+            raise
+        finally:
+            session.close()
 
     def register_client(self, client_id):
         """

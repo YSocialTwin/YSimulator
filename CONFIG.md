@@ -25,25 +25,77 @@ Controls the Ray server parameters:
 
 ### 2. `agent_population.json` - Agent Population Configuration
 
-Defines the agent population characteristics:
+Defines the agent population with detailed profiles based on the User_mgmt model:
 
 ```json
 {
-  "num_agents": 50,
-  "cluster_distribution": {
-    "weights": [0.4, 0.3, 0.3],
+  "agents": [
+    {
+      "id": 1,
+      "username": "validator_001",
+      "email": "validator001@simulation.local",
+      "age": 35,
+      "oe": "medium",
+      "co": "high",
+      "ex": "low",
+      "ag": "medium",
+      "ne": "low",
+      "education_level": "graduate",
+      "gender": "non-binary",
+      "nationality": "US",
+      "profession": "Data Analyst",
+      "activity_profile": "Evening Active",
+      "archetype": "Validator",
+      "cluster": 0,
+      "llm": true
+    }
+  ],
+  "generation_config": {
+    "num_additional_agents": 47,
+    "cluster_distribution": {
+      "weights": [0.4, 0.3, 0.3]
+    },
     "llm_enabled_probability": 0.1
   }
 }
 ```
 
-**Parameters:**
-- `num_agents`: Total number of agents per client
+**Agent Fields** (based on User_mgmt model):
+- `id`: Unique agent identifier (required)
+- `username`: Agent username (required)
+- `email`: Agent email address
+- `age`: Age in years
+- **Big Five Personality Traits**:
+  - `oe`: Openness to Experience (low/medium/high)
+  - `co`: Conscientiousness (low/medium/high)
+  - `ex`: Extraversion (low/medium/high)
+  - `ag`: Agreeableness (low/medium/high)
+  - `ne`: Neuroticism (low/medium/high)
+- `education_level`: Education level (high_school/college/graduate/phd)
+- `gender`: Gender identity (male/female/non-binary)
+- `nationality`: Nationality code (US/UK/CA/AU/EU)
+- `profession`: Job title or profession
+- `activity_profile`: Activity pattern (Always On/Morning Active/Evening Active/Weekend Warrior)
+- `archetype`: Social media archetype (Validator/Broadcaster/Explorer)
+- `cluster`: Behavioral cluster (0=Validator, 1=Broadcaster, 2=Explorer)
+- `llm`: Whether to use LLM for this agent (true/false)
+- `daily_activity_level`: Activity frequency (1-4)
+- `toxicity`: Toxicity setting (yes/no)
+- `leaning`: Political leaning (neutral/left/right)
+- `language`: Language code (en/es/fr/de)
+
+**Generation Config**:
+- `num_additional_agents`: Number of agents to generate automatically
 - `cluster_distribution.weights`: Distribution weights for clusters [0, 1, 2]
-  - Cluster 0: Validators (skeptical, brief)
-  - Cluster 1: Broadcasters (high energy, viral)
-  - Cluster 2: Explorers (curious, questioning)
-- `cluster_distribution.llm_enabled_probability`: Probability that an agent uses LLM vs rule-based behavior
+- `llm_enabled_probability`: Probability that generated agents use LLM
+- `age_range`: Min and max age for generated agents [min, max]
+- `default_settings`: Default values for generated agents
+
+**Notes**:
+- Predefined agents in the `agents` array are created first
+- Additional agents are generated using the `generation_config` settings
+- All agents are registered in the `user_mgmt` database table at simulation start
+- Existing agents (by ID) are not re-registered
 
 ### 3. `simulation_config.json` - Simulation Configuration
 
@@ -156,11 +208,39 @@ Edit `server_config.json`:
 Edit `agent_population.json`:
 ```json
 {
-  "num_agents": 100
+  "agents": [...],
+  "generation_config": {
+    "num_additional_agents": 200
+  }
 }
 ```
 
-### Example 3: Run for Limited Time
+### Example 3: Add Custom Agent with Specific Personality
+
+Edit `agent_population.json`:
+```json
+{
+  "agents": [
+    {
+      "id": 1,
+      "username": "critical_thinker",
+      "age": 45,
+      "oe": "high",
+      "co": "high",
+      "ex": "low",
+      "ag": "medium",
+      "ne": "low",
+      "education_level": "phd",
+      "profession": "Professor",
+      "archetype": "Validator",
+      "cluster": 0,
+      "llm": true
+    }
+  ]
+}
+```
+
+### Example 4: Run for Limited Time
 
 Edit `simulation_config.json`:
 ```json
@@ -172,7 +252,7 @@ Edit `simulation_config.json`:
 }
 ```
 
-### Example 4: Use Different LLM Model
+### Example 5: Use Different LLM Model
 
 Edit `simulation_config.json`:
 ```json
@@ -184,7 +264,7 @@ Edit `simulation_config.json`:
 }
 ```
 
-### Example 5: Customize Personas
+### Example 6: Customize Personas
 
 Edit `llm_prompts.json`:
 ```json

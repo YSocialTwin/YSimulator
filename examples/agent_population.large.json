@@ -1,7 +1,46 @@
 {
-  "num_agents": 100,
-  "cluster_distribution": {
-    "weights": [0.5, 0.3, 0.2],
-    "llm_enabled_probability": 0.2
+  "agents": [
+    {
+      "id": 1,
+      "username": "validator_001",
+      "email": "validator001@simulation.local",
+      "leaning": "neutral",
+      "user_type": "agent",
+      "age": 35,
+      "oe": "medium",
+      "co": "high",
+      "ex": "low",
+      "ag": "medium",
+      "ne": "low",
+      "language": "en",
+      "education_level": "graduate",
+      "gender": "non-binary",
+      "nationality": "US",
+      "profession": "Data Analyst",
+      "activity_profile": "Evening Active",
+      "archetype": "Validator",
+      "cluster": 0,
+      "llm": true,
+      "toxicity": "no",
+      "daily_activity_level": 2
+    }
+  ],
+  "generation_config": {
+    "num_additional_agents": 99,
+    "cluster_distribution": {
+      "weights": [0.5, 0.3, 0.2]
+    },
+    "llm_enabled_probability": 0.2,
+    "age_range": [18, 65],
+    "default_settings": {
+      "leaning": "neutral",
+      "user_type": "agent",
+      "language": "en",
+      "toxicity": "no",
+      "password": "simulation_agent",
+      "education_level": "college",
+      "round_actions": 3,
+      "is_page": 0
+    }
   }
 }

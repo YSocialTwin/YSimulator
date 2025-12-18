@@ -41,7 +41,12 @@ if __name__ == "__main__":
     print(f"--- Launching Client {args.id} ---")
     print(f"--- Namespace: {namespace} ---")
     print(f"--- LLM Model: {sim_config['llm']['model']} ---")
-    print(f"--- Number of Agents: {agent_config['num_agents']} ---")
+    
+    # Calculate total number of agents
+    num_predefined = len(agent_config.get('agents', []))
+    num_generated = agent_config.get('generation_config', {}).get('num_additional_agents', 0)
+    total_agents = num_predefined + num_generated
+    print(f"--- Number of Agents: {total_agents} ({num_predefined} predefined + {num_generated} generated) ---")
 
     # Create LLM service with configuration
     llm_service = LLMService.remote(sim_config["llm"], prompts_config)
