@@ -256,7 +256,7 @@ class SimulationClient:
                 continue
 
             # Check if we've reached the day limit
-            if instruction.day >= max_days:
+            if instruction.day > max_days:
                 self.logger.info(
                     "Reached maximum days, stopping",
                     extra={"extra_data": {"max_days": max_days, "total_slots": slot_count}},
