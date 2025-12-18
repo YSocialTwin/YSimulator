@@ -242,12 +242,18 @@ class SimulationClient:
 
         # Register client with the server, passing num_days for progress tracking
         client_reg = ray.get(self.server.register_client.remote(self.client_id, self.num_days))
+        
+        # Validate registration response
+        if not isinstance(client_reg, dict) or not client_reg.get("registered"):
+            raise RuntimeError(f"Client registration failed: {client_reg}")
+        
+        start_day = client_reg.get("start_day", "unknown")
         self.logger.info(
             "Client registered with server",
             extra={"extra_data": client_reg},
         )
         print(
-            f"[{self.client_id}] Client registered. Starting at day {client_reg['start_day']}, "
+            f"[{self.client_id}] Client registered. Starting at day {start_day}, "
             f"will run for {self.num_days if self.num_days > 0 else '∞'} days."
         )
 

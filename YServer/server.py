@@ -272,7 +272,17 @@ class OrchestratorServer:
             )
         
         # Return start point and max day for this client
-        progress = self.client_progress.get(client_id, {"start_day": self.day, "num_days": num_days})
+        # Always use existing progress data if client was already registered
+        if client_id in self.client_progress:
+            progress = self.client_progress[client_id]
+        else:
+            # This shouldn't happen since we just set it above, but handle defensively
+            self.logger.warning(
+                f"Client {client_id} registered but progress not found, using current time",
+                extra={"extra_data": {"client_id": client_id}}
+            )
+            progress = {"start_day": self.day, "start_slot": self.slot, "num_days": num_days}
+        
         max_day = progress["start_day"] + progress["num_days"] if progress["num_days"] > 0 else 0
         
         return {
@@ -358,6 +368,12 @@ class OrchestratorServer:
         for client_id in self._get_active_clients():
             # Check if heartbeat was ever received (should be set during registration)
             if client_id not in self.last_heartbeat:
+                # This shouldn't happen, but log and skip to avoid crashes
+                self.logger.warning(
+                    f"Active client {client_id} has no heartbeat entry, initializing",
+                    extra={"extra_data": {"client_id": client_id}}
+                )
+                self.last_heartbeat[client_id] = current_time
                 continue
                 
             last_hb = self.last_heartbeat[client_id]
