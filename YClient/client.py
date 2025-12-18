@@ -56,10 +56,11 @@ class SimulationClient:
 
         # Load simulation configuration with defaults
         if simulation_config is None:
-            simulation_config = {"simulation": {"num_days": 0, "num_slots_per_day": 24}}
+            simulation_config = {"simulation": {"num_days": 0, "num_slots_per_day": 24, "heartbeat_interval": 5}}
 
         self.num_days = simulation_config["simulation"]["num_days"]
         self.num_slots_per_day = simulation_config["simulation"]["num_slots_per_day"]
+        self.heartbeat_interval = simulation_config["simulation"].get("heartbeat_interval", 5)
 
         # Create agents from configuration
         self.agent_profiles = []
@@ -253,8 +254,8 @@ class SimulationClient:
 
         try:
             while current_day < max_days:
-                # Send heartbeat every 5 seconds
-                if time.time() - last_heartbeat_time > 5:
+                # Send heartbeat periodically (configurable interval, default: 5 seconds)
+                if time.time() - last_heartbeat_time > self.heartbeat_interval:
                     ray.get(self.server.heartbeat.remote(self.client_id))
                     last_heartbeat_time = time.time()
 

@@ -273,8 +273,7 @@ class OrchestratorServer:
             bool: True if successfully marked as complete
         """
         if client_id in self.registered_clients:
-            self.completed_clients.add(client_id)
-            self.submitted_clients.discard(client_id)
+            self._mark_client_as_completed(client_id)
 
             self.logger.info(
                 "Client completed all activities",
@@ -331,7 +330,9 @@ class OrchestratorServer:
         stale_clients = []
 
         for client_id in self._get_active_clients():
-            last_hb = self.last_heartbeat.get(client_id, 0)
+            # Use current time as default so newly registered clients aren't immediately stale
+            # (register_client sets initial heartbeat timestamp)
+            last_hb = self.last_heartbeat.get(client_id, current_time)
             if current_time - last_hb > self.timeout_seconds:
                 stale_clients.append(client_id)
 
@@ -351,8 +352,19 @@ class OrchestratorServer:
                 f"(no heartbeat for {self.timeout_seconds}s)"
             )
             # Mark as completed to not block others
-            self.completed_clients.add(client_id)
-            self.submitted_clients.discard(client_id)
+            self._mark_client_as_completed(client_id)
+
+    def _mark_client_as_completed(self, client_id: str):
+        """
+        Mark a client as completed internally.
+
+        Helper method to avoid code duplication between complete_client and stale detection.
+
+        Args:
+            client_id: Unique identifier for the client
+        """
+        self.completed_clients.add(client_id)
+        self.submitted_clients.discard(client_id)
 
     def deregister_client(self, client_id: str) -> bool:
         """
@@ -500,10 +512,11 @@ class OrchestratorServer:
             return
 
         # Count how many active clients have submitted
-        active_submitted = len(self.submitted_clients & active_clients)
+        submitted_active_clients = self.submitted_clients & active_clients
+        active_submitted_count = len(submitted_active_clients)
 
         # If all active clients have submitted, advance.
-        if active_submitted >= active_count:
+        if active_submitted_count >= active_count:
             execution_start = time.time()
 
             print(
