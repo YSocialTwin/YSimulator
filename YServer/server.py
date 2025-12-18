@@ -381,8 +381,10 @@ class OrchestratorServer:
         """
         if client_id in self.registered_clients:
             self.registered_clients.remove(client_id)
-            # If we were waiting ONLY for this client, we might be able to advance now
+            # Clean up all tracking data for this client
             self.submitted_clients.discard(client_id)
+            self.completed_clients.discard(client_id)
+            self.last_heartbeat.pop(client_id, None)
 
             self.logger.info(
                 "Client deregistered",
