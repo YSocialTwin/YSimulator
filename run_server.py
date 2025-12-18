@@ -110,6 +110,7 @@ if __name__ == "__main__":
     address = config.get("address", "auto")
     port = config.get("port")
     db_filename = config.get("database_file", "simulation.db")
+    min_to_start = config.get("min_to_start", 1)  # Minimum clients before simulation starts
 
     # Create database in config path
     db_path = config_path / db_filename
@@ -173,7 +174,7 @@ if __name__ == "__main__":
     actor_start = time.time()
     server = OrchestratorServer.options(name="Orchestrator").remote(
         db_name=db_name,
-        min_to_start=1,  # Starts as soon as 1 person joins
+        min_to_start=min_to_start,
         config_path=str(config_path),
         server_name=server_name,
     )
