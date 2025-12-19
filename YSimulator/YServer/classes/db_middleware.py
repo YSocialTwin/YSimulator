@@ -426,33 +426,21 @@ class DatabaseMiddleware:
                     if not k.endswith(":recent") and not k.endswith(":counter")
                 ]
 
-                # Transfer posts and track old ones for removal
-                posts_to_remove = []
-                old_post_ids = set()  # Collect old post IDs during first pass
-                cutoff_day = day - self.redis_sliding_window_days
-
+                # Transfer all posts to SQL
                 for key in post_keys:
                     post_data = self.redis_client.hgetall(key)
                     if post_data and "id" in post_data:
-                        post_day = int(post_data.get("day", 0))
-
                         # Check if post already exists in SQLite
                         existing = session.query(Post).filter_by(id=post_data["id"]).first()
                         if not existing:
                             post = Post(
                                 id=post_data["id"],
-                                tweet=post_data.get("content", ""),
-                                user_id=int(post_data.get("agent_id", 0)),
-                                round=int(post_data.get("round", 0)),
+                                tweet=post_data.get("tweet", ""),
+                                user_id=str(post_data.get("user_id", "")),
+                                round=str(post_data.get("round", "")),
                             )
                             session.add(post)
                             posts_count += 1
-
-                        # Mark for removal if outside sliding window (strictly less than cutoff)
-                        # Keep posts from cutoff_day onwards (inclusive)
-                        if post_day < cutoff_day:
-                            posts_to_remove.append(key)
-                            old_post_ids.add(post_data["id"])
 
                 # Get all interaction keys
                 interaction_pattern = self._redis_key("interactions", "*")
@@ -462,9 +450,7 @@ class DatabaseMiddleware:
                     if not k.endswith(":counter")
                 ]
 
-                # Transfer interactions and mark old ones for removal
-                interactions_to_remove = []
-
+                # Transfer all interactions to SQL
                 for key in interaction_keys:
                     interaction_data = self.redis_client.hgetall(key)
                     if interaction_data and "id" in interaction_data:
@@ -477,35 +463,21 @@ class DatabaseMiddleware:
                         if not existing:
                             interaction = Reaction(
                                 id=interaction_data["id"],
-                                user_id=int(interaction_data.get("agent_id", 0)),
+                                user_id=str(interaction_data.get("user_id", "")),
                                 post_id=interaction_data.get("post_id", ""),
                                 type=interaction_data.get("type", ""),
-                                round=int(interaction_data.get("round", 0)),
+                                round=str(interaction_data.get("round", "")),
                             )
                             session.add(interaction)
                             interactions_count += 1
 
-                        # Mark for removal if it references an old post
-                        if interaction_data.get("post_id") in old_post_ids:
-                            interactions_to_remove.append(key)
-
                 # Commit all to SQLite
                 session.commit()
 
-                # Remove old data from Redis (outside sliding window)
-                if posts_to_remove:
-                    self.redis_client.delete(*posts_to_remove)
-                    removed_posts_count = len(posts_to_remove)
-
-                if interactions_to_remove:
-                    self.redis_client.delete(*interactions_to_remove)
-                    removed_interactions_count = len(interactions_to_remove)
-
-                # Clean up recent posts list - remove references to deleted posts
-                if old_post_ids:
-                    recent_key = self._redis_key("posts", "recent")
-                    for old_post_id in old_post_ids:
-                        self.redis_client.lrem(recent_key, 0, old_post_id)
+                # Keep data in Redis for fast queries during simulation
+                # SQL serves as permanent storage, Redis as hot cache
+                removed_posts_count = 0
+                removed_interactions_count = 0
 
                 self.logger.info(
                     f"Consolidated Redis data for day {day}",
@@ -514,10 +486,6 @@ class DatabaseMiddleware:
                             "day": day,
                             "posts_saved": posts_count,
                             "interactions_saved": interactions_count,
-                            "posts_removed": removed_posts_count,
-                            "interactions_removed": removed_interactions_count,
-                            "sliding_window_days": self.redis_sliding_window_days,
-                            "cutoff_day": cutoff_day,
                         }
                     },
                 )
