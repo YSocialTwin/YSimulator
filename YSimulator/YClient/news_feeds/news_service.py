@@ -108,7 +108,7 @@ class NewsFeedService:
             
             try:
                 # Check if website exists
-                website_data = ray.get(self.server.db.get_website_by_rss.remote(feed_url))
+                website_data = ray.get(self.server.get_website_by_rss.remote(feed_url))
                 
                 if website_data:
                     # Website exists, use its ID
@@ -125,7 +125,7 @@ class NewsFeedService:
                         "leaning": feed.get("leaning"),
                         "last_fetched": str(uuid.uuid4())
                     }
-                    website_id = ray.get(self.server.db.add_website.remote(website_data))
+                    website_id = ray.get(self.server.add_website.remote(website_data))
                 
                 if website_id:
                     self.website_ids[feed_url] = website_id
