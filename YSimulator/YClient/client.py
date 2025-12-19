@@ -443,9 +443,9 @@ class SimulationClient:
         # NOTE: Future enhancement - these mappings could be moved to simulation_config.json
         # for easier customization without code changes
         archetype_actions = {
-            "Validator": ["comment", "read"],  # Validators comment and read
-            "Broadcaster": ["post", "image", "share"],  # Broadcasters post and share
-            "Explorer": ["read", "search", "share_link"],  # Explorers read and search
+            "Validator": ["share", "read", "share_link"],  # Validators react and share content: they are active content consumers
+            "Broadcaster": ["post", "image", "share", "comment"],  # Broadcasters post, comment and share contents and images: they are content producers
+            "Explorer": ["search", "follow"],  # Explorers follow and search to grow network: they are lurkers
         }
         
         # Get archetype-specific action weights with safe fallback
@@ -538,7 +538,7 @@ class SimulationClient:
         if not available_agents:
             active_agents = []
         else:
-            num_active = int(len(available_agents) * hourly_prob)
+            num_active = max(1, int(len(available_agents) * hourly_prob))
             num_active = min(num_active, len(available_agents))  # Can't exceed available agents
             
             # Sample active agents from available agents
