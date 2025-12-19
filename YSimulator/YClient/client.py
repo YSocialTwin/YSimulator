@@ -433,6 +433,8 @@ class SimulationClient:
         
         # Define archetype-to-action mappings
         # This filters which actions are available based on archetype
+        # NOTE: Future enhancement - these mappings could be moved to simulation_config.json
+        # for easier customization without code changes
         archetype_actions = {
             "Validator": ["comment", "read"],  # Validators comment and read
             "Broadcaster": ["post", "image", "share"],  # Broadcasters post and share
@@ -523,14 +525,17 @@ class SimulationClient:
         
         # Calculate number of agents to activate based on hourly_activity
         # Use the probability as a ratio of available agents
-        num_active = max(1, int(len(available_agents) * hourly_prob))
-        num_active = min(num_active, len(available_agents))  # Can't exceed available agents
-        
-        # Sample active agents from available agents
-        if num_active > 0 and available_agents:
-            active_agents = random.sample(available_agents, k=num_active)
-        else:
+        if not available_agents:
             active_agents = []
+        else:
+            num_active = int(len(available_agents) * hourly_prob)
+            num_active = min(num_active, len(available_agents))  # Can't exceed available agents
+            
+            # Sample active agents from available agents
+            if num_active > 0:
+                active_agents = random.sample(available_agents, k=num_active)
+            else:
+                active_agents = []
         
         # Track pending LLM calls for parallel execution
         # Each entry: (agent_id, cluster_id, future) for posts
