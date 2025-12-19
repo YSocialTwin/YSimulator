@@ -1,0 +1,25 @@
+{
+    "server_name": "orchestrator_server",
+    "namespace": "social_sim",
+    "address": "auto",
+    "port": null,
+    "database": {
+        "type": "postgresql",
+        "postgresql": {
+            "host": "localhost",
+            "port": 5432,
+            "database": "ysimulator",
+            "username": "postgres",
+            "password": "your_password_here"
+        }
+    },
+    "min_to_start": 1,
+    "redis": {
+        "enabled": false,
+        "host": "localhost",
+        "port": 6379,
+        "db": 0,
+        "password": null,
+        "sliding_window_days": 2
+    }
+}
