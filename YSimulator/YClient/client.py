@@ -15,6 +15,12 @@ from pathlib import Path
 
 import ray
 
+from YSimulator.YClient.actions import (
+    generate_llm_post_async,
+    generate_llm_reaction_async,
+    generate_rule_based_post,
+    generate_rule_based_reaction,
+)
 from YSimulator.YClient.classes.ray_models import ActionDTO, AgentProfile
 
 
@@ -355,75 +361,135 @@ class SimulationClient:
                     extra={"extra_data": {"error": str(e)}},
                 )
 
+    def select_action(self, agent_profile: AgentProfile, recent_posts: list) -> tuple:
+        """
+        Determine which action an agent should perform.
+        
+        This method implements the action selection logic based on:
+        - Agent's cluster membership (determines behavior patterns)
+        - Probability distributions for different action types
+        - Availability of recent posts (for reactions)
+        - Agent type (LLM vs rule-based)
+        
+        Args:
+            agent_profile: Agent profile containing behavior settings
+            recent_posts: List of recent post UUIDs available for reactions
+            
+        Returns:
+            tuple: (action_type, agent_type, target_post_id) where:
+                - action_type: "post", "reaction", or None
+                - agent_type: "llm" or "rule_based"
+                - target_post_id: UUID string for reactions, None for posts/no-action
+                
+        Example:
+            >>> action_type, agent_type, target = self.select_action(profile, posts)
+            >>> if action_type == "post":
+            ...     # Generate post action
+            >>> elif action_type == "reaction":
+            ...     # Generate reaction to target post
+        """
+        cid = agent_profile.cluster
+        
+        # Cluster-based probability distributions
+        # Cluster 1: High post probability, low reaction probability
+        # Cluster 0: Low post probability, high reaction probability
+        p_post = 0.7 if cid == 1 else 0.1
+        p_react = 0.8 if cid == 0 else 0.3
+        
+        # Determine agent type
+        agent_type = "llm" if agent_profile.llm else "rule_based"
+        
+        # Post decision
+        if random.random() < p_post:
+            return ("post", agent_type, None)
+        
+        # Reaction decision (only if posts available)
+        if recent_posts and random.random() < p_react:
+            target = random.choice(recent_posts)
+            return ("reaction", agent_type, target)
+        
+        # No action selected
+        return (None, None, None)
+
     def _simulate(self, day: int, slot: int, recent_posts: list) -> list:
         """
-        Simulate agent behaviors for a given time slot.
-
+        Simulate agent behaviors for a given time slot using modular action implementations.
+        
+        This method orchestrates the simulation by:
+        1. Selecting active agents (20% of total population)
+        2. For each agent: calling select_action() to determine what to do
+        3. Dispatching actions based on agent type (rule_based vs llm)
+        4. Gathering async LLM results in parallel (scatter/gather pattern)
+        
+        The scatter/gather pattern is preserved for performance:
+        - Scatter: Fire off all LLM calls immediately without waiting
+        - Gather: Wait once for all LLM results simultaneously
+        
         Args:
             day: Current simulation day
             slot: Current time slot
-            recent_posts: List of recent post IDs for reactions
-
+            recent_posts: List of recent post UUIDs for reactions
+            
         Returns:
             list: List of ActionDTO objects representing agent actions
         """
         actions = []
-        # Select active agents based on daily_activity_level
+        
+        # Select active agents based on daily_activity_level (20% of population)
         active = random.sample(self.agent_profiles, k=int(len(self.agent_profiles) * 0.2))
-
-        # --- 1. SCATTER: Fire off all LLM tasks in parallel ---
-        # We store tuples of (agent_data, object_handle, type)
+        
+        # Track pending LLM calls for parallel execution
+        # Each entry: (agent_id, cluster_id, future) for posts
+        # Each entry: (agent_id, cluster_id, target_post_id, future) for reactions
         pending_llm_posts = []
         pending_llm_reactions = []
-
-        for agent_profile in active:
-            cid = agent_profile.cluster
-            p_post = 0.7 if cid == 1 else 0.1
-            p_react = 0.8 if cid == 0 else 0.3
-
-            # --- Post Logic ---
-            if random.random() < p_post:
-                if agent_profile.llm:
-                    # Don't call ray.get() here! Just get the handle (future).
-                    future = self.llm.generate_post.remote(cid, day, slot)
-                    pending_llm_posts.append((agent_profile.id, cid, future))
+        
+        # --- SCATTER PHASE: Select and dispatch actions ---
+        for agent in active:
+            action_type, agent_type, target = self.select_action(agent, recent_posts)
+            
+            if action_type == "post":
+                if agent_type == "llm":
+                    # LLM: Fire off async call (don't wait for result yet)
+                    future = generate_llm_post_async(self.llm, agent.cluster, day, slot)
+                    pending_llm_posts.append((agent.id, agent.cluster, future))
                 else:
-                    # Rule-based is instant
-                    txt = f"Cluster {cid} post"
-                    actions.append(ActionDTO(agent_profile.id, cid, "POST", content=txt))
-
-            # --- Reaction Logic ---
-            if recent_posts and random.random() < p_react:
-                target = random.choice(recent_posts)
-                if agent_profile.llm:
-                    future = self.llm.decide_reaction.remote(cid, "content")
-                    pending_llm_reactions.append((agent_profile.id, cid, target, future))
+                    # Rule-based: Execute immediately
+                    action = generate_rule_based_post(agent.id, agent.cluster)
+                    actions.append(action)
+            
+            elif action_type == "reaction":
+                if agent_type == "llm":
+                    # LLM: Fire off async call (don't wait for result yet)
+                    future = generate_llm_reaction_async(self.llm, agent.cluster, "content")
+                    pending_llm_reactions.append((agent.id, agent.cluster, target, future))
                 else:
-                    # Rule-based
-                    actions.append(ActionDTO(agent_profile.id, cid, "LIKE", target_post_id=target))
-
-        # --- 2. GATHER: Wait for all LLM results in parallel ---
-
+                    # Rule-based: Execute immediately
+                    action = generate_rule_based_reaction(agent.id, agent.cluster, target)
+                    actions.append(action)
+        
+        # --- GATHER PHASE: Wait for all LLM results in parallel ---
+        
         # Resolve Posts
         if pending_llm_posts:
             # Extract just the futures list to pass to ray.get
             futures = [p[2] for p in pending_llm_posts]
             results = ray.get(futures)  # Blocks once for ALL posts
-
+            
             for i, res_txt in enumerate(results):
                 a_id, cid, _ = pending_llm_posts[i]
                 actions.append(ActionDTO(a_id, cid, "POST", content=res_txt))
-
+        
         # Resolve Reactions
         if pending_llm_reactions:
             futures = [r[3] for r in pending_llm_reactions]
             results = ray.get(futures)  # Blocks once for ALL reactions
-
+            
             for i, res_act in enumerate(results):
                 a_id, cid, target, _ = pending_llm_reactions[i]
                 if res_act != "IGNORE":
                     actions.append(ActionDTO(a_id, cid, res_act, target_post_id=target))
-
+        
         return actions
 
     def shutdown(self):
