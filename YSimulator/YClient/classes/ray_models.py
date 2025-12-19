@@ -8,7 +8,7 @@ class AgentProfile:
     Agent profile data class for passing agent information between Ray actors.
     Maps to User_mgmt database model.
     """
-    id: int
+    id: str
     username: str
     email: str = ""
     password: str = "default_password"
@@ -45,7 +45,7 @@ class AgentProfile:
 @dataclass
 class ActionDTO:
     """Action data transfer object for agent actions."""
-    agent_id: int
+    agent_id: str
     cluster_id: int
     action_type: Literal['POST', 'LIKE', 'COMMENT']
     content: Optional[str] = None
@@ -75,10 +75,10 @@ class SimulationInstruction:
 class FollowDTO:
     """Follow/unfollow action between users."""
     id: str  # UUID
-    user_id: int
-    follower_id: int
+    user_id: str
+    follower_id: str
     action: str  # 'follow' or 'unfollow'
-    round: int
+    round: str
 
 
 @dataclass
@@ -88,7 +88,7 @@ class ReactionDTO:
     user_id: int
     post_id: str  # Post UUID
     type: str  # Reaction type (like, love, laugh, angry, sad, etc.)
-    round: int
+    round: str
 
 
 @dataclass
@@ -96,8 +96,8 @@ class MentionDTO:
     """User mention in a post."""
     id: str  # UUID
     post_id: str  # Post UUID
-    user_id: int
-    round: Optional[int] = None
+    user_id: str
+    round: str
     answered: int = 0
 
 
@@ -107,27 +107,27 @@ class RecommendationDTO:
     id: str  # UUID
     user_id: int
     post_ids: str  # Comma-separated or JSON list of post UUIDs
-    round: int
+    round: str
 
 
 @dataclass
 class VotingDTO:
     """User voting/preference data."""
     vid: str  # UUID (primary key)
-    user_id: int
+    user_id: str
     preference: str
-    content_type: Optional[str] = None
-    content_id: Optional[int] = None
-    round: Optional[int] = None
+    content_type: str
+    content_id: str
+    round: str
 
 
 @dataclass
 class UserInterestDTO:
     """User interest association."""
     id: str  # UUID
-    user_id: int
-    interest_id: int
-    round_id: Optional[int] = None
+    user_id: str
+    interest_id: str
+    round_id: str
 
 
 # ================================================
@@ -140,7 +140,7 @@ class PostEmotionDTO:
     """Emotional tag for a post."""
     id: str  # UUID
     post_id: str  # Post UUID
-    emotion_id: int
+    emotion_id: str
 
 
 @dataclass
@@ -148,7 +148,7 @@ class PostHashtagDTO:
     """Hashtag association for a post."""
     id: str  # UUID
     post_id: str  # Post UUID
-    hashtag_id: int
+    hashtag_id: str
 
 
 @dataclass
@@ -156,9 +156,9 @@ class PostSentimentDTO:
     """Sentiment analysis data for a post."""
     id: str  # UUID
     post_id: str  # Post UUID
-    user_id: int
-    topic_id: int
-    round: int
+    user_id: str
+    topic_id: str
+    round: str
     neg: Optional[float] = None
     pos: Optional[float] = None
     neu: Optional[float] = None
@@ -174,7 +174,7 @@ class PostTopicDTO:
     """Topic association for a post."""
     id: str  # UUID
     post_id: str  # Post UUID
-    topic_id: int
+    topic_id: str
 
 
 @dataclass
