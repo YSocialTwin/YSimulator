@@ -197,58 +197,79 @@ class SimulationClient:
         """
         # Group agents by archetype
         agents_by_archetype = {}
+        agents_without_archetype = []
+        
         for agent in available_agents:
             archetype = agent.archetype
             # Normalize archetype to lowercase for comparison
             if archetype:
                 archetype_key = archetype.lower()
+                if archetype_key not in agents_by_archetype:
+                    agents_by_archetype[archetype_key] = []
+                agents_by_archetype[archetype_key].append(agent)
             else:
-                archetype_key = "none"
-            
-            if archetype_key not in agents_by_archetype:
-                agents_by_archetype[archetype_key] = []
-            agents_by_archetype[archetype_key].append(agent)
+                # Track agents without archetype separately
+                agents_without_archetype.append(agent)
         
         selected_agents = []
         remaining_slots = num_active
         
-        # First pass: ensure at least 1 agent per archetype if distribution > 0
-        for archetype, percentage in self.archetype_distribution.items():
-            if percentage > 0 and archetype in agents_by_archetype:
-                available_for_archetype = agents_by_archetype[archetype]
-                if available_for_archetype and remaining_slots > 0:
-                    # Select at least 1 agent for this archetype
-                    selected = random.choice(available_for_archetype)
-                    selected_agents.append(selected)
-                    agents_by_archetype[archetype].remove(selected)
-                    remaining_slots -= 1
+        # Count how many archetypes have distribution > 0 and are available
+        available_archetypes = [
+            arch for arch, pct in self.archetype_distribution.items()
+            if pct > 0 and arch in agents_by_archetype
+        ]
         
-        # Second pass: distribute remaining slots according to distribution
-        if remaining_slots > 0:
-            for archetype, percentage in self.archetype_distribution.items():
-                if archetype in agents_by_archetype:
-                    # Calculate how many agents to select for this archetype
-                    num_for_archetype = int(remaining_slots * percentage)
+        # First pass: ensure at least 1 agent per archetype if distribution > 0
+        if num_active >= len(available_archetypes):
+            # We have enough slots to give at least 1 to each archetype
+            for archetype in available_archetypes:
+                if remaining_slots > 0:
                     available_for_archetype = agents_by_archetype[archetype]
-                    
-                    # Can't select more than available
-                    num_to_select = min(num_for_archetype, len(available_for_archetype))
+                    if available_for_archetype:
+                        selected = random.choice(available_for_archetype)
+                        selected_agents.append(selected)
+                        agents_by_archetype[archetype].remove(selected)
+                        remaining_slots -= 1
+            
+            # Second pass: distribute remaining slots according to distribution
+            if remaining_slots > 0:
+                for archetype, percentage in self.archetype_distribution.items():
+                    if archetype in agents_by_archetype and remaining_slots > 0:
+                        available_for_archetype = agents_by_archetype[archetype]
+                        # Calculate additional agents for this archetype (beyond the guaranteed 1)
+                        additional = round(remaining_slots * percentage)
+                        num_to_select = min(additional, len(available_for_archetype), remaining_slots)
+                        
+                        if num_to_select > 0:
+                            selected = random.sample(available_for_archetype, k=num_to_select)
+                            selected_agents.extend(selected)
+                            remaining_slots -= num_to_select
+                            for agent in selected:
+                                agents_by_archetype[archetype].remove(agent)
+        else:
+            # Not enough slots for all archetypes, use strict proportional distribution
+            for archetype, percentage in self.archetype_distribution.items():
+                if archetype in agents_by_archetype and remaining_slots > 0:
+                    available_for_archetype = agents_by_archetype[archetype]
+                    target = round(num_active * percentage)
+                    num_to_select = min(target, len(available_for_archetype), remaining_slots)
                     
                     if num_to_select > 0:
                         selected = random.sample(available_for_archetype, k=num_to_select)
                         selected_agents.extend(selected)
+                        remaining_slots -= num_to_select
                         for agent in selected:
                             agents_by_archetype[archetype].remove(agent)
         
-        # If we still have remaining slots (due to rounding), fill randomly from remaining agents
-        if len(selected_agents) < num_active:
-            all_remaining = []
+        # Fill any remaining slots with any available agents (including those without archetype)
+        if remaining_slots > 0:
+            all_remaining = agents_without_archetype.copy()
             for agents_list in agents_by_archetype.values():
                 all_remaining.extend(agents_list)
             
             if all_remaining:
-                additional_needed = num_active - len(selected_agents)
-                additional_needed = min(additional_needed, len(all_remaining))
+                additional_needed = min(remaining_slots, len(all_remaining))
                 if additional_needed > 0:
                     additional = random.sample(all_remaining, k=additional_needed)
                     selected_agents.extend(additional)
