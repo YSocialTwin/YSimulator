@@ -179,7 +179,7 @@ class OrchestratorServer:
                     "daily_activity_level": agent_profile.daily_activity_level,
                     "profession": agent_profile.profession,
                     "activity_profile": agent_profile.activity_profile,
-                    # Note: 'archetype' removed - not in User_mgmt model
+                    "archetype": agent_profile.archetype,
                 }
 
                 # Try to register user
