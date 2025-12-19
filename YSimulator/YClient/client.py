@@ -150,14 +150,23 @@ class SimulationClient:
             activity_profiles_config: Dictionary mapping profile names to hour strings
             
         Returns:
-            dict: Dictionary mapping profile names to lists of active hours
+            dict: Dictionary mapping profile names to lists of active hours (0-23)
         """
         parsed_profiles = {}
         for profile_name, hours_str in activity_profiles_config.items():
             if isinstance(hours_str, str):
-                parsed_profiles[profile_name] = [int(h.strip()) for h in hours_str.split(",")]
+                hours = [int(h.strip()) for h in hours_str.split(",")]
+                # Validate that all hours are in valid range 0-23
+                valid_hours = [h for h in hours if 0 <= h <= 23]
+                if len(valid_hours) != len(hours):
+                    self.logger.warning(
+                        f"Invalid hours found in activity profile '{profile_name}', filtered to valid range 0-23"
+                    )
+                parsed_profiles[profile_name] = valid_hours
             elif isinstance(hours_str, list):
-                parsed_profiles[profile_name] = hours_str
+                # Validate list hours as well
+                valid_hours = [h for h in hours_str if isinstance(h, int) and 0 <= h <= 23]
+                parsed_profiles[profile_name] = valid_hours
             else:
                 self.logger.warning(
                     f"Invalid activity profile format for '{profile_name}': {hours_str}"
@@ -428,9 +437,6 @@ class SimulationClient:
             >>> elif action_type == "comment":
             ...     # Generate comment to target post
         """
-        # Get archetype-specific action weights
-        archetype = agent_profile.archetype or "Default"
-        
         # Define archetype-to-action mappings
         # This filters which actions are available based on archetype
         # NOTE: Future enhancement - these mappings could be moved to simulation_config.json
@@ -442,8 +448,13 @@ class SimulationClient:
             "Default": ["post", "comment", "read"],  # Default actions
         }
         
-        # Get available actions for this archetype
-        available_actions = archetype_actions.get(archetype, archetype_actions["Default"])
+        # Get archetype-specific action weights with safe fallback
+        archetype = agent_profile.archetype
+        if archetype and archetype in archetype_actions:
+            available_actions = archetype_actions[archetype]
+        else:
+            # Use default for None or unrecognized archetype
+            available_actions = archetype_actions["Default"]
         
         # Filter actions_likelihood to only include available actions
         filtered_likelihood = {
@@ -459,16 +470,9 @@ class SimulationClient:
         # Select action based on weighted probabilities
         actions = list(filtered_likelihood.keys())
         weights = list(filtered_likelihood.values())
-        total_weight = sum(weights)
         
-        if total_weight == 0:
-            return None, None, None
-            
-        # Normalize weights to probabilities
-        probabilities = [w / total_weight for w in weights]
-        
-        # Select action using weighted random choice
-        selected_action = random.choices(actions, weights=probabilities)[0]
+        # random.choices can work directly with unnormalized weights
+        selected_action = random.choices(actions, weights=weights)[0]
         
         # Determine agent type
         agent_type = "llm" if agent_profile.llm else "rule_based"
@@ -546,8 +550,11 @@ class SimulationClient:
         # --- SCATTER PHASE: Select and dispatch actions ---
         for agent in active_agents:
             # Sample number of actions for this agent based on daily_activity_level
-            # Random from 1 to daily_activity_level
-            num_actions = random.randint(1, max(1, agent.daily_activity_level))
+            # Random from 1 to daily_activity_level (minimum 1)
+            if agent.daily_activity_level <= 0:
+                # Skip agents with 0 or negative activity level
+                continue
+            num_actions = random.randint(1, agent.daily_activity_level)
             
             for _ in range(num_actions):
                 action_type, agent_type, target = self.__select_action(agent, recent_posts)
