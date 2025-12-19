@@ -117,7 +117,7 @@ class User_mgmt(Base):
     language = Column(Text)
     owner = Column(Text)
     education_level = Column(Text)
-    joined_on = Column(String(36))
+    joined_on = Column(String(36), ForeignKey("rounds.id", ondelete="SET NULL"))
     frecsys_type = Column(Text)
     round_actions = Column(Integer, nullable=False, default=3)
     gender = Column(Text)
@@ -146,6 +146,7 @@ class User_mgmt(Base):
     mentions = relationship("Mention", back_populates="user", cascade="all, delete-orphan")
     post_sentiments = relationship("PostSentiment", back_populates="user", cascade="all, delete-orphan")
     reactions = relationship("Reaction", back_populates="user", cascade="all, delete-orphan")
+    round_joined = relationship("Round")
 
 
 # ================================================

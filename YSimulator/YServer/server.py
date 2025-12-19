@@ -151,10 +151,6 @@ class OrchestratorServer:
         try:
             for agent_profile in agents:
                 # Prepare user data
-                joined_on = agent_profile.joined_on
-                if joined_on == 0:
-                    joined_on = int(time.time())
-
                 user_data = {
                     "id": str(agent_profile.id),  # Convert to UUID string
                     "username": agent_profile.username,
@@ -173,7 +169,7 @@ class OrchestratorServer:
                     "language": agent_profile.language,
                     "owner": agent_profile.owner,
                     "education_level": agent_profile.education_level,
-                    "joined_on": str(joined_on),  # Convert to string for consistency
+                    "joined_on": self.current_round_id,  # FK to rounds table (UUID string)
                     "gender": agent_profile.gender,
                     "nationality": agent_profile.nationality,
                     "round_actions": agent_profile.round_actions,
@@ -496,7 +492,7 @@ class OrchestratorServer:
                     interaction_data = {
                         "user_id": str(act.agent_id),  # FK to user_mgmt.id (UUID string)
                         "post_id": act.target_post_id,  # FK to post.id (UUID string)
-                        "reaction_type": act.action_type,  # Type of reaction (like, love, etc.)
+                        "type": act.action_type,  # Field name is 'type' not 'reaction_type'
                         "round": self.current_round_id,  # FK to rounds.id
                     }
                     self.db.add_interaction(interaction_data)
