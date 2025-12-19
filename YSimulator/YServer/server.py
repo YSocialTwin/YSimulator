@@ -649,6 +649,9 @@ class OrchestratorServer:
         """
         import random
         
+        # Tolerance for probability sum validation
+        PROBABILITY_TOLERANCE = 0.01
+        
         if not self.archetypes_enabled or not self.archetype_transitions:
             return
         
@@ -665,12 +668,19 @@ class OrchestratorServer:
                 agent_id = agent.get("id")
                 current_archetype = agent.get("archetype")
                 
-                # Skip if agent has no archetype or archetype not in transitions
-                if not current_archetype or current_archetype.lower() not in self.archetype_transitions:
+                # Skip if agent has no archetype
+                if not current_archetype:
+                    continue
+                
+                # Normalize archetype to lowercase for comparison
+                current_archetype_lower = current_archetype.lower()
+                
+                # Skip if archetype not in transitions
+                if current_archetype_lower not in self.archetype_transitions:
                     continue
                 
                 # Get transition probabilities for current archetype
-                transitions = self.archetype_transitions.get(current_archetype.lower(), {})
+                transitions = self.archetype_transitions.get(current_archetype_lower, {})
                 
                 if not transitions:
                     continue
@@ -681,18 +691,18 @@ class OrchestratorServer:
                 
                 # Validate probabilities sum to approximately 1.0
                 total_prob = sum(probabilities)
-                if abs(total_prob - 1.0) > 0.01:
+                if abs(total_prob - 1.0) > PROBABILITY_TOLERANCE:
                     self.logger.warning(
                         f"Archetype transition probabilities for '{current_archetype}' sum to {total_prob}, expected 1.0"
                     )
                     # Normalize probabilities
                     probabilities = [p / total_prob for p in probabilities]
                 
-                # Select new archetype
+                # Select new archetype using weighted random choice
                 new_archetype = random.choices(archetypes, weights=probabilities)[0]
                 
                 # Update agent archetype in database if it changed
-                if new_archetype != current_archetype.lower():
+                if new_archetype != current_archetype_lower:
                     # Capitalize first letter to match format
                     new_archetype_formatted = new_archetype.capitalize()
                     
