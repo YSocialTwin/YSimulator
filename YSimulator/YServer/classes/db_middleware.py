@@ -21,7 +21,7 @@ except ImportError:
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
-from YSimulator.YServer.classes.models import Base, InteractionModel, PostModel, User_mgmt
+from YSimulator.YServer.classes.models import Base, Reaction, Post, User_mgmt
 
 
 class DatabaseMiddleware:
@@ -301,7 +301,7 @@ class DatabaseMiddleware:
             else:
                 session = Session(self.engine)
                 try:
-                    post = PostModel(**post_data)
+                    post = Post(**post_data)
                     session.add(post)
                     session.commit()
                     return post_id
@@ -334,7 +334,7 @@ class DatabaseMiddleware:
             else:
                 session = Session(self.engine)
                 try:
-                    interaction = InteractionModel(**interaction_data)
+                    interaction = Reaction(**interaction_data)
                     session.add(interaction)
                     session.commit()
                     return True
@@ -366,7 +366,7 @@ class DatabaseMiddleware:
                 session = Session(self.engine)
                 try:
                     posts = (
-                        session.query(PostModel).order_by(PostModel.id.desc()).limit(limit).all()
+                        session.query(Post).order_by(Post.id.desc()).limit(limit).all()
                     )
                     return [post.id for post in posts]
                 finally:
@@ -426,15 +426,13 @@ class DatabaseMiddleware:
                         post_day = int(post_data.get("day", 0))
 
                         # Check if post already exists in SQLite
-                        existing = session.query(PostModel).filter_by(id=post_data["id"]).first()
+                        existing = session.query(Post).filter_by(id=post_data["id"]).first()
                         if not existing:
-                            post = PostModel(
+                            post = Post(
                                 id=post_data["id"],
-                                agent_id=int(post_data.get("agent_id", 0)),
-                                cluster_id=int(post_data.get("cluster_id", 0)),
-                                content=post_data.get("content", ""),
-                                day=post_day,
-                                slot=int(post_data.get("slot", 0)),
+                                tweet=post_data.get("content", ""),
+                                user_id=int(post_data.get("agent_id", 0)),
+                                round=int(post_data.get("round", 0)),
                             )
                             session.add(post)
                             posts_count += 1
@@ -461,17 +459,17 @@ class DatabaseMiddleware:
                     if interaction_data and "id" in interaction_data:
                         # Check if interaction already exists in SQLite
                         existing = (
-                            session.query(InteractionModel)
+                            session.query(Reaction)
                             .filter_by(id=interaction_data["id"])
                             .first()
                         )
                         if not existing:
-                            interaction = InteractionModel(
+                            interaction = Reaction(
                                 id=interaction_data["id"],
-                                agent_id=int(interaction_data.get("agent_id", 0)),
+                                user_id=int(interaction_data.get("agent_id", 0)),
                                 post_id=interaction_data.get("post_id", ""),
                                 type=interaction_data.get("type", ""),
-                                content=interaction_data.get("content"),
+                                round=int(interaction_data.get("round", 0)),
                             )
                             session.add(interaction)
                             interactions_count += 1

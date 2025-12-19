@@ -44,11 +44,12 @@ class AgentProfile:
 
 @dataclass
 class ActionDTO:
+    """Action data transfer object for agent actions."""
     agent_id: int
     cluster_id: int
     action_type: Literal['POST', 'LIKE', 'COMMENT']
     content: Optional[str] = None
-    target_post_id: Optional[int] = None
+    target_post_id: Optional[str] = None  # UUID string
 
 
 @dataclass
@@ -62,4 +63,130 @@ class SimulationInstruction:
     status: Literal['WAIT', 'PROCEED']  # COMPLETE removed - client handles completion
     day: int = 0
     slot: int = 0
-    recent_post_ids: List[int] = None
+    recent_post_ids: List[str] = None  # UUID strings
+
+
+# ================================================
+# SOCIAL ACTION DTOs (UUID-based)
+# ================================================
+
+
+@dataclass
+class FollowDTO:
+    """Follow/unfollow action between users."""
+    id: str  # UUID
+    user_id: int
+    follower_id: int
+    action: str  # 'follow' or 'unfollow'
+    round: int
+
+
+@dataclass
+class ReactionDTO:
+    """User reaction to a post (like, love, laugh, etc.)."""
+    id: str  # UUID
+    user_id: int
+    post_id: str  # Post UUID
+    type: str  # Reaction type (like, love, laugh, angry, sad, etc.)
+    round: int
+
+
+@dataclass
+class MentionDTO:
+    """User mention in a post."""
+    id: str  # UUID
+    post_id: str  # Post UUID
+    user_id: int
+    round: Optional[int] = None
+    answered: int = 0
+
+
+@dataclass
+class RecommendationDTO:
+    """Content recommendation for a user."""
+    id: str  # UUID
+    user_id: int
+    post_ids: str  # Comma-separated or JSON list of post UUIDs
+    round: int
+
+
+@dataclass
+class VotingDTO:
+    """User voting/preference data."""
+    vid: str  # UUID (primary key)
+    user_id: int
+    preference: str
+    content_type: Optional[str] = None
+    content_id: Optional[int] = None
+    round: Optional[int] = None
+
+
+@dataclass
+class UserInterestDTO:
+    """User interest association."""
+    id: str  # UUID
+    user_id: int
+    interest_id: int
+    round_id: Optional[int] = None
+
+
+# ================================================
+# CONTENT METADATA DTOs
+# ================================================
+
+
+@dataclass
+class PostEmotionDTO:
+    """Emotional tag for a post."""
+    id: str  # UUID
+    post_id: str  # Post UUID
+    emotion_id: int
+
+
+@dataclass
+class PostHashtagDTO:
+    """Hashtag association for a post."""
+    id: str  # UUID
+    post_id: str  # Post UUID
+    hashtag_id: int
+
+
+@dataclass
+class PostSentimentDTO:
+    """Sentiment analysis data for a post."""
+    id: str  # UUID
+    post_id: str  # Post UUID
+    user_id: int
+    topic_id: int
+    round: int
+    neg: Optional[float] = None
+    pos: Optional[float] = None
+    neu: Optional[float] = None
+    compound: Optional[float] = None
+    sentiment_parent: Optional[str] = None
+    is_post: int = 0
+    is_comment: int = 0
+    is_reaction: int = 0
+
+
+@dataclass
+class PostTopicDTO:
+    """Topic association for a post."""
+    id: str  # UUID
+    post_id: str  # Post UUID
+    topic_id: int
+
+
+@dataclass
+class PostToxicityDTO:
+    """Toxicity analysis data for a post."""
+    id: str  # UUID
+    post_id: str  # Post UUID
+    toxicity: float = 0.0
+    severe_toxicity: float = 0.0
+    identity_attack: float = 0.0
+    insult: float = 0.0
+    profanity: float = 0.0
+    threat: float = 0.0
+    sexually_explicit: float = 0.0
+    flirtation: float = 0.0
