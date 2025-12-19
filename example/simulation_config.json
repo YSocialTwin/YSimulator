@@ -71,6 +71,14 @@
             "cast": 0.0,
             "share_link": 0
         },
+    "agent_archetypes": {
+        "enabled": true,
+        "distribution": {
+            "validator": 0.33,
+            "broadcaster": 0.33,
+            "explorer": 0.34
+        }
+    },
     "emotion_annotation": false
   },
   "posts": {

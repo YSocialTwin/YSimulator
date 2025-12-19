@@ -82,6 +82,11 @@ class SimulationClient:
         
         # Load actions likelihood (weights for action selection)
         self.actions_likelihood = simulation_config["simulation"].get("actions_likelihood", {})
+        
+        # Load archetype configuration for agent sampling
+        archetype_config = simulation_config["simulation"].get("agent_archetypes", {})
+        self.archetypes_enabled = archetype_config.get("enabled", False)
+        self.archetype_distribution = archetype_config.get("distribution", {})
 
         # Create agents from configuration
         self.agent_profiles = []
@@ -174,6 +179,81 @@ class SimulationClient:
                 )
                 parsed_profiles[profile_name] = list(range(24))  # Default to always active
         return parsed_profiles
+
+    def _sample_agents_by_archetype(self, available_agents, num_active):
+        """
+        Sample agents according to archetype distribution.
+        
+        Ensures that active agents are composed using the archetype distribution 
+        from the configuration. If a percentage is > 0, at least one agent of that 
+        archetype is always selected (if available).
+        
+        Args:
+            available_agents: List of agents available for selection
+            num_active: Total number of agents to activate
+            
+        Returns:
+            list: List of selected agents respecting archetype distribution
+        """
+        # Group agents by archetype
+        agents_by_archetype = {}
+        for agent in available_agents:
+            archetype = agent.archetype
+            # Normalize archetype to lowercase for comparison
+            if archetype:
+                archetype_key = archetype.lower()
+            else:
+                archetype_key = "none"
+            
+            if archetype_key not in agents_by_archetype:
+                agents_by_archetype[archetype_key] = []
+            agents_by_archetype[archetype_key].append(agent)
+        
+        selected_agents = []
+        remaining_slots = num_active
+        
+        # First pass: ensure at least 1 agent per archetype if distribution > 0
+        for archetype, percentage in self.archetype_distribution.items():
+            if percentage > 0 and archetype in agents_by_archetype:
+                available_for_archetype = agents_by_archetype[archetype]
+                if available_for_archetype and remaining_slots > 0:
+                    # Select at least 1 agent for this archetype
+                    selected = random.choice(available_for_archetype)
+                    selected_agents.append(selected)
+                    agents_by_archetype[archetype].remove(selected)
+                    remaining_slots -= 1
+        
+        # Second pass: distribute remaining slots according to distribution
+        if remaining_slots > 0:
+            for archetype, percentage in self.archetype_distribution.items():
+                if archetype in agents_by_archetype:
+                    # Calculate how many agents to select for this archetype
+                    num_for_archetype = int(remaining_slots * percentage)
+                    available_for_archetype = agents_by_archetype[archetype]
+                    
+                    # Can't select more than available
+                    num_to_select = min(num_for_archetype, len(available_for_archetype))
+                    
+                    if num_to_select > 0:
+                        selected = random.sample(available_for_archetype, k=num_to_select)
+                        selected_agents.extend(selected)
+                        for agent in selected:
+                            agents_by_archetype[archetype].remove(agent)
+        
+        # If we still have remaining slots (due to rounding), fill randomly from remaining agents
+        if len(selected_agents) < num_active:
+            all_remaining = []
+            for agents_list in agents_by_archetype.values():
+                all_remaining.extend(agents_list)
+            
+            if all_remaining:
+                additional_needed = num_active - len(selected_agents)
+                additional_needed = min(additional_needed, len(all_remaining))
+                if additional_needed > 0:
+                    additional = random.sample(all_remaining, k=additional_needed)
+                    selected_agents.extend(additional)
+        
+        return selected_agents
 
     def _create_agents_from_config(self, agent_config):
         """
@@ -543,7 +623,12 @@ class SimulationClient:
             
             # Sample active agents from available agents
             if num_active > 0:
-                active_agents = random.sample(available_agents, k=num_active)
+                # If archetypes are enabled, sample according to distribution
+                if self.archetypes_enabled and self.archetype_distribution:
+                    active_agents = self._sample_agents_by_archetype(available_agents, num_active)
+                else:
+                    # Random sampling when archetypes are disabled
+                    active_agents = random.sample(available_agents, k=num_active)
             else:
                 active_agents = []
         
