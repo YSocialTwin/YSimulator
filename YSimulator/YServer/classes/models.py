@@ -74,6 +74,16 @@ class Round(Base):
     day = Column(Integer)
     hour = Column(Integer)
 
+    # Unique constraint to prevent duplicate rounds
+    __table_args__ = (UniqueConstraint("day", "hour", name="uq_round_day_hour"),)
+
+    # Relationships to all tables that reference rounds
+    posts = relationship("Post", back_populates="round_obj", cascade="all, delete-orphan")
+    reactions = relationship("Reaction", back_populates="round_obj", cascade="all, delete-orphan")
+    recommendations = relationship("Recommendation", back_populates="round_obj", cascade="all, delete-orphan")
+    user_interests = relationship("UserInterest", back_populates="round_obj", cascade="all, delete-orphan")
+    post_sentiments = relationship("PostSentiment", back_populates="round_obj", cascade="all, delete-orphan")
+
 
 # ================================================
 # USER MANAGEMENT (Integer IDs from config)

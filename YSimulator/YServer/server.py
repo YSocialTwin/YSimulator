@@ -68,6 +68,7 @@ class OrchestratorServer:
         self.day = 1
         self.slot = 1
         self.recent_posts_cache = []
+        self.current_round_id = None  # Will be set when simulation starts
 
         # Set up logging first
         self._setup_logging()
@@ -79,6 +80,9 @@ class OrchestratorServer:
             redis_config=redis_config,
             logger=self.logger,
         )
+        
+        # Initialize the first round entry
+        self.current_round_id = self.db.get_or_create_round(self.day, self.slot)
 
         self.logger.info(
             "Orchestrator server initialized",
@@ -481,6 +485,7 @@ class OrchestratorServer:
                         "content": act.content,
                         "day": self.day,
                         "slot": self.slot,
+                        "round": self.current_round_id,  # Add round FK reference
                     }
                     post_id = self.db.add_post(post_data)
                     if post_id:
@@ -496,6 +501,7 @@ class OrchestratorServer:
                         "post_id": act.target_post_id,
                         "type": act.action_type,
                         "content": act.content,
+                        "round": self.current_round_id,  # Add round FK reference
                     }
                     self.db.add_interaction(interaction_data)
 
@@ -603,6 +609,9 @@ class OrchestratorServer:
                         f"{consolidation_result.get('removed_interactions', 0)} old interactions from Redis"
                     )
 
+            # Update Round table with new time
+            self.current_round_id = self.db.get_or_create_round(self.day, self.slot)
+
             execution_time = (time.time() - execution_start) * 1000
 
             self.logger.info(
@@ -611,6 +620,7 @@ class OrchestratorServer:
                     "extra_data": {
                         "new_day": self.day,
                         "new_slot": self.slot,
+                        "round_id": self.current_round_id,
                         "num_active_clients": active_count,
                         "day_completed": day_completed,
                         "execution_time_ms": execution_time,

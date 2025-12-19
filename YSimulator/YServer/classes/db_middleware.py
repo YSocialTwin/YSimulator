@@ -21,7 +21,7 @@ except ImportError:
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
-from YSimulator.YServer.classes.models import Base, Reaction, Post, User_mgmt
+from YSimulator.YServer.classes.models import Base, Reaction, Post, User_mgmt, Round
 
 
 class DatabaseMiddleware:
@@ -107,6 +107,10 @@ class DatabaseMiddleware:
         # Initialize SQL database backend
         self.engine = create_engine(connection_string)
         Base.metadata.create_all(self.engine)
+        
+        # Initialize round cache for performance
+        self.round_cache = {}  # Cache: (day, hour) -> round_id
+        
         self.logger.info(
             "SQL database initialized",
             extra={
@@ -537,3 +541,61 @@ class DatabaseMiddleware:
                 "removed_interactions": 0,
                 "message": f"Consolidation failed: {str(e)}",
             }
+
+    def get_or_create_round(self, day: int, hour: int) -> str:
+        """
+        Get or create a Round entry for the given day and hour.
+        
+        This method ensures that each (day, hour) combination has exactly one Round
+        record in the database, which is used as a foreign key reference by posts,
+        reactions, and other temporal entities.
+        
+        Args:
+            day: Simulation day number
+            hour: Hour/slot within the day (typically 1-24)
+            
+        Returns:
+            str: UUID of the Round record
+        """
+        # Check cache first for performance
+        cache_key = (day, hour)
+        if cache_key in self.round_cache:
+            return self.round_cache[cache_key]
+        
+        # Query or create in database
+        session = Session(self.engine)
+        try:
+            # Try to find existing round
+            round_obj = session.query(Round).filter_by(day=day, hour=hour).first()
+            
+            if not round_obj:
+                # Create new round
+                round_id = str(uuid.uuid4())
+                round_obj = Round(id=round_id, day=day, hour=hour)
+                session.add(round_obj)
+                session.commit()
+                
+                self.logger.debug(
+                    f"Created new Round entry",
+                    extra={
+                        "extra_data": {
+                            "round_id": round_id,
+                            "day": day,
+                            "hour": hour,
+                        }
+                    },
+                )
+            
+            # Cache the result
+            self.round_cache[cache_key] = round_obj.id
+            return round_obj.id
+            
+        except Exception as e:
+            session.rollback()
+            self.logger.error(
+                f"Error getting/creating round: {e}",
+                extra={"extra_data": {"error": str(e), "day": day, "hour": hour}},
+            )
+            raise
+        finally:
+            session.close()
