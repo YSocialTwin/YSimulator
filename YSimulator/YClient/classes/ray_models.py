@@ -40,6 +40,7 @@ class AgentProfile:
     # Simulation-specific fields
     cluster: int = 0
     llm: bool = False
+    archetype: Optional[str] = None
 
 
 @dataclass

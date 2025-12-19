@@ -361,7 +361,8 @@ class SimulationClient:
                     extra={"extra_data": {"error": str(e)}},
                 )
 
-    def select_action(self, agent_profile: AgentProfile, recent_posts: list) -> tuple:
+    @staticmethod
+    def __select_action(agent_profile: AgentProfile, recent_posts: list) -> tuple:
         """
         Determine which action an agent should perform.
         
@@ -382,7 +383,7 @@ class SimulationClient:
                 - target_post_id: UUID string for reactions, None for posts/no-action
                 
         Example:
-            >>> action_type, agent_type, target = self.select_action(profile, posts)
+            >>> action_type, agent_type, target = self.__select_action(profile, posts)
             >>> if action_type == "post":
             ...     # Generate post action
             >>> elif action_type == "reaction":
@@ -401,15 +402,15 @@ class SimulationClient:
         
         # Post decision
         if random.random() < p_post:
-            return ("post", agent_type, None)
+            return "post", agent_type, None
         
         # Reaction decision (only if posts available)
         if recent_posts and random.random() < p_react:
             target = random.choice(recent_posts)
-            return ("reaction", agent_type, target)
+            return "reaction", agent_type, target
         
         # No action selected
-        return (None, None, None)
+        return None, None, None
 
     def _simulate(self, day: int, slot: int, recent_posts: list) -> list:
         """
@@ -446,7 +447,7 @@ class SimulationClient:
         
         # --- SCATTER PHASE: Select and dispatch actions ---
         for agent in active:
-            action_type, agent_type, target = self.select_action(agent, recent_posts)
+            action_type, agent_type, target = self.__select_action(agent, recent_posts)
             
             if action_type == "post":
                 if agent_type == "llm":
