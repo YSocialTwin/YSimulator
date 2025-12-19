@@ -139,6 +139,7 @@ if __name__ == "__main__":
         db_config[db_type]["database"] = unique_db_name
     
     redis_config = config.get("redis")  # Redis configuration (optional)
+    simulation_config = config.get("simulation", {})  # Simulation configuration (optional)
 
     # Set up logging in config directory
     logger = setup_logging(config_dir, server_name)
@@ -242,6 +243,7 @@ if __name__ == "__main__":
         server_name=server_name,
         redis_config=redis_config,
         timeout_seconds=timeout_seconds,
+        simulation_config=simulation_config,
     )
     actor_time = (time.time() - actor_start) * 1000
 

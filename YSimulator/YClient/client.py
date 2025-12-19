@@ -446,16 +446,21 @@ class SimulationClient:
             "Validator": ["comment", "read"],  # Validators comment and read
             "Broadcaster": ["post", "image", "share"],  # Broadcasters post and share
             "Explorer": ["read", "search", "share_link"],  # Explorers read and search
-            "Default": ["post", "comment", "read"],  # Default actions
         }
         
         # Get archetype-specific action weights with safe fallback
         archetype = agent_profile.archetype
-        if archetype and archetype in archetype_actions:
+        
+        # If agent has no archetype (archetypes disabled), all actions are available
+        if not archetype:
+            # Get all action types from actions_likelihood
+            available_actions = list(self.actions_likelihood.keys())
+        elif archetype in archetype_actions:
+            # Use archetype-specific actions
             available_actions = archetype_actions[archetype]
         else:
-            # Use default for None or unrecognized archetype
-            available_actions = archetype_actions["Default"]
+            # Unknown archetype - use all available actions as fallback
+            available_actions = list(self.actions_likelihood.keys())
         
         # Filter actions_likelihood to only include available actions
         filtered_likelihood = {

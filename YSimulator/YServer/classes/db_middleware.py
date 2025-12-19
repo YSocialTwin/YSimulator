@@ -574,3 +574,72 @@ class DatabaseMiddleware:
             raise
         finally:
             session.close()
+
+    def get_all_users(self) -> List[Dict[str, Any]]:
+        """
+        Get all registered users from the database.
+        
+        Returns:
+            List[Dict]: List of user dictionaries with id, username, and archetype
+        """
+        from YSimulator.YServer.classes.models import User_mgmt
+        
+        session = self.Session()
+        try:
+            users = session.query(User_mgmt).all()
+            
+            result = []
+            for user in users:
+                result.append({
+                    "id": user.id,
+                    "username": user.username,
+                    "archetype": user.archetype,
+                })
+            
+            return result
+            
+        except Exception as e:
+            self.logger.error(
+                f"Error getting all users: {e}",
+                extra={"extra_data": {"error": str(e)}}
+            )
+            return []
+        finally:
+            session.close()
+
+    def update_user_archetype(self, user_id: str, new_archetype: str) -> bool:
+        """
+        Update the archetype of a user in the database.
+        
+        Args:
+            user_id: User ID (UUID string)
+            new_archetype: New archetype value
+            
+        Returns:
+            bool: True if update successful, False otherwise
+        """
+        from YSimulator.YServer.classes.models import User_mgmt
+        
+        session = self.Session()
+        try:
+            user = session.query(User_mgmt).filter(User_mgmt.id == user_id).first()
+            
+            if user:
+                user.archetype = new_archetype
+                session.commit()
+                return True
+            else:
+                self.logger.warning(
+                    f"User {user_id} not found for archetype update"
+                )
+                return False
+                
+        except Exception as e:
+            session.rollback()
+            self.logger.error(
+                f"Error updating user archetype: {e}",
+                extra={"extra_data": {"error": str(e), "user_id": user_id, "new_archetype": new_archetype}}
+            )
+            return False
+        finally:
+            session.close()

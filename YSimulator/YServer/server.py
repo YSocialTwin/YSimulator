@@ -37,6 +37,7 @@ class OrchestratorServer:
         server_name: str = "orchestrator",
         redis_config: dict = None,
         timeout_seconds: int = 60,
+        simulation_config: dict = None,
     ):
         """
         Initialize the orchestrator server.
@@ -48,6 +49,7 @@ class OrchestratorServer:
             server_name: Name of this server instance (str)
             redis_config: Redis configuration dict (optional)
             timeout_seconds: Seconds before considering a client stale (default: 60)
+            simulation_config: Simulation configuration dict (optional)
         """
         from YSimulator.YServer.classes.db_middleware import DatabaseMiddleware
 
@@ -56,6 +58,17 @@ class OrchestratorServer:
         self.server_name = server_name
         self.config_path = Path(config_path)
         self.timeout_seconds = timeout_seconds
+
+        # Archetype configuration
+        if simulation_config is None:
+            simulation_config = {}
+        self.archetype_config = simulation_config.get("agent_archetypes", {})
+        self.archetypes_enabled = self.archetype_config.get("enabled", False)
+        self.archetype_distribution = self.archetype_config.get("distribution", {})
+        self.archetype_transitions = self.archetype_config.get("transitions", {})
+        
+        # Track last archetype transition day (start at 0, so first transition at day 7)
+        self.last_archetype_transition_day = 0
 
         # Client tracking
         self.registered_clients = set()  # All registered clients
@@ -92,6 +105,7 @@ class OrchestratorServer:
                     "min_to_start": min_to_start,
                     "redis_enabled": self.db.use_redis,
                     "timeout_seconds": timeout_seconds,
+                    "archetypes_enabled": self.archetypes_enabled,
                 }
             },
         )
@@ -600,6 +614,11 @@ class OrchestratorServer:
                         f"Removed {consolidation_result.get('removed_posts', 0)} old posts, "
                         f"{consolidation_result.get('removed_interactions', 0)} old interactions from Redis"
                     )
+                
+                # Check if it's time for archetype transitions (every 7 days)
+                if self.archetypes_enabled and self.day - self.last_archetype_transition_day >= 7:
+                    self._perform_archetype_transitions()
+                    self.last_archetype_transition_day = self.day
 
             # Update Round table with new time
             self.current_round_id = self.db.get_or_create_round(self.day, self.slot)
@@ -619,3 +638,96 @@ class OrchestratorServer:
                     }
                 },
             )
+
+    def _perform_archetype_transitions(self) -> None:
+        """
+        Perform archetype transitions for all registered agents based on transition probabilities.
+        
+        Each agent has a probability of transitioning to a different archetype based on their
+        current archetype and the transition matrix defined in the configuration.
+        This is called every 7 days when archetypes are enabled.
+        """
+        import random
+        
+        if not self.archetypes_enabled or not self.archetype_transitions:
+            return
+        
+        transition_start = time.time()
+        transitioned_count = 0
+        error_count = 0
+        
+        # Get all registered agents from database
+        try:
+            # Query all users and their current archetypes
+            agents = self.db.get_all_users()
+            
+            for agent in agents:
+                agent_id = agent.get("id")
+                current_archetype = agent.get("archetype")
+                
+                # Skip if agent has no archetype or archetype not in transitions
+                if not current_archetype or current_archetype.lower() not in self.archetype_transitions:
+                    continue
+                
+                # Get transition probabilities for current archetype
+                transitions = self.archetype_transitions.get(current_archetype.lower(), {})
+                
+                if not transitions:
+                    continue
+                
+                # Sample new archetype based on transition probabilities
+                archetypes = list(transitions.keys())
+                probabilities = list(transitions.values())
+                
+                # Validate probabilities sum to approximately 1.0
+                total_prob = sum(probabilities)
+                if abs(total_prob - 1.0) > 0.01:
+                    self.logger.warning(
+                        f"Archetype transition probabilities for '{current_archetype}' sum to {total_prob}, expected 1.0"
+                    )
+                    # Normalize probabilities
+                    probabilities = [p / total_prob for p in probabilities]
+                
+                # Select new archetype
+                new_archetype = random.choices(archetypes, weights=probabilities)[0]
+                
+                # Update agent archetype in database if it changed
+                if new_archetype != current_archetype.lower():
+                    # Capitalize first letter to match format
+                    new_archetype_formatted = new_archetype.capitalize()
+                    
+                    if self.db.update_user_archetype(agent_id, new_archetype_formatted):
+                        transitioned_count += 1
+                        self.logger.debug(
+                            f"Agent {agent_id} transitioned from {current_archetype} to {new_archetype_formatted}"
+                        )
+                    else:
+                        error_count += 1
+        
+        except Exception as e:
+            self.logger.error(
+                f"Error during archetype transitions: {e}",
+                extra={"extra_data": {"error": str(e)}}
+            )
+            print(f"[Server] ❌ Archetype transition error: {e}")
+            return
+        
+        transition_time = (time.time() - transition_start) * 1000
+        
+        self.logger.info(
+            f"Archetype transitions complete at day {self.day}",
+            extra={
+                "extra_data": {
+                    "day": self.day,
+                    "transitioned_count": transitioned_count,
+                    "error_count": error_count,
+                    "total_agents": len(agents),
+                    "execution_time_ms": transition_time,
+                }
+            },
+        )
+        
+        print(
+            f"[Server] 🔄 Archetype transitions complete - "
+            f"{transitioned_count} agents changed archetypes (day {self.day})"
+        )
