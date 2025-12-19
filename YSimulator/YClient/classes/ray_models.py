@@ -50,6 +50,7 @@ class ActionDTO:
     action_type: Literal['POST', 'LIKE', 'COMMENT']
     content: Optional[str] = None
     target_post_id: Optional[str] = None  # UUID string
+    article_id: Optional[str] = None  # UUID string for news posts
 
 
 @dataclass

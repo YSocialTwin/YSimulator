@@ -643,3 +643,172 @@ class DatabaseMiddleware:
             return False
         finally:
             session.close()
+
+    def add_website(self, website_data: Dict[str, Any]) -> Optional[str]:
+        """
+        Add a website (news source) to the database.
+        
+        Args:
+            website_data (dict): Website information with keys:
+                - id: Website UUID
+                - name: Website name
+                - rss: RSS feed URL
+                - leaning: Political leaning (optional)
+                - category: Content category (optional)
+                - country: Country code (optional)
+                - language: Language code (optional)
+                - last_fetched: Last fetch timestamp (optional)
+                
+        Returns:
+            str: Website ID if successful, None otherwise
+        """
+        from YSimulator.YServer.classes.models import Website
+        import uuid
+        
+        session = self.Session()
+        try:
+            # Generate UUID if not provided
+            website_id = website_data.get("id", str(uuid.uuid4()))
+            
+            # Check if website already exists by RSS URL
+            existing = session.query(Website).filter(Website.rss == website_data.get("rss")).first()
+            if existing:
+                return existing.id
+            
+            # Create new website
+            website = Website(
+                id=website_id,
+                name=website_data.get("name"),
+                rss=website_data.get("rss"),
+                leaning=website_data.get("leaning"),
+                category=website_data.get("category"),
+                country=website_data.get("country"),
+                language=website_data.get("language"),
+                last_fetched=website_data.get("last_fetched", str(uuid.uuid4()))
+            )
+            
+            session.add(website)
+            session.commit()
+            
+            # Also cache in Redis if enabled
+            if self.use_redis:
+                redis_key = self._redis_key("websites", website_id)
+                self.redis_client.hset(redis_key, mapping={
+                    "id": website_id,
+                    "name": website_data.get("name", ""),
+                    "rss": website_data.get("rss", ""),
+                    "category": website_data.get("category", ""),
+                    "language": website_data.get("language", "")
+                })
+            
+            return website_id
+            
+        except Exception as e:
+            session.rollback()
+            self.logger.error(
+                f"Error adding website: {e}",
+                extra={"extra_data": {"error": str(e), "website_data": website_data}}
+            )
+            return None
+        finally:
+            session.close()
+
+    def add_article(self, article_data: Dict[str, Any]) -> Optional[str]:
+        """
+        Add a news article to the database.
+        
+        Args:
+            article_data (dict): Article information with keys:
+                - id: Article UUID (optional, will be generated)
+                - title: Article title
+                - summary: Article summary/description
+                - website_id: Reference to website (UUID)
+                - link: Article URL
+                - fetched_on: Fetch timestamp (UUID format)
+                
+        Returns:
+            str: Article ID if successful, None otherwise
+        """
+        from YSimulator.YServer.classes.models import Article
+        import uuid
+        
+        session = self.Session()
+        try:
+            # Generate UUID if not provided
+            article_id = article_data.get("id", str(uuid.uuid4()))
+            
+            # Check if article already exists by link
+            existing = session.query(Article).filter(Article.link == article_data.get("link")).first()
+            if existing:
+                return existing.id
+            
+            # Create new article
+            article = Article(
+                id=article_id,
+                title=article_data.get("title"),
+                summary=article_data.get("summary"),
+                website_id=article_data.get("website_id"),
+                link=article_data.get("link"),
+                fetched_on=article_data.get("fetched_on", str(uuid.uuid4()))
+            )
+            
+            session.add(article)
+            session.commit()
+            
+            # Also cache in Redis if enabled
+            if self.use_redis:
+                redis_key = self._redis_key("articles", article_id)
+                self.redis_client.hset(redis_key, mapping={
+                    "id": article_id,
+                    "title": article_data.get("title", ""),
+                    "summary": article_data.get("summary", "")[:200],  # Truncate for Redis
+                    "website_id": article_data.get("website_id", ""),
+                    "link": article_data.get("link", "")
+                })
+            
+            return article_id
+            
+        except Exception as e:
+            session.rollback()
+            self.logger.error(
+                f"Error adding article: {e}",
+                extra={"extra_data": {"error": str(e), "article_data": article_data}}
+            )
+            return None
+        finally:
+            session.close()
+
+    def get_website_by_rss(self, rss_url: str) -> Optional[Dict[str, Any]]:
+        """
+        Get website by RSS URL.
+        
+        Args:
+            rss_url (str): RSS feed URL
+            
+        Returns:
+            dict: Website data if found, None otherwise
+        """
+        from YSimulator.YServer.classes.models import Website
+        
+        session = self.Session()
+        try:
+            website = session.query(Website).filter(Website.rss == rss_url).first()
+            
+            if website:
+                return {
+                    "id": website.id,
+                    "name": website.name,
+                    "rss": website.rss,
+                    "category": website.category,
+                    "language": website.language
+                }
+            return None
+            
+        except Exception as e:
+            self.logger.error(
+                f"Error getting website by RSS: {e}",
+                extra={"extra_data": {"error": str(e), "rss_url": rss_url}}
+            )
+            return None
+        finally:
+            session.close()

@@ -680,7 +680,7 @@ class SimulationClient:
                     if agent_type == "llm":
                         # LLM: Fire off async call (don't wait for result yet)
                         future = generate_llm_post_async(self.llm, agent.cluster, day, slot)
-                        pending_llm_posts.append((agent.id, agent.cluster, future))
+                        pending_llm_posts.append((agent.id, agent.cluster, future, None))
                     else:
                         # Rule-based: Execute immediately
                         action = generate_rule_based_post(agent.id, agent.cluster)
@@ -706,12 +706,12 @@ class SimulationClient:
                     # Future implementation: integrate with image generation
                     if agent_type == "llm":
                         future = generate_llm_post_async(self.llm, agent.cluster, day, slot)
-                        pending_llm_posts.append((agent.id, agent.cluster, future))
+                        pending_llm_posts.append((agent.id, agent.cluster, future, None))
                     else:
                         action = generate_rule_based_post(agent.id, agent.cluster)
                         actions.append(action)
                 
-                elif action_type == "share":
+                elif action_type == "news":
                     # News sharing action - agent shares news article from RSS feeds
                     # LLM agents can comment on the news, rule-based agents share it directly
                     if self.news_service:
@@ -725,15 +725,19 @@ class SimulationClient:
                             if article:
                                 if agent_type == "llm":
                                     # LLM agent posts news with commentary
-                                    future = generate_news_post_async(
+                                    # generate_news_post_async now returns (future, article_id)
+                                    future, article_id = generate_news_post_async(
                                         self.news_service, self.llm, agent.cluster, article
                                     )
-                                    pending_llm_posts.append((agent.id, agent.cluster, future))
+                                    pending_llm_posts.append((agent.id, agent.cluster, future, article_id))
                                 else:
                                     # Rule-based agent posts news directly
-                                    action = generate_rule_based_news_post(
-                                        agent.id, agent.cluster, article
+                                    # generate_rule_based_news_post now returns (action, article_id)
+                                    action, article_id = generate_rule_based_news_post(
+                                        agent.id, agent.cluster, article, self.news_service
                                     )
+                                    # Store article_id with the action for later use when submitting
+                                    action.article_id = article_id  # Add article_id as attribute
                                     actions.append(action)
                             else:
                                 # No article available, skip
@@ -745,15 +749,15 @@ class SimulationClient:
                         # News service not configured, fallback to regular post
                         if agent_type == "llm":
                             future = generate_llm_post_async(self.llm, agent.cluster, day, slot)
-                            pending_llm_posts.append((agent.id, agent.cluster, future))
+                            pending_llm_posts.append((agent.id, agent.cluster, future, None))
                         else:
                             action = generate_rule_based_post(agent.id, agent.cluster)
                             actions.append(action)
                 
-               # elif action_type == "share":
+                elif action_type == "share":
                     # Stub: Share action - agent shares an existing post
                     # Future implementation: select post to share and track sharing
-               #     pass
+                    pass
                 
                 elif action_type == "search":
                     # Stub: Search action - agent searches for content
@@ -765,7 +769,7 @@ class SimulationClient:
                     # Future implementation: special broadcast mechanism
                     if agent_type == "llm":
                         future = generate_llm_post_async(self.llm, agent.cluster, day, slot)
-                        pending_llm_posts.append((agent.id, agent.cluster, future))
+                        pending_llm_posts.append((agent.id, agent.cluster, future, None))
                     else:
                         action = generate_rule_based_post(agent.id, agent.cluster)
                         actions.append(action)
@@ -775,7 +779,7 @@ class SimulationClient:
                     # Future implementation: integrate with link sharing
                     if agent_type == "llm":
                         future = generate_llm_post_async(self.llm, agent.cluster, day, slot)
-                        pending_llm_posts.append((agent.id, agent.cluster, future))
+                        pending_llm_posts.append((agent.id, agent.cluster, future, None))
                     else:
                         action = generate_rule_based_post(agent.id, agent.cluster)
                         actions.append(action)
@@ -789,8 +793,12 @@ class SimulationClient:
             results = ray.get(futures)  # Blocks once for ALL posts
             
             for i, res_txt in enumerate(results):
-                a_id, cid, _ = pending_llm_posts[i]
-                actions.append(ActionDTO(a_id, cid, "POST", content=res_txt))
+                a_id, cid, _, article_id = pending_llm_posts[i]
+                action = ActionDTO(a_id, cid, "POST", content=res_txt)
+                # Add article_id as attribute if present (for news posts)
+                if article_id:
+                    action.article_id = article_id
+                actions.append(action)
         
         # Resolve Reactions
         if pending_llm_reactions:

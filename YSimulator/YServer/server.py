@@ -494,6 +494,10 @@ class OrchestratorServer:
                         "tweet": act.content,  # Post content field
                         "round": self.current_round_id,  # FK to rounds.id
                     }
+                    # Add article_id (news_id) if this is a news post
+                    if hasattr(act, 'article_id') and act.article_id:
+                        post_data["news_id"] = act.article_id
+                    
                     post_id = self.db.add_post(post_data)
                     if post_id:
                         new_ids.append(post_id)

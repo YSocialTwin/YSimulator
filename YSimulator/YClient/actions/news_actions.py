@@ -15,26 +15,25 @@ def generate_news_post_async(news_service, llm_service, agent_cluster: int, arti
     
     This function creates a news post where an LLM agent reads a news article
     and generates a comment or perspective on it based on their persona.
+    Also saves the article to the database.
     
     Args:
         news_service: Ray actor reference for NewsFeedService
         llm_service: Ray actor reference for LLMService
         agent_cluster: Cluster ID of the agent (determines persona)
-        article: Article dictionary with keys: title, summary, link, source
+        article: Article dictionary with keys: title, summary, link, source, website_id
         
     Returns:
-        Ray ObjectRef: Future that will resolve to the generated post content
+        tuple: (Ray ObjectRef for content, article_id)
     """
-    # Get LLM to comment on the news article
-    prompt_data = {
-        "cluster_id": agent_cluster,
-        "title": article.get("title", ""),
-        "summary": article.get("summary", ""),
-        "source": article.get("source", "")
-    }
+    # Save article to database first
+    article_id_future = news_service.save_article_to_db.remote(article)
+    article_id = ray.get(article_id_future)
     
     # Use LLM to generate commentary
-    return generate_llm_news_commentary.remote(llm_service, agent_cluster, article)
+    content_future = generate_llm_news_commentary.remote(llm_service, agent_cluster, article)
+    
+    return content_future, article_id
 
 
 @ray.remote
@@ -69,7 +68,8 @@ def generate_llm_news_commentary(llm_service, cluster_id: int, article: dict) ->
     return content
 
 
-def generate_rule_based_news_post(agent_id: int, cluster_id: int, article: dict) -> ActionDTO:
+def generate_rule_based_news_post(agent_id: int, cluster_id: int, article: dict, 
+                                   news_service, article_id: str = None) -> ActionDTO:
     """
     Generate a simple rule-based news post.
     
@@ -80,10 +80,16 @@ def generate_rule_based_news_post(agent_id: int, cluster_id: int, article: dict)
         agent_id: Unique identifier for the agent
         cluster_id: Cluster/group the agent belongs to
         article: Article dictionary with keys: title, summary, link, source
+        news_service: Ray actor reference for NewsFeedService
+        article_id: Article ID if already saved (optional)
         
     Returns:
-        ActionDTO: POST action with news content
+        tuple: (ActionDTO with POST action and news content, article_id)
     """
+    # Save article to database if not already saved
+    if not article_id and news_service:
+        article_id = ray.get(news_service.save_article_to_db.remote(article))
+    
     title = article.get("title", "Interesting article")
     summary = article.get("summary", "")[:100]  # Truncate to 100 chars
     link = article.get("link", "")
@@ -92,4 +98,6 @@ def generate_rule_based_news_post(agent_id: int, cluster_id: int, article: dict)
     # Format the news post
     content = f"📰 {title}\n\n{summary}...\n\nVia {source}: {link}"
     
-    return ActionDTO(agent_id, cluster_id, "POST", content=content)
+    action = ActionDTO(agent_id, cluster_id, "POST", content=content)
+    
+    return action, article_id

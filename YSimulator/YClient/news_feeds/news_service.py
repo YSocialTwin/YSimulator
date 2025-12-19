@@ -70,9 +70,16 @@ class NewsFeedService:
         self.feeds_config = feeds_config.get("feeds", [])
         self.cache_duration = feeds_config.get("cache_duration", 3600)
         
-        # Cache structure: {feed_url: {"articles": [...], "timestamp": int}}
+        # Get server actor reference
+        try:
+            self.server = ray.get_actor("Orchestrator")
+        except:
+            self.server = None
+        
+        # Cache structure: {feed_url: {"articles": [...], "timestamp": int, "website_id": str}}
         self.cached_news = {}
         self.last_fetched = {}
+        self.website_ids = {}  # Map feed_url to website_id
         
         # Initialize caches for all configured feeds
         for feed in self.feeds_config:
@@ -80,6 +87,52 @@ class NewsFeedService:
             if feed_url:
                 self.cached_news[feed_url] = {"articles": [], "timestamp": 0}
                 self.last_fetched[feed_url] = 0
+        
+        # Register feeds with server
+        self._register_feeds_with_server()
+    
+    def _register_feeds_with_server(self):
+        """
+        Register all configured feeds with the server database.
+        Creates Website entries for each feed.
+        """
+        if not self.server:
+            return
+        
+        import uuid
+        
+        for feed in self.feeds_config:
+            feed_url = feed.get("url")
+            if not feed_url:
+                continue
+            
+            try:
+                # Check if website exists
+                website_data = ray.get(self.server.db.get_website_by_rss.remote(feed_url))
+                
+                if website_data:
+                    # Website exists, use its ID
+                    website_id = website_data["id"]
+                else:
+                    # Create new website
+                    website_data = {
+                        "id": str(uuid.uuid4()),
+                        "name": feed.get("name", "Unknown"),
+                        "rss": feed_url,
+                        "category": feed.get("category"),
+                        "language": feed.get("language"),
+                        "country": feed.get("country"),
+                        "leaning": feed.get("leaning"),
+                        "last_fetched": str(uuid.uuid4())
+                    }
+                    website_id = ray.get(self.server.db.add_website.remote(website_data))
+                
+                if website_id:
+                    self.website_ids[feed_url] = website_id
+                    
+            except Exception as e:
+                # Failed to register feed, continue with others
+                pass
     
     def _should_refresh_cache(self, feed_url: str) -> bool:
         """
@@ -104,9 +157,11 @@ class NewsFeedService:
             feed_name (str): Human-readable feed name
             
         Returns:
-            list: List of article dictionaries with keys: title, summary, link
+            list: List of article dictionaries with keys: title, summary, link, website_id
         """
         articles = []
+        website_id = self.website_ids.get(feed_url)
+        
         try:
             feed = feedparser.parse(feed_url)
             
@@ -117,7 +172,8 @@ class NewsFeedService:
                         "summary": entry.get("summary", entry.get("description", "No summary available")),
                         "link": entry.get("link", ""),
                         "published": entry.get("published", "Unknown date"),
-                        "source": feed_name
+                        "source": feed_name,
+                        "website_id": website_id  # Include website_id for database reference
                     }
                     articles.append(article)
                 except Exception as e:
@@ -230,6 +286,38 @@ class NewsFeedService:
         
         # Return a random article
         return random.choice(all_articles)
+    
+    def save_article_to_db(self, article: Dict) -> Optional[str]:
+        """
+        Save an article to the database.
+        
+        Args:
+            article (dict): Article dictionary with keys: title, summary, link, website_id
+            
+        Returns:
+            str: Article ID if successful, None otherwise
+        """
+        if not self.server or not article:
+            return None
+        
+        import uuid
+        
+        try:
+            article_data = {
+                "id": str(uuid.uuid4()),
+                "title": article.get("title"),
+                "summary": article.get("summary"),
+                "website_id": article.get("website_id"),
+                "link": article.get("link"),
+                "fetched_on": str(uuid.uuid4())  # Using UUID as timestamp format
+            }
+            
+            article_id = ray.get(self.server.db.add_article.remote(article_data))
+            return article_id
+            
+        except Exception as e:
+            # Failed to save article
+            return None
     
     def get_feed_status(self) -> Dict:
         """
