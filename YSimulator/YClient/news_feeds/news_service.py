@@ -312,7 +312,7 @@ class NewsFeedService:
                 "fetched_on": str(uuid.uuid4())  # Using UUID as timestamp format
             }
             
-            article_id = ray.get(self.server.db.add_article.remote(article_data))
+            article_id = ray.get(self.server.add_article.remote(article_data))
             return article_id
             
         except Exception as e:

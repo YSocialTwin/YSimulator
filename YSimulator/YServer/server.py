@@ -548,6 +548,48 @@ class OrchestratorServer:
         # Check if EVERYONE is done
         self._check_barrier_and_advance()
 
+    def add_website(self, website_data: dict) -> Optional[str]:
+        """
+        Add a website (news source) to the database.
+        
+        This is a wrapper method that can be called remotely from Ray actors.
+        
+        Args:
+            website_data: Dictionary containing website information
+            
+        Returns:
+            str: Website ID if successful, None otherwise
+        """
+        return self.db.add_website(website_data)
+    
+    def get_website_by_rss(self, rss_url: str) -> Optional[dict]:
+        """
+        Get website information by RSS URL.
+        
+        This is a wrapper method that can be called remotely from Ray actors.
+        
+        Args:
+            rss_url: RSS feed URL
+            
+        Returns:
+            dict: Website information if found, None otherwise
+        """
+        return self.db.get_website_by_rss(rss_url)
+    
+    def add_article(self, article_data: dict) -> Optional[str]:
+        """
+        Add a news article to the database.
+        
+        This is a wrapper method that can be called remotely from Ray actors.
+        
+        Args:
+            article_data: Dictionary containing article information
+            
+        Returns:
+            str: Article ID if successful, None otherwise
+        """
+        return self.db.add_article(article_data)
+
     def _check_barrier_and_advance(self) -> None:
         """
         Check if all active clients have submitted actions and advance simulation state.
