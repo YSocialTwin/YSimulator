@@ -21,6 +21,8 @@ from YSimulator.YClient.actions import (
     generate_rule_based_post,
     generate_rule_based_reaction,
     generate_rule_based_comment,
+    generate_news_post_async,
+    generate_rule_based_news_post,
 )
 from YSimulator.YClient.classes.ray_models import ActionDTO, AgentProfile
 
@@ -45,6 +47,7 @@ class SimulationClient:
         simulation_config: dict = None,
         config_path: str = ".",
         parent_logger=None,
+        news_service_handle=None,
     ):
         """
         Initialize the simulation client.
@@ -56,9 +59,11 @@ class SimulationClient:
             simulation_config: Simulation parameters
             config_path: Path to configuration directory for logs
             parent_logger: Parent logger (not used in Ray actor, we create our own)
+            news_service_handle: Ray actor handle for NewsFeedService (optional)
         """
         self.client_id = client_id
         self.llm = llm_handle
+        self.news_service = news_service_handle
         self.config_path = Path(config_path)
 
         # Load simulation configuration with defaults
@@ -707,14 +712,43 @@ class SimulationClient:
                         actions.append(action)
                 
                 elif action_type == "news":
-                    # Stub: News sharing action - agent shares news article
-                    # Future implementation: integrate with news sources
-                    if agent_type == "llm":
-                        future = generate_llm_post_async(self.llm, agent.cluster, day, slot)
-                        pending_llm_posts.append((agent.id, agent.cluster, future))
+                    # News sharing action - agent shares news article from RSS feeds
+                    # LLM agents can comment on the news, rule-based agents share it directly
+                    if self.news_service:
+                        # Get a random article from news service
+                        try:
+                            article_future = self.news_service.get_random_article.remote(
+                                language="en"  # Can be made configurable
+                            )
+                            article = ray.get(article_future)
+                            
+                            if article:
+                                if agent_type == "llm":
+                                    # LLM agent posts news with commentary
+                                    future = generate_news_post_async(
+                                        self.news_service, self.llm, agent.cluster, article
+                                    )
+                                    pending_llm_posts.append((agent.id, agent.cluster, future))
+                                else:
+                                    # Rule-based agent posts news directly
+                                    action = generate_rule_based_news_post(
+                                        agent.id, agent.cluster, article
+                                    )
+                                    actions.append(action)
+                            else:
+                                # No article available, skip
+                                pass
+                        except Exception as e:
+                            # News service unavailable or error, skip action
+                            self.logger.warning(f"News action failed: {e}")
                     else:
-                        action = generate_rule_based_post(agent.id, agent.cluster)
-                        actions.append(action)
+                        # News service not configured, fallback to regular post
+                        if agent_type == "llm":
+                            future = generate_llm_post_async(self.llm, agent.cluster, day, slot)
+                            pending_llm_posts.append((agent.id, agent.cluster, future))
+                        else:
+                            action = generate_rule_based_post(agent.id, agent.cluster)
+                            actions.append(action)
                 
                 elif action_type == "share":
                     # Stub: Share action - agent shares an existing post
