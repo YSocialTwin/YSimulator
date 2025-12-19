@@ -711,7 +711,7 @@ class SimulationClient:
                         action = generate_rule_based_post(agent.id, agent.cluster)
                         actions.append(action)
                 
-                elif action_type == "news":
+                elif action_type == "share":
                     # News sharing action - agent shares news article from RSS feeds
                     # LLM agents can comment on the news, rule-based agents share it directly
                     if self.news_service:
@@ -750,10 +750,10 @@ class SimulationClient:
                             action = generate_rule_based_post(agent.id, agent.cluster)
                             actions.append(action)
                 
-                elif action_type == "share":
+               # elif action_type == "share":
                     # Stub: Share action - agent shares an existing post
                     # Future implementation: select post to share and track sharing
-                    pass
+               #     pass
                 
                 elif action_type == "search":
                     # Stub: Search action - agent searches for content
