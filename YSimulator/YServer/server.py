@@ -156,7 +156,7 @@ class OrchestratorServer:
                     joined_on = int(time.time())
 
                 user_data = {
-                    "id": agent_profile.id,
+                    "id": str(agent_profile.id),  # Convert to UUID string
                     "username": agent_profile.username,
                     "email": agent_profile.email,
                     "password": agent_profile.password,
@@ -173,7 +173,7 @@ class OrchestratorServer:
                     "language": agent_profile.language,
                     "owner": agent_profile.owner,
                     "education_level": agent_profile.education_level,
-                    "joined_on": joined_on,
+                    "joined_on": str(joined_on),  # Convert to string for consistency
                     "gender": agent_profile.gender,
                     "nationality": agent_profile.nationality,
                     "round_actions": agent_profile.round_actions,
@@ -183,7 +183,7 @@ class OrchestratorServer:
                     "daily_activity_level": agent_profile.daily_activity_level,
                     "profession": agent_profile.profession,
                     "activity_profile": agent_profile.activity_profile,
-                    "archetype": agent_profile.archetype,
+                    # Note: 'archetype' removed - not in User_mgmt model
                 }
 
                 # Try to register user
@@ -480,12 +480,9 @@ class OrchestratorServer:
             for act in actions:
                 if act.action_type == "POST":
                     post_data = {
-                        "agent_id": act.agent_id,
-                        "cluster_id": act.cluster_id,
-                        "content": act.content,
-                        "day": self.day,
-                        "slot": self.slot,
-                        "round": self.current_round_id,  # Add round FK reference
+                        "user_id": str(act.agent_id),  # FK to user_mgmt.id (UUID string)
+                        "tweet": act.content,  # Post content field
+                        "round": self.current_round_id,  # FK to rounds.id
                     }
                     post_id = self.db.add_post(post_data)
                     if post_id:
@@ -497,11 +494,10 @@ class OrchestratorServer:
                         )
                 else:
                     interaction_data = {
-                        "agent_id": act.agent_id,
-                        "post_id": act.target_post_id,
-                        "type": act.action_type,
-                        "content": act.content,
-                        "round": self.current_round_id,  # Add round FK reference
+                        "user_id": str(act.agent_id),  # FK to user_mgmt.id (UUID string)
+                        "post_id": act.target_post_id,  # FK to post.id (UUID string)
+                        "reaction_type": act.action_type,  # Type of reaction (like, love, etc.)
+                        "round": self.current_round_id,  # FK to rounds.id
                     }
                     self.db.add_interaction(interaction_data)
 
