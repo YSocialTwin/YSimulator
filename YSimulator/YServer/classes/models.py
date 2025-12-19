@@ -30,7 +30,7 @@ class Emotion(Base):
 
     __tablename__ = "emotions"
 
-    id = Column(Integer, primary_key=True, autoincrement=True)
+    id = Column(String(36), primary_key=True)
     emotion = Column(Text, nullable=False)
     icon = Column(Text)
 
@@ -43,7 +43,7 @@ class Hashtag(Base):
 
     __tablename__ = "hashtags"
 
-    id = Column(Integer, primary_key=True, autoincrement=True)
+    id = Column(String(36), primary_key=True)
     hashtag = Column(Text, nullable=False)
 
     # Relationships
@@ -55,7 +55,7 @@ class Interest(Base):
 
     __tablename__ = "interests"
 
-    iid = Column(Integer, primary_key=True, autoincrement=True)
+    iid = Column(String(36), primary_key=True)
     interest = Column(Text)
 
     # Relationships
@@ -70,16 +70,9 @@ class Round(Base):
 
     __tablename__ = "rounds"
 
-    id = Column(Integer, primary_key=True, autoincrement=True)
+    id = Column(String(36), primary_key=True)
     day = Column(Integer)
     hour = Column(Integer)
-
-    # Relationships
-    recommendations = relationship("Recommendation", back_populates="round", cascade="all, delete-orphan")
-    user_interests = relationship("UserInterest", back_populates="round_obj", cascade="all, delete-orphan")
-    posts = relationship("Post", back_populates="round_obj", cascade="all, delete-orphan")
-    reactions = relationship("Reaction", back_populates="round_obj", cascade="all, delete-orphan")
-    post_sentiments = relationship("PostSentiment", back_populates="round_obj", cascade="all, delete-orphan")
 
 
 # ================================================
@@ -97,7 +90,7 @@ class User_mgmt(Base):
 
     __tablename__ = "user_mgmt"
 
-    id = Column(Integer, primary_key=True)
+    id = Column(String(36), primary_key=True)  # UUID string
     username = Column(String(50), nullable=False, unique=True)
     email = Column(String(50))
     password = Column(String(400), nullable=False)
@@ -114,14 +107,14 @@ class User_mgmt(Base):
     language = Column(Text)
     owner = Column(Text)
     education_level = Column(Text)
-    joined_on = Column(Integer)
+    joined_on = Column(String(36))
     frecsys_type = Column(Text)
     round_actions = Column(Integer, nullable=False, default=3)
     gender = Column(Text)
     nationality = Column(Text)
     toxicity = Column(Text)
     is_page = Column(Integer, nullable=False, default=0)
-    left_on = Column(Integer)
+    left_on = Column(String(36))
     daily_activity_level = Column(Integer, default=1)
     profession = Column(Text)
     activity_profile = Column(Text)
@@ -145,13 +138,6 @@ class User_mgmt(Base):
     reactions = relationship("Reaction", back_populates="user", cascade="all, delete-orphan")
 
 
-# Indexes for user_mgmt
-Index("idx_user_mgmt_username", User_mgmt.username)
-Index("idx_user_mgmt_email", User_mgmt.email)
-Index("idx_user_mgmt_round_actions", User_mgmt.round_actions)
-Index("idx_user_mgmt_nationality", User_mgmt.nationality)
-
-
 # ================================================
 # SOCIAL INTERACTIONS (UUID IDs)
 # ================================================
@@ -162,11 +148,11 @@ class Follow(Base):
 
     __tablename__ = "follow"
 
-    id = Column(String(36), primary_key=True)  # UUID
-    user_id = Column(Integer, ForeignKey("user_mgmt.id", ondelete="CASCADE"), nullable=False)
-    follower_id = Column(Integer, ForeignKey("user_mgmt.id", ondelete="CASCADE"), nullable=False)
+    id = Column(String(36), primary_key=True)  # UUID string
+    user_id = Column(String(36), ForeignKey("user_mgmt.id", ondelete="CASCADE"), nullable=False)
+    follower_id = Column(String(36), ForeignKey("user_mgmt.id", ondelete="CASCADE"), nullable=False)
     action = Column(Text)
-    round = Column(Integer)
+    round = Column(String(36))
 
     # Relationships
     user = relationship("User_mgmt", foreign_keys=[user_id], back_populates="follows_as_user")
@@ -184,9 +170,9 @@ class Recommendation(Base):
     __tablename__ = "recommendations"
 
     id = Column(String(36), primary_key=True)  # UUID
-    user_id = Column(Integer, ForeignKey("user_mgmt.id", ondelete="CASCADE"), nullable=False)
+    user_id = Column(String(36), ForeignKey("user_mgmt.id", ondelete="CASCADE"), nullable=False)
     post_ids = Column(Text)  # Comma-separated or JSON list of post UUIDs
-    round = Column(Integer, ForeignKey("rounds.id", ondelete="CASCADE"), nullable=False)
+    round = Column(String(36), ForeignKey("rounds.id", ondelete="CASCADE"), nullable=False)
 
     # Relationships
     user = relationship("User_mgmt", back_populates="recommendations")
@@ -203,9 +189,9 @@ class UserInterest(Base):
     __tablename__ = "user_interest"
 
     id = Column(String(36), primary_key=True)  # UUID
-    user_id = Column(Integer, ForeignKey("user_mgmt.id", ondelete="CASCADE"))
-    interest_id = Column(Integer, ForeignKey("interests.iid", ondelete="CASCADE"))
-    round_id = Column(Integer, ForeignKey("rounds.id", ondelete="CASCADE"))
+    user_id = Column(String(36), ForeignKey("user_mgmt.id", ondelete="CASCADE"))
+    interest_id = Column(String(36), ForeignKey("interests.iid", ondelete="CASCADE"))
+    round_id = Column(String(36), ForeignKey("rounds.id", ondelete="CASCADE"))
 
     # Relationships
     user = relationship("User_mgmt", back_populates="user_interests")
@@ -224,11 +210,11 @@ class Voting(Base):
     __tablename__ = "voting"
 
     vid = Column(String(36), primary_key=True)  # UUID
-    round = Column(Integer)
-    user_id = Column(Integer, ForeignKey("user_mgmt.id", ondelete="CASCADE"))
+    round = Column(String(36))
+    user_id = Column(String(36), ForeignKey("user_mgmt.id", ondelete="CASCADE"))
     preference = Column(Text)
     content_type = Column(Text)
-    content_id = Column(Integer)
+    content_id = Column(String(36))
 
     # Relationships
     user = relationship("User_mgmt", back_populates="votings")
@@ -248,12 +234,12 @@ class Website(Base):
 
     __tablename__ = "websites"
 
-    id = Column(Integer, primary_key=True, autoincrement=True)
+    id = Column(String(36), primary_key=True)
     name = Column(Text)
     rss = Column(Text)
     leaning = Column(Text)
     category = Column(Text)
-    last_fetched = Column(Integer)
+    last_fetched = Column(String(36))
     country = Column(Text)
     language = Column(Text)
 
@@ -266,11 +252,11 @@ class Article(Base):
 
     __tablename__ = "articles"
 
-    id = Column(Integer, primary_key=True, autoincrement=True)
+    id = Column(String(36), primary_key=True)
     title = Column(Text, nullable=False)
     summary = Column(Text)
     website_id = Column(Integer, ForeignKey("websites.id", ondelete="CASCADE"), nullable=False)
-    fetched_on = Column(Integer, nullable=False)
+    fetched_on = Column(String(36), nullable=False)
     link = Column(Text)
 
     # Relationships
@@ -288,9 +274,9 @@ class ArticleTopic(Base):
 
     __tablename__ = "article_topics"
 
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    article_id = Column(Integer, ForeignKey("articles.id", ondelete="CASCADE"), nullable=False)
-    topic_id = Column(Integer, ForeignKey("interests.iid", ondelete="CASCADE"))
+    id = Column(String(36), primary_key=True)
+    article_id = Column(String(36), ForeignKey("articles.id", ondelete="CASCADE"), nullable=False)
+    topic_id = Column(String(36), ForeignKey("interests.iid", ondelete="CASCADE"))
 
     # Relationships
     article = relationship("Article", back_populates="article_topics")
@@ -309,10 +295,10 @@ class Image(Base):
 
     __tablename__ = "images"
 
-    id = Column(Integer, primary_key=True, autoincrement=True)
+    id = Column(String(36), primary_key=True)
     url = Column(Text)
     description = Column(Text)
-    article_id = Column(Integer, ForeignKey("articles.id", ondelete="CASCADE"))
+    article_id = Column(String(36), ForeignKey("articles.id", ondelete="CASCADE"))
 
     # Relationships
     article = relationship("Article", back_populates="images")
@@ -335,13 +321,13 @@ class Post(Base):
     id = Column(String(36), primary_key=True)  # UUID
     tweet = Column(Text, nullable=False)
     post_img = Column(String(20))
-    user_id = Column(Integer, ForeignKey("user_mgmt.id", ondelete="CASCADE"), nullable=False)
-    comment_to = Column(Integer, default=-1)
-    thread_id = Column(Integer)
-    round = Column(Integer, ForeignKey("rounds.id", ondelete="CASCADE"))
-    news_id = Column(Integer, ForeignKey("articles.id", ondelete="CASCADE"), default=-1)
-    shared_from = Column(Integer, default=-1)
-    image_id = Column(Integer, ForeignKey("images.id", ondelete="CASCADE"))
+    user_id = Column(String(36), ForeignKey("user_mgmt.id", ondelete="CASCADE"), nullable=False)
+    comment_to = Column(String(36), default=-1)
+    thread_id = Column(String(36))
+    round = Column(String(36), ForeignKey("rounds.id", ondelete="CASCADE"))
+    news_id = Column(String(36), ForeignKey("articles.id", ondelete="CASCADE"), default=-1)
+    shared_from = Column(String(36), default=-1)
+    image_id = Column(String(36), ForeignKey("images.id", ondelete="CASCADE"))
     reaction_count = Column(Integer, default=0)
 
     # Relationships
@@ -371,9 +357,9 @@ class Mention(Base):
     __tablename__ = "mentions"
 
     id = Column(String(36), primary_key=True)  # UUID
-    user_id = Column(Integer, ForeignKey("user_mgmt.id", ondelete="CASCADE"))
+    user_id = Column(String(36), ForeignKey("user_mgmt.id", ondelete="CASCADE"))
     post_id = Column(String(36), ForeignKey("post.id", ondelete="CASCADE"))
-    round = Column(Integer)
+    round = Column(String(36))
     answered = Column(Integer, default=0)
 
     # Relationships
@@ -393,7 +379,7 @@ class PostEmotion(Base):
 
     id = Column(String(36), primary_key=True)  # UUID
     post_id = Column(String(36), ForeignKey("post.id", ondelete="CASCADE"))
-    emotion_id = Column(Integer, ForeignKey("emotions.id", ondelete="CASCADE"))
+    emotion_id = Column(String(36), ForeignKey("emotions.id", ondelete="CASCADE"))
 
     # Relationships
     post = relationship("Post", back_populates="post_emotions")
@@ -411,7 +397,7 @@ class PostHashtag(Base):
 
     id = Column(String(36), primary_key=True)  # UUID
     post_id = Column(String(36), ForeignKey("post.id", ondelete="CASCADE"))
-    hashtag_id = Column(Integer, ForeignKey("hashtags.id", ondelete="CASCADE"))
+    hashtag_id = Column(String(36), ForeignKey("hashtags.id", ondelete="CASCADE"))
 
     # Relationships
     post = relationship("Post", back_populates="post_hashtags")
@@ -433,10 +419,10 @@ class PostSentiment(Base):
     pos = Column(Float)
     neu = Column(Float)
     compound = Column(Float)
-    user_id = Column(Integer, ForeignKey("user_mgmt.id", ondelete="CASCADE"), nullable=False)
-    round = Column(Integer, ForeignKey("rounds.id", ondelete="CASCADE"), nullable=False)
+    user_id = Column(String(36), ForeignKey("user_mgmt.id", ondelete="CASCADE"), nullable=False)
+    round = Column(String(36), ForeignKey("rounds.id", ondelete="CASCADE"), nullable=False)
     sentiment_parent = Column(Text)
-    topic_id = Column(Integer, ForeignKey("interests.iid", ondelete="CASCADE"), nullable=False)
+    topic_id = Column(String(36), ForeignKey("interests.iid", ondelete="CASCADE"), nullable=False)
     is_post = Column(Integer, nullable=False, default=0)
     is_comment = Column(Integer, nullable=False, default=0)
     is_reaction = Column(Integer, nullable=False, default=0)
@@ -461,7 +447,7 @@ class PostTopic(Base):
 
     id = Column(String(36), primary_key=True)  # UUID
     post_id = Column(String(36), ForeignKey("post.id", ondelete="CASCADE"))
-    topic_id = Column(Integer, ForeignKey("interests.iid", ondelete="CASCADE"))
+    topic_id = Column(String(36), ForeignKey("interests.iid", ondelete="CASCADE"))
 
     # Relationships
     post = relationship("Post", back_populates="post_topics")
@@ -502,9 +488,9 @@ class Reaction(Base):
 
     id = Column(String(36), primary_key=True)  # UUID
     post_id = Column(String(36), ForeignKey("post.id", ondelete="CASCADE"))
-    user_id = Column(Integer, ForeignKey("user_mgmt.id", ondelete="CASCADE"))
+    user_id = Column(String(36), ForeignKey("user_mgmt.id", ondelete="CASCADE"))
     type = Column(Text)
-    round = Column(Integer, ForeignKey("rounds.id", ondelete="CASCADE"))
+    round = Column(String(36), ForeignKey("rounds.id", ondelete="CASCADE"))
 
     # Relationships
     post = relationship("Post", back_populates="reactions")
