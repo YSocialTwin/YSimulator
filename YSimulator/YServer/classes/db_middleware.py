@@ -214,8 +214,11 @@ class DatabaseMiddleware:
                 if self.redis_client.exists(key):
                     return False
 
+                # Filter out None values for Redis (Redis cannot store None)
+                redis_data = {k: v for k, v in user_data.items() if v is not None}
+                
                 # Store user data
-                self.redis_client.hset(key, mapping=user_data)
+                self.redis_client.hset(key, mapping=redis_data)
                 # Add to user set
                 self.redis_client.sadd(self._redis_key("user_mgmt", "ids"), user_id)
                 return True
@@ -294,7 +297,9 @@ class DatabaseMiddleware:
             if self.use_redis:
                 # Store post
                 key = self._redis_key("posts", post_id)
-                self.redis_client.hset(key, mapping=post_data)
+                # Filter out None values for Redis (Redis cannot store None)
+                redis_data = {k: v for k, v in post_data.items() if v is not None}
+                self.redis_client.hset(key, mapping=redis_data)
 
                 # Add to posts list
                 self.redis_client.lpush(self._redis_key("posts", "recent"), post_id)
@@ -333,7 +338,9 @@ class DatabaseMiddleware:
             if self.use_redis:
                 # Store interaction
                 key = self._redis_key("interactions", interaction_id)
-                self.redis_client.hset(key, mapping=interaction_data)
+                # Filter out None values for Redis (Redis cannot store None)
+                redis_data = {k: v for k, v in interaction_data.items() if v is not None}
+                self.redis_client.hset(key, mapping=redis_data)
                 return True
             else:
                 session = Session(self.engine)
