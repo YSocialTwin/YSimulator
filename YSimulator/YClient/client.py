@@ -20,6 +20,7 @@ from YSimulator.YClient.actions import (
     generate_llm_reaction_async,
     generate_rule_based_post,
     generate_rule_based_reaction,
+    generate_rule_based_comment,
 )
 from YSimulator.YClient.classes.ray_models import ActionDTO, AgentProfile
 
@@ -576,7 +577,7 @@ class SimulationClient:
                         pending_llm_reactions.append((agent.id, agent.cluster, target, future))
                     else:
                         # Rule-based: Create COMMENT action
-                        action = generate_rule_based_reaction(agent.id, agent.cluster, target)
+                        action = generate_rule_based_comment(agent.id, agent.cluster, target)
                         actions.append(action)
                 
                 elif action_type == "read":

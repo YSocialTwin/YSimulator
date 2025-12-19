@@ -13,11 +13,13 @@ from YSimulator.YClient.actions.llm_actions import (
 from YSimulator.YClient.actions.rule_based_actions import (
     generate_rule_based_post,
     generate_rule_based_reaction,
+    generate_rule_based_comment,
 )
 
 __all__ = [
     "generate_rule_based_post",
     "generate_rule_based_reaction",
+    "generate_rule_based_comment",
     "generate_llm_post_async",
     "generate_llm_reaction_async",
 ]
