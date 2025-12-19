@@ -68,6 +68,20 @@ class SimulationClient:
         self.num_slots_per_day = simulation_config["simulation"]["num_slots_per_day"]
         self.heartbeat_interval = simulation_config["simulation"].get("heartbeat_interval", 5)
 
+        # Load activity profiles (maps profile name to list of active hours)
+        self.activity_profiles = self._parse_activity_profiles(
+            simulation_config["simulation"].get("activity_profiles", {})
+        )
+        
+        # Load hourly activity distribution (probability of activity per hour)
+        self.hourly_activity = {
+            int(k): float(v) 
+            for k, v in simulation_config["simulation"].get("hourly_activity", {}).items()
+        }
+        
+        # Load actions likelihood (weights for action selection)
+        self.actions_likelihood = simulation_config["simulation"].get("actions_likelihood", {})
+
         # Create agents from configuration
         self.agent_profiles = []
         if agent_config:
@@ -124,6 +138,32 @@ class SimulationClient:
 
         handler.setFormatter(JsonFormatter())
         self.logger.addHandler(handler)
+
+    def _parse_activity_profiles(self, activity_profiles_config):
+        """
+        Parse activity profiles from configuration.
+        
+        Converts string representations like "0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23"
+        into lists of integers representing active hours.
+        
+        Args:
+            activity_profiles_config: Dictionary mapping profile names to hour strings
+            
+        Returns:
+            dict: Dictionary mapping profile names to lists of active hours
+        """
+        parsed_profiles = {}
+        for profile_name, hours_str in activity_profiles_config.items():
+            if isinstance(hours_str, str):
+                parsed_profiles[profile_name] = [int(h.strip()) for h in hours_str.split(",")]
+            elif isinstance(hours_str, list):
+                parsed_profiles[profile_name] = hours_str
+            else:
+                self.logger.warning(
+                    f"Invalid activity profile format for '{profile_name}': {hours_str}"
+                )
+                parsed_profiles[profile_name] = list(range(24))  # Default to always active
+        return parsed_profiles
 
     def _create_agents_from_config(self, agent_config):
         """
@@ -361,15 +401,14 @@ class SimulationClient:
                     extra={"extra_data": {"error": str(e)}},
                 )
 
-    @staticmethod
-    def __select_action(agent_profile: AgentProfile, recent_posts: list) -> tuple:
+    def __select_action(self, agent_profile: AgentProfile, recent_posts: list) -> tuple:
         """
         Determine which action an agent should perform.
         
         This method implements the action selection logic based on:
-        - Agent's cluster membership (determines behavior patterns)
-        - Probability distributions for different action types
-        - Availability of recent posts (for reactions)
+        - actions_likelihood from simulation config (weighted action selection)
+        - Agent's archetype (filters available actions)
+        - Availability of recent posts (for comment/reaction actions)
         - Agent type (LLM vs rule-based)
         
         Args:
@@ -378,49 +417,84 @@ class SimulationClient:
             
         Returns:
             tuple: (action_type, agent_type, target_post_id) where:
-                - action_type: "post", "reaction", or None
+                - action_type: "post", "comment", "read", "image", "news", "share", "search", "cast", "share_link", or None
                 - agent_type: "llm" or "rule_based"
-                - target_post_id: UUID string for reactions, None for posts/no-action
+                - target_post_id: UUID string for comment/read actions, None for posts/no-action
                 
         Example:
             >>> action_type, agent_type, target = self.__select_action(profile, posts)
             >>> if action_type == "post":
             ...     # Generate post action
-            >>> elif action_type == "reaction":
-            ...     # Generate reaction to target post
+            >>> elif action_type == "comment":
+            ...     # Generate comment to target post
         """
-        cid = agent_profile.cluster
+        # Get archetype-specific action weights
+        archetype = agent_profile.archetype or "Default"
         
-        # Cluster-based probability distributions
-        # Cluster 1: High post probability, low reaction probability
-        # Cluster 0: Low post probability, high reaction probability
-        p_post = 0.7 if cid == 1 else 0.1
-        p_react = 0.8 if cid == 0 else 0.3
+        # Define archetype-to-action mappings
+        # This filters which actions are available based on archetype
+        archetype_actions = {
+            "Validator": ["comment", "read"],  # Validators comment and read
+            "Broadcaster": ["post", "image", "share"],  # Broadcasters post and share
+            "Explorer": ["read", "search", "share_link"],  # Explorers read and search
+            "Default": ["post", "comment", "read"],  # Default actions
+        }
+        
+        # Get available actions for this archetype
+        available_actions = archetype_actions.get(archetype, archetype_actions["Default"])
+        
+        # Filter actions_likelihood to only include available actions
+        filtered_likelihood = {
+            action: weight 
+            for action, weight in self.actions_likelihood.items() 
+            if action in available_actions and weight > 0
+        }
+        
+        # If no valid actions, return no action
+        if not filtered_likelihood:
+            return None, None, None
+            
+        # Select action based on weighted probabilities
+        actions = list(filtered_likelihood.keys())
+        weights = list(filtered_likelihood.values())
+        total_weight = sum(weights)
+        
+        if total_weight == 0:
+            return None, None, None
+            
+        # Normalize weights to probabilities
+        probabilities = [w / total_weight for w in weights]
+        
+        # Select action using weighted random choice
+        selected_action = random.choices(actions, weights=probabilities)[0]
         
         # Determine agent type
         agent_type = "llm" if agent_profile.llm else "rule_based"
         
-        # Post decision
-        if random.random() < p_post:
-            return "post", agent_type, None
+        # Actions that require a target post
+        target_required_actions = ["comment", "read"]
         
-        # Reaction decision (only if posts available)
-        if recent_posts and random.random() < p_react:
-            target = random.choice(recent_posts)
-            return "reaction", agent_type, target
+        # If action requires a target but no posts available, return no action
+        if selected_action in target_required_actions and not recent_posts:
+            return None, None, None
+            
+        # Select target post if needed
+        target = random.choice(recent_posts) if selected_action in target_required_actions else None
         
-        # No action selected
-        return None, None, None
+        return selected_action, agent_type, target
 
     def _simulate(self, day: int, slot: int, recent_posts: list) -> list:
         """
         Simulate agent behaviors for a given time slot using modular action implementations.
         
         This method orchestrates the simulation by:
-        1. Selecting active agents (20% of total population)
-        2. For each agent: calling select_action() to determine what to do
-        3. Dispatching actions based on agent type (rule_based vs llm)
-        4. Gathering async LLM results in parallel (scatter/gather pattern)
+        1. Using hourly_activity to determine how many agents should be active
+        2. Filtering agents by their activity_profile (are they available at this hour?)
+        3. Selecting active agents based on hourly activity probability
+        4. For each active agent: sampling number of actions from daily_activity_level
+        5. For each action: calling select_action() to determine what to do
+        6. Dispatching actions based on agent type (rule_based vs llm)
+        7. Gathering async LLM results in parallel (scatter/gather pattern)
         
         The scatter/gather pattern is preserved for performance:
         - Scatter: Fire off all LLM calls immediately without waiting
@@ -428,7 +502,7 @@ class SimulationClient:
         
         Args:
             day: Current simulation day
-            slot: Current time slot
+            slot: Current time slot (0-23, representing hour of day)
             recent_posts: List of recent post UUIDs for reactions
             
         Returns:
@@ -436,38 +510,117 @@ class SimulationClient:
         """
         actions = []
         
-        # Select active agents based on daily_activity_level (20% of population)
-        active = random.sample(self.agent_profiles, k=int(len(self.agent_profiles) * 0.2))
+        # Get hourly activity probability for this slot (default to 0.04 if not specified)
+        hourly_prob = self.hourly_activity.get(slot, 0.04)
+        
+        # Filter agents available at this time slot based on their activity_profile
+        available_agents = []
+        for agent in self.agent_profiles:
+            profile_name = agent.activity_profile
+            active_hours = self.activity_profiles.get(profile_name, list(range(24)))
+            if slot in active_hours:
+                available_agents.append(agent)
+        
+        # Calculate number of agents to activate based on hourly_activity
+        # Use the probability as a ratio of available agents
+        num_active = max(1, int(len(available_agents) * hourly_prob))
+        num_active = min(num_active, len(available_agents))  # Can't exceed available agents
+        
+        # Sample active agents from available agents
+        if num_active > 0 and available_agents:
+            active_agents = random.sample(available_agents, k=num_active)
+        else:
+            active_agents = []
         
         # Track pending LLM calls for parallel execution
         # Each entry: (agent_id, cluster_id, future) for posts
-        # Each entry: (agent_id, cluster_id, target_post_id, future) for reactions
+        # Each entry: (agent_id, cluster_id, target_post_id, future) for reactions/comments
         pending_llm_posts = []
         pending_llm_reactions = []
         
         # --- SCATTER PHASE: Select and dispatch actions ---
-        for agent in active:
-            action_type, agent_type, target = self.__select_action(agent, recent_posts)
+        for agent in active_agents:
+            # Sample number of actions for this agent based on daily_activity_level
+            # Random from 1 to daily_activity_level
+            num_actions = random.randint(1, max(1, agent.daily_activity_level))
             
-            if action_type == "post":
-                if agent_type == "llm":
-                    # LLM: Fire off async call (don't wait for result yet)
-                    future = generate_llm_post_async(self.llm, agent.cluster, day, slot)
-                    pending_llm_posts.append((agent.id, agent.cluster, future))
-                else:
-                    # Rule-based: Execute immediately
-                    action = generate_rule_based_post(agent.id, agent.cluster)
-                    actions.append(action)
-            
-            elif action_type == "reaction":
-                if agent_type == "llm":
-                    # LLM: Fire off async call (don't wait for result yet)
-                    future = generate_llm_reaction_async(self.llm, agent.cluster, "content")
-                    pending_llm_reactions.append((agent.id, agent.cluster, target, future))
-                else:
-                    # Rule-based: Execute immediately
-                    action = generate_rule_based_reaction(agent.id, agent.cluster, target)
-                    actions.append(action)
+            for _ in range(num_actions):
+                action_type, agent_type, target = self.__select_action(agent, recent_posts)
+                
+                if action_type == "post":
+                    if agent_type == "llm":
+                        # LLM: Fire off async call (don't wait for result yet)
+                        future = generate_llm_post_async(self.llm, agent.cluster, day, slot)
+                        pending_llm_posts.append((agent.id, agent.cluster, future))
+                    else:
+                        # Rule-based: Execute immediately
+                        action = generate_rule_based_post(agent.id, agent.cluster)
+                        actions.append(action)
+                
+                elif action_type == "comment":
+                    if agent_type == "llm":
+                        # LLM: Fire off async call for reaction (comment is a type of reaction)
+                        future = generate_llm_reaction_async(self.llm, agent.cluster, "content")
+                        pending_llm_reactions.append((agent.id, agent.cluster, target, future))
+                    else:
+                        # Rule-based: Create COMMENT action
+                        action = generate_rule_based_reaction(agent.id, agent.cluster, target)
+                        actions.append(action)
+                
+                elif action_type == "read":
+                    # Stub: Read action - agent reads a post without creating content
+                    # This could track engagement metrics in the future
+                    pass
+                
+                elif action_type == "image":
+                    # Stub: Image post action - agent creates a post with an image
+                    # Future implementation: integrate with image generation
+                    if agent_type == "llm":
+                        future = generate_llm_post_async(self.llm, agent.cluster, day, slot)
+                        pending_llm_posts.append((agent.id, agent.cluster, future))
+                    else:
+                        action = generate_rule_based_post(agent.id, agent.cluster)
+                        actions.append(action)
+                
+                elif action_type == "news":
+                    # Stub: News sharing action - agent shares news article
+                    # Future implementation: integrate with news sources
+                    if agent_type == "llm":
+                        future = generate_llm_post_async(self.llm, agent.cluster, day, slot)
+                        pending_llm_posts.append((agent.id, agent.cluster, future))
+                    else:
+                        action = generate_rule_based_post(agent.id, agent.cluster)
+                        actions.append(action)
+                
+                elif action_type == "share":
+                    # Stub: Share action - agent shares an existing post
+                    # Future implementation: select post to share and track sharing
+                    pass
+                
+                elif action_type == "search":
+                    # Stub: Search action - agent searches for content
+                    # Future implementation: integrate with search functionality
+                    pass
+                
+                elif action_type == "cast":
+                    # Stub: Cast/broadcast action - agent broadcasts to wider audience
+                    # Future implementation: special broadcast mechanism
+                    if agent_type == "llm":
+                        future = generate_llm_post_async(self.llm, agent.cluster, day, slot)
+                        pending_llm_posts.append((agent.id, agent.cluster, future))
+                    else:
+                        action = generate_rule_based_post(agent.id, agent.cluster)
+                        actions.append(action)
+                
+                elif action_type == "share_link":
+                    # Stub: Share link action - agent shares external link
+                    # Future implementation: integrate with link sharing
+                    if agent_type == "llm":
+                        future = generate_llm_post_async(self.llm, agent.cluster, day, slot)
+                        pending_llm_posts.append((agent.id, agent.cluster, future))
+                    else:
+                        action = generate_rule_based_post(agent.id, agent.cluster)
+                        actions.append(action)
         
         # --- GATHER PHASE: Wait for all LLM results in parallel ---
         
