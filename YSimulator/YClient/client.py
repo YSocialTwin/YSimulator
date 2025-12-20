@@ -776,6 +776,7 @@ class SimulationClient:
                         # Get an article from this page's specific feed
                         # The feed is already registered with the page's ID as website_id
                         try:
+                            self.logger.info(f"Page {agent.username} fetching article from {agent.feed_url[:50]}")
                             article_future = self.news_service.get_article_from_feed.remote(
                                 agent.feed_url
                             )
@@ -858,6 +859,8 @@ class SimulationClient:
         
         # --- GATHER PHASE: Wait for all LLM results in parallel ---
         
+        self.logger.info(f"Gather phase: pending_llm_posts={len(pending_llm_posts)}, pending_llm_reactions={len(pending_llm_reactions)}, actions_so_far={len(actions)}")
+        
         # Resolve Posts
         if pending_llm_posts:
             # Extract just the futures list to pass to ray.get
@@ -885,6 +888,7 @@ class SimulationClient:
                 if res_act != "IGNORE":
                     actions.append(ActionDTO(a_id, cid, res_act, target_post_id=target))
         
+        self.logger.info(f"Returning {len(actions)} total actions")
         return actions
 
     def shutdown(self):
