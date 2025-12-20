@@ -9,6 +9,7 @@ import json
 import logging
 import random
 import time
+import uuid
 from datetime import datetime
 from pathlib import Path
 from typing import Optional, Dict, Any, List
@@ -934,6 +935,63 @@ class OrchestratorServer:
         visibility_hour = (visibility_hours - 1) % self.num_slots_per_day + 1
         return visibility_day, visibility_hour
     
+    def _save_recommendation(self, agent_id: str, post_ids: List[str]) -> None:
+        """
+        Save recommendations to the database (and Redis if enabled).
+        
+        Stores the list of recommended posts for an agent in the current round,
+        formatted as a pipe-separated string (e.g., "post_id1|post_id2|post_id3").
+        
+        Args:
+            agent_id: UUID of the agent receiving recommendations
+            post_ids: List of post UUIDs recommended to the agent
+        """
+        if not post_ids:
+            return
+        
+        try:
+            # Format post IDs as pipe-separated string (original implementation format)
+            post_ids_str = "|".join(post_ids)
+            recommendation_id = str(uuid.uuid4())
+            
+            # Save to SQL database
+            with self.db.engine.begin() as connection:
+                query = text("""
+                    INSERT INTO recommendations (id, user_id, post_ids, round)
+                    VALUES (:id, :user_id, :post_ids, :round)
+                """)
+                connection.execute(query, {
+                    "id": recommendation_id,
+                    "user_id": agent_id,
+                    "post_ids": post_ids_str,
+                    "round": self.current_round_id
+                })
+            
+            # Also save to Redis if enabled
+            if self.db.use_redis:
+                # Store recommendation in Redis with key format: ysim:recommendations:{user_id}:{round_id}
+                rec_key = self.db._redis_key("recommendations", f"{agent_id}:{self.current_round_id}")
+                self.db.redis_client.set(rec_key, post_ids_str)
+                # Set TTL to prevent unbounded growth (e.g., 7 days)
+                self.db.redis_client.expire(rec_key, 604800)
+                
+            self.logger.debug(
+                f"Saved recommendation for agent {agent_id}: {len(post_ids)} posts",
+                extra={
+                    "extra_data": {
+                        "agent_id": agent_id,
+                        "round": self.current_round_id,
+                        "post_count": len(post_ids)
+                    }
+                }
+            )
+            
+        except Exception as e:
+            self.logger.error(
+                f"Error saving recommendation: {e}",
+                extra={"extra_data": {"agent_id": agent_id, "error": str(e)}}
+            )
+    
     def get_recommended_posts(
         self,
         agent_id: str,
@@ -1386,6 +1444,9 @@ class OrchestratorServer:
                     },
                 )
                 
+                # Save recommendations to database (and Redis if enabled)
+                self._save_recommendation(agent_id, post_ids)
+                
                 return post_ids
                 
             else:
@@ -1818,6 +1879,9 @@ class OrchestratorServer:
                             }
                         },
                     )
+                    
+                    # Save recommendations to database (and Redis if enabled)
+                    self._save_recommendation(agent_id, post_ids)
                     
                     return post_ids
                 
