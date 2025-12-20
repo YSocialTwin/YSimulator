@@ -21,6 +21,7 @@ from YSimulator.YClient.actions import (
     generate_rule_based_post,
     generate_rule_based_reaction,
     generate_rule_based_comment,
+    generate_rule_based_share,
     generate_news_post_async,
     generate_rule_based_news_post,
 )
@@ -533,9 +534,9 @@ class SimulationClient:
             
         Returns:
             tuple: (action_type, agent_type, target_post_id) where:
-                - action_type: "post", "comment", "read", "image", "news", "share", "search", "cast", "share_link", or None
+                - action_type: "post", "comment", "read", "image", "share_link", "share", "search", "cast", or None
                 - agent_type: "llm" or "rule_based"
-                - target_post_id: UUID string for comment/read actions, None for posts/no-action
+                - target_post_id: UUID string for comment/read/share actions, None for posts/no-action
                 
         Example:
             >>> action_type, agent_type, target = self.__select_action(profile, posts)
@@ -590,7 +591,7 @@ class SimulationClient:
         agent_type = "llm" if agent_profile.llm else "rule_based"
         
         # Actions that require a target post
-        target_required_actions = ["comment", "read"]
+        target_required_actions = ["comment", "read", "share"]
         
         # If action requires a target but no posts available, return no action
         if selected_action in target_required_actions and not recent_posts:
@@ -711,7 +712,7 @@ class SimulationClient:
                         action = generate_rule_based_post(agent.id, agent.cluster)
                         actions.append(action)
                 
-                elif action_type == "news":
+                elif action_type == "share_link":
                     # News sharing action - agent shares news article from RSS feeds
                     # LLM agents can comment on the news, rule-based agents share it directly
                     if self.news_service:
@@ -744,7 +745,7 @@ class SimulationClient:
                                 pass
                         except Exception as e:
                             # News service unavailable or error, skip action
-                            self.logger.warning(f"News action failed: {e}")
+                            self.logger.warning(f"Share link action failed: {e}")
                     else:
                         # News service not configured, fallback to regular post
                         if agent_type == "llm":
@@ -755,9 +756,15 @@ class SimulationClient:
                             actions.append(action)
                 
                 elif action_type == "share":
-                    # Stub: Share action - agent shares an existing post
-                    # Future implementation: select post to share and track sharing
-                    pass
+                    # Share action - agent shares an existing post
+                    # Select a post from recent_posts to share
+                    if recent_posts:
+                        # For now, only rule-based agents share (LLM share can be added later)
+                        if agent_type == "rule_based":
+                            action = generate_rule_based_share(agent.id, agent.cluster, target)
+                            actions.append(action)
+                        # LLM share could generate commentary using LLM in the future
+                    # If no posts available, skip
                 
                 elif action_type == "search":
                     # Stub: Search action - agent searches for content

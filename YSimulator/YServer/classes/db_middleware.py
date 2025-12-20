@@ -293,6 +293,14 @@ class DatabaseMiddleware:
             # Generate UUID for post
             post_id = str(uuid.uuid4())
             post_data["id"] = post_id
+            
+            # Set thread_id logic:
+            # - If comment_to is set (comment), inherit thread_id from parent post
+            # - Otherwise (new post or share), set thread_id to post_id
+            if "comment_to" not in post_data or post_data.get("comment_to") == "-1" or post_data.get("comment_to") is None:
+                # New post or share - create new thread
+                post_data["thread_id"] = post_id
+            # If comment_to is set, thread_id should already be set by the caller
 
             if self.use_redis:
                 # Store post
@@ -356,6 +364,45 @@ class DatabaseMiddleware:
                 f"Error adding interaction: {e}", extra={"extra_data": {"error": str(e)}}
             )
             return False
+
+    def get_post(self, post_id: str) -> Optional[Dict[str, Any]]:
+        """
+        Get post data by ID.
+        
+        Args:
+            post_id: Post UUID
+            
+        Returns:
+            dict: Post data if found, None otherwise
+        """
+        try:
+            if self.use_redis:
+                key = self._redis_key("posts", post_id)
+                post_data = self.redis_client.hgetall(key)
+                return post_data if post_data else None
+            else:
+                session = Session(self.engine)
+                try:
+                    post = session.query(Post).filter(Post.id == post_id).first()
+                    if post:
+                        return {
+                            "id": post.id,
+                            "thread_id": post.thread_id,
+                            "news_id": post.news_id,
+                            "comment_to": post.comment_to,
+                            "shared_from": post.shared_from,
+                            "user_id": post.user_id,
+                            "tweet": post.tweet,
+                            "round": post.round,
+                        }
+                    return None
+                finally:
+                    session.close()
+        except Exception as e:
+            self.logger.error(
+                f"Error getting post: {e}", extra={"extra_data": {"error": str(e)}}
+            )
+            return None
 
     def get_recent_posts(self, limit: int = 50) -> List[str]:
         """

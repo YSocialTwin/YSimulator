@@ -84,3 +84,29 @@ def generate_rule_based_comment(agent_id: int, cluster_id: int, target_post_id: 
     """
     content = f"Cluster {cluster_id} comment"
     return ActionDTO(agent_id, cluster_id, "COMMENT", content=content, target_post_id=target_post_id)
+
+
+def generate_rule_based_share(agent_id: int, cluster_id: int, target_post_id: str) -> ActionDTO:
+    """
+    Generate a simple rule-based share action.
+    
+    Rule-based agents share posts with optional simple commentary.
+    The behavior is deterministic - rule-based agents create cluster-specific share commentary.
+    
+    Args:
+        agent_id: Unique identifier for the agent
+        cluster_id: Cluster/group the agent belongs to
+        target_post_id: UUID of the post to share
+        
+    Returns:
+        ActionDTO: SHARE action targeting the specified post
+        
+    Example:
+        >>> action = generate_rule_based_share(42, 1, "post-uuid-123")
+        >>> action.action_type
+        'SHARE'
+        >>> action.target_post_id
+        'post-uuid-123'
+    """
+    content = f"Sharing from cluster {cluster_id}"
+    return ActionDTO(agent_id, cluster_id, "SHARE", content=content, target_post_id=target_post_id)

@@ -15,6 +15,7 @@ from YSimulator.YClient.actions.rule_based_actions import (
     generate_rule_based_post,
     generate_rule_based_reaction,
     generate_rule_based_comment,
+    generate_rule_based_share,
 )
 from YSimulator.YClient.actions.news_actions import (
     generate_news_post_async,
@@ -25,6 +26,7 @@ __all__ = [
     "generate_rule_based_post",
     "generate_rule_based_reaction",
     "generate_rule_based_comment",
+    "generate_rule_based_share",
     "generate_llm_post_async",
     "generate_llm_reaction_async",
     "generate_news_post_async",

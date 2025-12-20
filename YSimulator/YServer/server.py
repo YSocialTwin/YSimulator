@@ -506,7 +506,64 @@ class OrchestratorServer:
                             f"Failed to add post for agent {act.agent_id}",
                             extra={"extra_data": {"agent_id": act.agent_id}},
                         )
+                
+                elif act.action_type == "COMMENT":
+                    # Comments are stored as posts with comment_to set
+                    # Get the parent post to inherit thread_id
+                    parent_post = self.db.get_post(act.target_post_id)
+                    if parent_post:
+                        post_data = {
+                            "user_id": str(act.agent_id),
+                            "tweet": act.content,
+                            "round": self.current_round_id,
+                            "comment_to": act.target_post_id,
+                            "thread_id": parent_post.get("thread_id"),  # Inherit thread_id
+                        }
+                        post_id = self.db.add_post(post_data)
+                        if post_id:
+                            new_ids.append(post_id)
+                        else:
+                            self.logger.warning(
+                                f"Failed to add comment for agent {act.agent_id}",
+                                extra={"extra_data": {"agent_id": act.agent_id}},
+                            )
+                    else:
+                        self.logger.warning(
+                            f"Parent post not found for comment: {act.target_post_id}",
+                            extra={"extra_data": {"agent_id": act.agent_id, "target_post_id": act.target_post_id}},
+                        )
+                
+                elif act.action_type == "SHARE":
+                    # Share action: create a new post referencing the original
+                    # Get the original post to copy news_id if present
+                    original_post = self.db.get_post(act.target_post_id)
+                    if original_post:
+                        post_data = {
+                            "user_id": str(act.agent_id),
+                            "tweet": act.content if act.content else "",  # Optional commentary
+                            "round": self.current_round_id,
+                            "shared_from": act.target_post_id,
+                        }
+                        # If the original post references an article, copy the reference
+                        if original_post.get("news_id") and original_post.get("news_id") != "-1":
+                            post_data["news_id"] = original_post["news_id"]
+                        
+                        post_id = self.db.add_post(post_data)
+                        if post_id:
+                            new_ids.append(post_id)
+                        else:
+                            self.logger.warning(
+                                f"Failed to add share for agent {act.agent_id}",
+                                extra={"extra_data": {"agent_id": act.agent_id}},
+                            )
+                    else:
+                        self.logger.warning(
+                            f"Original post not found for share: {act.target_post_id}",
+                            extra={"extra_data": {"agent_id": act.agent_id, "target_post_id": act.target_post_id}},
+                        )
+                
                 else:
+                    # Other interactions (LIKE, etc.)
                     interaction_data = {
                         "user_id": str(act.agent_id),  # FK to user_mgmt.id (UUID string)
                         "post_id": act.target_post_id,  # FK to post.id (UUID string)
