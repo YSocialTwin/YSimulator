@@ -81,29 +81,6 @@
     },
     "emotion_annotation": false
   },
-  "news_feeds": {
-    "feeds": [
-      {
-        "name": "BBC News",
-        "url": "http://feeds.bbci.co.uk/news/rss.xml",
-        "category": "general",
-        "language": "en"
-      },
-      {
-        "name": "TechCrunch",
-        "url": "https://techcrunch.com/feed/",
-        "category": "tech",
-        "language": "en"
-      },
-      {
-        "name": "Reuters",
-        "url": "https://www.reutersagency.com/feed/",
-        "category": "general",
-        "language": "en"
-      }
-    ],
-    "cache_duration": 3600
-  },
   "posts": {
     "visibility_rounds": 36,
     "emotions": {

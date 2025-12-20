@@ -38,6 +38,9 @@ class NewsFeedService:
         """
         Initialize the NewsFeedService actor.
         
+        Feeds are now registered dynamically by page agents via register_page_feed().
+        The feeds_config parameter is kept for backward compatibility but defaults to empty.
+        
         Args:
             feeds_config (dict, optional): Configuration dictionary with feed URLs
                 Example:
@@ -54,16 +57,10 @@ class NewsFeedService:
                 }
         """
         # Load configuration with defaults
+        # Note: Feeds are now registered by page agents, so we start with an empty list
         if feeds_config is None:
             feeds_config = {
-                "feeds": [
-                    {
-                        "name": "BBC News",
-                        "url": "http://feeds.bbci.co.uk/news/rss.xml",
-                        "category": "general",
-                        "language": "en"
-                    }
-                ],
+                "feeds": [],  # Start empty - page agents will register their feeds
                 "cache_duration": 3600  # 1 hour
             }
         
@@ -79,9 +76,9 @@ class NewsFeedService:
         # Cache structure: {feed_url: {"articles": [...], "timestamp": int, "website_id": str}}
         self.cached_news = {}
         self.last_fetched = {}
-        self.website_ids = {}  # Map feed_url to website_id
+        self.website_ids = {}  # Map feed_url to website_id (page agent id)
         
-        # Initialize caches for all configured feeds
+        # Initialize caches for all configured feeds (if any)
         for feed in self.feeds_config:
             feed_url = feed.get("url")
             if feed_url:
