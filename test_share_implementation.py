@@ -206,6 +206,62 @@ class TestShareImplementation(unittest.TestCase):
         self.assertEqual(action.action_type, "SHARE")
         self.assertEqual(action.target_post_id, "post-uuid-123")
         print(f"✓ ActionDTO supports SHARE action type")
+    
+    def test_06_nested_comments_inherit_root_thread_id(self):
+        """Test that nested comments (comment on a comment) inherit the root thread_id."""
+        print("\n=== Test 6: Nested Comments Inherit Root Thread ID ===")
+        
+        # Create root post
+        root_post_data = {
+            "user_id": self.user_id,
+            "tweet": "Root post",
+            "round": self.round_id,
+        }
+        root_post_id = self.db.add_post(root_post_data)
+        root_post = self.db.get_post(root_post_id)
+        
+        print(f"Root post: {root_post_id}, thread_id={root_post['thread_id']}")
+        self.assertEqual(root_post["thread_id"], root_post_id, "Root post thread_id should equal post_id")
+        
+        # Create first-level comment on root post
+        comment1_data = {
+            "user_id": self.user_id,
+            "tweet": "First level comment",
+            "round": self.round_id,
+            "comment_to": root_post_id,
+            "thread_id": root_post["thread_id"],
+        }
+        comment1_id = self.db.add_post(comment1_data)
+        comment1 = self.db.get_post(comment1_id)
+        
+        print(f"Comment 1: {comment1_id}, thread_id={comment1['thread_id']}, comment_to={comment1['comment_to']}")
+        self.assertEqual(comment1["thread_id"], root_post_id, "First-level comment should have root thread_id")
+        self.assertEqual(comment1["comment_to"], root_post_id, "First-level comment should reference root post")
+        
+        # Create second-level comment (comment on comment)
+        comment2_data = {
+            "user_id": self.user_id,
+            "tweet": "Second level comment",
+            "round": self.round_id,
+            "comment_to": comment1_id,  # Commenting on the first comment
+            "thread_id": comment1["thread_id"],  # Should inherit root thread_id from comment1
+        }
+        comment2_id = self.db.add_post(comment2_data)
+        comment2 = self.db.get_post(comment2_id)
+        
+        print(f"Comment 2: {comment2_id}, thread_id={comment2['thread_id']}, comment_to={comment2['comment_to']}")
+        self.assertEqual(comment2["thread_id"], root_post_id, "Second-level comment should have root thread_id")
+        self.assertEqual(comment2["comment_to"], comment1_id, "Second-level comment should reference first comment")
+        
+        # Verify all posts in the thread have the same thread_id pointing to root
+        self.assertEqual(root_post["thread_id"], root_post_id)
+        self.assertEqual(comment1["thread_id"], root_post_id)
+        self.assertEqual(comment2["thread_id"], root_post_id)
+        
+        print(f"✓ All comments in thread have thread_id={root_post_id} (root post ID)")
+        print(f"  - Root post: {root_post_id}")
+        print(f"  - Comment 1 (on root): {comment1_id} → {comment1['comment_to']}")
+        print(f"  - Comment 2 (on comment 1): {comment2_id} → {comment2['comment_to']}")
 
 
 def run_tests():

@@ -509,11 +509,14 @@ class OrchestratorServer:
                 
                 elif act.action_type == "COMMENT":
                     # Comments are stored as posts with comment_to set
-                    # Get the parent post to inherit thread_id
+                    # Get the parent post to inherit thread_id (which points to the root of the thread)
                     parent_post = self.db.get_post(act.target_post_id)
                     if parent_post:
+                        # Get thread_id from parent - this will point to the root post
                         thread_id = parent_post.get("thread_id")
-                        # If parent doesn't have thread_id, use parent's ID as thread
+                        
+                        # If parent doesn't have thread_id, the parent IS the root post
+                        # So use the parent's ID as the thread_id
                         if not thread_id:
                             thread_id = act.target_post_id
                         
@@ -521,8 +524,8 @@ class OrchestratorServer:
                             "user_id": str(act.agent_id),
                             "tweet": act.content,
                             "round": self.current_round_id,
-                            "comment_to": act.target_post_id,
-                            "thread_id": thread_id,  # Inherit thread_id
+                            "comment_to": act.target_post_id,  # Points to immediate parent
+                            "thread_id": thread_id,  # Points to root post of thread
                         }
                         post_id = self.db.add_post(post_data)
                         if post_id:
@@ -550,9 +553,9 @@ class OrchestratorServer:
                             "shared_from": act.target_post_id,
                         }
                         # If the original post references an article, copy the reference
-                        # Check for valid news_id (not None, not empty string, not -1)
+                        # Use helper method for consistent empty/default value checking
                         news_id = original_post.get("news_id")
-                        if news_id and news_id != -1 and news_id != "-1" and news_id != "":
+                        if not self.db._is_empty_or_default(news_id):
                             post_data["news_id"] = news_id
                         
                         post_id = self.db.add_post(post_data)

@@ -121,6 +121,22 @@ class DatabaseMiddleware:
             },
         )
 
+    @staticmethod
+    def _is_empty_or_default(value) -> bool:
+        """
+        Check if a value is empty or a default placeholder (-1, '-1', '', None).
+        
+        This helper handles the database's use of -1 as a default value for foreign keys
+        that can be either integers or strings depending on context.
+        
+        Args:
+            value: The value to check
+            
+        Returns:
+            bool: True if the value should be considered empty/default
+        """
+        return not value or value == -1 or value == "-1" or value == ""
+
     def _build_connection_string(self, db_config: Dict[str, Any]) -> str:
         """
         Build SQLAlchemy connection string based on database configuration.
@@ -298,7 +314,7 @@ class DatabaseMiddleware:
             # - If comment_to is set and not -1 (comment), thread_id should already be set by caller
             # - Otherwise (new post or share), set thread_id to post_id
             comment_to = post_data.get("comment_to")
-            if not comment_to or comment_to == "-1" or comment_to == -1:
+            if self._is_empty_or_default(comment_to):
                 # New post or share - create new thread
                 post_data["thread_id"] = post_id
             # If comment_to is set to a valid value, thread_id should already be set by the caller

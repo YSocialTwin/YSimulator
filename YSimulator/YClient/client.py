@@ -780,16 +780,6 @@ class SimulationClient:
                     else:
                         action = generate_rule_based_post(agent.id, agent.cluster)
                         actions.append(action)
-                
-                elif action_type == "share_link":
-                    # Stub: Share link action - agent shares external link
-                    # Future implementation: integrate with link sharing
-                    if agent_type == "llm":
-                        future = generate_llm_post_async(self.llm, agent.cluster, day, slot)
-                        pending_llm_posts.append((agent.id, agent.cluster, future, None))
-                    else:
-                        action = generate_rule_based_post(agent.id, agent.cluster)
-                        actions.append(action)
         
         # --- GATHER PHASE: Wait for all LLM results in parallel ---
         
