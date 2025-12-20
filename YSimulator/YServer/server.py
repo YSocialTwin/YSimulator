@@ -1263,7 +1263,7 @@ class OrchestratorServer:
                             FROM post p
                             INNER JOIN rounds rd ON p.round = rd.id
                             INNER JOIN post_topics pt ON p.id = pt.post_id
-                            INNER JOIN user_interests ui ON pt.topic_id = ui.interest_id
+                            INNER JOIN user_interest ui ON pt.topic_id = ui.interest_id
                             INNER JOIN follow f ON p.user_id = f.follower_id
                             WHERE ui.user_id = :agent_id
                                 AND f.user_id = :agent_id
@@ -1290,7 +1290,7 @@ class OrchestratorServer:
                                     FROM post p
                                     INNER JOIN rounds rd ON p.round = rd.id
                                     INNER JOIN post_topics pt ON p.id = pt.post_id
-                                    INNER JOIN user_interests ui ON pt.topic_id = ui.interest_id
+                                    INNER JOIN user_interest ui ON pt.topic_id = ui.interest_id
                                     WHERE ui.user_id = :agent_id
                                         AND (rd.day > :vis_day OR (rd.day = :vis_day AND rd.hour >= :vis_hour))
                                         AND p.user_id != :agent_id
@@ -1312,7 +1312,7 @@ class OrchestratorServer:
                                     FROM post p
                                     INNER JOIN rounds rd ON p.round = rd.id
                                     INNER JOIN post_topics pt ON p.id = pt.post_id
-                                    INNER JOIN user_interests ui ON pt.topic_id = ui.interest_id
+                                    INNER JOIN user_interest ui ON pt.topic_id = ui.interest_id
                                     WHERE ui.user_id = :agent_id
                                         AND (rd.day > :vis_day OR (rd.day = :vis_day AND rd.hour >= :vis_hour))
                                         AND p.user_id != :agent_id
@@ -1340,8 +1340,8 @@ class OrchestratorServer:
                             INNER JOIN rounds rd ON p.round = rd.id
                             INNER JOIN reaction r ON p.id = r.post_id
                             INNER JOIN user_mgmt um ON r.user_id = um.id
-                            INNER JOIN user_interests ui1 ON um.id = ui1.user_id
-                            INNER JOIN user_interests ui2 ON ui1.interest_id = ui2.interest_id
+                            INNER JOIN user_interest ui1 ON um.id = ui1.user_id
+                            INNER JOIN user_interest ui2 ON ui1.interest_id = ui2.interest_id
                             INNER JOIN follow f ON um.id = f.follower_id
                             WHERE ui2.user_id = :agent_id
                                 AND f.user_id = :agent_id
@@ -1369,8 +1369,8 @@ class OrchestratorServer:
                                     INNER JOIN rounds rd ON p.round = rd.id
                                     INNER JOIN reaction r ON p.id = r.post_id
                                     INNER JOIN user_mgmt um ON r.user_id = um.id
-                                    INNER JOIN user_interests ui1 ON um.id = ui1.user_id
-                                    INNER JOIN user_interests ui2 ON ui1.interest_id = ui2.interest_id
+                                    INNER JOIN user_interest ui1 ON um.id = ui1.user_id
+                                    INNER JOIN user_interest ui2 ON ui1.interest_id = ui2.interest_id
                                     WHERE ui2.user_id = :agent_id
                                         AND (rd.day > :vis_day OR (rd.day = :vis_day AND rd.hour >= :vis_hour))
                                         AND p.user_id != :agent_id
@@ -1401,7 +1401,7 @@ class OrchestratorServer:
                             WHERE (rd.day > :vis_day OR (rd.day = :vis_day AND rd.hour >= :vis_hour))
                                 AND p.user_id != :agent_id
                                 AND um.id != :agent_id
-                                AND r.reaction_type = 'like'
+                                AND r.type = 'like'
                                 AND (
                                     (um.age_group = target.age_group) OR
                                     (um.gender = target.gender) OR
