@@ -195,14 +195,15 @@ if __name__ == "__main__":
     llm_time = (time.time() - llm_start) * 1000
     
     # Create News Feed service with configuration (optional)
+    # Always create the service - page agents will register their feeds dynamically
     news_start = time.time()
-    news_feeds_config = sim_config.get("news_feeds", None)
-    if news_feeds_config:
-        news_service = NewsFeedService.remote(news_feeds_config)
-        logger.info("News feed service enabled", extra={"extra_data": {"feeds": len(news_feeds_config.get("feeds", []))}})
+    news_feeds_config = sim_config.get("news_feeds", {"feeds": []})
+    news_service = NewsFeedService.remote(news_feeds_config)
+    feed_count = len(news_feeds_config.get("feeds", []))
+    if feed_count > 0:
+        logger.info("News feed service enabled with static feeds", extra={"extra_data": {"feeds": feed_count}})
     else:
-        news_service = None
-        logger.info("News feed service disabled - no configuration provided")
+        logger.info("News feed service enabled for page agents (no static feeds)")
     news_time = (time.time() - news_start) * 1000
 
     # Create client with all configurations
