@@ -20,6 +20,10 @@ from sqlalchemy import text
 from YSimulator.YClient.classes.ray_models import SimulationInstruction
 
 
+# Constants
+RECOMMENDATION_TTL_SECONDS = 7 * 24 * 60 * 60  # 7 days in seconds
+
+
 @ray.remote
 class OrchestratorServer:
     """
@@ -972,8 +976,8 @@ class OrchestratorServer:
                 # Store recommendation in Redis with key format: ysim:recommendations:{user_id}:{round_id}
                 rec_key = self.db._redis_key("recommendations", f"{agent_id}:{self.current_round_id}")
                 self.db.redis_client.set(rec_key, post_ids_str)
-                # Set TTL to prevent unbounded growth (e.g., 7 days)
-                self.db.redis_client.expire(rec_key, 604800)
+                # Set TTL to prevent unbounded growth
+                self.db.redis_client.expire(rec_key, RECOMMENDATION_TTL_SECONDS)
                 
             self.logger.debug(
                 f"Saved recommendation for agent {agent_id}: {len(post_ids)} posts",
