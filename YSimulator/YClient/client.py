@@ -809,7 +809,7 @@ class SimulationClient:
                                     # LLM page posts news with commentary
                                     self.logger.info(f"LLM Page {agent.username} generating news post async")
                                     future, article_id = generate_news_post_async(
-                                        self.news_service, self.llm, agent.cluster, article
+                                        self.news_service, self.llm, agent.cluster, article, agent.username
                                     )
                                     self.logger.info(f"LLM Page {agent.username} got article_id: {article_id}")
                                     pending_llm_posts.append((agent.id, agent.cluster, future, article_id))

@@ -9,7 +9,7 @@ import ray
 from YSimulator.YClient.classes.ray_models import ActionDTO
 
 
-def generate_news_post_async(news_service, llm_service, agent_cluster: int, article: dict):
+def generate_news_post_async(news_service, llm_service, agent_cluster: int, article: dict, website_name: str = None):
     """
     Generate a news post with LLM commentary asynchronously.
     
@@ -22,6 +22,7 @@ def generate_news_post_async(news_service, llm_service, agent_cluster: int, arti
         llm_service: Ray actor reference for LLMService
         agent_cluster: Cluster ID of the agent (determines persona)
         article: Article dictionary with keys: title, summary, link, source, website_id
+        website_name: Name of the website/page sharing the article (for LLM context)
         
     Returns:
         tuple: (Ray ObjectRef for commentary, article_id)
@@ -31,20 +32,21 @@ def generate_news_post_async(news_service, llm_service, agent_cluster: int, arti
     article_id = ray.get(article_id_future)
     
     # Use LLM to generate commentary (just the comment, not the full article)
-    commentary_future = generate_llm_news_commentary.remote(llm_service, agent_cluster, article)
+    commentary_future = generate_llm_news_commentary.remote(llm_service, agent_cluster, article, website_name)
     
     return commentary_future, article_id
 
 
 @ray.remote
-def generate_llm_news_commentary(llm_service, cluster_id: int, article: dict) -> str:
+def generate_llm_news_commentary(llm_service, cluster_id: int, article: dict, website_name: str = None) -> str:
     """
-    Generate LLM commentary on a news article.
+    Generate LLM commentary on a news article as a social media manager.
     
     Args:
         llm_service: Ray actor reference for LLMService
         cluster_id: Agent cluster/persona ID
-        article: Article dictionary
+        article: Article dictionary with 'title' and 'summary' keys
+        website_name: Name of the website/page sharing the article
         
     Returns:
         str: Generated commentary/perspective on the news article (not including article details)
@@ -52,18 +54,42 @@ def generate_llm_news_commentary(llm_service, cluster_id: int, article: dict) ->
     from langchain_core.prompts import ChatPromptTemplate
     from langchain_core.output_parsers import StrOutputParser
     
-    # Get the LLM instance from the service
-    llm = ray.get(llm_service.llm.remote()) if hasattr(llm_service, 'llm') else None
+    # Extract article information
+    article_title = article.get('title', 'News Article')
+    article_text = article.get('summary', article.get('description', ''))
     
-    # For now, generate a simple commentary
-    # In a full implementation, this would use the LLM to generate a personalized perspective
-    # The commentary should be brief and not include the full article details
-    # (those are stored in the Article table and referenced via news_id)
+    # Default website name if not provided
+    if not website_name:
+        website_name = "this website"
     
-    # Simple placeholder commentary - in production, this would use LLM
-    commentary = "Interesting news! Worth checking out."
+    # Create a prompt asking LLM to act as social media manager
+    system_msg = f"You are the social media manager for {website_name}. Your job is to present news articles to your audience in an engaging way."
+    user_msg = f"""Here's a news article to share:
+
+Title: {article_title}
+
+Content: {article_text}
+
+Write a brief, engaging tweet (max 280 characters) to present this article to your followers. Be professional but engaging. Do NOT include hashtags or links - just your commentary."""
     
-    return commentary
+    prompt = ChatPromptTemplate.from_messages([
+        ("system", system_msg),
+        ("user", user_msg)
+    ])
+    
+    # Get commentary from LLM
+    try:
+        chain = prompt | llm_service | StrOutputParser()
+        commentary = ray.get(chain.invoke.remote({}))
+        
+        # Ensure commentary doesn't exceed tweet length
+        if len(commentary) > 280:
+            commentary = commentary[:277] + "..."
+            
+        return commentary
+    except Exception as e:
+        # Fallback if LLM fails
+        return f"Check out this article: {article_title[:100]}"
 
 
 def generate_rule_based_news_post(agent_id: int, cluster_id: int, article: dict, 
