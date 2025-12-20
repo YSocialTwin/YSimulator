@@ -764,12 +764,16 @@ class SimulationClient:
                     # News sharing action - ONLY page agents can perform this action
                     # Page agents share news articles from their assigned RSS feed
                     # The feed must be associated with a Website that has the same ID as the page
+                    self.logger.info(f"share_link action: agent={agent.username}, is_page={agent.is_page}, feed_url={agent.feed_url[:50] if agent.feed_url else None}, news_service={self.news_service is not None}")
+                    
                     if agent.is_page != 1:
                         # Non-page agents cannot perform share_link action, skip
+                        self.logger.warning(f"share_link skipped: {agent.username} is not a page agent")
                         continue
                     
                     if not agent.feed_url:
                         # Page without feed URL, skip
+                        self.logger.warning(f"share_link skipped: {agent.username} has no feed_url")
                         continue
                     
                     if self.news_service:
@@ -829,6 +833,7 @@ class SimulationClient:
                             self.logger.warning(f"Traceback: {traceback.format_exc()}")
                     else:
                         # News service not configured, skip (pages can only share links)
+                        self.logger.warning(f"share_link skipped: {agent.username} - news_service is None")
                         pass
                 
                 elif action_type == "share":
