@@ -717,23 +717,69 @@ class DatabaseMiddleware:
         """
         Add a news article to the database.
         
+        Ensures the related website exists before creating the article.
+        If website_id is provided but doesn't exist, returns None.
+        If rss_url is provided instead of website_id, looks up or creates the website.
+        
         Args:
             article_data (dict): Article information with keys:
                 - id: Article UUID (optional, will be generated)
                 - title: Article title
                 - summary: Article summary/description
-                - website_id: Reference to website (UUID)
+                - website_id: Reference to website (UUID) - required if rss_url not provided
+                - rss_url: RSS feed URL - used to lookup/create website if website_id not provided
+                - website_name: Website name - used when creating website from rss_url
                 - link: Article URL
                 - fetched_on: Fetch timestamp (UUID format)
                 
         Returns:
             str: Article ID if successful, None otherwise
         """
-        from YSimulator.YServer.classes.models import Article
+        from YSimulator.YServer.classes.models import Article, Website
         import uuid
         
         session = self.Session()
         try:
+            # Get or ensure website exists
+            website_id = article_data.get("website_id")
+            
+            # If no website_id provided, try to get it from rss_url
+            if not website_id:
+                rss_url = article_data.get("rss_url")
+                if rss_url:
+                    # Look up website by RSS URL
+                    website = session.query(Website).filter(Website.rss == rss_url).first()
+                    if website:
+                        website_id = website.id
+                    else:
+                        # Create new website
+                        website_id = str(uuid.uuid4())
+                        new_website = Website(
+                            id=website_id,
+                            name=article_data.get("website_name", "Unknown"),
+                            rss=rss_url,
+                            category=article_data.get("category"),
+                            language=article_data.get("language"),
+                            country=article_data.get("country"),
+                            leaning=article_data.get("leaning"),
+                            last_fetched=str(uuid.uuid4())
+                        )
+                        session.add(new_website)
+                        session.flush()  # Ensure website is created before article
+            
+            # Verify website exists
+            if not website_id:
+                self.logger.error("Cannot add article: no website_id or rss_url provided")
+                return None
+                
+            website_exists = session.query(Website).filter(Website.id == website_id).first()
+            if not website_exists:
+                self.logger.error(
+                    f"Cannot add article: website {website_id} does not exist",
+                    extra={"extra_data": {"website_id": website_id}}
+                )
+                return None
+            
             # Generate UUID if not provided
             article_id = article_data.get("id", str(uuid.uuid4()))
             
@@ -747,7 +793,7 @@ class DatabaseMiddleware:
                 id=article_id,
                 title=article_data.get("title"),
                 summary=article_data.get("summary"),
-                website_id=article_data.get("website_id"),
+                website_id=website_id,
                 link=article_data.get("link"),
                 fetched_on=article_data.get("fetched_on", str(uuid.uuid4()))
             )
@@ -762,7 +808,7 @@ class DatabaseMiddleware:
                     "id": article_id,
                     "title": article_data.get("title", ""),
                     "summary": article_data.get("summary", "")[:200],  # Truncate for Redis
-                    "website_id": article_data.get("website_id", ""),
+                    "website_id": website_id,
                     "link": article_data.get("link", "")
                 })
             
