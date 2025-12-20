@@ -1068,6 +1068,7 @@ class OrchestratorServer:
                         
                     elif mode == "rchrono_followers":
                         # Prioritize posts from followed users
+                        # Note: user_id is the one being followed, follower_id is the one following
                         follower_posts_limit = int(limit * followers_ratio)
                         additional_posts_limit = limit - follower_posts_limit
                         
@@ -1092,22 +1093,36 @@ class OrchestratorServer:
                         
                         # If we need more posts, get additional ones
                         if len(post_ids) < limit and additional_posts_limit > 0:
-                            query_additional = text("""
-                                SELECT id FROM post
-                                WHERE round >= :visibility 
-                                    AND user_id != :agent_id
-                                    AND id NOT IN :existing_ids
-                                ORDER BY round DESC
-                                LIMIT :additional_limit
-                            """)
-                            # Handle empty list case for SQL IN clause
-                            existing_ids = tuple(post_ids) if post_ids else ('',)
-                            result = connection.execute(query_additional, {
-                                "visibility": visibility,
-                                "agent_id": agent_id,
-                                "existing_ids": existing_ids,
-                                "additional_limit": additional_posts_limit
-                            })
+                            # Use conditional query based on whether we have existing IDs
+                            if post_ids:
+                                query_additional = text("""
+                                    SELECT id FROM post
+                                    WHERE round >= :visibility 
+                                        AND user_id != :agent_id
+                                        AND id NOT IN :existing_ids
+                                    ORDER BY round DESC
+                                    LIMIT :additional_limit
+                                """)
+                                result = connection.execute(query_additional, {
+                                    "visibility": visibility,
+                                    "agent_id": agent_id,
+                                    "existing_ids": tuple(post_ids),
+                                    "additional_limit": additional_posts_limit
+                                })
+                            else:
+                                # No existing posts, skip the NOT IN clause
+                                query_additional = text("""
+                                    SELECT id FROM post
+                                    WHERE round >= :visibility 
+                                        AND user_id != :agent_id
+                                    ORDER BY round DESC
+                                    LIMIT :additional_limit
+                                """)
+                                result = connection.execute(query_additional, {
+                                    "visibility": visibility,
+                                    "agent_id": agent_id,
+                                    "additional_limit": additional_posts_limit
+                                })
                             post_ids.extend([row[0] for row in result])
                         
                     elif mode == "rchrono_followers_popularity":
@@ -1139,40 +1154,60 @@ class OrchestratorServer:
                         post_ids = [row[0] for row in result]
                         
                         if len(post_ids) < limit and additional_posts_limit > 0:
-                            existing_ids = tuple(post_ids) if post_ids else ('',)
-                            query_additional = text("""
-                                SELECT p.id 
-                                FROM post p
-                                LEFT JOIN (
-                                    SELECT post_id, COUNT(*) as reaction_count
-                                    FROM reaction
-                                    GROUP BY post_id
-                                ) r ON p.id = r.post_id
-                                WHERE p.round >= :visibility 
-                                    AND p.user_id != :agent_id
-                                    AND p.id NOT IN :existing_ids
-                                ORDER BY p.round DESC, COALESCE(r.reaction_count, 0) DESC
-                                LIMIT :additional_limit
-                            """)
-                            result = connection.execute(query_additional, {
-                                "visibility": visibility,
-                                "agent_id": agent_id,
-                                "existing_ids": existing_ids,
-                                "additional_limit": additional_posts_limit
-                            })
+                            if post_ids:
+                                query_additional = text("""
+                                    SELECT p.id 
+                                    FROM post p
+                                    LEFT JOIN (
+                                        SELECT post_id, COUNT(*) as reaction_count
+                                        FROM reaction
+                                        GROUP BY post_id
+                                    ) r ON p.id = r.post_id
+                                    WHERE p.round >= :visibility 
+                                        AND p.user_id != :agent_id
+                                        AND p.id NOT IN :existing_ids
+                                    ORDER BY p.round DESC, COALESCE(r.reaction_count, 0) DESC
+                                    LIMIT :additional_limit
+                                """)
+                                result = connection.execute(query_additional, {
+                                    "visibility": visibility,
+                                    "agent_id": agent_id,
+                                    "existing_ids": tuple(post_ids),
+                                    "additional_limit": additional_posts_limit
+                                })
+                            else:
+                                query_additional = text("""
+                                    SELECT p.id 
+                                    FROM post p
+                                    LEFT JOIN (
+                                        SELECT post_id, COUNT(*) as reaction_count
+                                        FROM reaction
+                                        GROUP BY post_id
+                                    ) r ON p.id = r.post_id
+                                    WHERE p.round >= :visibility 
+                                        AND p.user_id != :agent_id
+                                    ORDER BY p.round DESC, COALESCE(r.reaction_count, 0) DESC
+                                    LIMIT :additional_limit
+                                """)
+                                result = connection.execute(query_additional, {
+                                    "visibility": visibility,
+                                    "agent_id": agent_id,
+                                    "additional_limit": additional_posts_limit
+                                })
                             post_ids.extend([row[0] for row in result])
                             
                     elif mode == "rchrono_comments":
                         # Prioritize posts with more comments (thread activity)
+                        # Count comments by checking posts that reference this post via comment_to
                         query = text("""
-                            SELECT p.id, COUNT(c.id) as comment_count
+                            SELECT p.id
                             FROM post p
-                            LEFT JOIN post c ON p.id = c.thread_id AND c.comment_to IS NOT NULL
+                            LEFT JOIN post c ON p.id = c.comment_to
                             WHERE p.round >= :visibility 
                                 AND p.user_id != :agent_id
                                 AND p.comment_to IS NULL
                             GROUP BY p.id
-                            ORDER BY comment_count DESC, p.round DESC
+                            ORDER BY COUNT(c.id) DESC, p.round DESC
                             LIMIT :limit
                         """)
                         result = connection.execute(query, {
