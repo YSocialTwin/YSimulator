@@ -761,7 +761,7 @@ class SimulationClient:
                         # Page without feed URL, skip
                         continue
                     
-                    if self.news_service:
+                     if self.news_service:
                         # Get an article from this page's specific feed
                         # The feed is already registered with the page's ID as website_id
                         try:
@@ -771,6 +771,8 @@ class SimulationClient:
                             article = ray.get(article_future)
                             
                             if article:
+                                self.logger.info(f"Page {agent.username} got article: {article.get('title', 'NO TITLE')[:50]}")
+                                
                                 # Verify the article's website_id matches the page's user_id
                                 # This ensures pages can only share from their own feeds
                                 article_website_id = article.get("website_id")
@@ -789,24 +791,30 @@ class SimulationClient:
                                 
                                 if agent_type == "llm":
                                     # LLM page posts news with commentary
+                                    self.logger.info(f"LLM Page {agent.username} generating news post async")
                                     future, article_id = generate_news_post_async(
                                         self.news_service, self.llm, agent.cluster, article
                                     )
+                                    self.logger.info(f"LLM Page {agent.username} got article_id: {article_id}")
                                     pending_llm_posts.append((agent.id, agent.cluster, future, article_id))
                                 else:
                                     # Rule-based page posts news directly
+                                    self.logger.info(f"Rule-based Page {agent.username} generating news post")
                                     action, article_id = generate_rule_based_news_post(
                                         agent.id, agent.cluster, article, self.news_service
                                     )
+                                    self.logger.info(f"Rule-based Page {agent.username} got article_id: {article_id}")
                                     # Store article_id with the action for later use when submitting
                                     action.article_id = article_id
                                     actions.append(action)
                             else:
                                 # No article available from this feed, skip
-                                pass
+                                self.logger.warning(f"Page {agent.username} got no article from feed")
                         except Exception as e:
                             # News service unavailable or error, skip action
                             self.logger.warning(f"Share link action failed for page {agent.username}: {e}")
+                            import traceback
+                            self.logger.warning(f"Traceback: {traceback.format_exc()}")
                     else:
                         # News service not configured, skip (pages can only share links)
                         pass
@@ -851,6 +859,9 @@ class SimulationClient:
                 # Add article_id as attribute if present (for news posts)
                 if article_id:
                     action.article_id = article_id
+                    self.logger.info(f"LLM post for agent {a_id}: article_id={article_id}, content_len={len(res_txt)}")
+                else:
+                    self.logger.info(f"LLM post for agent {a_id}: NO article_id, content_len={len(res_txt)}")
                 actions.append(action)
         
         # Resolve Reactions

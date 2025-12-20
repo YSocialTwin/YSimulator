@@ -363,7 +363,12 @@ class NewsFeedService:
         Returns:
             str: Article ID if successful, None otherwise
         """
-        if not self.server or not article:
+        if not self.server:
+            print(f"[NewsFeedService] ERROR: No server connection for saving article")
+            return None
+            
+        if not article:
+            print(f"[NewsFeedService] ERROR: No article data provided")
             return None
         
         import uuid
@@ -378,11 +383,23 @@ class NewsFeedService:
                 "fetched_on": str(uuid.uuid4())  # Using UUID as timestamp format
             }
             
+            # Debug logging
+            print(f"[NewsFeedService] Saving article: title='{article_data['title'][:50]}...', website_id={article_data['website_id']}")
+            
             article_id = ray.get(self.server.add_article.remote(article_data))
+            
+            if article_id:
+                print(f"[NewsFeedService] Article saved successfully: id={article_id}")
+            else:
+                print(f"[NewsFeedService] ERROR: Failed to save article (server returned None)")
+            
             return article_id
             
         except Exception as e:
-            # Failed to save article
+            # Failed to save article - log the error
+            print(f"[NewsFeedService] ERROR: Exception while saving article: {e}")
+            import traceback
+            traceback.print_exc()
             return None
     
     def get_feed_status(self) -> Dict:
