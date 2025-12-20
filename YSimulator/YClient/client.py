@@ -102,6 +102,9 @@ class SimulationClient:
         # Connect to the Named Server Actor
         self.server = ray.get_actor("Orchestrator")
         
+        # Set up logging first (before any logging attempts)
+        self._setup_logging()
+        
         # Register page agent feeds with news service
         if self.news_service:
             for agent in self.agent_profiles:
@@ -112,8 +115,6 @@ class SimulationClient:
                         # Failed to register page feed, log and continue
                         self.logger.warning(f"Failed to register feed for page {agent.username}: {e}")
 
-        # Set up logging
-        self._setup_logging()
         self.logger.info(
             "Simulation client initialized",
             extra={
