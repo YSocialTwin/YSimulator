@@ -7,6 +7,7 @@ managing client registration, agent actions, and simulation state progression.
 
 import json
 import logging
+import random
 import time
 from datetime import datetime
 from pathlib import Path
@@ -939,27 +940,35 @@ class OrchestratorServer:
             
             if self.db.use_redis:
                 # Use Redis for recommendations
-                import random
-                
                 # Get recent posts from Redis
                 recent_posts_key = self.db._redis_key("posts", "recent")
                 all_post_ids = self.db.redis_client.lrange(recent_posts_key, 0, -1)
                 
-                # Filter posts by visibility and exclude agent's own posts
-                valid_posts = []
-                for post_id in all_post_ids:
-                    post_key = self.db._redis_key("posts", post_id)
-                    post_data = self.db.redis_client.hgetall(post_key)
-                    if post_data:
-                        post_round = post_data.get("round")
-                        post_user_id = post_data.get("user_id")
-                        # Check visibility and exclude own posts
-                        if post_round and post_user_id != agent_id:
-                            try:
-                                if int(post_round) >= visibility:
-                                    valid_posts.append(post_id)
-                            except (ValueError, TypeError):
-                                continue
+                # Use Redis pipeline to fetch post data efficiently (avoid N+1 queries)
+                if all_post_ids:
+                    pipeline = self.db.redis_client.pipeline()
+                    for post_id in all_post_ids:
+                        post_key = self.db._redis_key("posts", post_id)
+                        pipeline.hgetall(post_key)
+                    
+                    # Execute pipeline and get all results at once
+                    posts_data = pipeline.execute()
+                    
+                    # Filter posts by visibility and exclude agent's own posts
+                    valid_posts = []
+                    for i, post_data in enumerate(posts_data):
+                        if post_data:
+                            post_round = post_data.get("round")
+                            post_user_id = post_data.get("user_id")
+                            # Check visibility and exclude own posts
+                            if post_round and post_user_id != agent_id:
+                                try:
+                                    if int(post_round) >= visibility:
+                                        valid_posts.append(all_post_ids[i])
+                                except (ValueError, TypeError):
+                                    continue
+                else:
+                    valid_posts = []
                 
                 # Apply mode-specific ordering
                 if mode == "rchrono":
