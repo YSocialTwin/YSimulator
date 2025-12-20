@@ -920,16 +920,24 @@ class OrchestratorServer:
         agent_id: str,
         mode: str = "random",
         limit: int = 5,
-        visibility_rounds: int = 36
+        visibility_rounds: int = 36,
+        followers_ratio: float = 0.6
     ) -> List[str]:
         """
         Get recommended posts for an agent using the specified recommendation strategy.
         
         Args:
             agent_id: UUID of the agent requesting recommendations
-            mode: Recommendation mode - "rchrono" (reverse chronological) or "random" (default)
+            mode: Recommendation mode:
+                - "random": Random post ordering (default)
+                - "rchrono": Reverse chronological ordering (newest first)
+                - "rchrono_popularity": Reverse chronological with popularity boost
+                - "rchrono_followers": Prioritizes posts from followed users
+                - "rchrono_followers_popularity": Followers + popularity
+                - "rchrono_comments": Prioritizes highly commented posts
             limit: Number of posts to recommend (default: 5)
             visibility_rounds: Number of rounds (time slots) to look back for posts (default: 36)
+            followers_ratio: Ratio of posts from followers vs others (default: 0.6)
             
         Returns:
             List[str]: List of post UUIDs recommended for the agent
@@ -940,6 +948,9 @@ class OrchestratorServer:
             
             if self.db.use_redis:
                 # Use Redis for recommendations
+                # Note: Redis has limited support for complex queries
+                # For modes requiring joins (followers, topics, etc.), we fallback to simpler modes
+                
                 # Get recent posts from Redis
                 recent_posts_key = self.db._redis_key("posts", "recent")
                 all_post_ids = self.db.redis_client.lrange(recent_posts_key, 0, -1)
@@ -954,8 +965,8 @@ class OrchestratorServer:
                     # Execute pipeline and get all results at once
                     posts_data = pipeline.execute()
                     
-                    # Filter posts by visibility and exclude agent's own posts
-                    valid_posts = []
+                    # Build list of valid posts with metadata
+                    valid_posts_with_data = []
                     for i, post_data in enumerate(posts_data):
                         if post_data:
                             post_round = post_data.get("round")
@@ -964,26 +975,45 @@ class OrchestratorServer:
                             if post_round and post_user_id != agent_id:
                                 try:
                                     if int(post_round) >= visibility:
-                                        valid_posts.append(all_post_ids[i])
+                                        valid_posts_with_data.append({
+                                            'id': all_post_ids[i],
+                                            'round': int(post_round),
+                                            'reaction_count': int(post_data.get("reaction_count", 0) or 0)
+                                        })
                                 except (ValueError, TypeError):
                                     continue
                 else:
-                    valid_posts = []
+                    valid_posts_with_data = []
                 
                 # Apply mode-specific ordering
                 if mode == "rchrono":
                     # Redis recent list is already in reverse chronological order (newest first)
                     # Just take the first 'limit' items
-                    post_ids = valid_posts[:limit]
+                    post_ids = [p['id'] for p in valid_posts_with_data[:limit]]
+                    
+                elif mode == "rchrono_popularity":
+                    # Sort by round desc, then by reaction_count desc
+                    sorted_posts = sorted(valid_posts_with_data, 
+                                        key=lambda x: (x['round'], x['reaction_count']), 
+                                        reverse=True)
+                    post_ids = [p['id'] for p in sorted_posts[:limit]]
+                    
+                elif mode in ["rchrono_followers", "rchrono_followers_popularity", "rchrono_comments"]:
+                    # For follower-based modes in Redis, fallback to reverse chronological
+                    # Complex joins not easily supported in Redis
+                    self.logger.info(f"Mode {mode} not fully supported in Redis, using rchrono fallback")
+                    post_ids = [p['id'] for p in valid_posts_with_data[:limit]]
+                    
                 else:
-                    # Random ordering
-                    if len(valid_posts) > limit:
-                        post_ids = random.sample(valid_posts, limit)
+                    # Random ordering (default for Redis)
+                    if len(valid_posts_with_data) > limit:
+                        selected = random.sample(valid_posts_with_data, limit)
+                        post_ids = [p['id'] for p in selected]
                     else:
-                        post_ids = valid_posts
+                        post_ids = [p['id'] for p in valid_posts_with_data]
                 
                 self.logger.info(
-                    f"Recommended {len(post_ids)} posts (Redis)",
+                    f"Recommended {len(post_ids)} posts (Redis, mode={mode})",
                     extra={
                         "extra_data": {
                             "agent_id": agent_id,
@@ -995,9 +1025,11 @@ class OrchestratorServer:
                 )
                 
                 return post_ids
+                
             else:
                 # Use SQL database for recommendations
                 with self.db.engine.begin() as connection:
+                    
                     if mode == "rchrono":
                         # Reverse chronological: newest posts first
                         query = text("""
@@ -1006,6 +1038,150 @@ class OrchestratorServer:
                             ORDER BY round DESC, id DESC
                             LIMIT :limit
                         """)
+                        result = connection.execute(query, {
+                            "visibility": visibility,
+                            "agent_id": agent_id,
+                            "limit": limit
+                        })
+                        post_ids = [row[0] for row in result]
+                        
+                    elif mode == "rchrono_popularity":
+                        # Reverse chronological with popularity (reaction count)
+                        query = text("""
+                            SELECT p.id 
+                            FROM post p
+                            LEFT JOIN (
+                                SELECT post_id, COUNT(*) as reaction_count
+                                FROM reaction
+                                GROUP BY post_id
+                            ) r ON p.id = r.post_id
+                            WHERE p.round >= :visibility AND p.user_id != :agent_id
+                            ORDER BY p.round DESC, COALESCE(r.reaction_count, 0) DESC
+                            LIMIT :limit
+                        """)
+                        result = connection.execute(query, {
+                            "visibility": visibility,
+                            "agent_id": agent_id,
+                            "limit": limit
+                        })
+                        post_ids = [row[0] for row in result]
+                        
+                    elif mode == "rchrono_followers":
+                        # Prioritize posts from followed users
+                        follower_posts_limit = int(limit * followers_ratio)
+                        additional_posts_limit = limit - follower_posts_limit
+                        
+                        # Get posts from followed users
+                        query_followers = text("""
+                            SELECT DISTINCT p.id 
+                            FROM post p
+                            INNER JOIN follow f ON p.user_id = f.follower_id
+                            WHERE f.user_id = :agent_id 
+                                AND f.action = 'follow'
+                                AND p.round >= :visibility
+                                AND p.user_id != :agent_id
+                            ORDER BY p.round DESC
+                            LIMIT :follower_limit
+                        """)
+                        result = connection.execute(query_followers, {
+                            "agent_id": agent_id,
+                            "visibility": visibility,
+                            "follower_limit": follower_posts_limit
+                        })
+                        post_ids = [row[0] for row in result]
+                        
+                        # If we need more posts, get additional ones
+                        if len(post_ids) < limit and additional_posts_limit > 0:
+                            query_additional = text("""
+                                SELECT id FROM post
+                                WHERE round >= :visibility 
+                                    AND user_id != :agent_id
+                                    AND id NOT IN :existing_ids
+                                ORDER BY round DESC
+                                LIMIT :additional_limit
+                            """)
+                            # Handle empty list case for SQL IN clause
+                            existing_ids = tuple(post_ids) if post_ids else ('',)
+                            result = connection.execute(query_additional, {
+                                "visibility": visibility,
+                                "agent_id": agent_id,
+                                "existing_ids": existing_ids,
+                                "additional_limit": additional_posts_limit
+                            })
+                            post_ids.extend([row[0] for row in result])
+                        
+                    elif mode == "rchrono_followers_popularity":
+                        # Followers with popularity boost
+                        follower_posts_limit = int(limit * followers_ratio)
+                        additional_posts_limit = limit - follower_posts_limit
+                        
+                        query_followers = text("""
+                            SELECT DISTINCT p.id 
+                            FROM post p
+                            INNER JOIN follow f ON p.user_id = f.follower_id
+                            LEFT JOIN (
+                                SELECT post_id, COUNT(*) as reaction_count
+                                FROM reaction
+                                GROUP BY post_id
+                            ) r ON p.id = r.post_id
+                            WHERE f.user_id = :agent_id 
+                                AND f.action = 'follow'
+                                AND p.round >= :visibility
+                                AND p.user_id != :agent_id
+                            ORDER BY p.round DESC, COALESCE(r.reaction_count, 0) DESC
+                            LIMIT :follower_limit
+                        """)
+                        result = connection.execute(query_followers, {
+                            "agent_id": agent_id,
+                            "visibility": visibility,
+                            "follower_limit": follower_posts_limit
+                        })
+                        post_ids = [row[0] for row in result]
+                        
+                        if len(post_ids) < limit and additional_posts_limit > 0:
+                            existing_ids = tuple(post_ids) if post_ids else ('',)
+                            query_additional = text("""
+                                SELECT p.id 
+                                FROM post p
+                                LEFT JOIN (
+                                    SELECT post_id, COUNT(*) as reaction_count
+                                    FROM reaction
+                                    GROUP BY post_id
+                                ) r ON p.id = r.post_id
+                                WHERE p.round >= :visibility 
+                                    AND p.user_id != :agent_id
+                                    AND p.id NOT IN :existing_ids
+                                ORDER BY p.round DESC, COALESCE(r.reaction_count, 0) DESC
+                                LIMIT :additional_limit
+                            """)
+                            result = connection.execute(query_additional, {
+                                "visibility": visibility,
+                                "agent_id": agent_id,
+                                "existing_ids": existing_ids,
+                                "additional_limit": additional_posts_limit
+                            })
+                            post_ids.extend([row[0] for row in result])
+                            
+                    elif mode == "rchrono_comments":
+                        # Prioritize posts with more comments (thread activity)
+                        query = text("""
+                            SELECT p.id, COUNT(c.id) as comment_count
+                            FROM post p
+                            LEFT JOIN post c ON p.id = c.thread_id AND c.comment_to IS NOT NULL
+                            WHERE p.round >= :visibility 
+                                AND p.user_id != :agent_id
+                                AND p.comment_to IS NULL
+                            GROUP BY p.id
+                            ORDER BY comment_count DESC, p.round DESC
+                            LIMIT :limit
+                        """)
+                        result = connection.execute(query, {
+                            "visibility": visibility,
+                            "agent_id": agent_id,
+                            "limit": limit
+                        })
+                        post_ids = [row[0] for row in result]
+                        
                     else:
                         # Random ordering (default)
                         # Note: RANDOM() works for SQLite and PostgreSQL
@@ -1016,20 +1192,15 @@ class OrchestratorServer:
                             ORDER BY RANDOM()
                             LIMIT :limit
                         """)
-                    
-                    result = connection.execute(
-                        query,
-                        {
+                        result = connection.execute(query, {
                             "visibility": visibility,
                             "agent_id": agent_id,
                             "limit": limit
-                        }
-                    )
-                    
-                    post_ids = [row[0] for row in result]
+                        })
+                        post_ids = [row[0] for row in result]
                     
                     self.logger.info(
-                        f"Recommended {len(post_ids)} posts (SQL)",
+                        f"Recommended {len(post_ids)} posts (SQL, mode={mode})",
                         extra={
                             "extra_data": {
                                 "agent_id": agent_id,
@@ -1045,7 +1216,7 @@ class OrchestratorServer:
         except Exception as e:
             self.logger.error(
                 f"Error getting recommended posts: {e}",
-                extra={"extra_data": {"agent_id": agent_id, "error": str(e)}},
+                extra={"extra_data": {"agent_id": agent_id, "mode": mode, "error": str(e)}},
             )
             return []
     
