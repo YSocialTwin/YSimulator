@@ -473,15 +473,14 @@ sql_posts = server.get_recommended_posts(agent_id, mode="rchrono_followers", lim
 
 ### Test Case 3: Popularity Sorting
 ```python
-# SQL: time-first, popularity-second
+# Both should now have similar time-first behavior
 sql_posts = server.get_recommended_posts(agent_id, mode="rchrono_popularity", limit=5)
-
-# Redis: popularity-only
 redis_posts = server.get_recommended_posts(agent_id, mode="rchrono_popularity", limit=5)
 
-# Results will differ significantly
-# SQL posts: recent posts sorted by reactions
-# Redis posts: most reacted posts (regardless of age)
+# Both implementations prioritize time (recency) with popularity as tiebreaker
+# SQL: Uses exact day/hour from rounds table
+# Redis: Uses list position (index) as time proxy
+# Results should be similar, with SQL having slightly more precision
 ```
 
 ---
