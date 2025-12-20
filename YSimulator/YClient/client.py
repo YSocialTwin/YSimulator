@@ -346,7 +346,18 @@ class SimulationClient:
             defaults = gen_config.get("default_settings", {})
             age_range = gen_config.get("age_range", [18, 65])
 
-            start_id = (max((a.id for a in agents), default=0) + 1) if agents else 1
+            # Generate UUIDs for additional agents using the same namespace
+            import uuid
+            AGENT_UUID_NAMESPACE = uuid.UUID('12345678-1234-5678-1234-567812345678')
+            
+            # Find the starting index for generated agents
+            # If we have predefined agents, start after them; otherwise start at 1
+            if agents:
+                # Try to extract numeric part from existing IDs for indexing
+                # For UUIDs, we'll just start from a high number to avoid conflicts
+                start_index = 10000
+            else:
+                start_index = 1
 
             archetypes = ["Validator", "Broadcaster", "Explorer"]
             activity_profiles = ["Always On", "Morning Active", "Evening Active", "Weekend Warrior"]
@@ -356,13 +367,15 @@ class SimulationClient:
             education_levels = ["high_school", "college", "graduate", "phd"]
 
             for i in range(num_additional):
-                agent_id = start_id + i
+                agent_index = start_index + i
+                # Generate deterministic UUID for generated agents
+                agent_id = str(uuid.uuid5(AGENT_UUID_NAMESPACE, f"generated_agent_{agent_index}"))
                 cluster = random.choices([0, 1, 2], weights=cluster_weights)[0]
 
                 profile = AgentProfile(
                     id=agent_id,
-                    username=f"agent_{agent_id:04d}",
-                    email=f"agent{agent_id}@simulation.local",
+                    username=f"agent_{agent_index:04d}",
+                    email=f"agent{agent_index}@simulation.local",
                     password=defaults.get("password", "simulation_agent"),
                     leaning=defaults.get("leaning", "neutral"),
                     user_type=defaults.get("user_type", "agent"),
