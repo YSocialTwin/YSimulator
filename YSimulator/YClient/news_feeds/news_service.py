@@ -134,6 +134,36 @@ class NewsFeedService:
                 # Failed to register feed, continue with others
                 pass
     
+    def register_page_feed(self, feed_url: str, page_id: str) -> bool:
+        """
+        Register a page agent's feed with the news service.
+        This is called when a page agent is registered to enable its feed.
+        
+        Args:
+            feed_url (str): RSS feed URL for the page
+            page_id (str): Page agent's user ID (also the website ID)
+            
+        Returns:
+            bool: True if successfully registered, False otherwise
+        """
+        if not feed_url:
+            return False
+        
+        # Initialize cache for this feed if not already present
+        if feed_url not in self.cached_news:
+            self.cached_news[feed_url] = {"articles": [], "timestamp": 0}
+            self.last_fetched[feed_url] = 0
+        
+        # Store the website_id (which is the page_id)
+        self.website_ids[feed_url] = page_id
+        
+        # Try to fetch initial articles
+        try:
+            self.refresh_feed(feed_url)
+            return True
+        except:
+            return False
+    
     def _should_refresh_cache(self, feed_url: str) -> bool:
         """
         Check if the cache for a feed should be refreshed.
@@ -286,6 +316,30 @@ class NewsFeedService:
         
         # Return a random article
         return random.choice(all_articles)
+    
+    def get_article_from_feed(self, feed_url: str) -> Optional[Dict]:
+        """
+        Get a random article from a specific feed URL.
+        Used by page agents to get articles from their assigned feed.
+        
+        Args:
+            feed_url (str): RSS feed URL
+            
+        Returns:
+            dict or None: Article dictionary with keys: title, summary, link, source, website_id
+                         Returns None if no articles available
+        """
+        # Refresh cache if stale
+        if self._should_refresh_cache(feed_url):
+            self.refresh_feed(feed_url)
+        
+        # Get articles from this specific feed
+        if feed_url in self.cached_news:
+            articles = self.cached_news[feed_url].get("articles", [])
+            if articles:
+                return random.choice(articles)
+        
+        return None
     
     def save_article_to_db(self, article: Dict) -> Optional[str]:
         """

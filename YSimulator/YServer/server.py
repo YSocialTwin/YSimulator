@@ -152,6 +152,7 @@ class OrchestratorServer:
     def register_agents(self, agents: list) -> dict:
         """
         Register agent profiles in the database if they don't already exist.
+        For page agents (is_page=1), also creates a Website entry.
 
         Args:
             agents: List of AgentProfile dataclass instances
@@ -162,6 +163,7 @@ class OrchestratorServer:
         start_time = time.time()
         registered_count = 0
         skipped_count = 0
+        pages_registered = 0
 
         try:
             for agent_profile in agents:
@@ -201,6 +203,20 @@ class OrchestratorServer:
                 if self.db.register_user(user_data):
                     registered_count += 1
                     self.registered_agents[agent_profile.id] = agent_profile.username
+                    
+                    # If this is a page agent, create a Website entry
+                    if agent_profile.is_page == 1 and agent_profile.feed_url:
+                        website_data = {
+                            "id": str(agent_profile.id),  # Website ID = User ID
+                            "name": agent_profile.username,  # Use username as website name
+                            "rss": agent_profile.feed_url,
+                            "category": "page",  # Mark as page
+                            "language": agent_profile.language,
+                            "country": agent_profile.nationality,
+                            "leaning": agent_profile.leaning,
+                        }
+                        if self.db.add_website(website_data):
+                            pages_registered += 1
                 else:
                     skipped_count += 1
                     self.registered_agents[agent_profile.id] = agent_profile.username
@@ -213,6 +229,7 @@ class OrchestratorServer:
                     "extra_data": {
                         "registered": registered_count,
                         "skipped": skipped_count,
+                        "pages": pages_registered,
                         "total": len(self.registered_agents),
                         "execution_time_ms": execution_time,
                     }
@@ -220,12 +237,13 @@ class OrchestratorServer:
             )
 
             print(
-                f"[Server] 👥 Agent Registration: {registered_count} new, {skipped_count} existing"
+                f"[Server] 👥 Agent Registration: {registered_count} new, {skipped_count} existing, {pages_registered} pages"
             )
 
             return {
                 "registered": registered_count,
                 "skipped": skipped_count,
+                "pages": pages_registered,
                 "total": len(self.registered_agents),
             }
 

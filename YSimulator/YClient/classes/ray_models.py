@@ -37,6 +37,8 @@ class AgentProfile:
     profession: str = ""
     activity_profile: str = "Always On"
     archetype: Optional[str] = None
+    # Page-specific field
+    feed_url: Optional[str] = None  # RSS feed URL for page agents
     # Simulation-specific fields
     cluster: int = 0
     llm: bool = False

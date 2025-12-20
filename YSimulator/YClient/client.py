@@ -101,6 +101,16 @@ class SimulationClient:
 
         # Connect to the Named Server Actor
         self.server = ray.get_actor("Orchestrator")
+        
+        # Register page agent feeds with news service
+        if self.news_service:
+            for agent in self.agent_profiles:
+                if agent.is_page == 1 and agent.feed_url:
+                    try:
+                        ray.get(self.news_service.register_page_feed.remote(agent.feed_url, str(agent.id)))
+                    except Exception as e:
+                        # Failed to register page feed, log but continue
+                        pass
 
         # Set up logging
         self._setup_logging()
@@ -322,6 +332,7 @@ class SimulationClient:
                     daily_activity_level=agent_data.get("daily_activity_level", 1),
                     round_actions=agent_data.get("round_actions", 3),
                     is_page=agent_data.get("is_page", 0),
+                    feed_url=agent_data.get("feed_url"),  # RSS feed for page agents
                 )
                 agents.append(profile)
 
@@ -632,32 +643,38 @@ class SimulationClient:
         # Get hourly activity probability for this slot (default to 0.04 if not specified)
         hourly_prob = self.hourly_activity.get(slot, 0.04)
         
-        # Filter agents available at this time slot based on their activity_profile
-        available_agents = []
+        # Separate regular agents and page agents
+        # Pages are always active during their activity profile hours
+        regular_agents = []
+        page_agents = []
+        
         for agent in self.agent_profiles:
             profile_name = agent.activity_profile
             active_hours = self.activity_profiles.get(profile_name, list(range(24)))
             if slot in active_hours:
-                available_agents.append(agent)
+                if agent.is_page == 1:
+                    page_agents.append(agent)
+                else:
+                    regular_agents.append(agent)
         
-        # Calculate number of agents to activate based on hourly_activity
-        # Use the probability as a ratio of available agents
-        if not available_agents:
-            active_agents = []
-        else:
-            num_active = max(1, int(len(available_agents) * hourly_prob))
-            num_active = min(num_active, len(available_agents))  # Can't exceed available agents
+        # Calculate number of regular agents to activate based on hourly_activity
+        # Page agents don't count toward the hourly percentage
+        active_regular_agents = []
+        if regular_agents:
+            num_active = max(1, int(len(regular_agents) * hourly_prob))
+            num_active = min(num_active, len(regular_agents))  # Can't exceed available agents
             
-            # Sample active agents from available agents
+            # Sample active agents from regular agents
             if num_active > 0:
                 # If archetypes are enabled, sample according to distribution
                 if self.archetypes_enabled and self.archetype_distribution:
-                    active_agents = self._sample_agents_by_archetype(available_agents, num_active)
+                    active_regular_agents = self._sample_agents_by_archetype(regular_agents, num_active)
                 else:
                     # Random sampling when archetypes are disabled
-                    active_agents = random.sample(available_agents, k=num_active)
-            else:
-                active_agents = []
+                    active_regular_agents = random.sample(regular_agents, k=num_active)
+        
+        # Combine regular agents and ALL page agents that are available
+        active_agents = active_regular_agents + page_agents
         
         # Track pending LLM calls for parallel execution
         # Each entry: (agent_id, cluster_id, future) for posts
@@ -713,47 +730,48 @@ class SimulationClient:
                         actions.append(action)
                 
                 elif action_type == "share_link":
-                    # News sharing action - agent shares news article from RSS feeds
-                    # LLM agents can comment on the news, rule-based agents share it directly
+                    # News sharing action - ONLY page agents can perform this action
+                    # Page agents share news articles from their assigned RSS feed
+                    if agent.is_page != 1:
+                        # Non-page agents cannot perform share_link action, skip
+                        continue
+                    
+                    if not agent.feed_url:
+                        # Page without feed URL, skip
+                        continue
+                    
                     if self.news_service:
-                        # Get a random article from news service
+                        # Get an article from this page's specific feed
                         try:
-                            article_future = self.news_service.get_random_article.remote(
-                                language="en"  # Can be made configurable
+                            article_future = self.news_service.get_article_from_feed.remote(
+                                agent.feed_url
                             )
                             article = ray.get(article_future)
                             
                             if article:
                                 if agent_type == "llm":
-                                    # LLM agent posts news with commentary
-                                    # generate_news_post_async now returns (future, article_id)
+                                    # LLM page posts news with commentary
                                     future, article_id = generate_news_post_async(
                                         self.news_service, self.llm, agent.cluster, article
                                     )
                                     pending_llm_posts.append((agent.id, agent.cluster, future, article_id))
                                 else:
-                                    # Rule-based agent posts news directly
-                                    # generate_rule_based_news_post now returns (action, article_id)
+                                    # Rule-based page posts news directly
                                     action, article_id = generate_rule_based_news_post(
                                         agent.id, agent.cluster, article, self.news_service
                                     )
                                     # Store article_id with the action for later use when submitting
-                                    action.article_id = article_id  # Add article_id as attribute
+                                    action.article_id = article_id
                                     actions.append(action)
                             else:
-                                # No article available, skip
+                                # No article available from this feed, skip
                                 pass
                         except Exception as e:
                             # News service unavailable or error, skip action
-                            self.logger.warning(f"Share link action failed: {e}")
+                            self.logger.warning(f"Share link action failed for page {agent.username}: {e}")
                     else:
-                        # News service not configured, fallback to regular post
-                        if agent_type == "llm":
-                            future = generate_llm_post_async(self.llm, agent.cluster, day, slot)
-                            pending_llm_posts.append((agent.id, agent.cluster, future, None))
-                        else:
-                            action = generate_rule_based_post(agent.id, agent.cluster)
-                            actions.append(action)
+                        # News service not configured, skip (pages can only share links)
+                        pass
                 
                 elif action_type == "share":
                     # Share action - agent shares an existing post
