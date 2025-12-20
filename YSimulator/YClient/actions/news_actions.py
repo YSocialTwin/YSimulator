@@ -44,56 +44,21 @@ def generate_llm_news_commentary(llm_service, cluster_id: int, article: dict, we
     
     Args:
         llm_service: Ray actor reference for LLMService
-        cluster_id: Agent cluster/persona ID
+        cluster_id: Agent cluster/persona ID (not currently used, reserved for future persona-based customization)
         article: Article dictionary with 'title' and 'summary' keys
         website_name: Name of the website/page sharing the article
         
     Returns:
         str: Generated commentary/perspective on the news article (not including article details)
     """
-    from langchain_core.prompts import ChatPromptTemplate
-    from langchain_core.output_parsers import StrOutputParser
-    
-    # Extract article information
-    article_title = article.get('title', 'News Article')
-    article_text = article.get('summary', article.get('description', ''))
-    
-    # Truncate article text if too long (keep first 500 chars)
-    if len(article_text) > 500:
-        article_text = article_text[:500] + "..."
-    
-    # Default website name if not provided
-    if not website_name:
-        website_name = "this website"
-    
-    # Create a prompt asking LLM to act as social media manager
-    system_msg = f"You are the social media manager for {website_name}. Your job is to present news articles to your audience in an engaging way."
-    user_msg = f"""Here's a news article to share:
-
-Title: {article_title}
-
-Content: {article_text}
-
-Write a brief, engaging tweet (max 280 characters) to present this article to your followers. Be professional but engaging. Do NOT include hashtags or links - just your commentary."""
-    
-    prompt = ChatPromptTemplate.from_messages([
-        ("system", system_msg),
-        ("user", user_msg)
-    ])
-    
-    # Get commentary from LLM
+    # Call the LLMService method to generate commentary
+    # Use ray.get to await the result from the Ray actor
     try:
-        chain = prompt | llm_service | StrOutputParser()
-        # Invoke chain with the formatted prompt (no variables needed since we used f-strings)
-        commentary = ray.get(chain.invoke.remote({}))
-        
-        # Ensure commentary doesn't exceed tweet length
-        if len(commentary) > 280:
-            commentary = commentary[:277] + "..."
-            
+        commentary = ray.get(llm_service.generate_news_commentary.remote(article, website_name))
         return commentary
     except Exception as e:
         # Fallback if LLM fails - truncate title if too long
+        article_title = article.get('title', 'News Article')
         title = article_title if len(article_title) <= 97 else article_title[:97] + "..."
         return f"Check out this article: {title}"
 
