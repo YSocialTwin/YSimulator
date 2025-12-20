@@ -11,6 +11,10 @@ Exports:
     - ReverseChronoFollowers: Prioritizes posts from followed users
     - ReverseChronoFollowersPopularity: Followers + popularity
     - ReverseChronoComments: Prioritizes highly commented posts
+    - CommonInterests: Posts with common topic interests
+    - CommonUserInterests: Posts by users with common interests
+    - SimilarUsersReact: Posts from similar users (by reactions)
+    - SimilarUsersPosts: Posts from similar users (by posting)
     - RandomOrder: Random post ordering
 """
 
@@ -21,6 +25,10 @@ from .ContentRecSys import (
     ReverseChronoFollowers,
     ReverseChronoFollowersPopularity,
     ReverseChronoComments,
+    CommonInterests,
+    CommonUserInterests,
+    SimilarUsersReact,
+    SimilarUsersPosts,
     RandomOrder
 )
 
@@ -31,5 +39,9 @@ __all__ = [
     "ReverseChronoFollowers",
     "ReverseChronoFollowersPopularity",
     "ReverseChronoComments",
+    "CommonInterests",
+    "CommonUserInterests",
+    "SimilarUsersReact",
+    "SimilarUsersPosts",
     "RandomOrder"
 ]

@@ -915,6 +915,25 @@ class OrchestratorServer:
             f"{transitioned_count} agents changed archetypes (day {self.day})"
         )
     
+    def _calculate_visibility_params(self, visibility_rounds: int) -> tuple:
+        """
+        Calculate visibility day/hour parameters for filtering posts.
+        
+        Since Round IDs are UUIDs (not sequential integers), we calculate
+        the day/hour threshold instead of trying to do arithmetic on UUIDs.
+        
+        Args:
+            visibility_rounds: Number of time slots to look back
+            
+        Returns:
+            tuple: (visibility_day, visibility_hour) representing the oldest round to show
+        """
+        total_hours = (self.day - 1) * self.num_slots_per_day + self.slot
+        visibility_hours = max(1, total_hours - visibility_rounds)
+        visibility_day = (visibility_hours - 1) // self.num_slots_per_day + 1
+        visibility_hour = (visibility_hours - 1) % self.num_slots_per_day + 1
+        return visibility_day, visibility_hour
+    
     def get_recommended_posts(
         self,
         agent_id: str,
@@ -935,6 +954,10 @@ class OrchestratorServer:
                 - "rchrono_followers": Prioritizes posts from followed users
                 - "rchrono_followers_popularity": Followers + popularity
                 - "rchrono_comments": Prioritizes highly commented posts
+                - "common_interests": Posts with common topic interests
+                - "common_user_interests": Posts by users with common interests
+                - "similar_users_react": Posts from similar users (by reactions)
+                - "similar_users_posts": Posts from similar users (by posting)
             limit: Number of posts to recommend (default: 5)
             visibility_rounds: Number of rounds (time slots) to look back for posts (default: 36)
             followers_ratio: Ratio of posts from followers vs others (default: 0.6)
@@ -943,8 +966,8 @@ class OrchestratorServer:
             List[str]: List of post UUIDs recommended for the agent
         """
         try:
-            # Calculate visibility threshold
-            visibility = max(1, self.current_round_id - visibility_rounds)
+            # Calculate visibility threshold based on day/hour (not UUID arithmetic)
+            visibility_day, visibility_hour = self._calculate_visibility_params(visibility_rounds)
             
             if self.db.use_redis:
                 # Use Redis for recommendations
@@ -966,22 +989,18 @@ class OrchestratorServer:
                     posts_data = pipeline.execute()
                     
                     # Build list of valid posts with metadata
+                    # For Redis, we don't filter by round visibility (UUID comparison issue)
+                    # The recent list is already limited to last 50 posts
                     valid_posts_with_data = []
                     for i, post_data in enumerate(posts_data):
                         if post_data:
-                            post_round = post_data.get("round")
                             post_user_id = post_data.get("user_id")
-                            # Check visibility and exclude own posts
-                            if post_round and post_user_id != agent_id:
-                                try:
-                                    if int(post_round) >= visibility:
-                                        valid_posts_with_data.append({
-                                            'id': all_post_ids[i],
-                                            'round': int(post_round),
-                                            'reaction_count': int(post_data.get("reaction_count", 0) or 0)
-                                        })
-                                except (ValueError, TypeError):
-                                    continue
+                            # Exclude own posts
+                            if post_user_id and post_user_id != agent_id:
+                                valid_posts_with_data.append({
+                                    'id': all_post_ids[i],
+                                    'reaction_count': int(post_data.get("reaction_count", 0) or 0)
+                                })
                 else:
                     valid_posts_with_data = []
                 
@@ -992,14 +1011,15 @@ class OrchestratorServer:
                     post_ids = [p['id'] for p in valid_posts_with_data[:limit]]
                     
                 elif mode == "rchrono_popularity":
-                    # Sort by round desc, then by reaction_count desc
+                    # Sort by reaction_count desc
                     sorted_posts = sorted(valid_posts_with_data, 
-                                        key=lambda x: (x['round'], x['reaction_count']), 
+                                        key=lambda x: x['reaction_count'], 
                                         reverse=True)
                     post_ids = [p['id'] for p in sorted_posts[:limit]]
                     
-                elif mode in ["rchrono_followers", "rchrono_followers_popularity", "rchrono_comments"]:
-                    # For follower-based modes in Redis, fallback to reverse chronological
+                elif mode in ["rchrono_followers", "rchrono_followers_popularity", "rchrono_comments",
+                             "common_interests", "common_user_interests", "similar_users_react", "similar_users_posts"]:
+                    # For complex modes in Redis, fallback to reverse chronological
                     # Complex joins not easily supported in Redis
                     self.logger.info(f"Mode {mode} not fully supported in Redis, using rchrono fallback")
                     post_ids = [p['id'] for p in valid_posts_with_data[:limit]]
@@ -1033,13 +1053,16 @@ class OrchestratorServer:
                     if mode == "rchrono":
                         # Reverse chronological: newest posts first
                         query = text("""
-                            SELECT id FROM post 
-                            WHERE round >= :visibility AND user_id != :agent_id
-                            ORDER BY round DESC, id DESC
+                            SELECT p.id FROM post p
+                            INNER JOIN rounds rd ON p.round = rd.id
+                            WHERE (rd.day > :vis_day OR (rd.day = :vis_day AND rd.hour >= :vis_hour))
+                                AND p.user_id != :agent_id
+                            ORDER BY rd.day DESC, rd.hour DESC
                             LIMIT :limit
                         """)
                         result = connection.execute(query, {
-                            "visibility": visibility,
+                            "vis_day": visibility_day,
+                            "vis_hour": visibility_hour,
                             "agent_id": agent_id,
                             "limit": limit
                         })
@@ -1050,17 +1073,20 @@ class OrchestratorServer:
                         query = text("""
                             SELECT p.id 
                             FROM post p
+                            INNER JOIN rounds rd ON p.round = rd.id
                             LEFT JOIN (
                                 SELECT post_id, COUNT(*) as reaction_count
                                 FROM reaction
                                 GROUP BY post_id
                             ) r ON p.id = r.post_id
-                            WHERE p.round >= :visibility AND p.user_id != :agent_id
-                            ORDER BY p.round DESC, COALESCE(r.reaction_count, 0) DESC
+                            WHERE (rd.day > :vis_day OR (rd.day = :vis_day AND rd.hour >= :vis_hour))
+                                AND p.user_id != :agent_id
+                            ORDER BY rd.day DESC, rd.hour DESC, COALESCE(r.reaction_count, 0) DESC
                             LIMIT :limit
                         """)
                         result = connection.execute(query, {
-                            "visibility": visibility,
+                            "vis_day": visibility_day,
+                            "vis_hour": visibility_hour,
                             "agent_id": agent_id,
                             "limit": limit
                         })
@@ -1076,12 +1102,13 @@ class OrchestratorServer:
                         query_followers = text("""
                             SELECT DISTINCT p.id 
                             FROM post p
+                            INNER JOIN rounds rd ON p.round = rd.id
                             INNER JOIN follow f ON p.user_id = f.follower_id
                             WHERE f.user_id = :agent_id 
                                 AND f.action = 'follow'
-                                AND p.round >= :visibility
+                                AND (rd.day > :vis_day OR (rd.day = :vis_day AND rd.hour >= :vis_hour))
                                 AND p.user_id != :agent_id
-                            ORDER BY p.round DESC
+                            ORDER BY rd.day DESC, rd.hour DESC
                             LIMIT :follower_limit
                         """)
                         result = connection.execute(query_followers, {
@@ -1096,15 +1123,17 @@ class OrchestratorServer:
                             # Use conditional query based on whether we have existing IDs
                             if post_ids:
                                 query_additional = text("""
-                                    SELECT id FROM post
-                                    WHERE round >= :visibility 
-                                        AND user_id != :agent_id
-                                        AND id NOT IN :existing_ids
-                                    ORDER BY round DESC
+                                    SELECT p.id FROM post p
+                                    INNER JOIN rounds rd ON p.round = rd.id
+                                    WHERE (rd.day > :vis_day OR (rd.day = :vis_day AND rd.hour >= :vis_hour))
+                                        AND p.user_id != :agent_id
+                                        AND p.id NOT IN :existing_ids
+                                    ORDER BY rd.day DESC, rd.hour DESC
                                     LIMIT :additional_limit
                                 """)
                                 result = connection.execute(query_additional, {
-                                    "visibility": visibility,
+                                    "vis_day": visibility_day,
+                                    "vis_hour": visibility_hour,
                                     "agent_id": agent_id,
                                     "existing_ids": tuple(post_ids),
                                     "additional_limit": additional_posts_limit
@@ -1112,14 +1141,16 @@ class OrchestratorServer:
                             else:
                                 # No existing posts, skip the NOT IN clause
                                 query_additional = text("""
-                                    SELECT id FROM post
-                                    WHERE round >= :visibility 
-                                        AND user_id != :agent_id
-                                    ORDER BY round DESC
+                                    SELECT p.id FROM post p
+                                    INNER JOIN rounds rd ON p.round = rd.id
+                                    WHERE (rd.day > :vis_day OR (rd.day = :vis_day AND rd.hour >= :vis_hour))
+                                        AND p.user_id != :agent_id
+                                    ORDER BY rd.day DESC, rd.hour DESC
                                     LIMIT :additional_limit
                                 """)
                                 result = connection.execute(query_additional, {
-                                    "visibility": visibility,
+                                    "vis_day": visibility_day,
+                                    "vis_hour": visibility_hour,
                                     "agent_id": agent_id,
                                     "additional_limit": additional_posts_limit
                                 })
@@ -1133,6 +1164,7 @@ class OrchestratorServer:
                         query_followers = text("""
                             SELECT DISTINCT p.id 
                             FROM post p
+                            INNER JOIN rounds rd ON p.round = rd.id
                             INNER JOIN follow f ON p.user_id = f.follower_id
                             LEFT JOIN (
                                 SELECT post_id, COUNT(*) as reaction_count
@@ -1141,7 +1173,7 @@ class OrchestratorServer:
                             ) r ON p.id = r.post_id
                             WHERE f.user_id = :agent_id 
                                 AND f.action = 'follow'
-                                AND p.round >= :visibility
+                                AND (rd.day > :vis_day OR (rd.day = :vis_day AND rd.hour >= :vis_hour))
                                 AND p.user_id != :agent_id
                             ORDER BY p.round DESC, COALESCE(r.reaction_count, 0) DESC
                             LIMIT :follower_limit
@@ -1163,7 +1195,7 @@ class OrchestratorServer:
                                         FROM reaction
                                         GROUP BY post_id
                                     ) r ON p.id = r.post_id
-                                    WHERE p.round >= :visibility 
+                                    WHERE rd.id = p.round AND (rd.day > :vis_day OR (rd.day = :vis_day AND rd.hour >= :vis_hour)) 
                                         AND p.user_id != :agent_id
                                         AND p.id NOT IN :existing_ids
                                     ORDER BY p.round DESC, COALESCE(r.reaction_count, 0) DESC
@@ -1184,7 +1216,7 @@ class OrchestratorServer:
                                         FROM reaction
                                         GROUP BY post_id
                                     ) r ON p.id = r.post_id
-                                    WHERE p.round >= :visibility 
+                                    WHERE rd.id = p.round AND (rd.day > :vis_day OR (rd.day = :vis_day AND rd.hour >= :vis_hour)) 
                                         AND p.user_id != :agent_id
                                     ORDER BY p.round DESC, COALESCE(r.reaction_count, 0) DESC
                                     LIMIT :additional_limit
@@ -1202,17 +1234,213 @@ class OrchestratorServer:
                         query = text("""
                             SELECT p.id
                             FROM post p
+                            INNER JOIN rounds rd ON p.round = rd.id
                             LEFT JOIN post c ON p.id = c.comment_to
-                            WHERE p.round >= :visibility 
+                            WHERE (rd.day > :vis_day OR (rd.day = :vis_day AND rd.hour >= :vis_hour))
                                 AND p.user_id != :agent_id
                                 AND p.comment_to IS NULL
                             GROUP BY p.id
-                            ORDER BY COUNT(c.id) DESC, p.round DESC
+                            ORDER BY COUNT(c.id) DESC, rd.day DESC, rd.hour DESC
                             LIMIT :limit
                         """)
                         result = connection.execute(query, {
-                            "visibility": visibility,
+                            "vis_day": visibility_day,
+                            "vis_hour": visibility_hour,
                             "agent_id": agent_id,
+                            "limit": limit
+                        })
+                        post_ids = [row[0] for row in result]
+                        
+                    elif mode == "common_interests":
+                        # Posts with common topic interests
+                        # This requires PostTopic and UserInterest tables
+                        follower_posts_limit = int(limit * followers_ratio)
+                        additional_posts_limit = limit - follower_posts_limit
+                        
+                        # Get posts matching user's interests from followers
+                        query = text("""
+                            SELECT DISTINCT p.id
+                            FROM post p
+                            INNER JOIN rounds rd ON p.round = rd.id
+                            INNER JOIN post_topics pt ON p.id = pt.post_id
+                            INNER JOIN user_interests ui ON pt.topic_id = ui.interest_id
+                            INNER JOIN follow f ON p.user_id = f.follower_id
+                            WHERE ui.user_id = :agent_id
+                                AND f.user_id = :agent_id
+                                AND f.action = 'follow'
+                                AND (rd.day > :vis_day OR (rd.day = :vis_day AND rd.hour >= :vis_hour))
+                                AND p.user_id != :agent_id
+                            GROUP BY p.id
+                            ORDER BY COUNT(pt.topic_id) DESC, rd.day DESC, rd.hour DESC
+                            LIMIT :follower_limit
+                        """)
+                        result = connection.execute(query, {
+                            "agent_id": agent_id,
+                            "vis_day": visibility_day,
+                            "vis_hour": visibility_hour,
+                            "follower_limit": follower_posts_limit
+                        })
+                        post_ids = [row[0] for row in result]
+                        
+                        # Get additional posts with common interests
+                        if len(post_ids) < limit and additional_posts_limit > 0:
+                            if post_ids:
+                                query_additional = text("""
+                                    SELECT DISTINCT p.id
+                                    FROM post p
+                                    INNER JOIN rounds rd ON p.round = rd.id
+                                    INNER JOIN post_topics pt ON p.id = pt.post_id
+                                    INNER JOIN user_interests ui ON pt.topic_id = ui.interest_id
+                                    WHERE ui.user_id = :agent_id
+                                        AND (rd.day > :vis_day OR (rd.day = :vis_day AND rd.hour >= :vis_hour))
+                                        AND p.user_id != :agent_id
+                                        AND p.id NOT IN :existing_ids
+                                    GROUP BY p.id
+                                    ORDER BY COUNT(pt.topic_id) DESC, rd.day DESC, rd.hour DESC
+                                    LIMIT :additional_limit
+                                """)
+                                result = connection.execute(query_additional, {
+                                    "agent_id": agent_id,
+                                    "vis_day": visibility_day,
+                                    "vis_hour": visibility_hour,
+                                    "existing_ids": tuple(post_ids),
+                                    "additional_limit": additional_posts_limit
+                                })
+                            else:
+                                query_additional = text("""
+                                    SELECT DISTINCT p.id
+                                    FROM post p
+                                    INNER JOIN rounds rd ON p.round = rd.id
+                                    INNER JOIN post_topics pt ON p.id = pt.post_id
+                                    INNER JOIN user_interests ui ON pt.topic_id = ui.interest_id
+                                    WHERE ui.user_id = :agent_id
+                                        AND (rd.day > :vis_day OR (rd.day = :vis_day AND rd.hour >= :vis_hour))
+                                        AND p.user_id != :agent_id
+                                    GROUP BY p.id
+                                    ORDER BY COUNT(pt.topic_id) DESC, rd.day DESC, rd.hour DESC
+                                    LIMIT :additional_limit
+                                """)
+                                result = connection.execute(query_additional, {
+                                    "agent_id": agent_id,
+                                    "vis_day": visibility_day,
+                                    "vis_hour": visibility_hour,
+                                    "additional_limit": additional_posts_limit
+                                })
+                            post_ids.extend([row[0] for row in result])
+                    
+                    elif mode == "common_user_interests":
+                        # Posts by users with common interests (most interacted)
+                        follower_posts_limit = int(limit * followers_ratio)
+                        additional_posts_limit = limit - follower_posts_limit
+                        
+                        # Get posts reacted to by users with common interests who are followers
+                        query = text("""
+                            SELECT DISTINCT p.id, COUNT(r.id) as reaction_count
+                            FROM post p
+                            INNER JOIN rounds rd ON p.round = rd.id
+                            INNER JOIN reaction r ON p.id = r.post_id
+                            INNER JOIN user_mgmt um ON r.user_id = um.id
+                            INNER JOIN user_interests ui1 ON um.id = ui1.user_id
+                            INNER JOIN user_interests ui2 ON ui1.interest_id = ui2.interest_id
+                            INNER JOIN follow f ON um.id = f.follower_id
+                            WHERE ui2.user_id = :agent_id
+                                AND f.user_id = :agent_id
+                                AND f.action = 'follow'
+                                AND (rd.day > :vis_day OR (rd.day = :vis_day AND rd.hour >= :vis_hour))
+                                AND p.user_id != :agent_id
+                            GROUP BY p.id
+                            ORDER BY reaction_count DESC, rd.day DESC, rd.hour DESC
+                            LIMIT :follower_limit
+                        """)
+                        result = connection.execute(query, {
+                            "agent_id": agent_id,
+                            "vis_day": visibility_day,
+                            "vis_hour": visibility_hour,
+                            "follower_limit": follower_posts_limit
+                        })
+                        post_ids = [row[0] for row in result]
+                        
+                        # Get additional from non-followers with common interests
+                        if len(post_ids) < limit and additional_posts_limit > 0:
+                            if post_ids:
+                                query_additional = text("""
+                                    SELECT DISTINCT p.id, COUNT(r.id) as reaction_count
+                                    FROM post p
+                                    INNER JOIN rounds rd ON p.round = rd.id
+                                    INNER JOIN reaction r ON p.id = r.post_id
+                                    INNER JOIN user_mgmt um ON r.user_id = um.id
+                                    INNER JOIN user_interests ui1 ON um.id = ui1.user_id
+                                    INNER JOIN user_interests ui2 ON ui1.interest_id = ui2.interest_id
+                                    WHERE ui2.user_id = :agent_id
+                                        AND (rd.day > :vis_day OR (rd.day = :vis_day AND rd.hour >= :vis_hour))
+                                        AND p.user_id != :agent_id
+                                        AND p.id NOT IN :existing_ids
+                                    GROUP BY p.id
+                                    ORDER BY reaction_count DESC, rd.day DESC, rd.hour DESC
+                                    LIMIT :additional_limit
+                                """)
+                                result = connection.execute(query_additional, {
+                                    "agent_id": agent_id,
+                                    "vis_day": visibility_day,
+                                    "vis_hour": visibility_hour,
+                                    "existing_ids": tuple(post_ids),
+                                    "additional_limit": additional_posts_limit
+                                })
+                                post_ids.extend([row[0] for row in result])
+                    
+                    elif mode == "similar_users_react":
+                        # Posts from similar users (based on demographics/personality)
+                        # Find similar users and get posts they reacted to
+                        query = text("""
+                            SELECT DISTINCT p.id
+                            FROM post p
+                            INNER JOIN rounds rd ON p.round = rd.id
+                            INNER JOIN reaction r ON p.id = r.post_id
+                            INNER JOIN user_mgmt um ON r.user_id = um.id
+                            INNER JOIN user_mgmt target ON target.id = :agent_id
+                            WHERE (rd.day > :vis_day OR (rd.day = :vis_day AND rd.hour >= :vis_hour))
+                                AND p.user_id != :agent_id
+                                AND um.id != :agent_id
+                                AND r.reaction_type = 'like'
+                                AND (
+                                    (um.age_group = target.age_group) OR
+                                    (um.gender = target.gender) OR
+                                    (um.leaning = target.leaning)
+                                )
+                            GROUP BY p.id
+                            ORDER BY rd.day DESC, rd.hour DESC
+                            LIMIT :limit
+                        """)
+                        result = connection.execute(query, {
+                            "agent_id": agent_id,
+                            "vis_day": visibility_day,
+                            "vis_hour": visibility_hour,
+                            "limit": limit
+                        })
+                        post_ids = [row[0] for row in result]
+                    
+                    elif mode == "similar_users_posts":
+                        # Posts created by similar users
+                        query = text("""
+                            SELECT p.id
+                            FROM post p
+                            INNER JOIN rounds rd ON p.round = rd.id
+                            INNER JOIN user_mgmt um ON p.user_id = um.id
+                            INNER JOIN user_mgmt target ON target.id = :agent_id
+                            WHERE (rd.day > :vis_day OR (rd.day = :vis_day AND rd.hour >= :vis_hour))
+                                AND p.user_id != :agent_id
+                                AND (
+                                    (um.age_group = target.age_group) OR
+                                    (um.gender = target.gender) OR
+                                    (um.leaning = target.leaning)
+                                )
+                            ORDER BY rd.day DESC, rd.hour DESC
+                            LIMIT :limit
+                        """)
+                        result = connection.execute(query, {
+                            "agent_id": agent_id,
+                            "vis_day": visibility_day,
+                            "vis_hour": visibility_hour,
                             "limit": limit
                         })
                         post_ids = [row[0] for row in result]
@@ -1222,13 +1450,16 @@ class OrchestratorServer:
                         # Note: RANDOM() works for SQLite and PostgreSQL
                         # For MySQL, use RAND() instead
                         query = text("""
-                            SELECT id FROM post 
-                            WHERE round >= :visibility AND user_id != :agent_id
+                            SELECT p.id FROM post p
+                            INNER JOIN rounds rd ON p.round = rd.id
+                            WHERE (rd.day > :vis_day OR (rd.day = :vis_day AND rd.hour >= :vis_hour))
+                                AND p.user_id != :agent_id
                             ORDER BY RANDOM()
                             LIMIT :limit
                         """)
                         result = connection.execute(query, {
-                            "visibility": visibility,
+                            "vis_day": visibility_day,
+                            "vis_hour": visibility_hour,
                             "agent_id": agent_id,
                             "limit": limit
                         })

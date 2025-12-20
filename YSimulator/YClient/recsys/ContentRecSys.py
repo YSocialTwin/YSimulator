@@ -206,3 +206,85 @@ class RandomOrder(ContentRecSys):
                                                Defaults to 36.
         """
         super().__init__(mode="random", n_posts=n_posts, visibility_rounds=visibility_rounds)
+
+
+class CommonInterests(ContentRecSys):
+    """
+    Recommendation based on common topic interests.
+    
+    Recommends posts that match topics the agent is interested in.
+    """
+    
+    def __init__(self, n_posts=5, visibility_rounds=36, followers_ratio=0.6):
+        """
+        Initialize common interests recommendation system.
+        
+        Args:
+            n_posts (int, optional): Number of posts to recommend. Defaults to 5.
+            visibility_rounds (int, optional): Number of time slots posts remain visible.
+                                               Defaults to 36.
+            followers_ratio (float, optional): Proportion of posts from followed users.
+                                              Defaults to 0.6.
+        """
+        super().__init__(mode="common_interests", n_posts=n_posts,
+                        visibility_rounds=visibility_rounds, followers_ratio=followers_ratio)
+
+
+class CommonUserInterests(ContentRecSys):
+    """
+    Recommendation based on users with common interests.
+    
+    Recommends posts that were interacted with by users who share interests with the agent.
+    """
+    
+    def __init__(self, n_posts=5, visibility_rounds=36, followers_ratio=0.6):
+        """
+        Initialize common user interests recommendation system.
+        
+        Args:
+            n_posts (int, optional): Number of posts to recommend. Defaults to 5.
+            visibility_rounds (int, optional): Number of time slots posts remain visible.
+                                               Defaults to 36.
+            followers_ratio (float, optional): Proportion of posts from followed users.
+                                              Defaults to 0.6.
+        """
+        super().__init__(mode="common_user_interests", n_posts=n_posts,
+                        visibility_rounds=visibility_rounds, followers_ratio=followers_ratio)
+
+
+class SimilarUsersReact(ContentRecSys):
+    """
+    Recommendation based on similar users' reactions.
+    
+    Recommends posts that similar users (based on demographics/personality) have liked.
+    """
+    
+    def __init__(self, n_posts=5, visibility_rounds=36):
+        """
+        Initialize similar users reactions recommendation system.
+        
+        Args:
+            n_posts (int, optional): Number of posts to recommend. Defaults to 5.
+            visibility_rounds (int, optional): Number of time slots posts remain visible.
+                                               Defaults to 36.
+        """
+        super().__init__(mode="similar_users_react", n_posts=n_posts, visibility_rounds=visibility_rounds)
+
+
+class SimilarUsersPosts(ContentRecSys):
+    """
+    Recommendation based on similar users' posts.
+    
+    Recommends posts created by users similar to the agent (based on demographics/personality).
+    """
+    
+    def __init__(self, n_posts=5, visibility_rounds=36):
+        """
+        Initialize similar users posts recommendation system.
+        
+        Args:
+            n_posts (int, optional): Number of posts to recommend. Defaults to 5.
+            visibility_rounds (int, optional): Number of time slots posts remain visible.
+                                               Defaults to 36.
+        """
+        super().__init__(mode="similar_users_posts", n_posts=n_posts, visibility_rounds=visibility_rounds)
