@@ -18,6 +18,7 @@ import ray
 
 from YSimulator.common_utils import validate_config_directory
 from YSimulator.YClient.LLM_interactions.llm_service import LLMService
+from YSimulator.YClient.news_feeds.news_service import NewsFeedService
 from YSimulator.YClient.client import SimulationClient
 
 
@@ -192,18 +193,33 @@ if __name__ == "__main__":
     llm_start = time.time()
     llm_service = LLMService.remote(sim_config["llm"], prompts_config)
     llm_time = (time.time() - llm_start) * 1000
+    
+    # Create News Feed service with configuration (optional)
+    news_start = time.time()
+    news_feeds_config = sim_config.get("news_feeds", None)
+    if news_feeds_config:
+        news_service = NewsFeedService.remote(news_feeds_config)
+        logger.info("News feed service enabled", extra={"extra_data": {"feeds": len(news_feeds_config.get("feeds", []))}})
+    else:
+        news_service = None
+        logger.info("News feed service disabled - no configuration provided")
+    news_time = (time.time() - news_start) * 1000
 
     # Create client with all configurations
     client_start = time.time()
     client = SimulationClient.remote(
-        client_name, llm_service, agent_config, sim_config, str(config_dir), logger
+        client_name, llm_service, agent_config, sim_config, str(config_dir), logger, news_service
     )
     client_time = (time.time() - client_start) * 1000
 
     logger.info(
         "Client actors created",
         extra={
-            "extra_data": {"llm_creation_time_ms": llm_time, "client_creation_time_ms": client_time}
+            "extra_data": {
+                "llm_creation_time_ms": llm_time,
+                "news_creation_time_ms": news_time,
+                "client_creation_time_ms": client_time
+            }
         },
     )
 

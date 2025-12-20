@@ -58,3 +58,29 @@ def generate_rule_based_reaction(agent_id: int, cluster_id: int, target_post_id:
         'post-uuid-123'
     """
     return ActionDTO(agent_id, cluster_id, "LIKE", target_post_id=target_post_id)
+
+
+def generate_rule_based_comment(agent_id: int, cluster_id: int, target_post_id: str) -> ActionDTO:
+    """
+    Generate a simple rule-based comment action.
+    
+    Rule-based agents create simple comments on posts.
+    The behavior is deterministic - rule-based agents create cluster-specific comments.
+    
+    Args:
+        agent_id: Unique identifier for the agent
+        cluster_id: Cluster/group the agent belongs to
+        target_post_id: UUID of the post to comment on
+        
+    Returns:
+        ActionDTO: COMMENT action targeting the specified post
+        
+    Example:
+        >>> action = generate_rule_based_comment(42, 1, "post-uuid-123")
+        >>> action.action_type
+        'COMMENT'
+        >>> action.content
+        'Cluster 1 comment'
+    """
+    content = f"Cluster {cluster_id} comment"
+    return ActionDTO(agent_id, cluster_id, "COMMENT", content=content, target_post_id=target_post_id)

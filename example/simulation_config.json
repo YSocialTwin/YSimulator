@@ -29,7 +29,10 @@
     "percentage_new_agents_iteration": 0.0,
     "percentage_removed_agents_iteration": 0.0,
     "activity_profiles": {
-      "Always On": "0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23"
+      "Always On": "0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23",
+      "Morning Active": "6,7,8,9,10,11,12",
+      "Evening Active": "17,18,19,20,21,22,23",
+      "Weekend Warrior": "0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23"
     },
     "hourly_activity": {
             "0": 0.023,
@@ -68,7 +71,38 @@
             "cast": 0.0,
             "share_link": 0
         },
+    "agent_archetypes": {
+        "enabled": true,
+        "distribution": {
+            "validator": 0.33,
+            "broadcaster": 0.33,
+            "explorer": 0.34
+        }
+    },
     "emotion_annotation": false
+  },
+  "news_feeds": {
+    "feeds": [
+      {
+        "name": "BBC News",
+        "url": "http://feeds.bbci.co.uk/news/rss.xml",
+        "category": "general",
+        "language": "en"
+      },
+      {
+        "name": "TechCrunch",
+        "url": "https://techcrunch.com/feed/",
+        "category": "tech",
+        "language": "en"
+      },
+      {
+        "name": "Reuters",
+        "url": "https://www.reutersagency.com/feed/",
+        "category": "general",
+        "language": "en"
+      }
+    ],
+    "cache_duration": 3600
   },
   "posts": {
     "visibility_rounds": 36,

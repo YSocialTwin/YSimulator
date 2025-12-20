@@ -267,7 +267,7 @@ class Article(Base):
     id = Column(String(36), primary_key=True)
     title = Column(Text, nullable=False)
     summary = Column(Text)
-    website_id = Column(Integer, ForeignKey("websites.id", ondelete="CASCADE"), nullable=False)
+    website_id = Column(String(36), ForeignKey("websites.id", ondelete="CASCADE"), nullable=False)
     fetched_on = Column(String(36), nullable=False)
     link = Column(Text)
 

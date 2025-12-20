@@ -32,5 +32,32 @@
         "db": 0,
         "password": null,
         "sliding_window_days": 2
+    },
+    "simulation": {
+        "agent_archetypes": {
+            "enabled": true,
+            "distribution": {
+                "validator": 0.33,
+                "broadcaster": 0.33,
+                "explorer": 0.34
+            },
+            "transitions": {
+                "validator": {
+                    "validator": 0.85,
+                    "broadcaster": 0.10,
+                    "explorer": 0.05
+                },
+                "broadcaster": {
+                    "validator": 0.10,
+                    "broadcaster": 0.80,
+                    "explorer": 0.10
+                },
+                "explorer": {
+                    "validator": 0.05,
+                    "broadcaster": 0.10,
+                    "explorer": 0.85
+                }
+            }
+        }
     }
 }
