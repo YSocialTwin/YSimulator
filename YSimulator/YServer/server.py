@@ -512,12 +512,17 @@ class OrchestratorServer:
                     # Get the parent post to inherit thread_id
                     parent_post = self.db.get_post(act.target_post_id)
                     if parent_post:
+                        thread_id = parent_post.get("thread_id")
+                        # If parent doesn't have thread_id, use parent's ID as thread
+                        if not thread_id:
+                            thread_id = act.target_post_id
+                        
                         post_data = {
                             "user_id": str(act.agent_id),
                             "tweet": act.content,
                             "round": self.current_round_id,
                             "comment_to": act.target_post_id,
-                            "thread_id": parent_post.get("thread_id"),  # Inherit thread_id
+                            "thread_id": thread_id,  # Inherit thread_id
                         }
                         post_id = self.db.add_post(post_data)
                         if post_id:
@@ -545,8 +550,10 @@ class OrchestratorServer:
                             "shared_from": act.target_post_id,
                         }
                         # If the original post references an article, copy the reference
-                        if original_post.get("news_id") and original_post.get("news_id") != "-1":
-                            post_data["news_id"] = original_post["news_id"]
+                        # Check for valid news_id (not None, not empty string, not -1)
+                        news_id = original_post.get("news_id")
+                        if news_id and news_id != -1 and news_id != "-1" and news_id != "":
+                            post_data["news_id"] = news_id
                         
                         post_id = self.db.add_post(post_data)
                         if post_id:

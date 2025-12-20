@@ -49,9 +49,8 @@ class ActionDTO:
     cluster_id: int
     action_type: Literal['POST', 'LIKE', 'COMMENT', 'SHARE']
     content: Optional[str] = None
-    target_post_id: Optional[str] = None  # UUID string
+    target_post_id: Optional[str] = None  # UUID string - for comments, reactions, and shares
     article_id: Optional[str] = None  # UUID string for news posts
-    shared_from: Optional[str] = None  # UUID string for shared posts
 
 
 @dataclass

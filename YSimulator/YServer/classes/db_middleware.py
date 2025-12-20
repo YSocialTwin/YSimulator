@@ -295,12 +295,13 @@ class DatabaseMiddleware:
             post_data["id"] = post_id
             
             # Set thread_id logic:
-            # - If comment_to is set (comment), inherit thread_id from parent post
+            # - If comment_to is set and not -1 (comment), thread_id should already be set by caller
             # - Otherwise (new post or share), set thread_id to post_id
-            if "comment_to" not in post_data or post_data.get("comment_to") == "-1" or post_data.get("comment_to") is None:
+            comment_to = post_data.get("comment_to")
+            if not comment_to or comment_to == "-1" or comment_to == -1:
                 # New post or share - create new thread
                 post_data["thread_id"] = post_id
-            # If comment_to is set, thread_id should already be set by the caller
+            # If comment_to is set to a valid value, thread_id should already be set by the caller
 
             if self.use_redis:
                 # Store post
