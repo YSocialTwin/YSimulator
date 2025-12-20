@@ -38,6 +38,9 @@ class NewsFeedService:
         """
         Initialize the NewsFeedService actor.
         
+        Feeds are now registered dynamically by page agents via register_page_feed().
+        The feeds_config parameter is kept for backward compatibility but defaults to empty.
+        
         Args:
             feeds_config (dict, optional): Configuration dictionary with feed URLs
                 Example:
@@ -54,16 +57,10 @@ class NewsFeedService:
                 }
         """
         # Load configuration with defaults
+        # Note: Feeds are now registered by page agents, so we start with an empty list
         if feeds_config is None:
             feeds_config = {
-                "feeds": [
-                    {
-                        "name": "BBC News",
-                        "url": "http://feeds.bbci.co.uk/news/rss.xml",
-                        "category": "general",
-                        "language": "en"
-                    }
-                ],
+                "feeds": [],  # Start empty - page agents will register their feeds
                 "cache_duration": 3600  # 1 hour
             }
         
@@ -79,9 +76,9 @@ class NewsFeedService:
         # Cache structure: {feed_url: {"articles": [...], "timestamp": int, "website_id": str}}
         self.cached_news = {}
         self.last_fetched = {}
-        self.website_ids = {}  # Map feed_url to website_id
+        self.website_ids = {}  # Map feed_url to website_id (page agent id)
         
-        # Initialize caches for all configured feeds
+        # Initialize caches for all configured feeds (if any)
         for feed in self.feeds_config:
             feed_url = feed.get("url")
             if feed_url:
@@ -133,6 +130,48 @@ class NewsFeedService:
             except Exception as e:
                 # Failed to register feed, continue with others
                 pass
+    
+    def register_page_feed(self, feed_url: str, page_id: str) -> bool:
+        """
+        Register a page agent's feed with the news service.
+        This is called when a page agent is registered to enable its feed.
+        
+        Args:
+            feed_url (str): RSS feed URL for the page
+            page_id (str): Page agent's user ID (also the website ID)
+            
+        Returns:
+            bool: True if successfully registered, False otherwise
+        """
+        if not feed_url:
+            return False
+        
+        # Add feed to feeds_config if not already present
+        # This is needed for refresh_feed to work properly
+        if not any(f.get("url") == feed_url for f in self.feeds_config):
+            feed_config = {
+                "url": feed_url,
+                "name": f"Page_{page_id}",  # Use page_id as feed name
+                "category": "page",
+                "language": "en"  # Default language
+            }
+            self.feeds_config.append(feed_config)
+        
+        # Initialize cache for this feed if not already present
+        if feed_url not in self.cached_news:
+            self.cached_news[feed_url] = {"articles": [], "timestamp": 0}
+            self.last_fetched[feed_url] = 0
+        
+        # Store the website_id (which is the page_id)
+        self.website_ids[feed_url] = page_id
+        
+        # Try to fetch initial articles
+        try:
+            self.refresh_feed(feed_url)
+            return True
+        except Exception as e:
+            # Log specific error
+            return False
     
     def _should_refresh_cache(self, feed_url: str) -> bool:
         """
@@ -287,6 +326,30 @@ class NewsFeedService:
         # Return a random article
         return random.choice(all_articles)
     
+    def get_article_from_feed(self, feed_url: str) -> Optional[Dict]:
+        """
+        Get a random article from a specific feed URL.
+        Used by page agents to get articles from their assigned feed.
+        
+        Args:
+            feed_url (str): RSS feed URL
+            
+        Returns:
+            dict or None: Article dictionary with keys: title, summary, link, source, website_id
+                         Returns None if no articles available
+        """
+        # Refresh cache if stale
+        if self._should_refresh_cache(feed_url):
+            self.refresh_feed(feed_url)
+        
+        # Get articles from this specific feed
+        if feed_url in self.cached_news:
+            articles = self.cached_news[feed_url].get("articles", [])
+            if articles:
+                return random.choice(articles)
+        
+        return None
+    
     def save_article_to_db(self, article: Dict) -> Optional[str]:
         """
         Save an article to the database.
@@ -297,7 +360,12 @@ class NewsFeedService:
         Returns:
             str: Article ID if successful, None otherwise
         """
-        if not self.server or not article:
+        if not self.server:
+            print(f"[NewsFeedService] ERROR: No server connection for saving article")
+            return None
+            
+        if not article:
+            print(f"[NewsFeedService] ERROR: No article data provided")
             return None
         
         import uuid
@@ -312,11 +380,23 @@ class NewsFeedService:
                 "fetched_on": str(uuid.uuid4())  # Using UUID as timestamp format
             }
             
+            # Debug logging
+            print(f"[NewsFeedService] Saving article: title='{article_data['title'][:50]}...', website_id={article_data['website_id']}")
+            
             article_id = ray.get(self.server.add_article.remote(article_data))
+            
+            if article_id:
+                print(f"[NewsFeedService] Article saved successfully: id={article_id}")
+            else:
+                print(f"[NewsFeedService] ERROR: Failed to save article (server returned None)")
+            
             return article_id
             
         except Exception as e:
-            # Failed to save article
+            # Failed to save article - log the error
+            print(f"[NewsFeedService] ERROR: Exception while saving article: {e}")
+            import traceback
+            traceback.print_exc()
             return None
     
     def get_feed_status(self) -> Dict:

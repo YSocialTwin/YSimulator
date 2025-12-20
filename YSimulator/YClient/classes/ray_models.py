@@ -37,6 +37,8 @@ class AgentProfile:
     profession: str = ""
     activity_profile: str = "Always On"
     archetype: Optional[str] = None
+    # Page-specific field
+    feed_url: Optional[str] = None  # RSS feed URL for page agents
     # Simulation-specific fields
     cluster: int = 0
     llm: bool = False
@@ -47,9 +49,9 @@ class ActionDTO:
     """Action data transfer object for agent actions."""
     agent_id: str
     cluster_id: int
-    action_type: Literal['POST', 'LIKE', 'COMMENT']
+    action_type: Literal['POST', 'LIKE', 'COMMENT', 'SHARE']
     content: Optional[str] = None
-    target_post_id: Optional[str] = None  # UUID string
+    target_post_id: Optional[str] = None  # UUID string - for comments, reactions, and shares
     article_id: Optional[str] = None  # UUID string for news posts
 
 

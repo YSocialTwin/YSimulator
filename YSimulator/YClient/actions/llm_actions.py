@@ -9,6 +9,8 @@ All functions return Ray ObjectRefs (futures) to enable parallel execution
 of multiple LLM calls using the scatter/gather pattern.
 """
 
+import ray
+
 
 def generate_llm_post_async(llm_handle, cluster_id: int, day: int, slot: int):
     """
@@ -95,3 +97,57 @@ def generate_llm_reaction_async(llm_handle, cluster_id: int, content: str):
                 actions.append(ActionDTO(agent_id, cluster_id, reaction_type, target_post_id=target))
     """
     return llm_handle.decide_reaction.remote(cluster_id, content)
+
+
+def generate_news_post_async(news_service, llm_service, agent_cluster: int, article: dict, website_name: str = None):
+    """
+    Generate a news post with LLM commentary asynchronously.
+    
+    This function creates a news post where an LLM agent reads a news article
+    and generates a comment or perspective on it based on their persona.
+    Also saves the article to the database.
+    
+    Args:
+        news_service: Ray actor reference for NewsFeedService
+        llm_service: Ray actor reference for LLMService
+        agent_cluster: Cluster ID of the agent (determines persona)
+        article: Article dictionary with keys: title, summary, link, source, website_id
+        website_name: Name of the website/page sharing the article (for LLM context)
+        
+    Returns:
+        tuple: (Ray ObjectRef for commentary, article_id)
+    """
+    # Save article to database first
+    article_id_future = news_service.save_article_to_db.remote(article)
+    article_id = ray.get(article_id_future)
+    
+    # Use LLM to generate commentary (just the comment, not the full article)
+    commentary_future = generate_llm_news_commentary.remote(llm_service, agent_cluster, article, website_name)
+    
+    return commentary_future, article_id
+
+
+@ray.remote
+def generate_llm_news_commentary(llm_service, cluster_id: int, article: dict, website_name: str = None) -> str:
+    """
+    Generate LLM commentary on a news article as a social media manager.
+    
+    Args:
+        llm_service: Ray actor reference for LLMService
+        cluster_id: Agent cluster/persona ID (not currently used, reserved for future persona-based customization)
+        article: Article dictionary with 'title' and 'summary' keys
+        website_name: Name of the website/page sharing the article
+        
+    Returns:
+        str: Generated commentary/perspective on the news article (not including article details)
+    """
+    # Call the LLMService method to generate commentary
+    # Use ray.get to await the result from the Ray actor
+    try:
+        commentary = ray.get(llm_service.generate_news_commentary.remote(article, website_name))
+        return commentary
+    except Exception as e:
+        # Fallback if LLM fails - truncate title if too long
+        article_title = article.get('title', 'News Article')
+        title = article_title if len(article_title) <= 97 else article_title[:97] + "..."
+        return f"Check out this article: {title}"

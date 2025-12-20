@@ -10,6 +10,7 @@ import logging
 import time
 from datetime import datetime
 from pathlib import Path
+from typing import Optional
 
 import ray
 
@@ -151,6 +152,7 @@ class OrchestratorServer:
     def register_agents(self, agents: list) -> dict:
         """
         Register agent profiles in the database if they don't already exist.
+        For page agents (is_page=1), also creates a Website entry.
 
         Args:
             agents: List of AgentProfile dataclass instances
@@ -161,6 +163,7 @@ class OrchestratorServer:
         start_time = time.time()
         registered_count = 0
         skipped_count = 0
+        pages_registered = 0
 
         try:
             for agent_profile in agents:
@@ -197,12 +200,61 @@ class OrchestratorServer:
                 }
 
                 # Try to register user
-                if self.db.register_user(user_data):
+                user_registered = self.db.register_user(user_data)
+                if user_registered:
                     registered_count += 1
                     self.registered_agents[agent_profile.id] = agent_profile.username
+                    
+                    # If this is a page agent, create a Website entry
+                    if agent_profile.is_page == 1 and agent_profile.feed_url:
+                        website_data = {
+                            "id": str(agent_profile.id),  # Website ID = User ID
+                            "name": agent_profile.username,  # Use username as website name
+                            "rss": agent_profile.feed_url,
+                            "category": "page",  # Mark as page
+                            "language": agent_profile.language,
+                            "country": agent_profile.nationality,
+                            "leaning": agent_profile.leaning,
+                        }
+                        if self.db.add_website(website_data):
+                            pages_registered += 1
+                        else:
+                            self.logger.warning(
+                                f"Failed to create website for page {agent_profile.username}",
+                                extra={"extra_data": {"page_id": str(agent_profile.id)}}
+                            )
                 else:
                     skipped_count += 1
                     self.registered_agents[agent_profile.id] = agent_profile.username
+                    
+                    # If page already exists, ensure its Website entry also exists
+                    if agent_profile.is_page == 1 and agent_profile.feed_url:
+                        # Check if website exists
+                        website_data = self.db.get_website_by_rss(agent_profile.feed_url)
+                        if website_data:
+                            pages_registered += 1
+                        else:
+                            # Website doesn't exist, create it now
+                            self.logger.info(
+                                f"Creating missing website for existing page {agent_profile.username}",
+                                extra={"extra_data": {"page_id": str(agent_profile.id)}}
+                            )
+                            website_data = {
+                                "id": str(agent_profile.id),  # Website ID = User ID
+                                "name": agent_profile.username,  # Use username as website name
+                                "rss": agent_profile.feed_url,
+                                "category": "page",  # Mark as page
+                                "language": agent_profile.language,
+                                "country": agent_profile.nationality,
+                                "leaning": agent_profile.leaning,
+                            }
+                            if self.db.add_website(website_data):
+                                pages_registered += 1
+                            else:
+                                self.logger.warning(
+                                    f"Failed to create website for existing page {agent_profile.username}",
+                                    extra={"extra_data": {"page_id": str(agent_profile.id)}}
+                                )
 
             execution_time = (time.time() - start_time) * 1000
 
@@ -212,6 +264,7 @@ class OrchestratorServer:
                     "extra_data": {
                         "registered": registered_count,
                         "skipped": skipped_count,
+                        "pages": pages_registered,
                         "total": len(self.registered_agents),
                         "execution_time_ms": execution_time,
                     }
@@ -219,12 +272,13 @@ class OrchestratorServer:
             )
 
             print(
-                f"[Server] 👥 Agent Registration: {registered_count} new, {skipped_count} existing"
+                f"[Server] 👥 Agent Registration: {registered_count} new, {skipped_count} existing, {pages_registered} pages"
             )
 
             return {
                 "registered": registered_count,
                 "skipped": skipped_count,
+                "pages": pages_registered,
                 "total": len(self.registered_agents),
             }
 
@@ -506,7 +560,78 @@ class OrchestratorServer:
                             f"Failed to add post for agent {act.agent_id}",
                             extra={"extra_data": {"agent_id": act.agent_id}},
                         )
+                
+                elif act.action_type == "COMMENT":
+                    # Comments are stored as posts with comment_to set
+                    # Get the parent post to inherit thread_id (which points to the root of the thread)
+                    parent_post = self.db.get_post(act.target_post_id)
+                    if parent_post:
+                        # Get thread_id from parent - this will point to the root post
+                        # because:
+                        # 1. If parent is a root post, thread_id equals parent's ID
+                        # 2. If parent is a comment, it already inherited root's thread_id
+                        # So we recursively inherit the correct root thread_id
+                        thread_id = parent_post.get("thread_id")
+                        
+                        # Fallback: If parent doesn't have thread_id (legacy data), 
+                        # assume parent IS the root post
+                        if not thread_id:
+                            thread_id = act.target_post_id
+                        
+                        post_data = {
+                            "user_id": str(act.agent_id),
+                            "tweet": act.content,
+                            "round": self.current_round_id,
+                            "comment_to": act.target_post_id,  # Points to immediate parent
+                            "thread_id": thread_id,  # Points to root post of thread
+                        }
+                        post_id = self.db.add_post(post_data)
+                        if post_id:
+                            new_ids.append(post_id)
+                        else:
+                            self.logger.warning(
+                                f"Failed to add comment for agent {act.agent_id}",
+                                extra={"extra_data": {"agent_id": act.agent_id}},
+                            )
+                    else:
+                        self.logger.warning(
+                            f"Parent post not found for comment: {act.target_post_id}",
+                            extra={"extra_data": {"agent_id": act.agent_id, "target_post_id": act.target_post_id}},
+                        )
+                
+                elif act.action_type == "SHARE":
+                    # Share action: create a new post referencing the original
+                    # Get the original post to copy news_id if present
+                    original_post = self.db.get_post(act.target_post_id)
+                    if original_post:
+                        post_data = {
+                            "user_id": str(act.agent_id),
+                            "tweet": act.content if act.content else "",  # Optional commentary
+                            "round": self.current_round_id,
+                            "shared_from": act.target_post_id,
+                        }
+                        # If the original post references an article, copy the reference
+                        # Use helper method for consistent empty/default value checking
+                        news_id = original_post.get("news_id")
+                        if not self.db._is_empty_or_default(news_id):
+                            post_data["news_id"] = news_id
+                        
+                        post_id = self.db.add_post(post_data)
+                        if post_id:
+                            new_ids.append(post_id)
+                        else:
+                            self.logger.warning(
+                                f"Failed to add share for agent {act.agent_id}",
+                                extra={"extra_data": {"agent_id": act.agent_id}},
+                            )
+                    else:
+                        self.logger.warning(
+                            f"Original post not found for share: {act.target_post_id}",
+                            extra={"extra_data": {"agent_id": act.agent_id, "target_post_id": act.target_post_id}},
+                        )
+                
                 else:
+                    # Other interactions (LIKE, etc.)
                     interaction_data = {
                         "user_id": str(act.agent_id),  # FK to user_mgmt.id (UUID string)
                         "post_id": act.target_post_id,  # FK to post.id (UUID string)

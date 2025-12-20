@@ -121,6 +121,22 @@ class DatabaseMiddleware:
             },
         )
 
+    @staticmethod
+    def _is_empty_or_default(value) -> bool:
+        """
+        Check if a value is empty or a default placeholder (-1, '-1', '', None).
+        
+        This helper handles the database's use of -1 as a default value for foreign keys
+        that can be either integers or strings depending on context.
+        
+        Args:
+            value: The value to check
+            
+        Returns:
+            bool: True if the value should be considered empty/default
+        """
+        return value is None or value == -1 or value == "-1" or value == ""
+
     def _build_connection_string(self, db_config: Dict[str, Any]) -> str:
         """
         Build SQLAlchemy connection string based on database configuration.
@@ -293,6 +309,15 @@ class DatabaseMiddleware:
             # Generate UUID for post
             post_id = str(uuid.uuid4())
             post_data["id"] = post_id
+            
+            # Set thread_id logic:
+            # - If comment_to is set and not -1 (comment), thread_id should already be set by caller
+            # - Otherwise (new post or share), set thread_id to post_id
+            comment_to = post_data.get("comment_to")
+            if self._is_empty_or_default(comment_to):
+                # New post or share - create new thread
+                post_data["thread_id"] = post_id
+            # If comment_to is set to a valid value, thread_id should already be set by the caller
 
             if self.use_redis:
                 # Store post
@@ -356,6 +381,45 @@ class DatabaseMiddleware:
                 f"Error adding interaction: {e}", extra={"extra_data": {"error": str(e)}}
             )
             return False
+
+    def get_post(self, post_id: str) -> Optional[Dict[str, Any]]:
+        """
+        Get post data by ID.
+        
+        Args:
+            post_id: Post UUID
+            
+        Returns:
+            dict: Post data if found, None otherwise
+        """
+        try:
+            if self.use_redis:
+                key = self._redis_key("posts", post_id)
+                post_data = self.redis_client.hgetall(key)
+                return post_data if post_data else None
+            else:
+                session = Session(self.engine)
+                try:
+                    post = session.query(Post).filter(Post.id == post_id).first()
+                    if post:
+                        return {
+                            "id": post.id,
+                            "thread_id": post.thread_id,
+                            "news_id": post.news_id,
+                            "comment_to": post.comment_to,
+                            "shared_from": post.shared_from,
+                            "user_id": post.user_id,
+                            "tweet": post.tweet,
+                            "round": post.round,
+                        }
+                    return None
+                finally:
+                    session.close()
+        except Exception as e:
+            self.logger.error(
+                f"Error getting post: {e}", extra={"extra_data": {"error": str(e)}}
+            )
+            return None
 
     def get_recent_posts(self, limit: int = 50) -> List[str]:
         """

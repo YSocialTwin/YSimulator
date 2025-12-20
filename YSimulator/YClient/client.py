@@ -21,6 +21,7 @@ from YSimulator.YClient.actions import (
     generate_rule_based_post,
     generate_rule_based_reaction,
     generate_rule_based_comment,
+    generate_rule_based_share,
     generate_news_post_async,
     generate_rule_based_news_post,
 )
@@ -100,9 +101,20 @@ class SimulationClient:
 
         # Connect to the Named Server Actor
         self.server = ray.get_actor("Orchestrator")
-
-        # Set up logging
+        
+        # Set up logging first (before any logging attempts)
         self._setup_logging()
+        
+        # Register page agent feeds with news service
+        if self.news_service:
+            for agent in self.agent_profiles:
+                if agent.is_page == 1 and agent.feed_url:
+                    try:
+                        ray.get(self.news_service.register_page_feed.remote(agent.feed_url, str(agent.id)))
+                    except Exception as e:
+                        # Failed to register page feed, log and continue
+                        self.logger.warning(f"Failed to register feed for page {agent.username}: {e}")
+
         self.logger.info(
             "Simulation client initialized",
             extra={
@@ -321,6 +333,7 @@ class SimulationClient:
                     daily_activity_level=agent_data.get("daily_activity_level", 1),
                     round_actions=agent_data.get("round_actions", 3),
                     is_page=agent_data.get("is_page", 0),
+                    feed_url=agent_data.get("feed_url"),  # RSS feed for page agents
                 )
                 agents.append(profile)
 
@@ -333,7 +346,18 @@ class SimulationClient:
             defaults = gen_config.get("default_settings", {})
             age_range = gen_config.get("age_range", [18, 65])
 
-            start_id = (max((a.id for a in agents), default=0) + 1) if agents else 1
+            # Generate UUIDs for additional agents using the same namespace
+            import uuid
+            AGENT_UUID_NAMESPACE = uuid.UUID('12345678-1234-5678-1234-567812345678')
+            
+            # Find the starting index for generated agents
+            # If we have predefined agents, start after them; otherwise start at 1
+            if agents:
+                # Try to extract numeric part from existing IDs for indexing
+                # For UUIDs, we'll just start from a high number to avoid conflicts
+                start_index = 10000
+            else:
+                start_index = 1
 
             archetypes = ["Validator", "Broadcaster", "Explorer"]
             activity_profiles = ["Always On", "Morning Active", "Evening Active", "Weekend Warrior"]
@@ -343,13 +367,15 @@ class SimulationClient:
             education_levels = ["high_school", "college", "graduate", "phd"]
 
             for i in range(num_additional):
-                agent_id = start_id + i
+                agent_index = start_index + i
+                # Generate deterministic UUID for generated agents
+                agent_id = str(uuid.uuid5(AGENT_UUID_NAMESPACE, f"generated_agent_{agent_index}"))
                 cluster = random.choices([0, 1, 2], weights=cluster_weights)[0]
 
                 profile = AgentProfile(
                     id=agent_id,
-                    username=f"agent_{agent_id:04d}",
-                    email=f"agent{agent_id}@simulation.local",
+                    username=f"agent_{agent_index:04d}",
+                    email=f"agent{agent_index}@simulation.local",
                     password=defaults.get("password", "simulation_agent"),
                     leaning=defaults.get("leaning", "neutral"),
                     user_type=defaults.get("user_type", "agent"),
@@ -526,6 +552,7 @@ class SimulationClient:
         - Agent's archetype (filters available actions)
         - Availability of recent posts (for comment/reaction actions)
         - Agent type (LLM vs rule-based)
+        - Page agents can ONLY perform share_link action
         
         Args:
             agent_profile: Agent profile containing behavior settings
@@ -533,9 +560,9 @@ class SimulationClient:
             
         Returns:
             tuple: (action_type, agent_type, target_post_id) where:
-                - action_type: "post", "comment", "read", "image", "news", "share", "search", "cast", "share_link", or None
+                - action_type: "post", "comment", "read", "image", "share_link", "share", "search", "cast", or None
                 - agent_type: "llm" or "rule_based"
-                - target_post_id: UUID string for comment/read actions, None for posts/no-action
+                - target_post_id: UUID string for comment/read/share actions, None for posts/no-action
                 
         Example:
             >>> action_type, agent_type, target = self.__select_action(profile, posts)
@@ -544,6 +571,11 @@ class SimulationClient:
             >>> elif action_type == "comment":
             ...     # Generate comment to target post
         """
+        # Page agents can ONLY perform share_link action
+        if agent_profile.is_page == 1:
+            agent_type = "llm" if agent_profile.llm else "rule_based"
+            return "share_link", agent_type, None
+        
         # Define archetype-to-action mappings
         # This filters which actions are available based on archetype
         # NOTE: Future enhancement - these mappings could be moved to simulation_config.json
@@ -590,7 +622,7 @@ class SimulationClient:
         agent_type = "llm" if agent_profile.llm else "rule_based"
         
         # Actions that require a target post
-        target_required_actions = ["comment", "read"]
+        target_required_actions = ["comment", "read", "share"]
         
         # If action requires a target but no posts available, return no action
         if selected_action in target_required_actions and not recent_posts:
@@ -631,32 +663,43 @@ class SimulationClient:
         # Get hourly activity probability for this slot (default to 0.04 if not specified)
         hourly_prob = self.hourly_activity.get(slot, 0.04)
         
-        # Filter agents available at this time slot based on their activity_profile
-        available_agents = []
+        # Separate regular agents and page agents
+        # Pages are always active during their activity profile hours
+        regular_agents = []
+        page_agents = []
+        
         for agent in self.agent_profiles:
             profile_name = agent.activity_profile
             active_hours = self.activity_profiles.get(profile_name, list(range(24)))
             if slot in active_hours:
-                available_agents.append(agent)
+                if agent.is_page == 1:
+                    page_agents.append(agent)
+                else:
+                    regular_agents.append(agent)
         
-        # Calculate number of agents to activate based on hourly_activity
-        # Use the probability as a ratio of available agents
-        if not available_agents:
-            active_agents = []
-        else:
-            num_active = max(1, int(len(available_agents) * hourly_prob))
-            num_active = min(num_active, len(available_agents))  # Can't exceed available agents
+        self.logger.info(f"Activity sampling: slot={slot}, regular_agents={len(regular_agents)}, page_agents={len(page_agents)}")
+        if page_agents:
+            self.logger.info(f"Active page agents: {[p.username for p in page_agents]}")
+        
+        # Calculate number of regular agents to activate based on hourly_activity
+        # Page agents don't count toward the hourly percentage
+        active_regular_agents = []
+        if regular_agents:
+            num_active = max(1, int(len(regular_agents) * hourly_prob))
+            num_active = min(num_active, len(regular_agents))  # Can't exceed available agents
             
-            # Sample active agents from available agents
+            # Sample active agents from regular agents
             if num_active > 0:
                 # If archetypes are enabled, sample according to distribution
                 if self.archetypes_enabled and self.archetype_distribution:
-                    active_agents = self._sample_agents_by_archetype(available_agents, num_active)
+                    active_regular_agents = self._sample_agents_by_archetype(regular_agents, num_active)
                 else:
                     # Random sampling when archetypes are disabled
-                    active_agents = random.sample(available_agents, k=num_active)
-            else:
-                active_agents = []
+                    active_regular_agents = random.sample(regular_agents, k=num_active)
+        
+        # Combine regular agents and ALL page agents that are available
+        active_agents = active_regular_agents + page_agents
+        self.logger.info(f"Total active agents for this round: {len(active_agents)} (regular: {len(active_regular_agents)}, pages: {len(page_agents)})")
         
         # Track pending LLM calls for parallel execution
         # Each entry: (agent_id, cluster_id, future) for posts
@@ -673,8 +716,14 @@ class SimulationClient:
                 continue
             num_actions = random.randint(1, agent.daily_activity_level)
             
-            for _ in range(num_actions):
+            if agent.is_page == 1:
+                self.logger.info(f"Page agent {agent.username} will perform {num_actions} actions")
+            
+            for action_idx in range(num_actions):
                 action_type, agent_type, target = self.__select_action(agent, recent_posts)
+                
+                if agent.is_page == 1:
+                    self.logger.info(f"Page agent {agent.username} action {action_idx+1}/{num_actions}: type={action_type}, agent_type={agent_type}")
                 
                 if action_type == "post":
                     if agent_type == "llm":
@@ -711,53 +760,92 @@ class SimulationClient:
                         action = generate_rule_based_post(agent.id, agent.cluster)
                         actions.append(action)
                 
-                elif action_type == "news":
-                    # News sharing action - agent shares news article from RSS feeds
-                    # LLM agents can comment on the news, rule-based agents share it directly
+                elif action_type == "share_link":
+                    # News sharing action - ONLY page agents can perform this action
+                    # Page agents share news articles from their assigned RSS feed
+                    # The feed must be associated with a Website that has the same ID as the page
+                    self.logger.info(f"share_link action: agent={agent.username}, is_page={agent.is_page}, feed_url={agent.feed_url[:50] if agent.feed_url else None}, news_service={self.news_service is not None}")
+                    
+                    if agent.is_page != 1:
+                        # Non-page agents cannot perform share_link action, skip
+                        self.logger.warning(f"share_link skipped: {agent.username} is not a page agent")
+                        continue
+                    
+                    if not agent.feed_url:
+                        # Page without feed URL, skip
+                        self.logger.warning(f"share_link skipped: {agent.username} has no feed_url")
+                        continue
+                    
                     if self.news_service:
-                        # Get a random article from news service
+                        # Get an article from this page's specific feed
+                        # The feed is already registered with the page's ID as website_id
                         try:
-                            article_future = self.news_service.get_random_article.remote(
-                                language="en"  # Can be made configurable
+                            self.logger.info(f"Page {agent.username} fetching article from {agent.feed_url[:50]}")
+                            article_future = self.news_service.get_article_from_feed.remote(
+                                agent.feed_url
                             )
                             article = ray.get(article_future)
                             
                             if article:
+                                self.logger.info(f"Page {agent.username} got article: {article.get('title', 'NO TITLE')[:50]}")
+                                
+                                # Verify the article's website_id matches the page's user_id
+                                # This ensures pages can only share from their own feeds
+                                article_website_id = article.get("website_id")
+                                # Both IDs should be UUID strings - normalize for comparison
+                                if article_website_id:
+                                    # Normalize both IDs to lowercase strings for comparison
+                                    normalized_article_id = str(article_website_id).lower()
+                                    normalized_agent_id = str(agent.id).lower()
+                                    if normalized_article_id != normalized_agent_id:
+                                        # Article is from a different website, skip
+                                        self.logger.warning(
+                                            f"Page {agent.username} attempted to share from wrong feed. "
+                                            f"Page ID: {agent.id}, Article Website ID: {article_website_id}"
+                                        )
+                                        continue
+                                
                                 if agent_type == "llm":
-                                    # LLM agent posts news with commentary
-                                    # generate_news_post_async now returns (future, article_id)
+                                    # LLM page posts news with commentary
+                                    self.logger.info(f"LLM Page {agent.username} generating news post async")
                                     future, article_id = generate_news_post_async(
-                                        self.news_service, self.llm, agent.cluster, article
+                                        self.news_service, self.llm, agent.cluster, article, agent.username
                                     )
+                                    self.logger.info(f"LLM Page {agent.username} got article_id: {article_id}")
                                     pending_llm_posts.append((agent.id, agent.cluster, future, article_id))
                                 else:
-                                    # Rule-based agent posts news directly
-                                    # generate_rule_based_news_post now returns (action, article_id)
+                                    # Rule-based page posts news directly
+                                    self.logger.info(f"Rule-based Page {agent.username} generating news post")
                                     action, article_id = generate_rule_based_news_post(
                                         agent.id, agent.cluster, article, self.news_service
                                     )
+                                    self.logger.info(f"Rule-based Page {agent.username} got article_id: {article_id}")
                                     # Store article_id with the action for later use when submitting
-                                    action.article_id = article_id  # Add article_id as attribute
+                                    action.article_id = article_id
                                     actions.append(action)
                             else:
-                                # No article available, skip
-                                pass
+                                # No article available from this feed, skip
+                                self.logger.warning(f"Page {agent.username} got no article from feed")
                         except Exception as e:
                             # News service unavailable or error, skip action
-                            self.logger.warning(f"News action failed: {e}")
+                            self.logger.warning(f"Share link action failed for page {agent.username}: {e}")
+                            import traceback
+                            self.logger.warning(f"Traceback: {traceback.format_exc()}")
                     else:
-                        # News service not configured, fallback to regular post
-                        if agent_type == "llm":
-                            future = generate_llm_post_async(self.llm, agent.cluster, day, slot)
-                            pending_llm_posts.append((agent.id, agent.cluster, future, None))
-                        else:
-                            action = generate_rule_based_post(agent.id, agent.cluster)
-                            actions.append(action)
+                        # News service not configured, skip (pages can only share links)
+                        self.logger.warning(f"share_link skipped: {agent.username} - news_service is None")
+                        pass
                 
                 elif action_type == "share":
-                    # Stub: Share action - agent shares an existing post
-                    # Future implementation: select post to share and track sharing
-                    pass
+                    # Share action - agent shares an existing post
+                    # Select a post from recent_posts to share
+                    if recent_posts:
+                        # For now, only rule-based agents share (LLM share can be added later)
+                        if agent_type == "rule_based":
+                            action = generate_rule_based_share(agent.id, agent.cluster, target)
+                            actions.append(action)
+                        # LLM share could generate commentary using LLM in the future
+                    # If no posts available, skip
                 
                 elif action_type == "search":
                     # Stub: Search action - agent searches for content
@@ -773,18 +861,10 @@ class SimulationClient:
                     else:
                         action = generate_rule_based_post(agent.id, agent.cluster)
                         actions.append(action)
-                
-                elif action_type == "share_link":
-                    # Stub: Share link action - agent shares external link
-                    # Future implementation: integrate with link sharing
-                    if agent_type == "llm":
-                        future = generate_llm_post_async(self.llm, agent.cluster, day, slot)
-                        pending_llm_posts.append((agent.id, agent.cluster, future, None))
-                    else:
-                        action = generate_rule_based_post(agent.id, agent.cluster)
-                        actions.append(action)
         
         # --- GATHER PHASE: Wait for all LLM results in parallel ---
+        
+        self.logger.info(f"Gather phase: pending_llm_posts={len(pending_llm_posts)}, pending_llm_reactions={len(pending_llm_reactions)}, actions_so_far={len(actions)}")
         
         # Resolve Posts
         if pending_llm_posts:
@@ -798,6 +878,9 @@ class SimulationClient:
                 # Add article_id as attribute if present (for news posts)
                 if article_id:
                     action.article_id = article_id
+                    self.logger.info(f"LLM post for agent {a_id}: article_id={article_id}, content_len={len(res_txt)}")
+                else:
+                    self.logger.info(f"LLM post for agent {a_id}: NO article_id, content_len={len(res_txt)}")
                 actions.append(action)
         
         # Resolve Reactions
@@ -810,6 +893,7 @@ class SimulationClient:
                 if res_act != "IGNORE":
                     actions.append(ActionDTO(a_id, cid, res_act, target_post_id=target))
         
+        self.logger.info(f"Returning {len(actions)} total actions")
         return actions
 
     def shutdown(self):
