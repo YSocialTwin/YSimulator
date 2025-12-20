@@ -732,6 +732,7 @@ class SimulationClient:
                 elif action_type == "share_link":
                     # News sharing action - ONLY page agents can perform this action
                     # Page agents share news articles from their assigned RSS feed
+                    # The feed must be associated with a Website that has the same ID as the page
                     if agent.is_page != 1:
                         # Non-page agents cannot perform share_link action, skip
                         continue
@@ -742,6 +743,7 @@ class SimulationClient:
                     
                     if self.news_service:
                         # Get an article from this page's specific feed
+                        # The feed is already registered with the page's ID as website_id
                         try:
                             article_future = self.news_service.get_article_from_feed.remote(
                                 agent.feed_url
@@ -749,6 +751,17 @@ class SimulationClient:
                             article = ray.get(article_future)
                             
                             if article:
+                                # Verify the article's website_id matches the page's user_id
+                                # This ensures pages can only share from their own feeds
+                                article_website_id = article.get("website_id")
+                                if article_website_id and str(article_website_id) != str(agent.id):
+                                    # Article is from a different website, skip
+                                    self.logger.warning(
+                                        f"Page {agent.username} attempted to share from wrong feed. "
+                                        f"Page ID: {agent.id}, Article Website ID: {article_website_id}"
+                                    )
+                                    continue
+                                
                                 if agent_type == "llm":
                                     # LLM page posts news with commentary
                                     future, article_id = generate_news_post_async(
