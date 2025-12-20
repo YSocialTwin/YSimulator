@@ -135,7 +135,7 @@ class DatabaseMiddleware:
         Returns:
             bool: True if the value should be considered empty/default
         """
-        return not value or value == -1 or value == "-1" or value == ""
+        return value is None or value == -1 or value == "-1" or value == ""
 
     def _build_connection_string(self, db_config: Dict[str, Any]) -> str:
         """

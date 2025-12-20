@@ -513,10 +513,14 @@ class OrchestratorServer:
                     parent_post = self.db.get_post(act.target_post_id)
                     if parent_post:
                         # Get thread_id from parent - this will point to the root post
+                        # because:
+                        # 1. If parent is a root post, thread_id equals parent's ID
+                        # 2. If parent is a comment, it already inherited root's thread_id
+                        # So we recursively inherit the correct root thread_id
                         thread_id = parent_post.get("thread_id")
                         
-                        # If parent doesn't have thread_id, the parent IS the root post
-                        # So use the parent's ID as the thread_id
+                        # Fallback: If parent doesn't have thread_id (legacy data), 
+                        # assume parent IS the root post
                         if not thread_id:
                             thread_id = act.target_post_id
                         
