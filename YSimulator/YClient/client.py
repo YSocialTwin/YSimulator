@@ -109,8 +109,8 @@ class SimulationClient:
                     try:
                         ray.get(self.news_service.register_page_feed.remote(agent.feed_url, str(agent.id)))
                     except Exception as e:
-                        # Failed to register page feed, log but continue
-                        pass
+                        # Failed to register page feed, log and continue
+                        self.logger.warning(f"Failed to register feed for page {agent.username}: {e}")
 
         # Set up logging
         self._setup_logging()

@@ -71,6 +71,28 @@
       "llm": true,
       "toxicity": "no",
       "daily_activity_level": 3
+    },
+    {
+      "id": 101,
+      "username": "TechNewsPage",
+      "email": "tech@pages.local",
+      "leaning": "neutral",
+      "user_type": "page",
+      "age": 0,
+      "language": "en",
+      "education_level": "graduate",
+      "gender": "other",
+      "nationality": "US",
+      "profession": "News Publisher",
+      "activity_profile": "Always On",
+      "archetype": null,
+      "cluster": 0,
+      "llm": false,
+      "toxicity": "no",
+      "daily_activity_level": 4,
+      "round_actions": 6,
+      "is_page": 1,
+      "feed_url": "https://techcrunch.com/feed/"
     }
   ],
   "generation_config": {

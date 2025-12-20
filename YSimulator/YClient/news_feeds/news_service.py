@@ -161,7 +161,8 @@ class NewsFeedService:
         try:
             self.refresh_feed(feed_url)
             return True
-        except:
+        except Exception as e:
+            # Log specific error
             return False
     
     def _should_refresh_cache(self, feed_url: str) -> bool:

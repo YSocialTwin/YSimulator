@@ -200,7 +200,8 @@ class OrchestratorServer:
                 }
 
                 # Try to register user
-                if self.db.register_user(user_data):
+                user_registered = self.db.register_user(user_data)
+                if user_registered:
                     registered_count += 1
                     self.registered_agents[agent_profile.id] = agent_profile.username
                     
@@ -217,9 +218,20 @@ class OrchestratorServer:
                         }
                         if self.db.add_website(website_data):
                             pages_registered += 1
+                        else:
+                            self.logger.warning(
+                                f"Failed to create website for page {agent_profile.username}",
+                                extra={"extra_data": {"page_id": str(agent_profile.id)}}
+                            )
                 else:
                     skipped_count += 1
                     self.registered_agents[agent_profile.id] = agent_profile.username
+                    
+                    # If page already exists, count it in pages_registered if it has a website
+                    if agent_profile.is_page == 1 and agent_profile.feed_url:
+                        website_data = self.db.get_website_by_rss(agent_profile.feed_url)
+                        if website_data:
+                            pages_registered += 1
 
             execution_time = (time.time() - start_time) * 1000
 
