@@ -227,11 +227,34 @@ class OrchestratorServer:
                     skipped_count += 1
                     self.registered_agents[agent_profile.id] = agent_profile.username
                     
-                    # If page already exists, count it in pages_registered if it has a website
+                    # If page already exists, ensure its Website entry also exists
                     if agent_profile.is_page == 1 and agent_profile.feed_url:
+                        # Check if website exists
                         website_data = self.db.get_website_by_rss(agent_profile.feed_url)
                         if website_data:
                             pages_registered += 1
+                        else:
+                            # Website doesn't exist, create it now
+                            self.logger.info(
+                                f"Creating missing website for existing page {agent_profile.username}",
+                                extra={"extra_data": {"page_id": str(agent_profile.id)}}
+                            )
+                            website_data = {
+                                "id": str(agent_profile.id),  # Website ID = User ID
+                                "name": agent_profile.username,  # Use username as website name
+                                "rss": agent_profile.feed_url,
+                                "category": "page",  # Mark as page
+                                "language": agent_profile.language,
+                                "country": agent_profile.nationality,
+                                "leaning": agent_profile.leaning,
+                            }
+                            if self.db.add_website(website_data):
+                                pages_registered += 1
+                            else:
+                                self.logger.warning(
+                                    f"Failed to create website for existing page {agent_profile.username}",
+                                    extra={"extra_data": {"page_id": str(agent_profile.id)}}
+                                )
 
             execution_time = (time.time() - start_time) * 1000
 
