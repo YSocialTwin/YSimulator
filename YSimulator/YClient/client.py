@@ -552,6 +552,7 @@ class SimulationClient:
         - Agent's archetype (filters available actions)
         - Availability of recent posts (for comment/reaction actions)
         - Agent type (LLM vs rule-based)
+        - Page agents can ONLY perform share_link action
         
         Args:
             agent_profile: Agent profile containing behavior settings
@@ -570,6 +571,11 @@ class SimulationClient:
             >>> elif action_type == "comment":
             ...     # Generate comment to target post
         """
+        # Page agents can ONLY perform share_link action
+        if agent_profile.is_page == 1:
+            agent_type = "llm" if agent_profile.llm else "rule_based"
+            return "share_link", agent_type, None
+        
         # Define archetype-to-action mappings
         # This filters which actions are available based on archetype
         # NOTE: Future enhancement - these mappings could be moved to simulation_config.json
