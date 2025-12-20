@@ -80,6 +80,7 @@ Write a brief, engaging tweet (max 280 characters) to present this article to yo
     # Get commentary from LLM
     try:
         chain = prompt | llm_service | StrOutputParser()
+        # Invoke chain - the prompt template handles variable substitution
         commentary = ray.get(chain.invoke.remote({}))
         
         # Ensure commentary doesn't exceed tweet length
@@ -88,8 +89,9 @@ Write a brief, engaging tweet (max 280 characters) to present this article to yo
             
         return commentary
     except Exception as e:
-        # Fallback if LLM fails
-        return f"Check out this article: {article_title[:100]}"
+        # Fallback if LLM fails - truncate title if too long
+        title = article_title if len(article_title) <= 97 else article_title[:97] + "..."
+        return f"Check out this article: {title}"
 
 
 def generate_rule_based_news_post(agent_id: int, cluster_id: int, article: dict, 
