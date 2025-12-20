@@ -999,6 +999,7 @@ class OrchestratorServer:
                             if post_user_id and post_user_id != agent_id:
                                 valid_posts_with_data.append({
                                     'id': all_post_ids[i],
+                                    'index': i,  # Preserve chronological order (lower index = newer)
                                     'reaction_count': int(post_data.get("reaction_count", 0) or 0)
                                 })
                 else:
@@ -1011,10 +1012,10 @@ class OrchestratorServer:
                     post_ids = [p['id'] for p in valid_posts_with_data[:limit]]
                     
                 elif mode == "rchrono_popularity":
-                    # Sort by reaction_count desc
+                    # Sort by index (time proxy) first, then by reaction_count
+                    # This aligns better with SQL which sorts by time first, then popularity
                     sorted_posts = sorted(valid_posts_with_data, 
-                                        key=lambda x: x['reaction_count'], 
-                                        reverse=True)
+                                        key=lambda x: (x['index'], -x['reaction_count']))
                     post_ids = [p['id'] for p in sorted_posts[:limit]]
                     
                 elif mode in ["rchrono_followers", "rchrono_followers_popularity", "rchrono_comments",

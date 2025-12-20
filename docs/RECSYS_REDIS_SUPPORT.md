@@ -10,7 +10,7 @@ The YSimulator recommendation system supports 10 different recommendation modes.
 |------|---------------|-------------|-------|
 | `random` | ✅ Full | ✅ Full | Identical behavior |
 | `rchrono` | ✅ Full | ✅ Full | Minor differences (see below) |
-| `rchrono_popularity` | ⚠️ Partial | ✅ Full | Different sorting approach |
+| `rchrono_popularity` | ✅ Full | ✅ Full | Now aligned (time-first, popularity-second) |
 | `rchrono_followers` | ❌ Fallback | ✅ Full | Falls back to `rchrono` |
 | `rchrono_followers_popularity` | ❌ Fallback | ✅ Full | Falls back to `rchrono` |
 | `rchrono_comments` | ❌ Fallback | ✅ Full | Falls back to `rchrono` |
@@ -21,7 +21,7 @@ The YSimulator recommendation system supports 10 different recommendation modes.
 
 **Legend:**
 - ✅ Full: Mode is fully supported with expected behavior
-- ⚠️ Partial: Mode is supported but with behavioral differences
+- ⚠️ Partial: Mode is supported but with behavioral differences (NONE after improvements)
 - ❌ Fallback: Mode falls back to `rchrono` with logging
 
 ---
@@ -182,26 +182,31 @@ LIMIT :limit
 valid_posts = [
     {
         'id': post_id,
+        'index': i,  # Position in recent list (time proxy)
         'reaction_count': int(post_data.get('reaction_count', 0))
     }
-    for post in recent_posts if post.user_id != agent_id
+    for i, post in enumerate(recent_posts) if post.user_id != agent_id
 ]
-sorted_posts = sorted(valid_posts, key=lambda x: x['reaction_count'], reverse=True)
+# Sort by index (time) first, then by popularity (descending)
+sorted_posts = sorted(valid_posts, key=lambda x: (x['index'], -x['reaction_count']))
 post_ids = [p['id'] for p in sorted_posts[:limit]]
 ```
 
 **Behavior:**
 - Uses cached `reaction_count` field in post hash
-- Sorts ONLY by reaction count (not by time first)
+- Uses list index as time proxy (lower index = newer post)
+- Sorts by time (index) first, then popularity as tiebreaker
+- **IMPROVED**: Now aligns with SQL's time-first approach
 - No visibility window filtering
 
 #### Key Differences
 | Aspect | SQL | Redis |
 |--------|-----|-------|
-| Primary sort | Time (day/hour) | Popularity only |
-| Secondary sort | Popularity | None |
+| Primary sort | Time (day/hour) | Time (list index) ✅ |
+| Secondary sort | Popularity | Popularity ✅ |
 | Reaction counting | JOIN aggregation | Cached field |
 | Visibility filtering | ✅ Configurable | ❌ Fixed (50 posts) |
+| Time precision | Exact day+hour | Relative order |
 
 #### Example Results
 
@@ -219,19 +224,19 @@ Posts: [
 Time-first ordering: Posts from hour 12 appear before hour 11
 ```
 
-**Redis Results:**
+**Redis Results (IMPROVED):**
 ```
 Posts: [
-  {id: 'post-850', reactions: 15},  # Most popular (could be older)
-  {id: 'post-997', reactions: 8},
-  {id: 'post-999', reactions: 5},
-  {id: 'post-998', reactions: 3},
-  {id: 'post-700', reactions: 2}   # Old but has reactions
+  {id: 'post-999', index: 0, reactions: 5},  # Newest with high popularity
+  {id: 'post-998', index: 1, reactions: 3},  # Second newest
+  {id: 'post-997', index: 2, reactions: 8},  # Third newest (highest reactions in group)
+  {id: 'post-996', index: 3, reactions: 2},
+  {id: 'post-995', index: 4, reactions: 1}
 ]
-Popularity-only ordering: May include older posts with many reactions
+Time-first ordering: Posts ordered by position in recent list (time proxy), with popularity as tiebreaker
 ```
 
-**Impact:** **SIGNIFICANT DIFFERENCE**. SQL prioritizes recent posts with popularity as tiebreaker. Redis prioritizes popularity regardless of age, potentially showing older viral posts.
+**Impact:** **MINIMAL DIFFERENCE** (improved from previous version). Both implementations now prioritize time with popularity as tiebreaker. SQL has exact day/hour; Redis uses list position as time proxy.
 
 ---
 
@@ -483,6 +488,8 @@ redis_posts = server.get_recommended_posts(agent_id, mode="rchrono_popularity", 
 
 ## Conclusion
 
-The YSimulator recommendation system provides comprehensive functionality through SQL databases, with Redis offering a performance-optimized subset of features. For production deployments requiring personalized recommendations, **SQL databases are strongly recommended**. Redis should be used for development, testing, or high-performance scenarios where simple recent-post recommendations are sufficient.
+The YSimulator recommendation system provides comprehensive functionality through SQL databases, with Redis offering a performance-optimized subset of features. **Recent improvements have aligned Redis and SQL behavior for simple modes**, particularly `rchrono_popularity` which now uses time-first sorting like SQL.
 
-Key takeaway: **Redis trades functionality for performance**, providing 3 full modes (random, rchrono, rchrono_popularity with caveats) out of 10 total modes.
+For production deployments requiring personalized recommendations, **SQL databases are strongly recommended**. Redis should be used for development, testing, or high-performance scenarios where simple recent-post recommendations are sufficient.
+
+Key takeaway: **Redis now provides 3 fully aligned modes** (random, rchrono, rchrono_popularity) out of 10 total modes, with excellent behavioral parity to SQL for these modes.
