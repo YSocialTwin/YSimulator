@@ -1111,6 +1111,7 @@ class OrchestratorServer:
                 elif mode == "common_interests":
                     # Posts matching user's topic interests
                     # Assumes Redis will have: ysim:user:{user_id}:interests (set), ysim:post:{post_id}:topics (set)
+                    # Note: Redis client uses decode_responses=True, so SMEMBERS returns strings
                     
                     # Try to get user interests from Redis (future: will be cached)
                     user_interests_key = self.db._redis_key("user", agent_id) + ":interests"
