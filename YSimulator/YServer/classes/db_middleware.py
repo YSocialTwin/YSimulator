@@ -584,7 +584,7 @@ class DatabaseMiddleware:
         """
         from YSimulator.YServer.classes.models import User_mgmt
         
-        session = self.Session()
+        session = Session(self.engine)
         try:
             users = session.query(User_mgmt).all()
             
@@ -620,7 +620,7 @@ class DatabaseMiddleware:
         """
         from YSimulator.YServer.classes.models import User_mgmt
         
-        session = self.Session()
+        session = Session(self.engine)
         try:
             user = session.query(User_mgmt).filter(User_mgmt.id == user_id).first()
             
@@ -665,7 +665,7 @@ class DatabaseMiddleware:
         from YSimulator.YServer.classes.models import Website
         import uuid
         
-        session = self.Session()
+        session = Session(self.engine)
         try:
             # Generate UUID if not provided
             website_id = website_data.get("id", str(uuid.uuid4()))
@@ -738,7 +738,7 @@ class DatabaseMiddleware:
         from YSimulator.YServer.classes.models import Article, Website
         import uuid
         
-        session = self.Session()
+        session = Session(self.engine)
         try:
             # Get or ensure website exists
             website_id = article_data.get("website_id")
@@ -836,7 +836,7 @@ class DatabaseMiddleware:
         """
         from YSimulator.YServer.classes.models import Website
         
-        session = self.Session()
+        session = Session(self.engine)
         try:
             website = session.query(Website).filter(Website.rss == rss_url).first()
             
