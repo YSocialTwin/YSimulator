@@ -149,6 +149,17 @@ class NewsFeedService:
         if not feed_url:
             return False
         
+        # Add feed to feeds_config if not already present
+        # This is needed for refresh_feed to work properly
+        if not any(f.get("url") == feed_url for f in self.feeds_config):
+            feed_config = {
+                "url": feed_url,
+                "name": f"Page_{page_id}",  # Use page_id as feed name
+                "category": "page",
+                "language": "en"  # Default language
+            }
+            self.feeds_config.append(feed_config)
+        
         # Initialize cache for this feed if not already present
         if feed_url not in self.cached_news:
             self.cached_news[feed_url] = {"articles": [], "timestamp": 0}
