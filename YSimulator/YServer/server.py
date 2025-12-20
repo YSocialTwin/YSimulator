@@ -937,40 +937,44 @@ class OrchestratorServer:
             # Calculate visibility threshold
             visibility = max(1, self.current_round_id - visibility_rounds)
             
-            # Get posts based on the selected mode
-            with self.db.engine.begin() as connection:
+            if self.db.use_redis:
+                # Use Redis for recommendations
+                import random
+                
+                # Get recent posts from Redis
+                recent_posts_key = self.db._redis_key("posts", "recent")
+                all_post_ids = self.db.redis_client.lrange(recent_posts_key, 0, -1)
+                
+                # Filter posts by visibility and exclude agent's own posts
+                valid_posts = []
+                for post_id in all_post_ids:
+                    post_key = self.db._redis_key("posts", post_id)
+                    post_data = self.db.redis_client.hgetall(post_key)
+                    if post_data:
+                        post_round = post_data.get("round")
+                        post_user_id = post_data.get("user_id")
+                        # Check visibility and exclude own posts
+                        if post_round and post_user_id != agent_id:
+                            try:
+                                if int(post_round) >= visibility:
+                                    valid_posts.append(post_id)
+                            except (ValueError, TypeError):
+                                continue
+                
+                # Apply mode-specific ordering
                 if mode == "rchrono":
-                    # Reverse chronological: newest posts first
-                    query = text("""
-                        SELECT id FROM post 
-                        WHERE round >= :visibility AND user_id != :agent_id
-                        ORDER BY round DESC, id DESC
-                        LIMIT :limit
-                    """)
+                    # Redis recent list is already in reverse chronological order (newest first)
+                    # Just take the first 'limit' items
+                    post_ids = valid_posts[:limit]
                 else:
-                    # Random ordering (default)
-                    # Note: RANDOM() works for SQLite and PostgreSQL
-                    # For MySQL, use RAND() instead
-                    query = text("""
-                        SELECT id FROM post 
-                        WHERE round >= :visibility AND user_id != :agent_id
-                        ORDER BY RANDOM()
-                        LIMIT :limit
-                    """)
-                
-                result = connection.execute(
-                    query,
-                    {
-                        "visibility": visibility,
-                        "agent_id": agent_id,
-                        "limit": limit
-                    }
-                )
-                
-                post_ids = [row[0] for row in result]
+                    # Random ordering
+                    if len(valid_posts) > limit:
+                        post_ids = random.sample(valid_posts, limit)
+                    else:
+                        post_ids = valid_posts
                 
                 self.logger.info(
-                    f"Recommended {len(post_ids)} posts",
+                    f"Recommended {len(post_ids)} posts (Redis)",
                     extra={
                         "extra_data": {
                             "agent_id": agent_id,
@@ -982,6 +986,52 @@ class OrchestratorServer:
                 )
                 
                 return post_ids
+            else:
+                # Use SQL database for recommendations
+                with self.db.engine.begin() as connection:
+                    if mode == "rchrono":
+                        # Reverse chronological: newest posts first
+                        query = text("""
+                            SELECT id FROM post 
+                            WHERE round >= :visibility AND user_id != :agent_id
+                            ORDER BY round DESC, id DESC
+                            LIMIT :limit
+                        """)
+                    else:
+                        # Random ordering (default)
+                        # Note: RANDOM() works for SQLite and PostgreSQL
+                        # For MySQL, use RAND() instead
+                        query = text("""
+                            SELECT id FROM post 
+                            WHERE round >= :visibility AND user_id != :agent_id
+                            ORDER BY RANDOM()
+                            LIMIT :limit
+                        """)
+                    
+                    result = connection.execute(
+                        query,
+                        {
+                            "visibility": visibility,
+                            "agent_id": agent_id,
+                            "limit": limit
+                        }
+                    )
+                    
+                    post_ids = [row[0] for row in result]
+                    
+                    self.logger.info(
+                        f"Recommended {len(post_ids)} posts (SQL)",
+                        extra={
+                            "extra_data": {
+                                "agent_id": agent_id,
+                                "mode": mode,
+                                "limit": limit,
+                                "found": len(post_ids),
+                            }
+                        },
+                    )
+                    
+                    return post_ids
                 
         except Exception as e:
             self.logger.error(
