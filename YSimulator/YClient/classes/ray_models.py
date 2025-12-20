@@ -23,6 +23,7 @@ class AgentProfile:
     ne: Optional[str] = None  # Neuroticism
     recsys_type: str = "default"
     frecsys_type: str = "default"
+    crecsys: str = "random"  # Content recommendation system: random, rchrono, rchrono_popularity, etc.
     language: str = "en"
     owner: Optional[str] = None
     education_level: Optional[str] = None

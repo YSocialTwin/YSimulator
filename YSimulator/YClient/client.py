@@ -26,7 +26,19 @@ from YSimulator.YClient.actions import (
     generate_rule_based_news_post,
 )
 from YSimulator.YClient.classes.ray_models import ActionDTO, AgentProfile
-from YSimulator.YClient.recsys import ContentRecSys, ReverseChrono, RandomOrder
+from YSimulator.YClient.recsys import (
+    ContentRecSys,
+    ReverseChrono,
+    ReverseChronoPopularity,
+    ReverseChronoFollowers,
+    ReverseChronoFollowersPopularity,
+    ReverseChronoComments,
+    CommonInterests,
+    CommonUserInterests,
+    SimilarUsersReact,
+    SimilarUsersPosts,
+    RandomOrder
+)
 
 # Constants
 REACTION_TYPES = ["LIKE", "LOVE", "LAUGH", "ANGRY", "SAD", "IGNORE"]
@@ -747,17 +759,32 @@ class SimulationClient:
                 
                 elif action_type == "comment":
                     # Use recsys to get recommended posts to comment on
-                    # Initialize recsys based on configuration
-                    if self.recsys_mode == "rchrono":
-                        recsys = ReverseChrono(
-                            n_posts=self.recsys_n_posts,
-                            visibility_rounds=self.recsys_visibility_rounds
-                        )
-                    else:
-                        recsys = RandomOrder(
-                            n_posts=self.recsys_n_posts,
-                            visibility_rounds=self.recsys_visibility_rounds
-                        )
+                    # Initialize recsys based on agent's crecsys preference
+                    # Fall back to global config if agent doesn't specify
+                    agent_recsys_mode = getattr(agent, 'crecsys', None) or self.recsys_mode
+                    
+                    # Map recsys mode to appropriate class
+                    recsys_class_map = {
+                        "random": RandomOrder,
+                        "rchrono": ReverseChrono,
+                        "rchrono_popularity": ReverseChronoPopularity,
+                        "rchrono_followers": ReverseChronoFollowers,
+                        "rchrono_followers_popularity": ReverseChronoFollowersPopularity,
+                        "rchrono_comments": ReverseChronoComments,
+                        "common_interests": CommonInterests,
+                        "common_user_interests": CommonUserInterests,
+                        "similar_users_react": SimilarUsersReact,
+                        "similar_users_posts": SimilarUsersPosts,
+                    }
+                    
+                    # Get the appropriate recsys class, default to RandomOrder if unknown
+                    recsys_class = recsys_class_map.get(agent_recsys_mode, RandomOrder)
+                    
+                    # Initialize the recsys with configuration parameters
+                    recsys = recsys_class(
+                        n_posts=self.recsys_n_posts,
+                        visibility_rounds=self.recsys_visibility_rounds
+                    )
                     
                     # Get recommended posts from server
                     recommended_posts = recsys.get_recommendations(self.server, agent.id)

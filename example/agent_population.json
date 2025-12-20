@@ -20,7 +20,8 @@
       "daily_activity_level": 3,
       "round_actions": 5,
       "is_page": 1,
-      "feed_url": "https://techcrunch.com/feed/"
+      "feed_url": "https://techcrunch.com/feed/",
+      "crecsys": "random"
     },
     {
       "id": "5342c737-7c60-5d9b-aa9f-14bda3d36f97",
@@ -42,7 +43,8 @@
       "daily_activity_level": 4,
       "round_actions": 6,
       "is_page": 1,
-      "feed_url": "http://feeds.bbci.co.uk/news/rss.xml"
+      "feed_url": "http://feeds.bbci.co.uk/news/rss.xml",
+      "crecsys": "rchrono"
     },
     {
       "id": "981e9434-7dfc-5bf1-8bd8-9c6f97c27c57",
@@ -64,7 +66,8 @@
       "daily_activity_level": 5,
       "round_actions": 8,
       "is_page": 1,
-      "feed_url": "https://www.reutersagency.com/feed/"
+      "feed_url": "https://www.reutersagency.com/feed/",
+      "crecsys": "random"
     }
   ],
   "generation_config": {
@@ -89,7 +92,8 @@
       "password": "simulation_agent",
       "education_level": "college",
       "round_actions": 3,
-      "is_page": 0
+      "is_page": 0,
+      "crecsys": "random"
     }
   }
 }
