@@ -761,7 +761,7 @@ class SimulationClient:
                         # Page without feed URL, skip
                         continue
                     
-                     if self.news_service:
+                    if self.news_service:
                         # Get an article from this page's specific feed
                         # The feed is already registered with the page's ID as website_id
                         try:
