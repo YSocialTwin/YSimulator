@@ -143,3 +143,46 @@ Write a brief, engaging tweet (max 280 characters) to present this article to yo
             # Fallback if LLM fails - truncate title if too long
             title = article_title if len(article_title) <= 97 else article_title[:97] + "..."
             return f"Check out this article: {title}"
+    
+    def generate_comment(self, cluster_id: int, post_content: str) -> str:
+        """
+        Generate a comment on a post to continue the discussion.
+        
+        Args:
+            cluster_id: Cluster/persona ID of the agent
+            post_content: Content of the post to comment on
+            
+        Returns:
+            str: Generated comment text
+        """
+        # Get persona from configuration
+        persona = self.prompts_config["personas"].get(
+            str(cluster_id),
+            "You are a social media user."
+        )
+        
+        # Create a prompt asking LLM to generate a thoughtful comment
+        system_msg = f"{persona} You engage in discussions by commenting on posts."
+        user_msg = f"""Someone posted this:
+
+"{post_content}"
+
+Write a brief, thoughtful comment to continue the discussion. Max 100 characters. Be authentic to your persona."""
+        
+        prompt = ChatPromptTemplate.from_messages([
+            ("system", system_msg),
+            ("user", user_msg)
+        ])
+        
+        try:
+            chain = prompt | self.llm | StrOutputParser()
+            comment = chain.invoke({}).strip()
+            
+            # Ensure comment doesn't exceed length
+            if len(comment) > 280:
+                comment = comment[:277] + "..."
+                
+            return comment
+        except Exception as e:
+            # Fallback if LLM fails
+            return "Interesting perspective!"

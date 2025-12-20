@@ -66,7 +66,7 @@ def generate_rule_based_comment(agent_id: int, cluster_id: int, target_post_id: 
     Generate a simple rule-based comment action.
     
     Rule-based agents create simple comments on posts.
-    The behavior is deterministic - rule-based agents create cluster-specific comments.
+    The behavior is deterministic - rule-based agents just comment "COMMENT".
     
     Args:
         agent_id: Unique identifier for the agent
@@ -81,9 +81,9 @@ def generate_rule_based_comment(agent_id: int, cluster_id: int, target_post_id: 
         >>> action.action_type
         'COMMENT'
         >>> action.content
-        'Cluster 1 comment'
+        'COMMENT'
     """
-    content = f"Cluster {cluster_id} comment"
+    content = "COMMENT"
     return ActionDTO(agent_id, cluster_id, "COMMENT", content=content, target_post_id=target_post_id)
 
 

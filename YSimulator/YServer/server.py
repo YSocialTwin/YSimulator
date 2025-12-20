@@ -10,7 +10,7 @@ import logging
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Dict, Any
 
 import ray
 
@@ -912,3 +912,91 @@ class OrchestratorServer:
             f"[Server] 🔄 Archetype transitions complete - "
             f"{transitioned_count} agents changed archetypes (day {self.day})"
         )
+    
+    def get_recommended_posts(
+        self,
+        agent_id: str,
+        mode: str = "random",
+        limit: int = 5,
+        visibility_rounds: int = 36
+    ) -> list:
+        """
+        Get recommended posts for an agent using the specified recommendation strategy.
+        
+        Args:
+            agent_id: UUID of the agent requesting recommendations
+            mode: Recommendation mode - "rchrono" (reverse chronological) or "random" (default)
+            limit: Number of posts to recommend (default: 5)
+            visibility_rounds: Number of rounds (time slots) to look back for posts (default: 36)
+            
+        Returns:
+            List of post UUIDs recommended for the agent
+        """
+        try:
+            # Calculate visibility threshold
+            visibility = max(1, self.current_round_id - visibility_rounds)
+            
+            # Get posts based on the selected mode
+            with self.db.engine.begin() as connection:
+                from sqlalchemy import text
+                
+                if mode == "rchrono":
+                    # Reverse chronological: newest posts first
+                    query = text("""
+                        SELECT id FROM post 
+                        WHERE round >= :visibility AND user_id != :agent_id
+                        ORDER BY round DESC, id DESC
+                        LIMIT :limit
+                    """)
+                else:
+                    # Random ordering (default)
+                    query = text("""
+                        SELECT id FROM post 
+                        WHERE round >= :visibility AND user_id != :agent_id
+                        ORDER BY RANDOM()
+                        LIMIT :limit
+                    """)
+                
+                result = connection.execute(
+                    query,
+                    {
+                        "visibility": visibility,
+                        "agent_id": agent_id,
+                        "limit": limit
+                    }
+                )
+                
+                post_ids = [row[0] for row in result]
+                
+                self.logger.info(
+                    f"Recommended {len(post_ids)} posts",
+                    extra={
+                        "extra_data": {
+                            "agent_id": agent_id,
+                            "mode": mode,
+                            "limit": limit,
+                            "found": len(post_ids),
+                        }
+                    },
+                )
+                
+                return post_ids
+                
+        except Exception as e:
+            self.logger.error(
+                f"Error getting recommended posts: {e}",
+                extra={"extra_data": {"agent_id": agent_id, "error": str(e)}},
+            )
+            return []
+    
+    def get_post(self, post_id: str) -> Optional[Dict[str, Any]]:
+        """
+        Get a post by its ID.
+        
+        Args:
+            post_id: UUID of the post to retrieve
+            
+        Returns:
+            Dictionary with post data or None if not found
+        """
+        return self.db.get_post(post_id)

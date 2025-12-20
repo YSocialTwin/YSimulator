@@ -1,8 +1,21 @@
-from utils import *
-from YSimulator.YServer.classes.models import *
+from sqlalchemy import desc, func, case
+from YSimulator.YServer.recsys.utils import (
+    get_follows,
+    fetch_common_interest_posts,
+    fetch_common_user_interest_posts,
+    fetch_similar_users_posts,
+)
+from YSimulator.YServer.classes.models import (
+    Post,
+    User_mgmt,
+    Round,
+    Follow,
+    PostTopic,
+    Reaction,
+)
 
 
-def read(limit, mode, visibility_rounds, uid, followers_ratio=1, article=False):
+def read(db_session, limit, mode, visibility_rounds, uid, followers_ratio=1, article=False):
     """
     Return a list of candidate posts for the user as filtered by the content recommendation system.
 

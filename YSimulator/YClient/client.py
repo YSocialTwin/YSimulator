@@ -26,6 +26,7 @@ from YSimulator.YClient.actions import (
     generate_rule_based_news_post,
 )
 from YSimulator.YClient.classes.ray_models import ActionDTO, AgentProfile
+from YSimulator.YClient.recsys import ContentRecSys, ReverseChrono, RandomOrder
 
 
 @ray.remote
@@ -93,6 +94,12 @@ class SimulationClient:
         archetype_config = simulation_config["simulation"].get("agent_archetypes", {})
         self.archetypes_enabled = archetype_config.get("enabled", False)
         self.archetype_distribution = archetype_config.get("distribution", {})
+        
+        # Load recommendation system configuration
+        recsys_config = simulation_config["simulation"].get("recsys", {})
+        self.recsys_mode = recsys_config.get("mode", "random")  # "random" or "rchrono"
+        self.recsys_n_posts = recsys_config.get("n_posts", 5)
+        self.recsys_visibility_rounds = recsys_config.get("visibility_rounds", 36)
 
         # Create agents from configuration
         self.agent_profiles = []
@@ -736,13 +743,44 @@ class SimulationClient:
                         actions.append(action)
                 
                 elif action_type == "comment":
-                    if agent_type == "llm":
-                        # LLM: Fire off async call for reaction (comment is a type of reaction)
-                        future = generate_llm_reaction_async(self.llm, agent.cluster, "content")
-                        pending_llm_reactions.append((agent.id, agent.cluster, target, future))
+                    # Use recsys to get recommended posts to comment on
+                    # Initialize recsys based on configuration
+                    if self.recsys_mode == "rchrono":
+                        recsys = ReverseChrono(
+                            n_posts=self.recsys_n_posts,
+                            visibility_rounds=self.recsys_visibility_rounds
+                        )
                     else:
-                        # Rule-based: Create COMMENT action
-                        action = generate_rule_based_comment(agent.id, agent.cluster, target)
+                        recsys = RandomOrder(
+                            n_posts=self.recsys_n_posts,
+                            visibility_rounds=self.recsys_visibility_rounds
+                        )
+                    
+                    # Get recommended posts from server
+                    recommended_posts = recsys.get_recommendations(self.server, agent.id)
+                    
+                    if not recommended_posts:
+                        # No posts available to comment on, skip this action
+                        continue
+                    
+                    # Select one post randomly from recommendations
+                    target_post = random.choice(recommended_posts)
+                    
+                    if agent_type == "llm":
+                        # LLM: Get the post content and ask for a comment
+                        # First, fetch the post content
+                        post_data = ray.get(self.server.get_post.remote(target_post))
+                        if post_data:
+                            post_content = post_data.get("tweet", "")
+                            # Fire off async LLM call to generate comment
+                            future = self.llm.generate_comment.remote(agent.cluster, post_content)
+                            pending_llm_reactions.append((agent.id, agent.cluster, target_post, future))
+                        else:
+                            # Post not found, skip
+                            continue
+                    else:
+                        # Rule-based: Just comment "COMMENT"
+                        action = generate_rule_based_comment(agent.id, agent.cluster, target_post)
                         actions.append(action)
                 
                 elif action_type == "read":
@@ -883,14 +921,19 @@ class SimulationClient:
                     self.logger.info(f"LLM post for agent {a_id}: NO article_id, content_len={len(res_txt)}")
                 actions.append(action)
         
-        # Resolve Reactions
+        # Resolve Reactions and Comments
         if pending_llm_reactions:
             futures = [r[3] for r in pending_llm_reactions]
-            results = ray.get(futures)  # Blocks once for ALL reactions
+            results = ray.get(futures)  # Blocks once for ALL reactions/comments
             
             for i, res_act in enumerate(results):
                 a_id, cid, target, _ = pending_llm_reactions[i]
-                if res_act != "IGNORE":
+                # Check if result is a comment (text) or a reaction type (LIKE, IGNORE, etc.)
+                if res_act and res_act not in ["IGNORE", "LIKE", "LOVE", "LAUGH", "ANGRY", "SAD"]:
+                    # This is a comment text from LLM
+                    actions.append(ActionDTO(a_id, cid, "COMMENT", content=res_act, target_post_id=target))
+                elif res_act != "IGNORE":
+                    # This is a reaction type
                     actions.append(ActionDTO(a_id, cid, res_act, target_post_id=target))
         
         self.logger.info(f"Returning {len(actions)} total actions")
