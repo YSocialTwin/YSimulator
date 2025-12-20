@@ -693,4 +693,4 @@ For production deployments:
 - **SQL still recommended** for topic-based recommendations (common_interests, common_user_interests)
 - **Hybrid approach** provides 80%+ feature parity with 10x better caching performance
 
-Key takeaway: **Redis now provides functional parity for 8 out of 10 modes**, with only topic/interest-based recommendations requiring additional caching implementation.
+Key takeaway: **Redis now provides functional parity for 8 out of 10 modes using hybrid SQL+Redis operations**, with only topic/interest-based recommendations requiring additional caching implementation.

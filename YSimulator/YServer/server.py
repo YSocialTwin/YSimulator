@@ -1019,12 +1019,11 @@ class OrchestratorServer:
                     post_ids = [p['id'] for p in sorted_posts[:limit]]
                     
                 elif mode == "rchrono_followers":
-                    # Filter posts from followed users using Redis operations
-                    # Get agent's user data to find who they follow
+                    # Filter posts from followed users using hybrid SQL+Redis
                     follower_posts_limit = int(limit * followers_ratio)
                     additional_posts_limit = limit - follower_posts_limit
                     
-                    # Query SQL for follow relationships (Redis doesn't cache this yet)
+                    # Helper: Get followed user IDs (shared with rchrono_followers_popularity)
                     with self.db.engine.begin() as connection:
                         from sqlalchemy import text
                         result = connection.execute(
@@ -1033,9 +1032,18 @@ class OrchestratorServer:
                         )
                         followed_user_ids = set(row[0] for row in result)
                     
+                    # Create mapping for efficient lookup (avoid O(n²))
+                    post_id_to_data = {all_post_ids[i]: posts_data[i] for i in range(len(all_post_ids))}
+                    
                     # Filter posts by followed users
-                    follower_posts = [p for p in valid_posts_with_data if posts_data[valid_posts_with_data.index(p)].get('user_id') in followed_user_ids]
-                    other_posts = [p for p in valid_posts_with_data if posts_data[valid_posts_with_data.index(p)].get('user_id') not in followed_user_ids]
+                    follower_posts = []
+                    other_posts = []
+                    for post in valid_posts_with_data:
+                        post_data = post_id_to_data.get(post['id'])
+                        if post_data and post_data.get('user_id') in followed_user_ids:
+                            follower_posts.append(post)
+                        else:
+                            other_posts.append(post)
                     
                     # Take from followers first, then fill with others
                     post_ids = [p['id'] for p in follower_posts[:follower_posts_limit]]
@@ -1043,11 +1051,11 @@ class OrchestratorServer:
                         post_ids.extend([p['id'] for p in other_posts[:additional_posts_limit]])
                     
                 elif mode == "rchrono_followers_popularity":
-                    # Combine followers and popularity
+                    # Combine followers and popularity with hybrid approach
                     follower_posts_limit = int(limit * followers_ratio)
                     additional_posts_limit = limit - follower_posts_limit
                     
-                    # Get follow relationships
+                    # Get follow relationships (same query as rchrono_followers)
                     with self.db.engine.begin() as connection:
                         from sqlalchemy import text
                         result = connection.execute(
@@ -1056,9 +1064,18 @@ class OrchestratorServer:
                         )
                         followed_user_ids = set(row[0] for row in result)
                     
+                    # Create mapping for efficient lookup
+                    post_id_to_data = {all_post_ids[i]: posts_data[i] for i in range(len(all_post_ids))}
+                    
                     # Filter and sort
-                    follower_posts = [p for p in valid_posts_with_data if posts_data[valid_posts_with_data.index(p)].get('user_id') in followed_user_ids]
-                    other_posts = [p for p in valid_posts_with_data if posts_data[valid_posts_with_data.index(p)].get('user_id') not in followed_user_ids]
+                    follower_posts = []
+                    other_posts = []
+                    for post in valid_posts_with_data:
+                        post_data = post_id_to_data.get(post['id'])
+                        if post_data and post_data.get('user_id') in followed_user_ids:
+                            follower_posts.append(post)
+                        else:
+                            other_posts.append(post)
                     
                     # Sort by index (time) then popularity
                     follower_posts_sorted = sorted(follower_posts, key=lambda x: (x['index'], -x['reaction_count']))
