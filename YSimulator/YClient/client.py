@@ -677,6 +677,10 @@ class SimulationClient:
                 else:
                     regular_agents.append(agent)
         
+        self.logger.info(f"Activity sampling: slot={slot}, regular_agents={len(regular_agents)}, page_agents={len(page_agents)}")
+        if page_agents:
+            self.logger.info(f"Active page agents: {[p.username for p in page_agents]}")
+        
         # Calculate number of regular agents to activate based on hourly_activity
         # Page agents don't count toward the hourly percentage
         active_regular_agents = []
@@ -695,6 +699,7 @@ class SimulationClient:
         
         # Combine regular agents and ALL page agents that are available
         active_agents = active_regular_agents + page_agents
+        self.logger.info(f"Total active agents for this round: {len(active_agents)} (regular: {len(active_regular_agents)}, pages: {len(page_agents)})")
         
         # Track pending LLM calls for parallel execution
         # Each entry: (agent_id, cluster_id, future) for posts
@@ -711,8 +716,14 @@ class SimulationClient:
                 continue
             num_actions = random.randint(1, agent.daily_activity_level)
             
-            for _ in range(num_actions):
+            if agent.is_page == 1:
+                self.logger.info(f"Page agent {agent.username} will perform {num_actions} actions")
+            
+            for action_idx in range(num_actions):
                 action_type, agent_type, target = self.__select_action(agent, recent_posts)
+                
+                if agent.is_page == 1:
+                    self.logger.info(f"Page agent {agent.username} action {action_idx+1}/{num_actions}: type={action_type}, agent_type={agent_type}")
                 
                 if action_type == "post":
                     if agent_type == "llm":
