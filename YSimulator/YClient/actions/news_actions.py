@@ -58,6 +58,10 @@ def generate_llm_news_commentary(llm_service, cluster_id: int, article: dict, we
     article_title = article.get('title', 'News Article')
     article_text = article.get('summary', article.get('description', ''))
     
+    # Truncate article text if too long (keep first 500 chars)
+    if len(article_text) > 500:
+        article_text = article_text[:500] + "..."
+    
     # Default website name if not provided
     if not website_name:
         website_name = "this website"
@@ -80,7 +84,7 @@ Write a brief, engaging tweet (max 280 characters) to present this article to yo
     # Get commentary from LLM
     try:
         chain = prompt | llm_service | StrOutputParser()
-        # Invoke chain - the prompt template handles variable substitution
+        # Invoke chain with the formatted prompt (no variables needed since we used f-strings)
         commentary = ray.get(chain.invoke.remote({}))
         
         # Ensure commentary doesn't exceed tweet length
