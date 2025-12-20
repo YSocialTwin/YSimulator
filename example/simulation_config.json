@@ -66,10 +66,10 @@
             "news": 0.0,
             "comment": 5.0,
             "read": 2.0,
-            "share": 0.0,
+            "share": 2.0,
             "search": 0.0,
             "cast": 0.0,
-            "share_link": 0
+            "share_link": 2.0
         },
     "agent_archetypes": {
         "enabled": true,
