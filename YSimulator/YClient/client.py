@@ -754,13 +754,18 @@ class SimulationClient:
                                 # Verify the article's website_id matches the page's user_id
                                 # This ensures pages can only share from their own feeds
                                 article_website_id = article.get("website_id")
-                                if article_website_id and str(article_website_id) != str(agent.id):
-                                    # Article is from a different website, skip
-                                    self.logger.warning(
-                                        f"Page {agent.username} attempted to share from wrong feed. "
-                                        f"Page ID: {agent.id}, Article Website ID: {article_website_id}"
-                                    )
-                                    continue
+                                # Both IDs should be UUID strings - normalize for comparison
+                                if article_website_id:
+                                    # Normalize both IDs to lowercase strings for comparison
+                                    normalized_article_id = str(article_website_id).lower()
+                                    normalized_agent_id = str(agent.id).lower()
+                                    if normalized_article_id != normalized_agent_id:
+                                        # Article is from a different website, skip
+                                        self.logger.warning(
+                                            f"Page {agent.username} attempted to share from wrong feed. "
+                                            f"Page ID: {agent.id}, Article Website ID: {article_website_id}"
+                                        )
+                                        continue
                                 
                                 if agent_type == "llm":
                                     # LLM page posts news with commentary

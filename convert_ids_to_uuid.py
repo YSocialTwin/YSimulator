@@ -8,6 +8,9 @@ import json
 import uuid
 from pathlib import Path
 
+# Namespace UUID for generating deterministic agent UUIDs
+AGENT_UUID_NAMESPACE = uuid.UUID('12345678-1234-5678-1234-567812345678')
+
 def convert_agent_ids_to_uuid(json_file_path):
     """Convert all agent IDs in the JSON file from integers to UUIDs."""
     
@@ -25,8 +28,7 @@ def convert_agent_ids_to_uuid(json_file_path):
             if isinstance(old_id, int):
                 # Generate a deterministic UUID based on the old ID for consistency
                 # This allows us to reproduce the same UUIDs if needed
-                namespace = uuid.UUID('12345678-1234-5678-1234-567812345678')
-                new_uuid = str(uuid.uuid5(namespace, f"agent_{old_id}"))
+                new_uuid = str(uuid.uuid5(AGENT_UUID_NAMESPACE, f"agent_{old_id}"))
                 id_mapping[old_id] = new_uuid
                 agent["id"] = new_uuid
                 print(f"Converted agent {old_id} -> {new_uuid} ({agent.get('username', 'unknown')})")
