@@ -1018,12 +1018,148 @@ class OrchestratorServer:
                                         key=lambda x: (x['index'], -x['reaction_count']))
                     post_ids = [p['id'] for p in sorted_posts[:limit]]
                     
-                elif mode in ["rchrono_followers", "rchrono_followers_popularity", "rchrono_comments",
-                             "common_interests", "common_user_interests", "similar_users_react", "similar_users_posts"]:
-                    # For complex modes in Redis, fallback to reverse chronological
-                    # Complex joins not easily supported in Redis
-                    self.logger.info(f"Mode {mode} not fully supported in Redis, using rchrono fallback")
-                    post_ids = [p['id'] for p in valid_posts_with_data[:limit]]
+                elif mode == "rchrono_followers":
+                    # Filter posts from followed users using Redis operations
+                    # Get agent's user data to find who they follow
+                    follower_posts_limit = int(limit * followers_ratio)
+                    additional_posts_limit = limit - follower_posts_limit
+                    
+                    # Query SQL for follow relationships (Redis doesn't cache this yet)
+                    with self.db.engine.begin() as connection:
+                        from sqlalchemy import text
+                        result = connection.execute(
+                            text("SELECT follower_id FROM follow WHERE user_id = :agent_id AND action = 'follow'"),
+                            {"agent_id": agent_id}
+                        )
+                        followed_user_ids = set(row[0] for row in result)
+                    
+                    # Filter posts by followed users
+                    follower_posts = [p for p in valid_posts_with_data if posts_data[valid_posts_with_data.index(p)].get('user_id') in followed_user_ids]
+                    other_posts = [p for p in valid_posts_with_data if posts_data[valid_posts_with_data.index(p)].get('user_id') not in followed_user_ids]
+                    
+                    # Take from followers first, then fill with others
+                    post_ids = [p['id'] for p in follower_posts[:follower_posts_limit]]
+                    if len(post_ids) < limit:
+                        post_ids.extend([p['id'] for p in other_posts[:additional_posts_limit]])
+                    
+                elif mode == "rchrono_followers_popularity":
+                    # Combine followers and popularity
+                    follower_posts_limit = int(limit * followers_ratio)
+                    additional_posts_limit = limit - follower_posts_limit
+                    
+                    # Get follow relationships
+                    with self.db.engine.begin() as connection:
+                        from sqlalchemy import text
+                        result = connection.execute(
+                            text("SELECT follower_id FROM follow WHERE user_id = :agent_id AND action = 'follow'"),
+                            {"agent_id": agent_id}
+                        )
+                        followed_user_ids = set(row[0] for row in result)
+                    
+                    # Filter and sort
+                    follower_posts = [p for p in valid_posts_with_data if posts_data[valid_posts_with_data.index(p)].get('user_id') in followed_user_ids]
+                    other_posts = [p for p in valid_posts_with_data if posts_data[valid_posts_with_data.index(p)].get('user_id') not in followed_user_ids]
+                    
+                    # Sort by index (time) then popularity
+                    follower_posts_sorted = sorted(follower_posts, key=lambda x: (x['index'], -x['reaction_count']))
+                    other_posts_sorted = sorted(other_posts, key=lambda x: (x['index'], -x['reaction_count']))
+                    
+                    post_ids = [p['id'] for p in follower_posts_sorted[:follower_posts_limit]]
+                    if len(post_ids) < limit:
+                        post_ids.extend([p['id'] for p in other_posts_sorted[:additional_posts_limit]])
+                    
+                elif mode == "rchrono_comments":
+                    # Count comments for each post using Redis
+                    # For each post, count how many posts have comment_to = this post_id
+                    posts_with_comment_counts = []
+                    for i, post_data in enumerate(posts_data):
+                        if post_data and post_data.get('user_id') != agent_id:
+                            post_id = all_post_ids[i]
+                            # Check if this is a top-level post (not a comment itself)
+                            if post_data.get('comment_to', '-1') == '-1':
+                                # Count comments by checking other posts
+                                comment_count = sum(1 for pd in posts_data if pd and pd.get('comment_to') == post_id)
+                                posts_with_comment_counts.append({
+                                    'id': post_id,
+                                    'index': i,
+                                    'comment_count': comment_count,
+                                    'reaction_count': int(post_data.get("reaction_count", 0) or 0)
+                                })
+                    
+                    # Sort by comment count desc, then by recency
+                    sorted_posts = sorted(posts_with_comment_counts, 
+                                        key=lambda x: (-x['comment_count'], x['index']))
+                    post_ids = [p['id'] for p in sorted_posts[:limit]]
+                    
+                elif mode in ["common_interests", "common_user_interests", "similar_users_react", "similar_users_posts"]:
+                    # These modes require data not cached in Redis (topics, interests, demographics)
+                    # Fall back to SQL query for now
+                    self.logger.info(f"Mode {mode} requires relational data not in Redis cache, using SQL fallback")
+                    # Query SQL directly
+                    with self.db.engine.begin() as connection:
+                        if mode == "similar_users_react":
+                            # Get similar users and their liked posts
+                            from sqlalchemy import text
+                            query = text("""
+                                SELECT DISTINCT p.id
+                                FROM post p
+                                INNER JOIN reaction r ON p.id = r.post_id
+                                INNER JOIN user_mgmt um ON r.user_id = um.id
+                                INNER JOIN user_mgmt target ON target.id = :agent_id
+                                WHERE p.user_id != :agent_id
+                                    AND um.id != :agent_id
+                                    AND r.type = 'like'
+                                    AND (
+                                        (um.age_group = target.age_group) OR
+                                        (um.gender = target.gender) OR
+                                        (um.leaning = target.leaning)
+                                    )
+                                ORDER BY p.id DESC
+                                LIMIT :limit
+                            """)
+                            result = connection.execute(query, {
+                                "agent_id": agent_id,
+                                "limit": limit
+                            })
+                        elif mode == "similar_users_posts":
+                            # Get posts from similar users
+                            from sqlalchemy import text
+                            query = text("""
+                                SELECT p.id
+                                FROM post p
+                                INNER JOIN user_mgmt um ON p.user_id = um.id
+                                INNER JOIN user_mgmt target ON target.id = :agent_id
+                                WHERE p.user_id != :agent_id
+                                    AND (
+                                        (um.age_group = target.age_group) OR
+                                        (um.gender = target.gender) OR
+                                        (um.leaning = target.leaning)
+                                    )
+                                ORDER BY p.id DESC
+                                LIMIT :limit
+                            """)
+                            result = connection.execute(query, {
+                                "agent_id": agent_id,
+                                "limit": limit
+                            })
+                        else:
+                            # common_interests or common_user_interests
+                            # These need topic and interest data - not in Redis
+                            # Fallback to rchrono for now
+                            self.logger.warning(f"Mode {mode} not fully implemented in Redis, using rchrono")
+                            post_ids = [p['id'] for p in valid_posts_with_data[:limit]]
+                            return post_ids
+                        
+                        # Get post IDs from results and filter to recent posts only
+                        sql_post_ids = [row[0] for row in result]
+                        # Keep only posts that are in our recent cache
+                        post_ids = [pid for pid in sql_post_ids if pid in all_post_ids][:limit]
+                        
+                        # If not enough, fill with recent posts
+                        if len(post_ids) < limit:
+                            additional = [p['id'] for p in valid_posts_with_data if p['id'] not in post_ids]
+                            post_ids.extend(additional[:limit - len(post_ids)])
+
                     
                 else:
                     # Random ordering (default for Redis)
