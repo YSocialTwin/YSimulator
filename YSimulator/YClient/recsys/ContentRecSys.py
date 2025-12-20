@@ -9,7 +9,10 @@ The server implements different recommendation strategies (modes):
     - "rchrono": Reverse chronological ordering (newest first)
 """
 
+import logging
 import ray
+
+logger = logging.getLogger(__name__)
 
 
 class ContentRecSys:
@@ -66,7 +69,7 @@ class ContentRecSys:
             )
             return post_ids if post_ids else []
         except Exception as e:
-            print(f"Error getting recommendations: {e}")
+            logger.error(f"Error getting recommendations for agent {agent_id}: {e}")
             return []
 
 

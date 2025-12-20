@@ -10,9 +10,10 @@ import logging
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 
 import ray
+from sqlalchemy import text
 
 from YSimulator.YClient.classes.ray_models import SimulationInstruction
 
@@ -919,7 +920,7 @@ class OrchestratorServer:
         mode: str = "random",
         limit: int = 5,
         visibility_rounds: int = 36
-    ) -> list:
+    ) -> List[str]:
         """
         Get recommended posts for an agent using the specified recommendation strategy.
         
@@ -930,7 +931,7 @@ class OrchestratorServer:
             visibility_rounds: Number of rounds (time slots) to look back for posts (default: 36)
             
         Returns:
-            List of post UUIDs recommended for the agent
+            List[str]: List of post UUIDs recommended for the agent
         """
         try:
             # Calculate visibility threshold
@@ -938,8 +939,6 @@ class OrchestratorServer:
             
             # Get posts based on the selected mode
             with self.db.engine.begin() as connection:
-                from sqlalchemy import text
-                
                 if mode == "rchrono":
                     # Reverse chronological: newest posts first
                     query = text("""
@@ -950,6 +949,8 @@ class OrchestratorServer:
                     """)
                 else:
                     # Random ordering (default)
+                    # Note: RANDOM() works for SQLite and PostgreSQL
+                    # For MySQL, use RAND() instead
                     query = text("""
                         SELECT id FROM post 
                         WHERE round >= :visibility AND user_id != :agent_id

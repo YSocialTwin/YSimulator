@@ -28,6 +28,9 @@ from YSimulator.YClient.actions import (
 from YSimulator.YClient.classes.ray_models import ActionDTO, AgentProfile
 from YSimulator.YClient.recsys import ContentRecSys, ReverseChrono, RandomOrder
 
+# Constants
+REACTION_TYPES = ["LIKE", "LOVE", "LAUGH", "ANGRY", "SAD", "IGNORE"]
+
 
 @ray.remote
 class SimulationClient:
@@ -928,11 +931,11 @@ class SimulationClient:
             
             for i, res_act in enumerate(results):
                 a_id, cid, target, _ = pending_llm_reactions[i]
-                # Check if result is a comment (text) or a reaction type (LIKE, IGNORE, etc.)
-                if res_act and res_act not in ["IGNORE", "LIKE", "LOVE", "LAUGH", "ANGRY", "SAD"]:
+                # Check if result is a comment (text) or a reaction type
+                if res_act and res_act.upper() not in REACTION_TYPES:
                     # This is a comment text from LLM
                     actions.append(ActionDTO(a_id, cid, "COMMENT", content=res_act, target_post_id=target))
-                elif res_act != "IGNORE":
+                elif res_act.upper() != "IGNORE":
                     # This is a reaction type
                     actions.append(ActionDTO(a_id, cid, res_act, target_post_id=target))
         

@@ -148,6 +148,8 @@ Write a brief, engaging tweet (max 280 characters) to present this article to yo
         """
         Generate a comment on a post to continue the discussion.
         
+        This method is called remotely via Ray actor (e.g., self.llm.generate_comment.remote(...)).
+        
         Args:
             cluster_id: Cluster/persona ID of the agent
             post_content: Content of the post to comment on
