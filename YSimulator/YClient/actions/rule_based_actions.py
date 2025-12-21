@@ -174,3 +174,27 @@ def generate_rule_based_read(agent_id: int, cluster_id: int, target_post_id: str
         return None  # No action for IGNORE
     
     return ActionDTO(agent_id, cluster_id, reaction_type, target_post_id=target_post_id)
+
+
+def generate_rule_based_follow(agent_id: int, cluster_id: int, target_user_id: str) -> ActionDTO:
+    """
+    Generate a follow action for a rule-based agent.
+    
+    Rule-based agents always follow suggested users (no decision making).
+    
+    Args:
+        agent_id: Unique identifier for the agent
+        cluster_id: Cluster/group the agent belongs to
+        target_user_id: UUID of the user to follow
+        
+    Returns:
+        ActionDTO: Follow action targeting the specified user
+        
+    Example:
+        >>> action = generate_rule_based_follow(42, 1, "user-uuid-123")
+        >>> action.action_type
+        'FOLLOW'
+        >>> action.target_user_id
+        'user-uuid-123'
+    """
+    return ActionDTO(agent_id, cluster_id, "FOLLOW", target_user_id=target_user_id)

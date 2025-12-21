@@ -19,11 +19,13 @@ from YSimulator.YClient.actions import (
     generate_llm_post_async,
     generate_llm_reaction_async,
     generate_llm_read_async,
+    generate_llm_follow_async,
     generate_rule_based_post,
     generate_rule_based_reaction,
     generate_rule_based_comment,
     generate_rule_based_share,
     generate_rule_based_read,
+    generate_rule_based_follow,
     generate_news_post_async,
     generate_rule_based_news_post,
 )
@@ -41,6 +43,14 @@ from YSimulator.YClient.recsys import (
     SimilarUsersPosts,
     RandomOrder
 )
+from YSimulator.YClient.recsys.FollowRecSysRay import (
+    FollowRecSysRay,
+    RandomFollowRecSys,
+    CommonNeighborsFollowRecSys,
+    JaccardFollowRecSys,
+    AdamicAdarFollowRecSys,
+    PreferentialAttachmentFollowRecSys
+)
 
 # Constants
 REACTION_TYPES = ["LIKE", "LOVE", "LAUGH", "ANGRY", "SAD", "IGNORE"]
@@ -57,6 +67,15 @@ RECSYS_CLASS_MAP = {
     "common_user_interests": CommonUserInterests,
     "similar_users_react": SimilarUsersReact,
     "similar_users_posts": SimilarUsersPosts,
+}
+
+# Follow recommendation system class mapping
+FOLLOW_RECSYS_CLASS_MAP = {
+    "random": RandomFollowRecSys,
+    "common_neighbors": CommonNeighborsFollowRecSys,
+    "jaccard": JaccardFollowRecSys,
+    "adamic_adar": AdamicAdarFollowRecSys,
+    "preferential_attachment": PreferentialAttachmentFollowRecSys,
 }
 
 
@@ -925,8 +944,10 @@ class SimulationClient:
         # Track pending LLM calls for parallel execution
         # Each entry: (agent_id, cluster_id, future) for posts
         # Each entry: (agent_id, cluster_id, target_post_id, future) for reactions/comments
+        # Each entry: (agent_id, cluster_id, future) for follows
         pending_llm_posts = []
         pending_llm_reactions = []
+        pending_llm_follows = []
         
         # --- SCATTER PHASE: Select and dispatch actions ---
         for agent in active_agents:
@@ -1043,6 +1064,35 @@ class SimulationClient:
                         if action:  # Only add if not IGNORE
                             actions.append(action)
                 
+                elif action_type == "follow":
+                    # Follow action: Get follow suggestions, randomly select one, create follow relationship
+                    # Use follow recsys to get suggested users
+                    # Initialize recsys based on agent's frecsys_type preference
+                    agent_frecsys_mode = getattr(agent, 'frecsys_type', None) or "random"
+                    
+                    # Get the appropriate follow recsys class, default to RandomFollowRecSys if unknown
+                    frecsys_class = FOLLOW_RECSYS_CLASS_MAP.get(agent_frecsys_mode, RandomFollowRecSys)
+                    
+                    # Initialize the follow recsys with default parameters
+                    frecsys = frecsys_class(n_neighbors=10, leaning_bias=1)
+                    
+                    # Get follow suggestions from server
+                    suggested_users = frecsys.get_follow_suggestions(self.server, agent.id)
+                    
+                    if not suggested_users:
+                        # No users available to follow, skip this action
+                        continue
+                    
+                    if agent_type == "llm":
+                        # LLM: Ask to decide which user to follow
+                        future = generate_llm_follow_async(self.llm, agent.cluster, suggested_users)
+                        pending_llm_follows.append((agent.id, agent.cluster, future))
+                    else:
+                        # Rule-based: Randomly select one user to follow
+                        target_user = random.choice(suggested_users)
+                        action = generate_rule_based_follow(agent.id, agent.cluster, target_user)
+                        actions.append(action)
+                
                 elif action_type == "image":
                     # Stub: Image post action - agent creates a post with an image
                     # Future implementation: integrate with image generation
@@ -1157,7 +1207,7 @@ class SimulationClient:
         
         # --- GATHER PHASE: Wait for all LLM results in parallel ---
         
-        self.logger.info(f"Gather phase: pending_llm_posts={len(pending_llm_posts)}, pending_llm_reactions={len(pending_llm_reactions)}, actions_so_far={len(actions)}")
+        self.logger.info(f"Gather phase: pending_llm_posts={len(pending_llm_posts)}, pending_llm_reactions={len(pending_llm_reactions)}, pending_llm_follows={len(pending_llm_follows)}, actions_so_far={len(actions)}")
         
         # Resolve Posts
         if pending_llm_posts:
@@ -1190,6 +1240,17 @@ class SimulationClient:
                 elif res_act.upper() != "IGNORE":
                     # This is a reaction type
                     actions.append(ActionDTO(a_id, cid, res_act, target_post_id=target))
+        
+        # Resolve Follows
+        if pending_llm_follows:
+            futures = [f[2] for f in pending_llm_follows]
+            results = ray.get(futures)  # Blocks once for ALL follow decisions
+            
+            for i, target_user in enumerate(results):
+                a_id, cid, _ = pending_llm_follows[i]
+                # LLM returns user_id to follow or None to skip
+                if target_user:
+                    actions.append(ActionDTO(a_id, cid, "FOLLOW", target_user_id=target_user))
         
         self.logger.info(f"Returning {len(actions)} total actions")
         return actions

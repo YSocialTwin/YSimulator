@@ -164,6 +164,35 @@ def generate_llm_read_async(llm_handle, cluster_id: int, content: str):
     return llm_handle.generate_read_reaction.remote(cluster_id, content)
 
 
+def generate_llm_follow_async(llm_handle, cluster_id: int, candidate_users: list):
+    """
+    Initiate async LLM follow decision.
+    
+    This function doesn't wait for the LLM response - it immediately returns
+    a Ray ObjectRef (future) that can be resolved later. This enables parallel
+    execution of multiple LLM calls.
+    
+    The LLM service will decide whether to follow one of the suggested users.
+    
+    Args:
+        llm_handle: Ray actor handle for the LLM service
+        cluster_id: Cluster/group the agent belongs to (determines persona)
+        candidate_users: List of user IDs that could be followed
+        
+    Returns:
+        Ray ObjectRef: Future that will resolve to user ID to follow (str) or None
+        
+    Usage:
+        # Fire off LLM call to decide which user to follow
+        future = generate_llm_follow_async(llm, agent.cluster, candidates)
+        # Later, resolve the future to get the decision
+        target_user = ray.get(future)
+        if target_user:
+            actions.append(ActionDTO(agent_id, cluster_id, "FOLLOW", target_user_id=target_user))
+    """
+    return llm_handle.generate_follow_decision.remote(cluster_id, candidate_users)
+
+
 @ray.remote
 def generate_llm_news_commentary(llm_service, cluster_id: int, article: dict, website_name: str = None) -> str:
     """

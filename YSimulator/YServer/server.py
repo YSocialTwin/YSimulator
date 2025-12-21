@@ -716,6 +716,21 @@ class OrchestratorServer:
                             extra={"extra_data": {"agent_id": act.agent_id, "target_post_id": act.target_post_id}},
                         )
                 
+                elif act.action_type == "FOLLOW":
+                    # Follow action: create follow relationship
+                    follow_data = {
+                        "follower_id": str(act.agent_id),  # FK to user_mgmt.id (UUID string) - agent who is following
+                        "user_id": act.target_user_id,  # FK to user_mgmt.id (UUID string) - user being followed
+                        "action": "follow",
+                        "round": self.current_round_id,  # FK to rounds.id
+                    }
+                    success = self.db.add_follow(follow_data)
+                    if not success:
+                        self.logger.warning(
+                            f"Failed to add follow for agent {act.agent_id}",
+                            extra={"extra_data": {"agent_id": act.agent_id, "target_user_id": act.target_user_id}},
+                        )
+                
                 else:
                     # Other interactions (LIKE, etc.)
                     interaction_data = {
@@ -1984,3 +1999,189 @@ class OrchestratorServer:
             Dictionary with post data or None if not found
         """
         return self.db.get_post(post_id)
+
+    def get_follow_suggestions(
+        self,
+        agent_id: str,
+        mode: str = "random",
+        n_neighbors: int = 10,
+        leaning_bias: int = 1
+    ) -> List[str]:
+        """
+        Get follow suggestions for an agent using the specified recommendation strategy.
+        
+        This method implements various link prediction and recommendation algorithms
+        to suggest users that an agent might want to follow.
+        
+        Args:
+            agent_id: UUID of the agent requesting follow suggestions
+            mode: Recommendation mode:
+                - "random": Random user suggestions (default)
+                - "common_neighbors": Users with mutual connections
+                - "jaccard": Jaccard coefficient-based similarity
+                - "adamic_adar": Adamic/Adar index for link prediction
+                - "preferential_attachment": Rich-get-richer recommendation
+            n_neighbors: Number of users to suggest (default: 10)
+            leaning_bias: Political leaning bias factor (1 = no bias, higher = more homophily)
+            
+        Returns:
+            List[str]: List of user UUIDs recommended for the agent to follow
+        """
+        try:
+            from sqlalchemy.orm import Session
+            from YSimulator.YServer.classes.models import User_mgmt, Follow
+            import networkx as nx
+            
+            with Session(self.db.engine) as session:
+                # Get agent's info for leaning-based filtering
+                agent = session.query(User_mgmt).filter_by(id=agent_id).first()
+                if not agent:
+                    self.logger.warning(f"Agent {agent_id} not found for follow suggestions")
+                    return []
+                
+                # Get all users (potential follow targets)
+                all_users = session.query(User_mgmt.id, User_mgmt.leaning).all()
+                all_user_ids = {user.id for user in all_users}
+                
+                # Get current follow relationships
+                follows = session.query(Follow).filter_by(action="follow").all()
+                
+                # Build follow network graph
+                G = nx.DiGraph()
+                G.add_nodes_from(all_user_ids)
+                for follow in follows:
+                    G.add_edge(follow.follower_id, follow.user_id)
+                
+                # Get users agent is already following
+                following = set(G.successors(agent_id)) if agent_id in G else set()
+                
+                # Get candidate users (not following yet, not self)
+                candidates = all_user_ids - following - {agent_id}
+                
+                if not candidates:
+                    return []
+                
+                # Apply recommendation strategy
+                if mode == "random":
+                    # Random selection from candidates
+                    suggestions = list(candidates)
+                    random.shuffle(suggestions)
+                    suggestions = suggestions[:n_neighbors]
+                    
+                elif mode == "common_neighbors":
+                    # Recommend users with most mutual connections
+                    scores = {}
+                    for candidate in candidates:
+                        if agent_id in G and candidate in G:
+                            common = len(set(G.successors(agent_id)) & set(G.successors(candidate)))
+                            scores[candidate] = common
+                        else:
+                            scores[candidate] = 0
+                    
+                    # Sort by score and take top-n
+                    sorted_candidates = sorted(scores.items(), key=lambda x: x[1], reverse=True)
+                    suggestions = [uid for uid, score in sorted_candidates[:n_neighbors]]
+                    
+                elif mode == "jaccard":
+                    # Jaccard similarity of follow sets
+                    scores = {}
+                    for candidate in candidates:
+                        if agent_id in G and candidate in G:
+                            agent_follows = set(G.successors(agent_id))
+                            candidate_follows = set(G.successors(candidate))
+                            if agent_follows or candidate_follows:
+                                intersection = len(agent_follows & candidate_follows)
+                                union = len(agent_follows | candidate_follows)
+                                scores[candidate] = intersection / union if union > 0 else 0
+                            else:
+                                scores[candidate] = 0
+                        else:
+                            scores[candidate] = 0
+                    
+                    sorted_candidates = sorted(scores.items(), key=lambda x: x[1], reverse=True)
+                    suggestions = [uid for uid, score in sorted_candidates[:n_neighbors]]
+                    
+                elif mode == "adamic_adar":
+                    # Adamic/Adar index
+                    try:
+                        # NetworkX provides this
+                        preds = nx.adamic_adar_index(G, [(agent_id, u) for u in candidates])
+                        scores = {u: score for _, u, score in preds}
+                        sorted_candidates = sorted(scores.items(), key=lambda x: x[1], reverse=True)
+                        suggestions = [uid for uid, score in sorted_candidates[:n_neighbors]]
+                    except:
+                        # Fallback to random if error
+                        suggestions = list(candidates)
+                        random.shuffle(suggestions)
+                        suggestions = suggestions[:n_neighbors]
+                    
+                elif mode == "preferential_attachment":
+                    # Rich-get-richer: prefer users with many followers
+                    scores = {}
+                    for candidate in candidates:
+                        # Count how many followers this candidate has
+                        followers_count = G.in_degree(candidate) if candidate in G else 0
+                        scores[candidate] = followers_count
+                    
+                    sorted_candidates = sorted(scores.items(), key=lambda x: x[1], reverse=True)
+                    suggestions = [uid for uid, score in sorted_candidates[:n_neighbors]]
+                    
+                else:
+                    # Unknown mode, fallback to random
+                    suggestions = list(candidates)
+                    random.shuffle(suggestions)
+                    suggestions = suggestions[:n_neighbors]
+                
+                # Apply leaning bias if > 1
+                if leaning_bias > 1 and suggestions:
+                    # Build leaning map
+                    leaning_map = {user.id: user.leaning for user in all_users}
+                    agent_leaning = leaning_map.get(agent_id)
+                    
+                    if agent_leaning:
+                        # Score candidates by leaning match
+                        leaning_scores = {}
+                        for candidate in suggestions:
+                            if leaning_map.get(candidate) == agent_leaning:
+                                leaning_scores[candidate] = leaning_bias
+                            else:
+                                leaning_scores[candidate] = 1
+                        
+                        # Weighted random selection
+                        weighted_suggestions = random.choices(
+                            list(leaning_scores.keys()),
+                            weights=list(leaning_scores.values()),
+                            k=min(n_neighbors, len(leaning_scores))
+                        )
+                        suggestions = weighted_suggestions
+                
+                return suggestions[:n_neighbors]
+                
+        except ImportError:
+            self.logger.error("NetworkX not available for follow recommendations, falling back to random")
+            # Fallback: random selection from non-following users
+            try:
+                with Session(self.db.engine) as session:
+                    all_users = session.query(User_mgmt.id).all()
+                    all_user_ids = [user.id for user in all_users if user.id != agent_id]
+                    
+                    # Get users already following
+                    following = session.query(Follow.user_id).filter_by(
+                        follower_id=agent_id,
+                        action="follow"
+                    ).all()
+                    following_ids = {f.user_id for f in following}
+                    
+                    # Filter out already following
+                    candidates = [uid for uid in all_user_ids if uid not in following_ids]
+                    
+                    if candidates:
+                        random.shuffle(candidates)
+                        return candidates[:n_neighbors]
+                    return []
+            except Exception as e:
+                self.logger.error(f"Error in fallback follow suggestions: {e}")
+                return []
+        except Exception as e:
+            self.logger.error(f"Error getting follow suggestions: {e}")
+            return []

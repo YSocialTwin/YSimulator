@@ -246,3 +246,38 @@ Your reaction:"""
         except Exception as e:
             # Fallback if LLM fails - default to LIKE
             return "LIKE"
+    
+    def generate_follow_decision(self, cluster_id: int, candidate_users: list) -> str:
+        """
+        Decide whether to follow one of the suggested users.
+        
+        This method is called remotely via Ray actor for the follow action.
+        
+        Args:
+            cluster_id: Cluster/persona ID of the agent
+            candidate_users: List of user IDs that could be followed
+            
+        Returns:
+            str: User ID to follow, or None to skip following
+        """
+        import random
+        
+        # If no candidates, return None
+        if not candidate_users:
+            return None
+        
+        # Get persona from configuration
+        persona = self.prompts_config["personas"].get(
+            str(cluster_id),
+            "You are a social media user."
+        )
+        
+        # For simplicity, LLM-based agents randomly select from candidates
+        # In future versions, this could query user profiles and make informed decisions
+        # For now, we keep it simple: randomly select one candidate
+        
+        # Simple heuristic: follow with 70% probability
+        if random.random() < 0.7:
+            return random.choice(candidate_users)
+        else:
+            return None  # Skip following this time
