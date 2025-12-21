@@ -47,6 +47,7 @@ config_directory/
 ├── simulation_config.json      # Client simulation configuration
 ├── agent_population.json       # Agent profiles
 ├── llm_prompts.json           # LLM prompts and personas
+├── network.csv                # Social network topology (optional)
 ├── simulation.db              # Database (auto-created)
 ├── ray_config.temp            # Ray address (auto-created)
 └── logs/                      # Log files (auto-created)
@@ -348,6 +349,60 @@ Defines personas and prompt templates for LLM interactions:
   - Available variables: `{cluster_id}`
 - `decide_reaction.user_template`: User prompt template for reaction decisions
   - Available variables: `{post_content}`
+
+### 5. `network.csv` - Social Network Topology (Optional)
+
+Defines the initial social network structure by specifying follow relationships between agents.
+
+**Format:**
+
+Each row in the CSV represents a directed edge (follow relationship):
+```csv
+follower_username,user_username
+```
+
+Where:
+- `follower_username`: Username of the agent who follows
+- `user_username`: Username of the agent being followed
+
+**Example:**
+
+```csv
+validator_001,TechNewsPage
+broadcaster_001,TechNewsPage
+explorer_001,TechNewsPage
+validator_001,broadcaster_001
+broadcaster_001,explorer_001
+explorer_001,validator_001
+```
+
+This creates a network where:
+- All three agents follow TechNewsPage
+- validator_001 follows broadcaster_001
+- broadcaster_001 follows explorer_001
+- explorer_001 follows validator_001
+
+**Behavior:**
+
+1. **Automatic Loading**: If `network.csv` exists in the configuration directory, it is automatically loaded when the first client connects.
+
+2. **Multi-Client Safe**: The system checks if any edges from the CSV already exist in the database before loading. This ensures the network is only loaded once, even in multi-client scenarios.
+
+3. **Agent Validation**: Only edges between agents defined in `agent_population.json` are created. Invalid usernames are logged and skipped.
+
+4. **Database Storage**: Follow relationships are stored in the `follow` table with:
+   - `action`: Set to "follow"
+   - `round`: Empty string (initial network has no associated simulation round)
+
+5. **Recommendation Systems**: Once loaded, the network influences content recommendation systems like `rchrono_followers` which prioritize posts from followed users.
+
+**Notes:**
+
+- The file is optional. If not present, agents start with no follow relationships.
+- Usernames must exactly match those in `agent_population.json` (case-sensitive).
+- The CSV should not have a header row.
+- Empty lines are ignored.
+- Follow relationships can still be created dynamically during simulation through agent actions.
 
 ## Usage
 
