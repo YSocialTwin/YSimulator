@@ -1093,7 +1093,6 @@ class OrchestratorServer:
                     
                     # Helper: Get followed user IDs (shared with rchrono_followers_popularity)
                     with self.db.engine.begin() as connection:
-                        from sqlalchemy import text
                         result = connection.execute(
                             text("SELECT follower_id FROM follow WHERE user_id = :agent_id AND action = 'follow'"),
                             {"agent_id": agent_id}
@@ -1125,7 +1124,6 @@ class OrchestratorServer:
                     
                     # Get follow relationships (same query as rchrono_followers)
                     with self.db.engine.begin() as connection:
-                        from sqlalchemy import text
                         result = connection.execute(
                             text("SELECT follower_id FROM follow WHERE user_id = :agent_id AND action = 'follow'"),
                             {"agent_id": agent_id}
@@ -1217,7 +1215,6 @@ class OrchestratorServer:
                         # Fallback to SQL query when Redis data not available yet
                         self.logger.info(f"Mode {mode} - Redis cache for interests/topics not available yet, using SQL")
                         with self.db.engine.begin() as connection:
-                            from sqlalchemy import text
                             query = text("""
                                 SELECT DISTINCT p.id
                                 FROM post p
@@ -1285,7 +1282,6 @@ class OrchestratorServer:
                         # Fallback to SQL
                         self.logger.info(f"Mode {mode} - Redis cache for interests not available yet, using SQL")
                         with self.db.engine.begin() as connection:
-                            from sqlalchemy import text
                             query = text("""
                                 SELECT DISTINCT p.id
                                 FROM post p
@@ -1390,7 +1386,6 @@ class OrchestratorServer:
                         # Fallback to SQL query
                         self.logger.info(f"Mode {mode} - Using SQL for user demographics query")
                         with self.db.engine.begin() as connection:
-                            from sqlalchemy import text
                             if mode == "similar_users_react":
                                 query = text("""
                                     SELECT DISTINCT p.id
