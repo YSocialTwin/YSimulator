@@ -442,6 +442,107 @@ class SimulationClient:
 
         return agents
 
+    def _load_and_create_social_network(self, network_csv_path: Path) -> int:
+        """
+        Load social network topology from CSV file and create Follow records.
+        
+        This method reads a network.csv file where each row represents an edge
+        in the social network as "agent1_name,agent2_name" and creates Follow
+        records in the database for each edge.
+        
+        Args:
+            network_csv_path: Path to the network.csv file
+            
+        Returns:
+            int: Number of follow relationships created
+        """
+        import csv
+        
+        if not network_csv_path.exists():
+            self.logger.info(f"No network.csv found at {network_csv_path}, skipping social network creation")
+            return 0
+        
+        self.logger.info(f"Loading social network from {network_csv_path}")
+        
+        # Create a mapping from username to agent ID for quick lookup
+        username_to_id = {agent.username: str(agent.id) for agent in self.agent_profiles}
+        
+        follow_count = 0
+        skipped_count = 0
+        
+        try:
+            with open(network_csv_path, 'r', encoding='utf-8') as csvfile:
+                reader = csv.reader(csvfile)
+                for row_num, row in enumerate(reader, start=1):
+                    # Skip empty rows
+                    if not row or len(row) < 2:
+                        continue
+                    
+                    # Parse the edge: follower follows user
+                    follower_name = row[0].strip()
+                    user_name = row[1].strip()
+                    
+                    # Skip if either username is not in our agent population
+                    if follower_name not in username_to_id:
+                        self.logger.warning(
+                            f"Skipping row {row_num}: follower '{follower_name}' not found in agent population"
+                        )
+                        skipped_count += 1
+                        continue
+                    
+                    if user_name not in username_to_id:
+                        self.logger.warning(
+                            f"Skipping row {row_num}: user '{user_name}' not found in agent population"
+                        )
+                        skipped_count += 1
+                        continue
+                    
+                    # Get agent IDs
+                    follower_id = username_to_id[follower_name]
+                    user_id = username_to_id[user_name]
+                    
+                    # Create follow relationship via server
+                    # We use the server's method to insert follow data
+                    # The round is set to None/empty for initial network setup
+                    follow_data = {
+                        "follower_id": follower_id,
+                        "user_id": user_id,
+                        "action": "follow",
+                        "round": "",  # Empty round for initial network setup
+                    }
+                    
+                    # Call server to add the follow relationship
+                    try:
+                        success = ray.get(self.server.add_follow_relationship.remote(follow_data))
+                        if success:
+                            follow_count += 1
+                        else:
+                            self.logger.warning(
+                                f"Failed to create follow relationship: {follower_name} -> {user_name}"
+                            )
+                            skipped_count += 1
+                    except Exception as e:
+                        self.logger.error(
+                            f"Error creating follow relationship: {follower_name} -> {user_name}: {e}",
+                            extra={"extra_data": {"error": str(e)}}
+                        )
+                        skipped_count += 1
+            
+            self.logger.info(
+                f"Social network loaded: {follow_count} relationships created, {skipped_count} skipped",
+                extra={"extra_data": {"follow_count": follow_count, "skipped_count": skipped_count}}
+            )
+            print(f"[{self.client_id}] Social network loaded: {follow_count} follow relationships created")
+            
+            return follow_count
+            
+        except Exception as e:
+            self.logger.error(
+                f"Error loading social network from {network_csv_path}: {e}",
+                extra={"extra_data": {"error": str(e)}}
+            )
+            return 0
+
     def run(self):
         """
         Main simulation loop for the client.
@@ -484,6 +585,16 @@ class SimulationClient:
         # Server tells us where to start - we count from here
         start_day = client_reg["start_day"]
         start_slot = client_reg["start_slot"]
+        
+        # Load social network topology if this is the first run (day 0, slot 0)
+        # and if network.csv exists in the config directory
+        if start_day == 0 and start_slot == 0:
+            network_csv_path = self.config_path / "network.csv"
+            if network_csv_path.exists():
+                print(f"[{self.client_id}] First run detected, loading social network topology...")
+                self._load_and_create_social_network(network_csv_path)
+            else:
+                self.logger.info("First run but no network.csv found, skipping social network creation")
         
         # Calculate our personal max_day for local tracking
         # num_days=0 means infinite simulation

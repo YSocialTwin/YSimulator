@@ -299,6 +299,33 @@ class OrchestratorServer:
             print(f"[Server] ❌ Agent registration error: {e}")
             raise
 
+    def add_follow_relationship(self, follow_data: dict) -> bool:
+        """
+        Add a follow relationship to the database.
+        
+        This method is called by clients to create follow relationships,
+        typically during initial social network setup from network.csv.
+        
+        Args:
+            follow_data: Dictionary containing:
+                - user_id: UUID of user being followed
+                - follower_id: UUID of follower
+                - action: 'follow' or 'unfollow'
+                - round: Round ID (can be empty for initial setup)
+        
+        Returns:
+            bool: True if successful, False otherwise
+        """
+        try:
+            success = self.db.add_follow(follow_data)
+            return success
+        except Exception as e:
+            self.logger.error(
+                f"Error adding follow relationship: {e}",
+                extra={"extra_data": {"error": str(e), "follow_data": follow_data}}
+            )
+            return False
+
     def register_client(self, client_id: str, num_days: int = 0) -> dict:
         """
         Register a new client with the server.
