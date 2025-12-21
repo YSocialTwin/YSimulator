@@ -45,6 +45,20 @@ from YSimulator.YClient.recsys import (
 # Constants
 REACTION_TYPES = ["LIKE", "LOVE", "LAUGH", "ANGRY", "SAD", "IGNORE"]
 
+# Recommendation system class mapping
+RECSYS_CLASS_MAP = {
+    "random": RandomOrder,
+    "rchrono": ReverseChrono,
+    "rchrono_popularity": ReverseChronoPopularity,
+    "rchrono_followers": ReverseChronoFollowers,
+    "rchrono_followers_popularity": ReverseChronoFollowersPopularity,
+    "rchrono_comments": ReverseChronoComments,
+    "common_interests": CommonInterests,
+    "common_user_interests": CommonUserInterests,
+    "similar_users_react": SimilarUsersReact,
+    "similar_users_posts": SimilarUsersPosts,
+}
+
 
 @ray.remote
 class SimulationClient:
@@ -765,22 +779,8 @@ class SimulationClient:
                     # Fall back to global config if agent doesn't specify
                     agent_recsys_mode = getattr(agent, 'recsys_type', None) or self.recsys_mode
                     
-                    # Map recsys mode to appropriate class
-                    recsys_class_map = {
-                        "random": RandomOrder,
-                        "rchrono": ReverseChrono,
-                        "rchrono_popularity": ReverseChronoPopularity,
-                        "rchrono_followers": ReverseChronoFollowers,
-                        "rchrono_followers_popularity": ReverseChronoFollowersPopularity,
-                        "rchrono_comments": ReverseChronoComments,
-                        "common_interests": CommonInterests,
-                        "common_user_interests": CommonUserInterests,
-                        "similar_users_react": SimilarUsersReact,
-                        "similar_users_posts": SimilarUsersPosts,
-                    }
-                    
                     # Get the appropriate recsys class, default to RandomOrder if unknown
-                    recsys_class = recsys_class_map.get(agent_recsys_mode, RandomOrder)
+                    recsys_class = RECSYS_CLASS_MAP.get(agent_recsys_mode, RandomOrder)
                     
                     # Initialize the recsys with configuration parameters
                     recsys = recsys_class(
@@ -822,22 +822,8 @@ class SimulationClient:
                     # Fall back to global config if agent doesn't specify
                     agent_recsys_mode = getattr(agent, 'recsys_type', None) or self.recsys_mode
                     
-                    # Map recsys mode to appropriate class
-                    recsys_class_map = {
-                        "random": RandomOrder,
-                        "rchrono": ReverseChrono,
-                        "rchrono_popularity": ReverseChronoPopularity,
-                        "rchrono_followers": ReverseChronoFollowers,
-                        "rchrono_followers_popularity": ReverseChronoFollowersPopularity,
-                        "rchrono_comments": ReverseChronoComments,
-                        "common_interests": CommonInterests,
-                        "common_user_interests": CommonUserInterests,
-                        "similar_users_react": SimilarUsersReact,
-                        "similar_users_posts": SimilarUsersPosts,
-                    }
-                    
                     # Get the appropriate recsys class, default to RandomOrder if unknown
-                    recsys_class = recsys_class_map.get(agent_recsys_mode, RandomOrder)
+                    recsys_class = RECSYS_CLASS_MAP.get(agent_recsys_mode, RandomOrder)
                     
                     # Initialize the recsys with configuration parameters
                     recsys = recsys_class(

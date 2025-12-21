@@ -6,6 +6,7 @@ These actions follow simple, predictable patterns based on cluster membership
 and probability distributions.
 """
 
+import random
 import ray
 from YSimulator.YClient.classes.ray_models import ActionDTO
 
@@ -165,8 +166,6 @@ def generate_rule_based_read(agent_id: int, cluster_id: int, target_post_id: str
         True
         >>> # Or action could be None (IGNORE)
     """
-    import random
-    
     # Rule-based: randomly choose reaction
     reactions = ["LIKE", "ANGRY", "IGNORE"]  # ANGRY represents DISLIKE
     reaction_type = random.choice(reactions)
