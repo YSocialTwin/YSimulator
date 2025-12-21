@@ -442,6 +442,57 @@ class SimulationClient:
 
         return agents
 
+    def _parse_network_edges(self, network_csv_path: Path) -> list:
+        """
+        Parse network.csv to extract edge tuples (follower_id, user_id).
+        
+        Args:
+            network_csv_path: Path to the network.csv file
+            
+        Returns:
+            list: List of tuples (follower_id, user_id) representing edges
+        """
+        import csv
+        
+        if not network_csv_path.exists():
+            return []
+        
+        # Create a mapping from username to agent ID for quick lookup
+        username_to_id = {agent.username: str(agent.id) for agent in self.agent_profiles}
+        
+        edges = []
+        
+        try:
+            with open(network_csv_path, 'r', encoding='utf-8') as csvfile:
+                reader = csv.reader(csvfile)
+                for row_num, row in enumerate(reader, start=1):
+                    # Skip empty rows
+                    if not row or len(row) < 2:
+                        continue
+                    
+                    # Parse the edge: follower follows user
+                    follower_name = row[0].strip()
+                    user_name = row[1].strip()
+                    
+                    # Skip if either username is not in our agent population
+                    if follower_name not in username_to_id or user_name not in username_to_id:
+                        continue
+                    
+                    # Get agent IDs
+                    follower_id = username_to_id[follower_name]
+                    user_id = username_to_id[user_name]
+                    
+                    edges.append((follower_id, user_id))
+            
+            return edges
+            
+        except Exception as e:
+            self.logger.error(
+                f"Error parsing network CSV: {e}",
+                extra={"extra_data": {"error": str(e)}}
+            )
+            return []
+
     def _load_and_create_social_network(self, network_csv_path: Path) -> int:
         """
         Load social network topology from CSV file and create Follow records.
@@ -586,15 +637,28 @@ class SimulationClient:
         start_day = client_reg["start_day"]
         start_slot = client_reg["start_slot"]
         
-        # Load social network topology if this is the first run (day 0, slot 0)
-        # and if network.csv exists in the config directory
-        if start_day == 0 and start_slot == 0:
-            network_csv_path = self.config_path / "network.csv"
-            if network_csv_path.exists():
-                print(f"[{self.client_id}] First run detected, loading social network topology...")
-                self._load_and_create_social_network(network_csv_path)
+        # Check if we should load the social network topology from network.csv
+        # This works regardless of when the client joins (multi-client scenarios)
+        network_csv_path = self.config_path / "network.csv"
+        if network_csv_path.exists():
+            # First, parse the network edges from CSV
+            print(f"[{self.client_id}] Checking if social network needs to be loaded...")
+            edges = self._parse_network_edges(network_csv_path)
+            
+            if edges:
+                # Ask server if any of these edges already exist in the database
+                edges_exist = ray.get(self.server.check_network_edges_exist.remote(edges))
+                
+                if not edges_exist:
+                    print(f"[{self.client_id}] Loading social network topology from network.csv...")
+                    self._load_and_create_social_network(network_csv_path)
+                else:
+                    self.logger.info("Network already loaded (edges exist in database)")
+                    print(f"[{self.client_id}] Social network already loaded, skipping")
             else:
-                self.logger.info("First run but no network.csv found, skipping social network creation")
+                self.logger.warning("No valid edges found in network.csv")
+        else:
+            self.logger.info("No network.csv found, skipping social network creation")
         
         # Calculate our personal max_day for local tracking
         # num_days=0 means infinite simulation

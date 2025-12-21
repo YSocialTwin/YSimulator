@@ -326,6 +326,54 @@ class OrchestratorServer:
             )
             return False
 
+    def check_network_edges_exist(self, edges: list) -> bool:
+        """
+        Check if any of the network edges already exist in the Follow table.
+        
+        This method checks if the social network from network.csv has already been loaded
+        by verifying if any of the specified edges exist in the database.
+        
+        Args:
+            edges: List of tuples (follower_id, user_id) representing network edges
+        
+        Returns:
+            bool: True if any edge exists, False if none exist
+        """
+        if not edges:
+            return False
+        
+        try:
+            from sqlalchemy.orm import Session
+            from YSimulator.YServer.classes.models import Follow
+            
+            with Session(self.db.engine) as session:
+                # Check if any of the edges exist
+                # We only need to find one to know the network was loaded
+                for follower_id, user_id in edges[:10]:  # Check first 10 edges for efficiency
+                    exists = session.query(Follow).filter_by(
+                        follower_id=follower_id,
+                        user_id=user_id,
+                        action="follow"
+                    ).first()
+                    
+                    if exists:
+                        self.logger.info(
+                            f"Network already loaded (found edge: {follower_id} -> {user_id})"
+                        )
+                        return True
+                
+                # None of the checked edges exist
+                self.logger.info("Network not yet loaded (no edges found in database)")
+                return False
+                
+        except Exception as e:
+            self.logger.error(
+                f"Error checking network edges: {e}",
+                extra={"extra_data": {"error": str(e)}}
+            )
+            # On error, assume network not loaded to be safe
+            return False
+
     def register_client(self, client_id: str, num_days: int = 0) -> dict:
         """
         Register a new client with the server.
