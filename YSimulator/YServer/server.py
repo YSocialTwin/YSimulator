@@ -2244,17 +2244,16 @@ class OrchestratorServer:
                     
                 elif mode == "adamic_adar":
                     # Adamic/Adar: sum of 1/log(degree) for common neighbors
-                    # Simplified version: prefer common neighbors with fewer followers
+                    # Two-step approach: 1) Find common neighbors, 2) Calculate Adamic/Adar scores
                     if not following_ids:
                         candidates = candidates_query.all()
                         candidate_ids = [c.id for c in candidates]
                         random.shuffle(candidate_ids)
                         return candidate_ids[:n_neighbors]
                     
-                    # Use common neighbors as proxy (full Adamic/Adar is computationally expensive)
-                    # This is a simplified version that still gives good results
-                    adamic_adar_query = text("""
-                        SELECT f2.user_id, COUNT(DISTINCT f2.follower_id) as score
+                    # Step 1: Get common neighbors (friend-of-friend) candidates
+                    common_neighbors_query = text("""
+                        SELECT f2.user_id, f2.follower_id as common_neighbor
                         FROM follow f1
                         JOIN follow f2 ON f1.user_id = f2.follower_id
                         WHERE f1.follower_id = :agent_id
@@ -2262,22 +2261,71 @@ class OrchestratorServer:
                           AND f2.action = 'follow'
                           AND f2.user_id != :agent_id
                           AND f2.user_id NOT IN :following_ids
-                        GROUP BY f2.user_id
-                        ORDER BY score DESC
-                        LIMIT :limit
                     """)
                     
                     following_list = list(following_ids) if following_ids else [agent_id]
                     result = session.execute(
-                        adamic_adar_query,
+                        common_neighbors_query,
                         {
                             "agent_id": agent_id,
-                            "following_ids": tuple(following_list),
-                            "limit": n_neighbors
+                            "following_ids": tuple(following_list)
                         }
                     )
-                    suggestions = [row[0] for row in result]
                     
+                    # Build mapping of candidate -> list of common neighbors
+                    candidate_common_neighbors = {}
+                    for row in result:
+                        candidate_id, common_neighbor = row
+                        if candidate_id not in candidate_common_neighbors:
+                            candidate_common_neighbors[candidate_id] = []
+                        candidate_common_neighbors[candidate_id].append(common_neighbor)
+                    
+                    if not candidate_common_neighbors:
+                        # No common neighbors found, fallback to random
+                        candidates = candidates_query.all()
+                        candidate_ids = [c.id for c in candidates]
+                        random.shuffle(candidate_ids)
+                        return candidate_ids[:n_neighbors]
+                    
+                    # Step 2: Calculate Adamic/Adar score for each candidate
+                    # For each common neighbor, get their degree (out-degree = users they follow)
+                    common_neighbor_ids = set()
+                    for neighbors in candidate_common_neighbors.values():
+                        common_neighbor_ids.update(neighbors)
+                    
+                    # Query to get degree for each common neighbor
+                    degree_query = text("""
+                        SELECT follower_id, COUNT(*) as out_degree
+                        FROM follow
+                        WHERE follower_id IN :neighbor_ids
+                          AND action = 'follow'
+                        GROUP BY follower_id
+                    """)
+                    
+                    degree_result = session.execute(
+                        degree_query,
+                        {"neighbor_ids": tuple(common_neighbor_ids)}
+                    )
+                    
+                    # Build degree map
+                    neighbor_degrees = {row[0]: row[1] for row in degree_result}
+                    
+                    # Calculate Adamic/Adar score for each candidate
+                    import math
+                    adamic_adar_scores = {}
+                    for candidate_id, neighbors in candidate_common_neighbors.items():
+                        score = 0.0
+                        for neighbor in neighbors:
+                            degree = neighbor_degrees.get(neighbor, 1)  # Default to 1 to avoid division by zero
+                            if degree > 1:  # Only count if degree > 1 (log(1) = 0)
+                                score += 1.0 / math.log(degree)
+                        adamic_adar_scores[candidate_id] = score
+                    
+                    # Sort by Adamic/Adar score (highest first)
+                    sorted_candidates = sorted(adamic_adar_scores.items(), key=lambda x: x[1], reverse=True)
+                    suggestions = [uid for uid, score in sorted_candidates[:n_neighbors]]
+                    
+                    # Fill with random if needed
                     if len(suggestions) < n_neighbors:
                         remaining = n_neighbors - len(suggestions)
                         extra_candidates = candidates_query.filter(
@@ -2433,9 +2481,8 @@ class OrchestratorServer:
                 sorted_candidates = sorted(follower_counts.items(), key=lambda x: x[1], reverse=True)
                 return [uid for uid, _ in sorted_candidates[:n_neighbors]]
             
-            elif mode in ["common_neighbors", "jaccard", "adamic_adar"]:
-                # These modes require more complex graph analysis
-                # For Redis, use a simplified common neighbors approach
+            elif mode in ["common_neighbors", "jaccard"]:
+                # These modes require common neighbors analysis
                 if not following_ids:
                     random.shuffle(candidates)
                     return candidates[:n_neighbors]
@@ -2458,6 +2505,65 @@ class OrchestratorServer:
                 
                 # Sort by common neighbor count
                 sorted_candidates = sorted(common_neighbor_counts.items(), key=lambda x: x[1], reverse=True)
+                return [uid for uid, _ in sorted_candidates[:n_neighbors]]
+            
+            elif mode == "adamic_adar":
+                # Adamic/Adar: sum of 1/log(degree) for common neighbors
+                # Two-step approach: 1) Find common neighbors, 2) Calculate Adamic/Adar scores
+                if not following_ids:
+                    random.shuffle(candidates)
+                    return candidates[:n_neighbors]
+                
+                # Step 1: Build candidate -> common neighbors mapping
+                candidate_common_neighbors = {}
+                for candidate in candidates:
+                    common_neighbors = []
+                    # Find which of agent's friends also follow this candidate
+                    for friend_id in following_ids:
+                        # Check if friend follows candidate
+                        for key in follow_keys:
+                            follow_data = self.db.redis_client.hgetall(key)
+                            if (follow_data.get("follower_id") == friend_id and 
+                                follow_data.get("user_id") == candidate and 
+                                follow_data.get("action") == "follow"):
+                                common_neighbors.append(friend_id)
+                                break
+                    if common_neighbors:
+                        candidate_common_neighbors[candidate] = common_neighbors
+                
+                if not candidate_common_neighbors:
+                    # No common neighbors found
+                    random.shuffle(candidates)
+                    return candidates[:n_neighbors]
+                
+                # Step 2: Calculate degree for each common neighbor
+                neighbor_degrees = {}
+                all_common_neighbors = set()
+                for neighbors in candidate_common_neighbors.values():
+                    all_common_neighbors.update(neighbors)
+                
+                for neighbor in all_common_neighbors:
+                    # Count how many users this neighbor follows
+                    degree = 0
+                    for key in follow_keys:
+                        follow_data = self.db.redis_client.hgetall(key)
+                        if follow_data.get("follower_id") == neighbor and follow_data.get("action") == "follow":
+                            degree += 1
+                    neighbor_degrees[neighbor] = max(degree, 1)  # At least 1 to avoid division issues
+                
+                # Step 3: Calculate Adamic/Adar score for each candidate
+                import math
+                adamic_adar_scores = {}
+                for candidate, neighbors in candidate_common_neighbors.items():
+                    score = 0.0
+                    for neighbor in neighbors:
+                        degree = neighbor_degrees.get(neighbor, 1)
+                        if degree > 1:  # Only count if degree > 1 (log(1) = 0)
+                            score += 1.0 / math.log(degree)
+                    adamic_adar_scores[candidate] = score
+                
+                # Sort by Adamic/Adar score (highest first)
+                sorted_candidates = sorted(adamic_adar_scores.items(), key=lambda x: x[1], reverse=True)
                 return [uid for uid, _ in sorted_candidates[:n_neighbors]]
             
             else:
