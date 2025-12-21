@@ -22,7 +22,8 @@
       "cluster": 0,
       "llm": true,
       "toxicity": "no",
-      "daily_activity_level": 2
+      "daily_activity_level": 2,
+      "recsys_type": "rchrono"
     },
     {
       "id": "0de14841-2c5c-5e94-87c5-bb9fac705308",
@@ -46,7 +47,8 @@
       "cluster": 1,
       "llm": true,
       "toxicity": "no",
-      "daily_activity_level": 4
+      "daily_activity_level": 4,
+      "recsys_type": "random"
     },
     {
       "id": "5244e080-c488-5e63-b6bb-260de35b9b51",
@@ -70,7 +72,8 @@
       "cluster": 2,
       "llm": true,
       "toxicity": "no",
-      "daily_activity_level": 3
+      "daily_activity_level": 3,
+      "recsys_type": "rchrono"
     },
     {
       "id": "b280899e-17b1-52a4-aed6-0c690ba6daf2",
@@ -92,7 +95,8 @@
       "daily_activity_level": 4,
       "round_actions": 6,
       "is_page": 1,
-      "feed_url": "https://techcrunch.com/feed/"
+      "feed_url": "https://techcrunch.com/feed/",
+      "recsys_type": "random"
     }
   ],
   "generation_config": {
@@ -117,7 +121,8 @@
       "password": "simulation_agent",
       "education_level": "college",
       "round_actions": 3,
-      "is_page": 0
+      "is_page": 0,
+      "recsys_type": "random"
     }
   }
 }

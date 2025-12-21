@@ -18,14 +18,46 @@ import ray
 from YSimulator.YClient.actions import (
     generate_llm_post_async,
     generate_llm_reaction_async,
+    generate_llm_read_async,
     generate_rule_based_post,
     generate_rule_based_reaction,
     generate_rule_based_comment,
     generate_rule_based_share,
+    generate_rule_based_read,
     generate_news_post_async,
     generate_rule_based_news_post,
 )
 from YSimulator.YClient.classes.ray_models import ActionDTO, AgentProfile
+from YSimulator.YClient.recsys import (
+    ContentRecSys,
+    ReverseChrono,
+    ReverseChronoPopularity,
+    ReverseChronoFollowers,
+    ReverseChronoFollowersPopularity,
+    ReverseChronoComments,
+    CommonInterests,
+    CommonUserInterests,
+    SimilarUsersReact,
+    SimilarUsersPosts,
+    RandomOrder
+)
+
+# Constants
+REACTION_TYPES = ["LIKE", "LOVE", "LAUGH", "ANGRY", "SAD", "IGNORE"]
+
+# Recommendation system class mapping
+RECSYS_CLASS_MAP = {
+    "random": RandomOrder,
+    "rchrono": ReverseChrono,
+    "rchrono_popularity": ReverseChronoPopularity,
+    "rchrono_followers": ReverseChronoFollowers,
+    "rchrono_followers_popularity": ReverseChronoFollowersPopularity,
+    "rchrono_comments": ReverseChronoComments,
+    "common_interests": CommonInterests,
+    "common_user_interests": CommonUserInterests,
+    "similar_users_react": SimilarUsersReact,
+    "similar_users_posts": SimilarUsersPosts,
+}
 
 
 @ray.remote
@@ -93,6 +125,12 @@ class SimulationClient:
         archetype_config = simulation_config["simulation"].get("agent_archetypes", {})
         self.archetypes_enabled = archetype_config.get("enabled", False)
         self.archetype_distribution = archetype_config.get("distribution", {})
+        
+        # Load recommendation system configuration
+        recsys_config = simulation_config["simulation"].get("recsys", {})
+        self.recsys_mode = recsys_config.get("mode", "random")  # "random" or "rchrono"
+        self.recsys_n_posts = recsys_config.get("n_posts", 5)
+        self.recsys_visibility_rounds = recsys_config.get("visibility_rounds", 36)
 
         # Create agents from configuration
         self.agent_profiles = []
@@ -736,19 +774,91 @@ class SimulationClient:
                         actions.append(action)
                 
                 elif action_type == "comment":
+                    # Use recsys to get recommended posts to comment on
+                    # Initialize recsys based on agent's recsys_type preference
+                    # Fall back to global config if agent doesn't specify
+                    agent_recsys_mode = getattr(agent, 'recsys_type', None) or self.recsys_mode
+                    
+                    # Get the appropriate recsys class, default to RandomOrder if unknown
+                    recsys_class = RECSYS_CLASS_MAP.get(agent_recsys_mode, RandomOrder)
+                    
+                    # Initialize the recsys with configuration parameters
+                    recsys = recsys_class(
+                        n_posts=self.recsys_n_posts,
+                        visibility_rounds=self.recsys_visibility_rounds
+                    )
+                    
+                    # Get recommended posts from server
+                    recommended_posts = recsys.get_recommendations(self.server, agent.id)
+                    
+                    if not recommended_posts:
+                        # No posts available to comment on, skip this action
+                        continue
+                    
+                    # Select one post randomly from recommendations
+                    target_post = random.choice(recommended_posts)
+                    
                     if agent_type == "llm":
-                        # LLM: Fire off async call for reaction (comment is a type of reaction)
-                        future = generate_llm_reaction_async(self.llm, agent.cluster, "content")
-                        pending_llm_reactions.append((agent.id, agent.cluster, target, future))
+                        # LLM: Get the post content and ask for a comment
+                        # First, fetch the post content
+                        post_data = ray.get(self.server.get_post.remote(target_post))
+                        if post_data:
+                            post_content = post_data.get("tweet", "")
+                            # Fire off async LLM call to generate comment
+                            future = self.llm.generate_comment.remote(agent.cluster, post_content)
+                            pending_llm_reactions.append((agent.id, agent.cluster, target_post, future))
+                        else:
+                            # Post not found, skip
+                            continue
                     else:
-                        # Rule-based: Create COMMENT action
-                        action = generate_rule_based_comment(agent.id, agent.cluster, target)
+                        # Rule-based: Just comment "COMMENT"
+                        action = generate_rule_based_comment(agent.id, agent.cluster, target_post)
                         actions.append(action)
                 
                 elif action_type == "read":
-                    # Stub: Read action - agent reads a post without creating content
-                    # This could track engagement metrics in the future
-                    pass
+                    # Read action: Get recommended posts, save recommendations, randomly select one, and decide reaction
+                    # Use recsys to get recommended posts
+                    # Initialize recsys based on agent's recsys_type preference
+                    # Fall back to global config if agent doesn't specify
+                    agent_recsys_mode = getattr(agent, 'recsys_type', None) or self.recsys_mode
+                    
+                    # Get the appropriate recsys class, default to RandomOrder if unknown
+                    recsys_class = RECSYS_CLASS_MAP.get(agent_recsys_mode, RandomOrder)
+                    
+                    # Initialize the recsys with configuration parameters
+                    recsys = recsys_class(
+                        n_posts=self.recsys_n_posts,
+                        visibility_rounds=self.recsys_visibility_rounds
+                    )
+                    
+                    # Get recommended posts from server
+                    # Note: _save_recommendation is already called inside get_recommendations via server
+                    recommended_posts = recsys.get_recommendations(self.server, agent.id)
+                    
+                    if not recommended_posts:
+                        # No posts available to read, skip this action
+                        continue
+                    
+                    # Select one post randomly from recommendations
+                    target_post = random.choice(recommended_posts)
+                    
+                    if agent_type == "llm":
+                        # LLM: Get the post content and ask for a reaction decision
+                        # First, fetch the post content
+                        post_data = ray.get(self.server.get_post.remote(target_post))
+                        if post_data:
+                            post_content = post_data.get("tweet", "")
+                            # Fire off async LLM call to decide reaction
+                            future = generate_llm_read_async(self.llm, agent.cluster, post_content)
+                            pending_llm_reactions.append((agent.id, agent.cluster, target_post, future))
+                        else:
+                            # Post not found, skip
+                            continue
+                    else:
+                        # Rule-based: Randomly choose LIKE, DISLIKE (ANGRY), or IGNORE
+                        action = generate_rule_based_read(agent.id, agent.cluster, target_post)
+                        if action:  # Only add if not IGNORE
+                            actions.append(action)
                 
                 elif action_type == "image":
                     # Stub: Image post action - agent creates a post with an image
@@ -883,14 +993,19 @@ class SimulationClient:
                     self.logger.info(f"LLM post for agent {a_id}: NO article_id, content_len={len(res_txt)}")
                 actions.append(action)
         
-        # Resolve Reactions
+        # Resolve Reactions and Comments
         if pending_llm_reactions:
             futures = [r[3] for r in pending_llm_reactions]
-            results = ray.get(futures)  # Blocks once for ALL reactions
+            results = ray.get(futures)  # Blocks once for ALL reactions/comments
             
             for i, res_act in enumerate(results):
                 a_id, cid, target, _ = pending_llm_reactions[i]
-                if res_act != "IGNORE":
+                # Check if result is a comment (text) or a reaction type
+                if res_act and res_act.upper() not in REACTION_TYPES:
+                    # This is a comment text from LLM
+                    actions.append(ActionDTO(a_id, cid, "COMMENT", content=res_act, target_post_id=target))
+                elif res_act.upper() != "IGNORE":
+                    # This is a reaction type
                     actions.append(ActionDTO(a_id, cid, res_act, target_post_id=target))
         
         self.logger.info(f"Returning {len(actions)} total actions")

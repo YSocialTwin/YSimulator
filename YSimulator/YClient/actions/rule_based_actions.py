@@ -6,6 +6,7 @@ These actions follow simple, predictable patterns based on cluster membership
 and probability distributions.
 """
 
+import random
 import ray
 from YSimulator.YClient.classes.ray_models import ActionDTO
 
@@ -66,7 +67,7 @@ def generate_rule_based_comment(agent_id: int, cluster_id: int, target_post_id: 
     Generate a simple rule-based comment action.
     
     Rule-based agents create simple comments on posts.
-    The behavior is deterministic - rule-based agents create cluster-specific comments.
+    The behavior is deterministic - rule-based agents just comment "COMMENT".
     
     Args:
         agent_id: Unique identifier for the agent
@@ -81,9 +82,9 @@ def generate_rule_based_comment(agent_id: int, cluster_id: int, target_post_id: 
         >>> action.action_type
         'COMMENT'
         >>> action.content
-        'Cluster 1 comment'
+        'COMMENT'
     """
-    content = f"Cluster {cluster_id} comment"
+    content = "COMMENT"
     return ActionDTO(agent_id, cluster_id, "COMMENT", content=content, target_post_id=target_post_id)
 
 
@@ -142,3 +143,34 @@ def generate_rule_based_news_post(agent_id: int, cluster_id: int, article: dict,
     action = ActionDTO(agent_id, cluster_id, "POST", content=content)
     
     return action, article_id
+
+
+def generate_rule_based_read(agent_id: int, cluster_id: int, target_post_id: str) -> ActionDTO:
+    """
+    Generate a simple rule-based read action (reaction to discovered post).
+    
+    Rule-based agents randomly decide to LIKE, DISLIKE (ANGRY), or IGNORE posts
+    they discover via the recommendation system.
+    
+    Args:
+        agent_id: Unique identifier for the agent
+        cluster_id: Cluster/group the agent belongs to
+        target_post_id: UUID of the post to react to
+        
+    Returns:
+        ActionDTO or None: Reaction action (LIKE or ANGRY), or None if IGNORE
+        
+    Example:
+        >>> action = generate_rule_based_read(42, 1, "post-uuid-123")
+        >>> action.action_type in ["LIKE", "ANGRY"]
+        True
+        >>> # Or action could be None (IGNORE)
+    """
+    # Rule-based: randomly choose reaction
+    reactions = ["LIKE", "ANGRY", "IGNORE"]  # ANGRY represents DISLIKE
+    reaction_type = random.choice(reactions)
+    
+    if reaction_type == "IGNORE":
+        return None  # No action for IGNORE
+    
+    return ActionDTO(agent_id, cluster_id, reaction_type, target_post_id=target_post_id)

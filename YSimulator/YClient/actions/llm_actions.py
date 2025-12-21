@@ -127,6 +127,43 @@ def generate_news_post_async(news_service, llm_service, agent_cluster: int, arti
     return commentary_future, article_id
 
 
+def generate_llm_read_async(llm_handle, cluster_id: int, content: str):
+    """
+    Initiate async LLM read reaction decision.
+    
+    This function doesn't wait for the LLM response - it immediately returns
+    a Ray ObjectRef (future) that can be resolved later. This enables parallel
+    execution of multiple LLM calls.
+    
+    The LLM service will decide how to react to a post discovered via read/recommendation.
+    
+    Args:
+        llm_handle: Ray actor handle for the LLM service
+        cluster_id: Cluster/group the agent belongs to (determines persona)
+        content: Content of the post being reacted to
+        
+    Returns:
+        Ray ObjectRef: Future that will resolve to reaction type (str)
+        
+    Usage:
+        # Scatter phase - fire off multiple LLM calls in parallel
+        futures = []
+        for agent, target_post, post_content in agent_post_pairs:
+            future = generate_llm_read_async(llm, agent.cluster, post_content)
+            futures.append((agent.id, agent.cluster, target_post, future))
+        
+        # Gather phase - wait for all results at once
+        results = ray.get([f[3] for f in futures])
+        
+        # Create actions from results (skip IGNORE)
+        for i, reaction_type in enumerate(results):
+            agent_id, cluster_id, target, _ = futures[i]
+            if reaction_type != "IGNORE":
+                actions.append(ActionDTO(agent_id, cluster_id, reaction_type, target_post_id=target))
+    """
+    return llm_handle.generate_read_reaction.remote(cluster_id, content)
+
+
 @ray.remote
 def generate_llm_news_commentary(llm_service, cluster_id: int, article: dict, website_name: str = None) -> str:
     """
