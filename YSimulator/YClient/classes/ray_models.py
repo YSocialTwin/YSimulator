@@ -21,9 +21,8 @@ class AgentProfile:
     ex: Optional[str] = None  # Extraversion
     ag: Optional[str] = None  # Agreeableness
     ne: Optional[str] = None  # Neuroticism
-    recsys_type: str = "default"
+    recsys_type: str = "random"  # Content recommendation system mode: random, rchrono, rchrono_popularity, rchrono_followers, rchrono_followers_popularity, rchrono_comments, common_interests, common_user_interests, similar_users_react, similar_users_posts
     frecsys_type: str = "default"
-    crecsys: str = "random"  # Content recommendation system mode: random, rchrono, rchrono_popularity, rchrono_followers, rchrono_followers_popularity, rchrono_comments, common_interests, common_user_interests, similar_users_react, similar_users_posts
     language: str = "en"
     owner: Optional[str] = None
     education_level: Optional[str] = None

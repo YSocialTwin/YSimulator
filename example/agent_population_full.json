@@ -22,7 +22,8 @@
       "cluster": 0,
       "llm": false,
       "toxicity": "no",
-      "daily_activity_level": 1
+      "daily_activity_level": 1,
+      "recsys_type": "random"
     },
     {
       "id": "0de14841-2c5c-5e94-87c5-bb9fac705308",
@@ -46,7 +47,8 @@
       "cluster": 2,
       "llm": true,
       "toxicity": "no",
-      "daily_activity_level": 4
+      "daily_activity_level": 4,
+      "recsys_type": "rchrono"
     },
     {
       "id": "5244e080-c488-5e63-b6bb-260de35b9b51",
@@ -70,7 +72,8 @@
       "cluster": 0,
       "llm": false,
       "toxicity": "no",
-      "daily_activity_level": 3
+      "daily_activity_level": 3,
+      "recsys_type": "random"
     },
     {
       "id": "e7d66d7c-ff04-5d6e-86b0-2c61739de7d6",
@@ -94,7 +97,8 @@
       "cluster": 0,
       "llm": false,
       "toxicity": "no",
-      "daily_activity_level": 3
+      "daily_activity_level": 3,
+      "recsys_type": "rchrono"
     },
     {
       "id": "ec2be7a9-c8e0-5a50-8cb4-5bb209782d88",
@@ -118,7 +122,8 @@
       "cluster": 1,
       "llm": true,
       "toxicity": "no",
-      "daily_activity_level": 5
+      "daily_activity_level": 5,
+      "recsys_type": "random"
     },
     {
       "id": "205d98d5-ba95-552e-8cc7-27484b9101ca",
@@ -142,7 +147,8 @@
       "cluster": 1,
       "llm": true,
       "toxicity": "no",
-      "daily_activity_level": 5
+      "daily_activity_level": 5,
+      "recsys_type": "rchrono"
     },
     {
       "id": "e5012653-0c60-52a0-9532-0a0c3d4e86d2",
@@ -166,7 +172,8 @@
       "cluster": 0,
       "llm": true,
       "toxicity": "no",
-      "daily_activity_level": 2
+      "daily_activity_level": 2,
+      "recsys_type": "random"
     },
     {
       "id": "83b67e44-6bc6-5836-bee8-c3e9289ffe08",
@@ -190,7 +197,8 @@
       "cluster": 0,
       "llm": false,
       "toxicity": "no",
-      "daily_activity_level": 2
+      "daily_activity_level": 2,
+      "recsys_type": "rchrono"
     },
     {
       "id": "38b10d5a-6ee7-5365-83a8-3d9913e506ed",
@@ -214,7 +222,8 @@
       "cluster": 0,
       "llm": true,
       "toxicity": "no",
-      "daily_activity_level": 2
+      "daily_activity_level": 2,
+      "recsys_type": "random"
     },
     {
       "id": "e2481d7d-6955-5198-8507-a3701bf01ae8",
@@ -238,7 +247,8 @@
       "cluster": 2,
       "llm": false,
       "toxicity": "no",
-      "daily_activity_level": 2
+      "daily_activity_level": 2,
+      "recsys_type": "rchrono"
     },
     {
       "id": "68e41262-a439-5509-967b-10ff043584b4",
@@ -262,7 +272,8 @@
       "cluster": 1,
       "llm": false,
       "toxicity": "no",
-      "daily_activity_level": 5
+      "daily_activity_level": 5,
+      "recsys_type": "random"
     },
     {
       "id": "bc7be151-8bde-510a-8622-6cb9fdb52040",
@@ -286,7 +297,8 @@
       "cluster": 1,
       "llm": false,
       "toxicity": "no",
-      "daily_activity_level": 5
+      "daily_activity_level": 5,
+      "recsys_type": "rchrono"
     },
     {
       "id": "6df231c8-fc83-5a27-aa2c-e094203f3084",
@@ -310,7 +322,8 @@
       "cluster": 0,
       "llm": false,
       "toxicity": "no",
-      "daily_activity_level": 3
+      "daily_activity_level": 3,
+      "recsys_type": "random"
     },
     {
       "id": "6771665a-d1f9-5809-880c-9b87f528404e",
@@ -334,7 +347,8 @@
       "cluster": 2,
       "llm": true,
       "toxicity": "no",
-      "daily_activity_level": 4
+      "daily_activity_level": 4,
+      "recsys_type": "rchrono"
     },
     {
       "id": "58ba4659-9583-5018-8398-29f5365c9d7e",
@@ -358,7 +372,8 @@
       "cluster": 0,
       "llm": false,
       "toxicity": "no",
-      "daily_activity_level": 2
+      "daily_activity_level": 2,
+      "recsys_type": "random"
     },
     {
       "id": "d4497669-984e-52e0-991b-dcca691aee36",
@@ -382,7 +397,8 @@
       "cluster": 0,
       "llm": false,
       "toxicity": "no",
-      "daily_activity_level": 1
+      "daily_activity_level": 1,
+      "recsys_type": "rchrono"
     },
     {
       "id": "c9e9bfde-c668-507f-b844-14eb3e129267",
@@ -406,7 +422,8 @@
       "cluster": 0,
       "llm": false,
       "toxicity": "no",
-      "daily_activity_level": 3
+      "daily_activity_level": 3,
+      "recsys_type": "random"
     },
     {
       "id": "a4154638-5b44-5e55-b41f-3054ade7b9ae",
@@ -430,7 +447,8 @@
       "cluster": 2,
       "llm": false,
       "toxicity": "no",
-      "daily_activity_level": 3
+      "daily_activity_level": 3,
+      "recsys_type": "rchrono"
     },
     {
       "id": "386256ba-0366-5611-9436-8431cef3ce6c",
@@ -454,7 +472,8 @@
       "cluster": 1,
       "llm": false,
       "toxicity": "no",
-      "daily_activity_level": 4
+      "daily_activity_level": 4,
+      "recsys_type": "random"
     },
     {
       "id": "e99f7ab7-3188-5a0b-9e20-aa56fb31c4f3",
@@ -478,7 +497,8 @@
       "cluster": 0,
       "llm": false,
       "toxicity": "no",
-      "daily_activity_level": 2
+      "daily_activity_level": 2,
+      "recsys_type": "rchrono"
     },
     {
       "id": "350fbfaf-e1c8-5311-a9d3-081fd1be6b3d",
@@ -502,7 +522,8 @@
       "cluster": 0,
       "llm": false,
       "toxicity": "no",
-      "daily_activity_level": 1
+      "daily_activity_level": 1,
+      "recsys_type": "random"
     },
     {
       "id": "faf36add-a8a6-5e62-afdc-39e238ff2c97",
@@ -526,7 +547,8 @@
       "cluster": 0,
       "llm": false,
       "toxicity": "no",
-      "daily_activity_level": 3
+      "daily_activity_level": 3,
+      "recsys_type": "rchrono"
     },
     {
       "id": "9d10155f-6dc8-5353-8a51-b589dfa6eb88",
@@ -550,7 +572,8 @@
       "cluster": 0,
       "llm": false,
       "toxicity": "no",
-      "daily_activity_level": 2
+      "daily_activity_level": 2,
+      "recsys_type": "random"
     },
     {
       "id": "889af60a-4165-5c76-93a5-1d629c25ce28",
@@ -574,7 +597,8 @@
       "cluster": 2,
       "llm": false,
       "toxicity": "no",
-      "daily_activity_level": 3
+      "daily_activity_level": 3,
+      "recsys_type": "rchrono"
     },
     {
       "id": "2add9c38-0934-5e80-98db-caa4236e4add",
@@ -598,7 +622,8 @@
       "cluster": 0,
       "llm": true,
       "toxicity": "no",
-      "daily_activity_level": 2
+      "daily_activity_level": 2,
+      "recsys_type": "random"
     },
     {
       "id": "51fd6f44-2315-50a6-8e9b-e3d636d89e5f",
@@ -622,7 +647,8 @@
       "cluster": 0,
       "llm": false,
       "toxicity": "no",
-      "daily_activity_level": 1
+      "daily_activity_level": 1,
+      "recsys_type": "rchrono"
     },
     {
       "id": "98293935-7f6f-5a82-a146-921925268fa2",
@@ -646,7 +672,8 @@
       "cluster": 2,
       "llm": false,
       "toxicity": "no",
-      "daily_activity_level": 3
+      "daily_activity_level": 3,
+      "recsys_type": "random"
     },
     {
       "id": "94948ef2-371c-5eb2-8274-bdaf20c039f5",
@@ -670,7 +697,8 @@
       "cluster": 1,
       "llm": false,
       "toxicity": "no",
-      "daily_activity_level": 3
+      "daily_activity_level": 3,
+      "recsys_type": "rchrono"
     },
     {
       "id": "5f10b02c-8476-57ae-acd5-87d4b02aff6f",
@@ -694,7 +722,8 @@
       "cluster": 2,
       "llm": false,
       "toxicity": "no",
-      "daily_activity_level": 2
+      "daily_activity_level": 2,
+      "recsys_type": "random"
     },
     {
       "id": "964b25d1-e5b0-5278-b885-1ac850ce0c9d",
@@ -718,7 +747,8 @@
       "cluster": 2,
       "llm": false,
       "toxicity": "no",
-      "daily_activity_level": 2
+      "daily_activity_level": 2,
+      "recsys_type": "rchrono"
     },
     {
       "id": "49cdb5e4-717b-5e2c-b881-d8838167a7d5",
@@ -742,7 +772,8 @@
       "cluster": 0,
       "llm": true,
       "toxicity": "no",
-      "daily_activity_level": 3
+      "daily_activity_level": 3,
+      "recsys_type": "random"
     },
     {
       "id": "696ebe4e-3716-5863-a360-45a953ccfb80",
@@ -766,7 +797,8 @@
       "cluster": 2,
       "llm": false,
       "toxicity": "no",
-      "daily_activity_level": 2
+      "daily_activity_level": 2,
+      "recsys_type": "rchrono"
     },
     {
       "id": "6a1ed071-9d63-5ef2-bbd7-8dee88f30fe8",
@@ -790,7 +822,8 @@
       "cluster": 1,
       "llm": false,
       "toxicity": "no",
-      "daily_activity_level": 5
+      "daily_activity_level": 5,
+      "recsys_type": "random"
     },
     {
       "id": "49dea28f-9006-538b-b311-577d4faa6244",
@@ -814,7 +847,8 @@
       "cluster": 2,
       "llm": false,
       "toxicity": "no",
-      "daily_activity_level": 4
+      "daily_activity_level": 4,
+      "recsys_type": "rchrono"
     },
     {
       "id": "8ebb0a5d-ced1-5dfa-8b43-d0416108f66f",
@@ -838,7 +872,8 @@
       "cluster": 0,
       "llm": true,
       "toxicity": "no",
-      "daily_activity_level": 2
+      "daily_activity_level": 2,
+      "recsys_type": "random"
     },
     {
       "id": "d972af50-b3dd-516c-afa7-020fff8d15bd",
@@ -862,7 +897,8 @@
       "cluster": 0,
       "llm": false,
       "toxicity": "no",
-      "daily_activity_level": 2
+      "daily_activity_level": 2,
+      "recsys_type": "rchrono"
     },
     {
       "id": "f10c09c5-e0d7-5d94-91d6-e315fb488294",
@@ -886,7 +922,8 @@
       "cluster": 2,
       "llm": false,
       "toxicity": "no",
-      "daily_activity_level": 3
+      "daily_activity_level": 3,
+      "recsys_type": "random"
     },
     {
       "id": "0feca30d-7985-5a9f-92b2-03a73a779359",
@@ -910,7 +947,8 @@
       "cluster": 0,
       "llm": true,
       "toxicity": "no",
-      "daily_activity_level": 3
+      "daily_activity_level": 3,
+      "recsys_type": "rchrono"
     },
     {
       "id": "1cba4594-0c15-5c16-ad96-d157a8c8c35d",
@@ -934,7 +972,8 @@
       "cluster": 0,
       "llm": true,
       "toxicity": "no",
-      "daily_activity_level": 3
+      "daily_activity_level": 3,
+      "recsys_type": "random"
     },
     {
       "id": "d7e1f319-e271-53c9-8857-deb45e519edb",
@@ -958,7 +997,8 @@
       "cluster": 0,
       "llm": false,
       "toxicity": "no",
-      "daily_activity_level": 1
+      "daily_activity_level": 1,
+      "recsys_type": "rchrono"
     },
     {
       "id": "7ad7ec09-08de-5d6e-ba34-8139b50229d4",
@@ -982,7 +1022,8 @@
       "cluster": 1,
       "llm": true,
       "toxicity": "no",
-      "daily_activity_level": 4
+      "daily_activity_level": 4,
+      "recsys_type": "random"
     },
     {
       "id": "b5db65ce-719d-5b6d-ae4a-4815661c1ec1",
@@ -1006,7 +1047,8 @@
       "cluster": 0,
       "llm": true,
       "toxicity": "no",
-      "daily_activity_level": 2
+      "daily_activity_level": 2,
+      "recsys_type": "rchrono"
     },
     {
       "id": "0f861c54-76a7-5367-94f2-d93e31bed4f7",
@@ -1030,7 +1072,8 @@
       "cluster": 0,
       "llm": true,
       "toxicity": "no",
-      "daily_activity_level": 1
+      "daily_activity_level": 1,
+      "recsys_type": "random"
     },
     {
       "id": "df99ef50-f387-567b-bc40-9f1ab1d71238",
@@ -1054,7 +1097,8 @@
       "cluster": 2,
       "llm": true,
       "toxicity": "no",
-      "daily_activity_level": 3
+      "daily_activity_level": 3,
+      "recsys_type": "rchrono"
     },
     {
       "id": "a655f919-8908-5559-b046-9bd6122618a1",
@@ -1078,7 +1122,8 @@
       "cluster": 0,
       "llm": true,
       "toxicity": "no",
-      "daily_activity_level": 2
+      "daily_activity_level": 2,
+      "recsys_type": "random"
     },
     {
       "id": "2e30ef7a-fc05-5227-966f-7223c07d3b96",
@@ -1102,7 +1147,8 @@
       "cluster": 1,
       "llm": false,
       "toxicity": "no",
-      "daily_activity_level": 5
+      "daily_activity_level": 5,
+      "recsys_type": "rchrono"
     },
     {
       "id": "b2f3e827-50be-5667-a8e1-1427ac8a725e",
@@ -1126,7 +1172,8 @@
       "cluster": 0,
       "llm": false,
       "toxicity": "no",
-      "daily_activity_level": 2
+      "daily_activity_level": 2,
+      "recsys_type": "random"
     },
     {
       "id": "1b095b7d-0879-55f6-9694-5feb3df8b5ce",
@@ -1150,7 +1197,8 @@
       "cluster": 0,
       "llm": true,
       "toxicity": "no",
-      "daily_activity_level": 2
+      "daily_activity_level": 2,
+      "recsys_type": "rchrono"
     },
     {
       "id": "4699fd9e-fa76-541a-a7ed-f67807d02653",
@@ -1174,7 +1222,8 @@
       "cluster": 0,
       "llm": false,
       "toxicity": "no",
-      "daily_activity_level": 2
+      "daily_activity_level": 2,
+      "recsys_type": "random"
     },
     {
       "id": "21e2baab-ea5f-5a1c-9de7-3a5ef8245a76",
@@ -1198,7 +1247,8 @@
       "cluster": 0,
       "llm": false,
       "toxicity": "no",
-      "daily_activity_level": 2
+      "daily_activity_level": 2,
+      "recsys_type": "rchrono"
     },
     {
       "id": "e53ab0e7-1aa5-5506-898d-beabf9156424",
@@ -1222,7 +1272,8 @@
       "cluster": 2,
       "llm": false,
       "toxicity": "no",
-      "daily_activity_level": 4
+      "daily_activity_level": 4,
+      "recsys_type": "random"
     },
     {
       "id": "652c5d0e-9930-51bd-a1a1-f5f0fb7dfd41",
@@ -1246,7 +1297,8 @@
       "cluster": 2,
       "llm": false,
       "toxicity": "no",
-      "daily_activity_level": 4
+      "daily_activity_level": 4,
+      "recsys_type": "rchrono"
     },
     {
       "id": "368405b7-24d2-5f30-9e4c-2ebde8241cd6",
@@ -1270,7 +1322,8 @@
       "cluster": 1,
       "llm": false,
       "toxicity": "no",
-      "daily_activity_level": 5
+      "daily_activity_level": 5,
+      "recsys_type": "random"
     },
     {
       "id": "18c20ac5-21be-5b66-b224-ef707c9a48ff",
@@ -1294,7 +1347,8 @@
       "cluster": 0,
       "llm": false,
       "toxicity": "no",
-      "daily_activity_level": 1
+      "daily_activity_level": 1,
+      "recsys_type": "rchrono"
     },
     {
       "id": "5cc439db-997b-5794-94e5-3f23eb6a6311",
@@ -1318,7 +1372,8 @@
       "cluster": 2,
       "llm": false,
       "toxicity": "no",
-      "daily_activity_level": 3
+      "daily_activity_level": 3,
+      "recsys_type": "random"
     },
     {
       "id": "196bc43b-df58-5249-bc8e-20ee09b69da1",
@@ -1342,7 +1397,8 @@
       "cluster": 1,
       "llm": true,
       "toxicity": "no",
-      "daily_activity_level": 3
+      "daily_activity_level": 3,
+      "recsys_type": "rchrono"
     },
     {
       "id": "5714b93f-57f3-54b3-8267-af7c2464e7c6",
@@ -1366,7 +1422,8 @@
       "cluster": 0,
       "llm": false,
       "toxicity": "no",
-      "daily_activity_level": 3
+      "daily_activity_level": 3,
+      "recsys_type": "random"
     },
     {
       "id": "630bbfef-c540-5e56-839d-a79b62d0228d",
@@ -1390,7 +1447,8 @@
       "cluster": 0,
       "llm": true,
       "toxicity": "no",
-      "daily_activity_level": 2
+      "daily_activity_level": 2,
+      "recsys_type": "rchrono"
     },
     {
       "id": "ca3eee8b-fb9e-5bc2-870b-65c4c956ac29",
@@ -1414,7 +1472,8 @@
       "cluster": 2,
       "llm": false,
       "toxicity": "no",
-      "daily_activity_level": 4
+      "daily_activity_level": 4,
+      "recsys_type": "random"
     },
     {
       "id": "d718f12e-1d88-5429-97fd-989f00c4d101",
@@ -1438,7 +1497,8 @@
       "cluster": 0,
       "llm": false,
       "toxicity": "no",
-      "daily_activity_level": 3
+      "daily_activity_level": 3,
+      "recsys_type": "rchrono"
     },
     {
       "id": "9fba33ca-5844-5d6b-a543-ed4e2490cad9",
@@ -1462,7 +1522,8 @@
       "cluster": 0,
       "llm": true,
       "toxicity": "no",
-      "daily_activity_level": 2
+      "daily_activity_level": 2,
+      "recsys_type": "random"
     },
     {
       "id": "f677b006-8306-55df-9524-ff66e2814de6",
@@ -1486,7 +1547,8 @@
       "cluster": 2,
       "llm": true,
       "toxicity": "no",
-      "daily_activity_level": 4
+      "daily_activity_level": 4,
+      "recsys_type": "rchrono"
     },
     {
       "id": "916d2096-bec4-5448-b66c-7249c596eabd",
@@ -1510,7 +1572,8 @@
       "cluster": 1,
       "llm": false,
       "toxicity": "no",
-      "daily_activity_level": 4
+      "daily_activity_level": 4,
+      "recsys_type": "random"
     },
     {
       "id": "a3c2cdd9-0d68-5267-af5e-0e56b4902c31",
@@ -1534,7 +1597,8 @@
       "cluster": 2,
       "llm": false,
       "toxicity": "no",
-      "daily_activity_level": 4
+      "daily_activity_level": 4,
+      "recsys_type": "rchrono"
     },
     {
       "id": "30de63f6-d77d-504d-a086-ceb84a30044e",
@@ -1558,7 +1622,8 @@
       "cluster": 2,
       "llm": false,
       "toxicity": "no",
-      "daily_activity_level": 2
+      "daily_activity_level": 2,
+      "recsys_type": "random"
     },
     {
       "id": "912d7b35-7279-58a9-b865-99e1d16f2a60",
@@ -1582,7 +1647,8 @@
       "cluster": 0,
       "llm": false,
       "toxicity": "no",
-      "daily_activity_level": 1
+      "daily_activity_level": 1,
+      "recsys_type": "rchrono"
     },
     {
       "id": "758d0320-7c36-5bb7-9fef-ae8054782488",
@@ -1606,7 +1672,8 @@
       "cluster": 2,
       "llm": true,
       "toxicity": "no",
-      "daily_activity_level": 4
+      "daily_activity_level": 4,
+      "recsys_type": "random"
     },
     {
       "id": "2787856c-2009-5f24-bf94-c6fe4e599328",
@@ -1630,7 +1697,8 @@
       "cluster": 0,
       "llm": false,
       "toxicity": "no",
-      "daily_activity_level": 1
+      "daily_activity_level": 1,
+      "recsys_type": "rchrono"
     },
     {
       "id": "887c4027-372e-58bf-a0fe-bd207c1abcd0",
@@ -1654,7 +1722,8 @@
       "cluster": 2,
       "llm": true,
       "toxicity": "no",
-      "daily_activity_level": 2
+      "daily_activity_level": 2,
+      "recsys_type": "random"
     },
     {
       "id": "18786d98-5a4e-5ab5-ac2a-fcdc6600879c",
@@ -1678,7 +1747,8 @@
       "cluster": 1,
       "llm": false,
       "toxicity": "no",
-      "daily_activity_level": 5
+      "daily_activity_level": 5,
+      "recsys_type": "rchrono"
     },
     {
       "id": "fe1ed237-0980-51bc-86ff-a1adde35db79",
@@ -1702,7 +1772,8 @@
       "cluster": 2,
       "llm": false,
       "toxicity": "no",
-      "daily_activity_level": 2
+      "daily_activity_level": 2,
+      "recsys_type": "random"
     },
     {
       "id": "ec1efe8f-ceaf-5606-991c-47c90a6c92c2",
@@ -1726,7 +1797,8 @@
       "cluster": 0,
       "llm": false,
       "toxicity": "no",
-      "daily_activity_level": 3
+      "daily_activity_level": 3,
+      "recsys_type": "rchrono"
     },
     {
       "id": "35eb6609-d129-5926-b931-6b6dc094d6a4",
@@ -1750,7 +1822,8 @@
       "cluster": 1,
       "llm": true,
       "toxicity": "no",
-      "daily_activity_level": 3
+      "daily_activity_level": 3,
+      "recsys_type": "random"
     },
     {
       "id": "40f633c7-31db-517a-925b-d67349fe0af5",
@@ -1774,7 +1847,8 @@
       "cluster": 0,
       "llm": false,
       "toxicity": "no",
-      "daily_activity_level": 1
+      "daily_activity_level": 1,
+      "recsys_type": "rchrono"
     },
     {
       "id": "25161603-a705-5b18-b02a-4620658f6b96",
@@ -1798,7 +1872,8 @@
       "cluster": 1,
       "llm": true,
       "toxicity": "no",
-      "daily_activity_level": 3
+      "daily_activity_level": 3,
+      "recsys_type": "random"
     },
     {
       "id": "96eb31e4-bd2b-52af-8c23-27821e0e5f41",
@@ -1822,7 +1897,8 @@
       "cluster": 1,
       "llm": false,
       "toxicity": "no",
-      "daily_activity_level": 4
+      "daily_activity_level": 4,
+      "recsys_type": "rchrono"
     },
     {
       "id": "5d697058-c857-5023-b0bd-094ed65f7927",
@@ -1846,7 +1922,8 @@
       "cluster": 1,
       "llm": false,
       "toxicity": "no",
-      "daily_activity_level": 5
+      "daily_activity_level": 5,
+      "recsys_type": "random"
     },
     {
       "id": "33997a76-389c-5d3c-9b74-859ed1f1d390",
@@ -1870,7 +1947,8 @@
       "cluster": 0,
       "llm": false,
       "toxicity": "no",
-      "daily_activity_level": 1
+      "daily_activity_level": 1,
+      "recsys_type": "rchrono"
     },
     {
       "id": "81227618-d89c-596f-a0f0-6594e01c4be5",
@@ -1894,7 +1972,8 @@
       "cluster": 0,
       "llm": true,
       "toxicity": "no",
-      "daily_activity_level": 2
+      "daily_activity_level": 2,
+      "recsys_type": "random"
     },
     {
       "id": "3da45904-2519-5fb1-b95e-117835e1cd57",
@@ -1918,7 +1997,8 @@
       "cluster": 2,
       "llm": false,
       "toxicity": "no",
-      "daily_activity_level": 2
+      "daily_activity_level": 2,
+      "recsys_type": "rchrono"
     },
     {
       "id": "1b56ba66-a7c3-57fd-a53b-945445bd83d1",
@@ -1942,7 +2022,8 @@
       "cluster": 1,
       "llm": true,
       "toxicity": "no",
-      "daily_activity_level": 5
+      "daily_activity_level": 5,
+      "recsys_type": "random"
     },
     {
       "id": "a88457d9-82cc-587e-91da-6c6b54a0216e",
@@ -1966,7 +2047,8 @@
       "cluster": 0,
       "llm": false,
       "toxicity": "no",
-      "daily_activity_level": 1
+      "daily_activity_level": 1,
+      "recsys_type": "rchrono"
     },
     {
       "id": "f2058ca5-91e7-5c59-bfc7-ce951f87edaf",
@@ -1990,7 +2072,8 @@
       "cluster": 1,
       "llm": true,
       "toxicity": "no",
-      "daily_activity_level": 3
+      "daily_activity_level": 3,
+      "recsys_type": "random"
     },
     {
       "id": "5276b8eb-91ba-5e40-b7c1-1fe1c5c65839",
@@ -2014,7 +2097,8 @@
       "cluster": 2,
       "llm": false,
       "toxicity": "no",
-      "daily_activity_level": 3
+      "daily_activity_level": 3,
+      "recsys_type": "rchrono"
     },
     {
       "id": "440ee3b1-9471-5bf7-8463-be2e1d39cc2d",
@@ -2038,7 +2122,8 @@
       "cluster": 2,
       "llm": true,
       "toxicity": "no",
-      "daily_activity_level": 4
+      "daily_activity_level": 4,
+      "recsys_type": "random"
     },
     {
       "id": "430f2013-8184-5299-9dc5-6e7cf851c7fd",
@@ -2062,7 +2147,8 @@
       "cluster": 2,
       "llm": true,
       "toxicity": "no",
-      "daily_activity_level": 2
+      "daily_activity_level": 2,
+      "recsys_type": "rchrono"
     },
     {
       "id": "f7c5f089-c97f-54bf-91de-dd7a6f11756c",
@@ -2086,7 +2172,8 @@
       "cluster": 0,
       "llm": true,
       "toxicity": "no",
-      "daily_activity_level": 1
+      "daily_activity_level": 1,
+      "recsys_type": "random"
     },
     {
       "id": "c5f1bc4e-5ad7-5d70-86e5-002fcc5d12a9",
@@ -2110,7 +2197,8 @@
       "cluster": 1,
       "llm": false,
       "toxicity": "no",
-      "daily_activity_level": 5
+      "daily_activity_level": 5,
+      "recsys_type": "rchrono"
     },
     {
       "id": "be23ec8c-1680-5443-976a-7a9e72b0aba1",
@@ -2134,7 +2222,8 @@
       "cluster": 0,
       "llm": true,
       "toxicity": "no",
-      "daily_activity_level": 2
+      "daily_activity_level": 2,
+      "recsys_type": "random"
     },
     {
       "id": "c2428883-d8dc-5d03-a61a-e80823a65392",
@@ -2158,7 +2247,8 @@
       "cluster": 1,
       "llm": false,
       "toxicity": "no",
-      "daily_activity_level": 5
+      "daily_activity_level": 5,
+      "recsys_type": "rchrono"
     },
     {
       "id": "8a3e9e03-ed4b-5382-8b66-15fd894bc631",
@@ -2182,7 +2272,8 @@
       "cluster": 0,
       "llm": false,
       "toxicity": "no",
-      "daily_activity_level": 2
+      "daily_activity_level": 2,
+      "recsys_type": "random"
     },
     {
       "id": "a579a2d0-10fd-57fc-aa37-7b35766a1897",
@@ -2206,7 +2297,8 @@
       "cluster": 0,
       "llm": false,
       "toxicity": "no",
-      "daily_activity_level": 3
+      "daily_activity_level": 3,
+      "recsys_type": "rchrono"
     },
     {
       "id": "5c1dbdb5-e062-5c0a-918b-50a3d10fcdc5",
@@ -2230,7 +2322,8 @@
       "cluster": 0,
       "llm": true,
       "toxicity": "no",
-      "daily_activity_level": 1
+      "daily_activity_level": 1,
+      "recsys_type": "random"
     },
     {
       "id": "d44eca8d-21fc-57b5-bfa1-31b01c03b0d0",
@@ -2254,7 +2347,8 @@
       "cluster": 0,
       "llm": true,
       "toxicity": "no",
-      "daily_activity_level": 1
+      "daily_activity_level": 1,
+      "recsys_type": "rchrono"
     },
     {
       "id": "c67dc4b7-9834-59b1-9446-fb8df92d2049",
@@ -2278,7 +2372,8 @@
       "cluster": 0,
       "llm": true,
       "toxicity": "no",
-      "daily_activity_level": 3
+      "daily_activity_level": 3,
+      "recsys_type": "random"
     },
     {
       "id": "de66c1ff-820f-5d2d-8fc8-2b57d7221a61",
@@ -2302,7 +2397,8 @@
       "cluster": 0,
       "llm": false,
       "toxicity": "no",
-      "daily_activity_level": 3
+      "daily_activity_level": 3,
+      "recsys_type": "rchrono"
     },
     {
       "id": "9af1896a-20e0-53fb-b525-0aef98766be6",
@@ -2326,7 +2422,8 @@
       "cluster": 0,
       "llm": true,
       "toxicity": "no",
-      "daily_activity_level": 1
+      "daily_activity_level": 1,
+      "recsys_type": "random"
     },
     {
       "id": "4ab6f137-f250-511e-84af-6b1006eb123f",
@@ -2350,7 +2447,8 @@
       "cluster": 2,
       "llm": false,
       "toxicity": "no",
-      "daily_activity_level": 2
+      "daily_activity_level": 2,
+      "recsys_type": "rchrono"
     },
     {
       "id": "ec06b02b-af57-52e1-b099-349074df0b9e",
@@ -2374,7 +2472,8 @@
       "cluster": 2,
       "llm": false,
       "toxicity": "no",
-      "daily_activity_level": 2
+      "daily_activity_level": 2,
+      "recsys_type": "random"
     },
     {
       "id": "dde776eb-4a20-52e0-851b-308ecf8244eb",
@@ -2398,7 +2497,8 @@
       "cluster": 2,
       "llm": false,
       "toxicity": "no",
-      "daily_activity_level": 3
+      "daily_activity_level": 3,
+      "recsys_type": "rchrono"
     },
     {
       "id": "b280899e-17b1-52a4-aed6-0c690ba6daf2",
@@ -2422,7 +2522,8 @@
       "cluster": 0,
       "llm": true,
       "toxicity": "no",
-      "daily_activity_level": 3
+      "daily_activity_level": 3,
+      "recsys_type": "random"
     },
     {
       "id": "d38c79ca-6228-5bb8-b6d7-3cd02c97dab4",
@@ -2446,7 +2547,8 @@
       "cluster": 1,
       "llm": false,
       "toxicity": "no",
-      "daily_activity_level": 4
+      "daily_activity_level": 4,
+      "recsys_type": "rchrono"
     },
     {
       "id": "25a7fde6-5519-52cd-8345-dce66443c049",
@@ -2470,7 +2572,8 @@
       "cluster": 0,
       "llm": false,
       "toxicity": "no",
-      "daily_activity_level": 2
+      "daily_activity_level": 2,
+      "recsys_type": "random"
     },
     {
       "id": "cf9b0e79-9fcf-535f-a17a-68ef8ab730d3",
@@ -2494,7 +2597,8 @@
       "cluster": 2,
       "llm": false,
       "toxicity": "no",
-      "daily_activity_level": 3
+      "daily_activity_level": 3,
+      "recsys_type": "rchrono"
     },
     {
       "id": "e1a2c878-3544-563d-b775-27226696a42b",
@@ -2518,7 +2622,8 @@
       "cluster": 1,
       "llm": true,
       "toxicity": "no",
-      "daily_activity_level": 3
+      "daily_activity_level": 3,
+      "recsys_type": "random"
     },
     {
       "id": "5e851aa1-c8e2-5bad-b412-9b7ebf69a979",
@@ -2542,7 +2647,8 @@
       "cluster": 0,
       "llm": false,
       "toxicity": "no",
-      "daily_activity_level": 1
+      "daily_activity_level": 1,
+      "recsys_type": "rchrono"
     },
     {
       "id": "eb8b4ab6-7c72-52e5-ae2c-b384b10adaea",
@@ -2566,7 +2672,8 @@
       "cluster": 2,
       "llm": false,
       "toxicity": "no",
-      "daily_activity_level": 3
+      "daily_activity_level": 3,
+      "recsys_type": "random"
     },
     {
       "id": "f65b4c9d-bb3b-5464-b7f2-324ab0836c91",
@@ -2590,7 +2697,8 @@
       "cluster": 0,
       "llm": true,
       "toxicity": "no",
-      "daily_activity_level": 3
+      "daily_activity_level": 3,
+      "recsys_type": "rchrono"
     },
     {
       "id": "5d94994f-6bdd-5688-abb9-1bf40272b7e7",
@@ -2614,7 +2722,8 @@
       "cluster": 0,
       "llm": true,
       "toxicity": "no",
-      "daily_activity_level": 1
+      "daily_activity_level": 1,
+      "recsys_type": "random"
     },
     {
       "id": "4fa2c4f9-a2b9-5fdf-9d98-3531d03a7d38",
@@ -2638,7 +2747,8 @@
       "cluster": 1,
       "llm": false,
       "toxicity": "no",
-      "daily_activity_level": 4
+      "daily_activity_level": 4,
+      "recsys_type": "rchrono"
     },
     {
       "id": "14e18c64-6aca-521c-a505-3b4725bacbac",
@@ -2662,7 +2772,8 @@
       "cluster": 1,
       "llm": true,
       "toxicity": "no",
-      "daily_activity_level": 4
+      "daily_activity_level": 4,
+      "recsys_type": "random"
     },
     {
       "id": "46f41aca-57fe-5b55-86f9-fde57a824834",
@@ -2686,7 +2797,8 @@
       "cluster": 2,
       "llm": false,
       "toxicity": "no",
-      "daily_activity_level": 2
+      "daily_activity_level": 2,
+      "recsys_type": "rchrono"
     },
     {
       "id": "a45b1c52-d76b-54ab-ac45-8db54880f28e",
@@ -2710,7 +2822,8 @@
       "cluster": 2,
       "llm": false,
       "toxicity": "no",
-      "daily_activity_level": 4
+      "daily_activity_level": 4,
+      "recsys_type": "random"
     },
     {
       "id": "d6b94b21-3c64-5994-8c4e-033f2eb848b9",
@@ -2734,7 +2847,8 @@
       "cluster": 0,
       "llm": true,
       "toxicity": "no",
-      "daily_activity_level": 2
+      "daily_activity_level": 2,
+      "recsys_type": "rchrono"
     },
     {
       "id": "596cb1f4-2ed9-5322-914a-2ce435db85ad",
@@ -2758,7 +2872,8 @@
       "cluster": 1,
       "llm": false,
       "toxicity": "no",
-      "daily_activity_level": 5
+      "daily_activity_level": 5,
+      "recsys_type": "random"
     },
     {
       "id": "c98a98f1-c30d-5a49-bc8b-0c422c2dc984",
@@ -2782,7 +2897,8 @@
       "cluster": 0,
       "llm": false,
       "toxicity": "no",
-      "daily_activity_level": 3
+      "daily_activity_level": 3,
+      "recsys_type": "rchrono"
     },
     {
       "id": "062ec525-cb33-512d-8f94-d89323f3b470",
@@ -2806,7 +2922,8 @@
       "cluster": 2,
       "llm": false,
       "toxicity": "no",
-      "daily_activity_level": 3
+      "daily_activity_level": 3,
+      "recsys_type": "random"
     },
     {
       "id": "d9087ef2-bbb0-529b-b50b-b8a35024261e",
@@ -2830,7 +2947,8 @@
       "cluster": 0,
       "llm": true,
       "toxicity": "no",
-      "daily_activity_level": 1
+      "daily_activity_level": 1,
+      "recsys_type": "rchrono"
     },
     {
       "id": "a1a6544d-c84b-557b-901d-b56290abbbab",
@@ -2854,7 +2972,8 @@
       "cluster": 2,
       "llm": false,
       "toxicity": "no",
-      "daily_activity_level": 4
+      "daily_activity_level": 4,
+      "recsys_type": "random"
     },
     {
       "id": "5f7c4fff-51e9-5b51-b6e6-6f6891f84f02",
@@ -2878,7 +2997,8 @@
       "cluster": 0,
       "llm": false,
       "toxicity": "no",
-      "daily_activity_level": 3
+      "daily_activity_level": 3,
+      "recsys_type": "rchrono"
     },
     {
       "id": "95f0e48c-fdbf-546a-9ce7-57f67c1ef5e3",
@@ -2902,7 +3022,8 @@
       "cluster": 0,
       "llm": true,
       "toxicity": "no",
-      "daily_activity_level": 2
+      "daily_activity_level": 2,
+      "recsys_type": "random"
     },
     {
       "id": "bc0ad089-ca19-5fda-9b45-b8da98b825c6",
@@ -2926,7 +3047,8 @@
       "cluster": 1,
       "llm": false,
       "toxicity": "no",
-      "daily_activity_level": 3
+      "daily_activity_level": 3,
+      "recsys_type": "rchrono"
     },
     {
       "id": "077cfeb5-0760-566e-8ccf-282517154fa0",
@@ -2950,7 +3072,8 @@
       "cluster": 2,
       "llm": false,
       "toxicity": "no",
-      "daily_activity_level": 2
+      "daily_activity_level": 2,
+      "recsys_type": "random"
     },
     {
       "id": "342e832b-1c48-5738-8411-c8e6303ba11b",
@@ -2974,7 +3097,8 @@
       "cluster": 2,
       "llm": false,
       "toxicity": "no",
-      "daily_activity_level": 3
+      "daily_activity_level": 3,
+      "recsys_type": "rchrono"
     },
     {
       "id": "9c43295d-9d80-5f93-9e37-c77b254f62c1",
@@ -2998,7 +3122,8 @@
       "cluster": 2,
       "llm": false,
       "toxicity": "no",
-      "daily_activity_level": 3
+      "daily_activity_level": 3,
+      "recsys_type": "random"
     },
     {
       "id": "775c1505-b7e1-5cd8-8852-5a931120176d",
@@ -3022,7 +3147,8 @@
       "cluster": 2,
       "llm": false,
       "toxicity": "no",
-      "daily_activity_level": 2
+      "daily_activity_level": 2,
+      "recsys_type": "rchrono"
     },
     {
       "id": "a37e3326-9a23-5d81-963d-ef8c6890a647",
@@ -3046,7 +3172,8 @@
       "cluster": 1,
       "llm": true,
       "toxicity": "no",
-      "daily_activity_level": 4
+      "daily_activity_level": 4,
+      "recsys_type": "random"
     },
     {
       "id": "ddf2057e-2124-52c8-90af-b71c760c3890",
@@ -3070,7 +3197,8 @@
       "cluster": 1,
       "llm": false,
       "toxicity": "no",
-      "daily_activity_level": 3
+      "daily_activity_level": 3,
+      "recsys_type": "rchrono"
     },
     {
       "id": "79cae659-e3ec-5c4e-859f-e5990eefabf0",
@@ -3094,7 +3222,8 @@
       "cluster": 0,
       "llm": true,
       "toxicity": "no",
-      "daily_activity_level": 1
+      "daily_activity_level": 1,
+      "recsys_type": "random"
     },
     {
       "id": "eb7b7962-62fa-5e29-a48d-ed5a050d9880",
@@ -3118,7 +3247,8 @@
       "cluster": 0,
       "llm": false,
       "toxicity": "no",
-      "daily_activity_level": 3
+      "daily_activity_level": 3,
+      "recsys_type": "rchrono"
     },
     {
       "id": "ce691f31-f744-5482-9f80-ca3427d9d58a",
@@ -3142,7 +3272,8 @@
       "cluster": 2,
       "llm": false,
       "toxicity": "no",
-      "daily_activity_level": 3
+      "daily_activity_level": 3,
+      "recsys_type": "random"
     },
     {
       "id": "7d5bf270-d235-5e6f-bda3-d214a18da1ce",
@@ -3166,7 +3297,8 @@
       "cluster": 2,
       "llm": false,
       "toxicity": "no",
-      "daily_activity_level": 4
+      "daily_activity_level": 4,
+      "recsys_type": "rchrono"
     },
     {
       "id": "45be3459-d37f-57d2-9bec-0100f84153ec",
@@ -3190,7 +3322,8 @@
       "cluster": 2,
       "llm": false,
       "toxicity": "no",
-      "daily_activity_level": 2
+      "daily_activity_level": 2,
+      "recsys_type": "random"
     },
     {
       "id": "6878acf2-1158-5025-baac-6366b03042c7",
@@ -3214,7 +3347,8 @@
       "cluster": 0,
       "llm": false,
       "toxicity": "no",
-      "daily_activity_level": 2
+      "daily_activity_level": 2,
+      "recsys_type": "rchrono"
     },
     {
       "id": "3ab2a8da-dce4-5183-ad80-825c271eab1e",
@@ -3238,7 +3372,8 @@
       "cluster": 2,
       "llm": false,
       "toxicity": "no",
-      "daily_activity_level": 2
+      "daily_activity_level": 2,
+      "recsys_type": "random"
     },
     {
       "id": "583932bc-17f6-5482-a62b-08d9c7c877b0",
@@ -3262,7 +3397,8 @@
       "cluster": 0,
       "llm": false,
       "toxicity": "no",
-      "daily_activity_level": 2
+      "daily_activity_level": 2,
+      "recsys_type": "rchrono"
     },
     {
       "id": "aba18bf8-5297-552c-a3d6-02ff5cd5dca6",
@@ -3286,7 +3422,8 @@
       "cluster": 0,
       "llm": false,
       "toxicity": "no",
-      "daily_activity_level": 1
+      "daily_activity_level": 1,
+      "recsys_type": "random"
     },
     {
       "id": "25926bce-114a-5999-8fc2-7479eaa1b78b",
@@ -3310,7 +3447,8 @@
       "cluster": 0,
       "llm": false,
       "toxicity": "no",
-      "daily_activity_level": 3
+      "daily_activity_level": 3,
+      "recsys_type": "rchrono"
     },
     {
       "id": "073358ea-5d53-5a36-9155-4d1ad1f3ba78",
@@ -3334,7 +3472,8 @@
       "cluster": 1,
       "llm": true,
       "toxicity": "no",
-      "daily_activity_level": 4
+      "daily_activity_level": 4,
+      "recsys_type": "random"
     },
     {
       "id": "634abaf2-b4a1-503c-92ff-46e6e2844e01",
@@ -3358,7 +3497,8 @@
       "cluster": 2,
       "llm": false,
       "toxicity": "no",
-      "daily_activity_level": 3
+      "daily_activity_level": 3,
+      "recsys_type": "rchrono"
     },
     {
       "id": "64377ef3-0caa-536b-bc65-3cb90a5ed06d",
@@ -3382,7 +3522,8 @@
       "cluster": 0,
       "llm": true,
       "toxicity": "no",
-      "daily_activity_level": 3
+      "daily_activity_level": 3,
+      "recsys_type": "random"
     },
     {
       "id": "bc44a607-ae4f-5290-84cf-b6f8d59032bb",
@@ -3406,7 +3547,8 @@
       "cluster": 0,
       "llm": false,
       "toxicity": "no",
-      "daily_activity_level": 3
+      "daily_activity_level": 3,
+      "recsys_type": "rchrono"
     },
     {
       "id": "cd7054df-8313-5331-84cb-7a76bc55cf1d",
@@ -3430,7 +3572,8 @@
       "cluster": 0,
       "llm": false,
       "toxicity": "no",
-      "daily_activity_level": 3
+      "daily_activity_level": 3,
+      "recsys_type": "random"
     },
     {
       "id": "0044e079-efbe-5733-ac94-a8257a7e5e21",
@@ -3454,7 +3597,8 @@
       "cluster": 0,
       "llm": true,
       "toxicity": "no",
-      "daily_activity_level": 2
+      "daily_activity_level": 2,
+      "recsys_type": "rchrono"
     },
     {
       "id": "36ae7b1d-647c-5bee-b946-cc449e7677b0",
@@ -3478,7 +3622,8 @@
       "cluster": 1,
       "llm": false,
       "toxicity": "no",
-      "daily_activity_level": 3
+      "daily_activity_level": 3,
+      "recsys_type": "random"
     },
     {
       "id": "8db8367a-96ca-5f58-8d54-6d726b5733d0",
@@ -3502,7 +3647,8 @@
       "cluster": 0,
       "llm": false,
       "toxicity": "no",
-      "daily_activity_level": 2
+      "daily_activity_level": 2,
+      "recsys_type": "rchrono"
     },
     {
       "id": "cbd4bacd-5a11-5c0a-a4b5-2e03adef3146",
@@ -3526,7 +3672,8 @@
       "cluster": 2,
       "llm": false,
       "toxicity": "no",
-      "daily_activity_level": 3
+      "daily_activity_level": 3,
+      "recsys_type": "random"
     },
     {
       "id": "a976745c-ec96-5600-9c5e-d06d21c5d852",
@@ -3550,7 +3697,8 @@
       "cluster": 2,
       "llm": false,
       "toxicity": "no",
-      "daily_activity_level": 4
+      "daily_activity_level": 4,
+      "recsys_type": "rchrono"
     },
     {
       "id": "92214efc-6618-5656-b550-cba685c2c929",
@@ -3574,7 +3722,8 @@
       "cluster": 0,
       "llm": false,
       "toxicity": "no",
-      "daily_activity_level": 2
+      "daily_activity_level": 2,
+      "recsys_type": "random"
     },
     {
       "id": "77265c4f-7509-5768-8955-2a18544e1d68",
@@ -3598,7 +3747,8 @@
       "cluster": 1,
       "llm": true,
       "toxicity": "no",
-      "daily_activity_level": 3
+      "daily_activity_level": 3,
+      "recsys_type": "rchrono"
     },
     {
       "id": "3d68ae81-eae3-57f4-86cc-27aa1f9a0586",
@@ -3622,7 +3772,8 @@
       "cluster": 0,
       "llm": false,
       "toxicity": "no",
-      "daily_activity_level": 3
+      "daily_activity_level": 3,
+      "recsys_type": "random"
     },
     {
       "id": "e4eb5bb8-6df2-5e3c-be04-e9f9b52c6bf8",
@@ -3646,7 +3797,8 @@
       "cluster": 2,
       "llm": false,
       "toxicity": "no",
-      "daily_activity_level": 3
+      "daily_activity_level": 3,
+      "recsys_type": "rchrono"
     },
     {
       "id": "7de84bdb-db21-54d8-a281-7bbfe1eafd71",
@@ -3670,7 +3822,8 @@
       "cluster": 1,
       "llm": true,
       "toxicity": "no",
-      "daily_activity_level": 4
+      "daily_activity_level": 4,
+      "recsys_type": "random"
     },
     {
       "id": "32d17b40-ee21-5cf6-a3b8-d4cf18a5e57f",
@@ -3694,7 +3847,8 @@
       "cluster": 1,
       "llm": true,
       "toxicity": "no",
-      "daily_activity_level": 5
+      "daily_activity_level": 5,
+      "recsys_type": "rchrono"
     },
     {
       "id": "58eaedf5-7f73-5c5b-9abc-891ca675529f",
@@ -3718,7 +3872,8 @@
       "cluster": 0,
       "llm": false,
       "toxicity": "no",
-      "daily_activity_level": 2
+      "daily_activity_level": 2,
+      "recsys_type": "random"
     },
     {
       "id": "be51dc98-cac2-544a-8684-4700ed7b5343",
@@ -3742,7 +3897,8 @@
       "cluster": 0,
       "llm": false,
       "toxicity": "no",
-      "daily_activity_level": 2
+      "daily_activity_level": 2,
+      "recsys_type": "rchrono"
     },
     {
       "id": "7837f8fd-7070-539c-9d15-d533fd950903",
@@ -3766,7 +3922,8 @@
       "cluster": 0,
       "llm": false,
       "toxicity": "no",
-      "daily_activity_level": 2
+      "daily_activity_level": 2,
+      "recsys_type": "random"
     },
     {
       "id": "6fa79707-bf9e-565d-a266-b956e4225c3a",
@@ -3790,7 +3947,8 @@
       "cluster": 0,
       "llm": true,
       "toxicity": "no",
-      "daily_activity_level": 3
+      "daily_activity_level": 3,
+      "recsys_type": "rchrono"
     },
     {
       "id": "f68fd624-e877-51fc-a5fc-082b3a2a0138",
@@ -3814,7 +3972,8 @@
       "cluster": 1,
       "llm": true,
       "toxicity": "no",
-      "daily_activity_level": 3
+      "daily_activity_level": 3,
+      "recsys_type": "random"
     },
     {
       "id": "d9016144-12ce-5cab-b69b-c4f15046c558",
@@ -3838,7 +3997,8 @@
       "cluster": 1,
       "llm": true,
       "toxicity": "no",
-      "daily_activity_level": 3
+      "daily_activity_level": 3,
+      "recsys_type": "rchrono"
     },
     {
       "id": "5ec2db3d-323e-5c3a-8975-800e9b3731a9",
@@ -3862,7 +4022,8 @@
       "cluster": 0,
       "llm": false,
       "toxicity": "no",
-      "daily_activity_level": 3
+      "daily_activity_level": 3,
+      "recsys_type": "random"
     },
     {
       "id": "35628111-f348-5904-a3e2-70e62adce88e",
@@ -3886,7 +4047,8 @@
       "cluster": 0,
       "llm": false,
       "toxicity": "no",
-      "daily_activity_level": 1
+      "daily_activity_level": 1,
+      "recsys_type": "rchrono"
     },
     {
       "id": "c15c7566-7650-5ebc-807c-8d51ce439159",
@@ -3910,7 +4072,8 @@
       "cluster": 0,
       "llm": false,
       "toxicity": "no",
-      "daily_activity_level": 1
+      "daily_activity_level": 1,
+      "recsys_type": "random"
     },
     {
       "id": "68defa86-20f0-5e08-b7a6-ae7983d3682d",
@@ -3934,7 +4097,8 @@
       "cluster": 2,
       "llm": false,
       "toxicity": "no",
-      "daily_activity_level": 4
+      "daily_activity_level": 4,
+      "recsys_type": "rchrono"
     },
     {
       "id": "d9a33a38-b272-5b4b-ae5b-63299818bea2",
@@ -3958,7 +4122,8 @@
       "cluster": 0,
       "llm": true,
       "toxicity": "no",
-      "daily_activity_level": 2
+      "daily_activity_level": 2,
+      "recsys_type": "random"
     },
     {
       "id": "d7965a04-db14-519d-8a85-2972bd7bc15b",
@@ -3982,7 +4147,8 @@
       "cluster": 1,
       "llm": true,
       "toxicity": "no",
-      "daily_activity_level": 5
+      "daily_activity_level": 5,
+      "recsys_type": "rchrono"
     },
     {
       "id": "b2167a46-6113-5e50-b021-d550159d4c04",
@@ -4006,7 +4172,8 @@
       "cluster": 0,
       "llm": false,
       "toxicity": "no",
-      "daily_activity_level": 2
+      "daily_activity_level": 2,
+      "recsys_type": "random"
     },
     {
       "id": "68795c35-41a9-52f4-aebe-d7c5bdb4c6c0",
@@ -4030,7 +4197,8 @@
       "cluster": 2,
       "llm": true,
       "toxicity": "no",
-      "daily_activity_level": 3
+      "daily_activity_level": 3,
+      "recsys_type": "rchrono"
     },
     {
       "id": "1f67361c-d6c1-5105-abdb-0ca79fc0497a",
@@ -4054,7 +4222,8 @@
       "cluster": 0,
       "llm": false,
       "toxicity": "no",
-      "daily_activity_level": 2
+      "daily_activity_level": 2,
+      "recsys_type": "random"
     },
     {
       "id": "45e59d22-3401-5f51-a00e-cf72392c05fb",
@@ -4078,7 +4247,8 @@
       "cluster": 2,
       "llm": false,
       "toxicity": "no",
-      "daily_activity_level": 4
+      "daily_activity_level": 4,
+      "recsys_type": "rchrono"
     },
     {
       "id": "e0201efb-028d-5623-9184-16bd3e06c3fb",
@@ -4102,7 +4272,8 @@
       "cluster": 0,
       "llm": false,
       "toxicity": "no",
-      "daily_activity_level": 3
+      "daily_activity_level": 3,
+      "recsys_type": "random"
     },
     {
       "id": "d56c7738-323f-5224-8f5a-93f1a9205311",
@@ -4126,7 +4297,8 @@
       "cluster": 2,
       "llm": false,
       "toxicity": "no",
-      "daily_activity_level": 4
+      "daily_activity_level": 4,
+      "recsys_type": "rchrono"
     },
     {
       "id": "78ddd553-f1fd-5c9b-9137-333fde4cf760",
@@ -4150,7 +4322,8 @@
       "cluster": 0,
       "llm": false,
       "toxicity": "no",
-      "daily_activity_level": 3
+      "daily_activity_level": 3,
+      "recsys_type": "random"
     },
     {
       "id": "7989f2ca-80a7-5004-8cf9-6599112158c4",
@@ -4174,7 +4347,8 @@
       "cluster": 0,
       "llm": false,
       "toxicity": "no",
-      "daily_activity_level": 2
+      "daily_activity_level": 2,
+      "recsys_type": "rchrono"
     },
     {
       "id": "8be2549c-87e1-5038-bc68-ecc433d6673f",
@@ -4198,7 +4372,8 @@
       "cluster": 0,
       "llm": false,
       "toxicity": "no",
-      "daily_activity_level": 2
+      "daily_activity_level": 2,
+      "recsys_type": "random"
     },
     {
       "id": "dd049c9a-b6a7-5dc3-8428-bd5d83ee67af",
@@ -4222,7 +4397,8 @@
       "cluster": 0,
       "llm": false,
       "toxicity": "no",
-      "daily_activity_level": 2
+      "daily_activity_level": 2,
+      "recsys_type": "rchrono"
     },
     {
       "id": "3cbe01c2-edec-5c15-ae9d-205c9a3b13bb",
@@ -4246,7 +4422,8 @@
       "cluster": 0,
       "llm": false,
       "toxicity": "no",
-      "daily_activity_level": 2
+      "daily_activity_level": 2,
+      "recsys_type": "random"
     },
     {
       "id": "59eeb89a-72ee-558a-8037-b82a940637f7",
@@ -4270,7 +4447,8 @@
       "cluster": 1,
       "llm": true,
       "toxicity": "no",
-      "daily_activity_level": 5
+      "daily_activity_level": 5,
+      "recsys_type": "rchrono"
     },
     {
       "id": "b25e9ab2-b2bc-5aba-a219-e1f14d104a47",
@@ -4294,7 +4472,8 @@
       "cluster": 0,
       "llm": false,
       "toxicity": "no",
-      "daily_activity_level": 1
+      "daily_activity_level": 1,
+      "recsys_type": "random"
     },
     {
       "id": "731fd009-467c-5741-a255-bac217c8bb24",
@@ -4318,7 +4497,8 @@
       "cluster": 2,
       "llm": false,
       "toxicity": "no",
-      "daily_activity_level": 4
+      "daily_activity_level": 4,
+      "recsys_type": "rchrono"
     },
     {
       "id": "0d709955-fb76-527c-a216-fdb33ef9f99a",
@@ -4342,7 +4522,8 @@
       "cluster": 2,
       "llm": false,
       "toxicity": "no",
-      "daily_activity_level": 2
+      "daily_activity_level": 2,
+      "recsys_type": "random"
     },
     {
       "id": "31ffca9e-fc6c-5558-a49a-c18405a829f9",
@@ -4366,7 +4547,8 @@
       "cluster": 2,
       "llm": false,
       "toxicity": "no",
-      "daily_activity_level": 3
+      "daily_activity_level": 3,
+      "recsys_type": "rchrono"
     },
     {
       "id": "4a35835a-6aa9-540d-a50a-663de452c384",
@@ -4390,7 +4572,8 @@
       "cluster": 2,
       "llm": false,
       "toxicity": "no",
-      "daily_activity_level": 2
+      "daily_activity_level": 2,
+      "recsys_type": "random"
     },
     {
       "id": "d38c29b8-7815-5076-8621-d49689b9370c",
@@ -4414,7 +4597,8 @@
       "cluster": 0,
       "llm": false,
       "toxicity": "no",
-      "daily_activity_level": 2
+      "daily_activity_level": 2,
+      "recsys_type": "rchrono"
     },
     {
       "id": "4a642500-d5a1-525d-961a-2a06b2fa735d",
@@ -4438,7 +4622,8 @@
       "cluster": 0,
       "llm": false,
       "toxicity": "no",
-      "daily_activity_level": 3
+      "daily_activity_level": 3,
+      "recsys_type": "random"
     },
     {
       "id": "50a9975f-8b44-5e10-9dcd-a8c6636eb260",
@@ -4462,7 +4647,8 @@
       "cluster": 2,
       "llm": false,
       "toxicity": "no",
-      "daily_activity_level": 3
+      "daily_activity_level": 3,
+      "recsys_type": "rchrono"
     },
     {
       "id": "56df9346-1072-5189-9c43-af8c4e1c2eb4",
@@ -4486,7 +4672,8 @@
       "cluster": 2,
       "llm": false,
       "toxicity": "no",
-      "daily_activity_level": 3
+      "daily_activity_level": 3,
+      "recsys_type": "random"
     },
     {
       "id": "70de6b95-62f3-5c6a-a6bc-934c1d0fa713",
@@ -4510,7 +4697,8 @@
       "cluster": 2,
       "llm": false,
       "toxicity": "no",
-      "daily_activity_level": 4
+      "daily_activity_level": 4,
+      "recsys_type": "rchrono"
     },
     {
       "id": "ea05ea26-6562-59a3-93d0-cf3f675f4fab",
@@ -4534,7 +4722,8 @@
       "cluster": 0,
       "llm": false,
       "toxicity": "no",
-      "daily_activity_level": 2
+      "daily_activity_level": 2,
+      "recsys_type": "random"
     },
     {
       "id": "6ff7f638-66c0-594b-9d37-804e3a77b434",
@@ -4558,7 +4747,8 @@
       "cluster": 0,
       "llm": true,
       "toxicity": "no",
-      "daily_activity_level": 1
+      "daily_activity_level": 1,
+      "recsys_type": "rchrono"
     },
     {
       "id": "e5000a86-16c4-56c5-9ab1-79c860b4028d",
@@ -4582,7 +4772,8 @@
       "cluster": 0,
       "llm": true,
       "toxicity": "no",
-      "daily_activity_level": 1
+      "daily_activity_level": 1,
+      "recsys_type": "random"
     },
     {
       "id": "44993438-6bbd-5e9c-b3e8-84b8e0b9ea4d",
@@ -4606,7 +4797,8 @@
       "cluster": 0,
       "llm": true,
       "toxicity": "no",
-      "daily_activity_level": 2
+      "daily_activity_level": 2,
+      "recsys_type": "rchrono"
     },
     {
       "id": "dc019721-eb80-5c1a-9928-e8288539133b",
@@ -4630,7 +4822,8 @@
       "cluster": 2,
       "llm": false,
       "toxicity": "no",
-      "daily_activity_level": 2
+      "daily_activity_level": 2,
+      "recsys_type": "random"
     },
     {
       "id": "0bd44c17-ce03-5b81-80f4-ff69c38bfe0e",
@@ -4654,7 +4847,8 @@
       "cluster": 1,
       "llm": false,
       "toxicity": "no",
-      "daily_activity_level": 3
+      "daily_activity_level": 3,
+      "recsys_type": "rchrono"
     },
     {
       "id": "034c1890-3456-59ae-a234-0b90c1f194ef",
@@ -4678,7 +4872,8 @@
       "cluster": 0,
       "llm": true,
       "toxicity": "no",
-      "daily_activity_level": 3
+      "daily_activity_level": 3,
+      "recsys_type": "random"
     },
     {
       "id": "e84b5636-4163-5cf3-b620-ecb87d08181b",
@@ -4702,7 +4897,8 @@
       "cluster": 0,
       "llm": false,
       "toxicity": "no",
-      "daily_activity_level": 1
+      "daily_activity_level": 1,
+      "recsys_type": "rchrono"
     },
     {
       "id": "7afbbc08-9f12-54d5-84d0-a8972b01c0f3",
@@ -4726,7 +4922,8 @@
       "cluster": 1,
       "llm": false,
       "toxicity": "no",
-      "daily_activity_level": 3
+      "daily_activity_level": 3,
+      "recsys_type": "random"
     },
     {
       "id": "0d7c7008-9d1f-5a02-9483-8e054f6be401",
@@ -4750,7 +4947,8 @@
       "cluster": 0,
       "llm": false,
       "toxicity": "no",
-      "daily_activity_level": 1
+      "daily_activity_level": 1,
+      "recsys_type": "rchrono"
     },
     {
       "id": "911a4390-6469-5194-88ee-5411fef6e9db",
@@ -4774,7 +4972,8 @@
       "cluster": 2,
       "llm": false,
       "toxicity": "no",
-      "daily_activity_level": 3
+      "daily_activity_level": 3,
+      "recsys_type": "random"
     },
     {
       "id": "7cf07a27-87bc-58b5-99ed-9a45cf958a7b",
@@ -4798,7 +4997,8 @@
       "cluster": 0,
       "llm": false,
       "toxicity": "no",
-      "daily_activity_level": 1
+      "daily_activity_level": 1,
+      "recsys_type": "rchrono"
     },
     {
       "id": "4a7c7fb9-33f7-51e5-b344-1a8542b7b3f6",
@@ -4820,7 +5020,8 @@
       "daily_activity_level": 3,
       "round_actions": 5,
       "is_page": 1,
-      "feed_url": "https://techcrunch.com/feed/"
+      "feed_url": "https://techcrunch.com/feed/",
+      "recsys_type": "random"
     },
     {
       "id": "5342c737-7c60-5d9b-aa9f-14bda3d36f97",
@@ -4842,7 +5043,8 @@
       "daily_activity_level": 4,
       "round_actions": 6,
       "is_page": 1,
-      "feed_url": "http://feeds.bbci.co.uk/news/rss.xml"
+      "feed_url": "http://feeds.bbci.co.uk/news/rss.xml",
+      "recsys_type": "rchrono"
     },
     {
       "id": "981e9434-7dfc-5bf1-8bd8-9c6f97c27c57",
@@ -4864,7 +5066,8 @@
       "daily_activity_level": 5,
       "round_actions": 8,
       "is_page": 1,
-      "feed_url": "https://www.reutersagency.com/feed/"
+      "feed_url": "https://www.reutersagency.com/feed/",
+      "recsys_type": "random"
     }
   ],
   "generation_config": {

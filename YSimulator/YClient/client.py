@@ -759,9 +759,9 @@ class SimulationClient:
                 
                 elif action_type == "comment":
                     # Use recsys to get recommended posts to comment on
-                    # Initialize recsys based on agent's crecsys preference
+                    # Initialize recsys based on agent's recsys_type preference
                     # Fall back to global config if agent doesn't specify
-                    agent_recsys_mode = getattr(agent, 'crecsys', None) or self.recsys_mode
+                    agent_recsys_mode = getattr(agent, 'recsys_type', None) or self.recsys_mode
                     
                     # Map recsys mode to appropriate class
                     recsys_class_map = {
