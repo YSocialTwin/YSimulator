@@ -22,6 +22,7 @@ from YSimulator.YClient.classes.ray_models import SimulationInstruction
 
 # Constants
 RECOMMENDATION_TTL_SECONDS = 7 * 24 * 60 * 60  # 7 days in seconds
+NETWORK_EDGE_CHECK_LIMIT = 10  # Number of edges to check when verifying network load
 
 
 @ray.remote
@@ -349,7 +350,7 @@ class OrchestratorServer:
             with Session(self.db.engine) as session:
                 # Check if any of the edges exist
                 # We only need to find one to know the network was loaded
-                for follower_id, user_id in edges[:10]:  # Check first 10 edges for efficiency
+                for follower_id, user_id in edges[:NETWORK_EDGE_CHECK_LIMIT]:
                     exists = session.query(Follow).filter_by(
                         follower_id=follower_id,
                         user_id=user_id,

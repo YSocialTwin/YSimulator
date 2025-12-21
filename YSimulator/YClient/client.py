@@ -446,6 +446,10 @@ class SimulationClient:
         """
         Parse network.csv to extract edge tuples (follower_id, user_id).
         
+        This is a lightweight parser used to check if the network has been loaded.
+        It only extracts valid edges without creating database records or logging details.
+        For the full loading process with detailed logging, see _load_and_create_social_network().
+        
         Args:
             network_csv_path: Path to the network.csv file
             
