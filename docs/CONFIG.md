@@ -80,6 +80,86 @@ For a client named "client_1":
 
 If these files don't exist, the client will use the generic files.
 
+## Dynamic Social Network Features
+
+YSimulator includes advanced social network features that allow agents to form and break relationships during simulation:
+
+### 1. Dynamic Follow Actions
+
+Agents can discover and follow other users during simulation using recommendation algorithms. This is configured per-agent using the `frecsys_type` field in agent profiles.
+
+**Available Recommendation Strategies:**
+
+- `random`: Random user selection from non-following users
+- `common_neighbors`: Friend-of-friend recommendations (users with mutual connections)
+- `jaccard`: Jaccard similarity of follow sets
+- `adamic_adar`: Adamic/Adar index scoring (weighted by common neighbor connectivity)
+- `preferential_attachment`: Popular users with many followers (rich-get-richer)
+
+**Implementation Details:**
+
+- Server uses efficient query-based approaches (no in-memory graph construction)
+- SQL backend: JOIN queries, subqueries, and aggregations
+- Redis backend: Key-value operations with minimal iterations
+- Supports political leaning bias for homophily
+- Follow action available to Explorer archetype by default
+
+**Agent Configuration:**
+
+In `agent_population.json`, specify the follow recommendation strategy:
+
+```json
+{
+  "id": 1,
+  "username": "explorer_001",
+  "archetype": "Explorer",
+  "frecsys_type": "common_neighbors"
+}
+```
+
+If not specified, defaults to `"random"`.
+
+### 2. Secondary Follow Behavior
+
+After reading or commenting on posts, agents can establish or break social ties with content authors. This is controlled by the `probability_of_secondary_follow` configuration parameter.
+
+**Configuration:**
+
+In `simulation_config.json`, add under the `agents` section:
+
+```json
+{
+  "agents": {
+    "probability_of_secondary_follow": 0.3
+  }
+}
+```
+
+**Behavior:**
+
+With probability `secondary_follow`, after a read or comment action:
+
+- **Rule-based agents**: Randomly decide to follow, unfollow, or make no change (equal probabilities)
+- **LLM agents**: Heuristic decision based on current follow status:
+  - If not following: 30% chance to follow the author
+  - If already following: 10% chance to unfollow the author
+  - Otherwise: No change
+
+**Implementation:**
+
+- Tracks all read/comment interactions with post authors
+- Evaluates secondary follow after main action pipeline completes
+- Checks current follow status before making decision
+- Creates FOLLOW or UNFOLLOW actions in Follow table
+- Both actions include round timestamp for temporal analysis
+
+**Use Cases:**
+
+- Model organic network growth through content interactions
+- Simulate unfollowing based on content disagreement
+- Create realistic social network evolution
+- Study relationship formation patterns
+
 ## Configuration Files
 
 ### 1. `server_config.json` - Server Configuration
@@ -289,6 +369,8 @@ Defines the agent population with detailed profiles based on the User_mgmt model
 - `toxicity`: Toxicity setting (yes/no)
 - `leaning`: Political leaning (neutral/left/right)
 - `language`: Language code (en/es/fr/de)
+- `recsys_type`: Content recommendation strategy (random/rchrono/rchrono_popularity/rchrono_followers/etc.)
+- `frecsys_type`: Follow recommendation strategy (random/common_neighbors/jaccard/adamic_adar/preferential_attachment)
 
 **Generation Config**:
 - `num_additional_agents`: Number of agents to generate automatically
@@ -339,6 +421,29 @@ Main configuration for client simulation parameters:
 - `llm.temperature`: LLM temperature for generation (0.0-1.0)
 - `simulation.num_days`: Number of days to simulate (0 = infinite, continues until manually stopped)
 - `simulation.num_slots_per_day`: Time slots per day (typically 24)
+- `agents.probability_of_secondary_follow`: Probability (0.0-1.0) of evaluating follow/unfollow after read/comment actions (default: 0.0)
+
+**Agent Behavior Configuration:**
+
+The `agents` section controls agent behavior parameters:
+
+```json
+{
+  "agents": {
+    "reading_from_follower_ratio": 0.6,
+    "max_length_thread_reading": 5,
+    "attention_window": 336,
+    "probability_of_daily_follow": 0.0,
+    "probability_of_secondary_follow": 0.0
+  }
+}
+```
+
+- `reading_from_follower_ratio`: Proportion of posts from followed users in recommendations (0.0-1.0)
+- `max_length_thread_reading`: Maximum comment thread depth to read
+- `attention_window`: Time slots of content visibility (default: 336 = 14 days × 24 slots)
+- `probability_of_daily_follow`: Reserved for future use
+- `probability_of_secondary_follow`: Probability of follow/unfollow evaluation after content interactions
 
 ### 4. `llm_prompts.json` - LLM Prompt Templates
 
