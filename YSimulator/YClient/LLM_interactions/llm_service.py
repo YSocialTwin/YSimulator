@@ -281,3 +281,42 @@ Your reaction:"""
             return random.choice(candidate_users)
         else:
             return None  # Skip following this time
+    
+    def generate_secondary_follow_decision(self, cluster_id: int, post_content: str, is_currently_following: bool) -> str:
+        """
+        Decide whether to follow or unfollow a post author based on interaction.
+        
+        This method is called after an agent has read or commented on a post,
+        to determine if they want to establish or break a social tie with the author.
+        
+        Args:
+            cluster_id: Cluster/persona ID of the agent
+            post_content: Content of the post the agent interacted with
+            is_currently_following: Whether the agent currently follows the author
+            
+        Returns:
+            str: Decision - "follow", "unfollow", or "no_change"
+        """
+        import random
+        
+        # Get persona from configuration
+        persona = self.prompts_config["personas"].get(
+            str(cluster_id),
+            "You are a social media user."
+        )
+        
+        # For simplicity, use a heuristic approach:
+        # - If not following: 30% chance to follow
+        # - If following: 10% chance to unfollow
+        # This could be enhanced with actual LLM prompts in future versions
+        
+        if not is_currently_following:
+            # Not following yet, consider following
+            if random.random() < 0.3:
+                return "follow"
+        else:
+            # Already following, consider unfollowing
+            if random.random() < 0.1:
+                return "unfollow"
+        
+        return "no_change"

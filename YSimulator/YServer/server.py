@@ -375,6 +375,39 @@ class OrchestratorServer:
             # On error, assume network not loaded to be safe
             return False
 
+    def check_follow_relationship(self, follower_id: str, user_id: str) -> bool:
+        """
+        Check if a follow relationship exists between two users.
+        
+        Args:
+            follower_id: UUID of the follower
+            user_id: UUID of the user being followed
+        
+        Returns:
+            bool: True if follower follows user with action="follow", False otherwise
+        """
+        try:
+            from sqlalchemy.orm import Session
+            from YSimulator.YServer.classes.models import Follow
+            
+            with Session(self.db.engine) as session:
+                # Check for active follow relationship
+                # Get the most recent follow action between these users
+                latest_follow = session.query(Follow).filter_by(
+                    follower_id=follower_id,
+                    user_id=user_id
+                ).order_by(Follow.round.desc()).first()
+                
+                # Return True if latest action is "follow", False otherwise
+                return latest_follow and latest_follow.action == "follow"
+                
+        except Exception as e:
+            self.logger.error(
+                f"Error checking follow relationship: {e}",
+                extra={"extra_data": {"error": str(e), "follower_id": follower_id, "user_id": user_id}}
+            )
+            return False
+
     def register_client(self, client_id: str, num_days: int = 0) -> dict:
         """
         Register a new client with the server.
@@ -728,6 +761,21 @@ class OrchestratorServer:
                     if not success:
                         self.logger.warning(
                             f"Failed to add follow for agent {act.agent_id}",
+                            extra={"extra_data": {"agent_id": act.agent_id, "target_user_id": act.target_user_id}},
+                        )
+                
+                elif act.action_type == "UNFOLLOW":
+                    # Unfollow action: create unfollow relationship record
+                    unfollow_data = {
+                        "follower_id": str(act.agent_id),  # FK to user_mgmt.id (UUID string) - agent who is unfollowing
+                        "user_id": act.target_user_id,  # FK to user_mgmt.id (UUID string) - user being unfollowed
+                        "action": "unfollow",
+                        "round": self.current_round_id,  # FK to rounds.id
+                    }
+                    success = self.db.add_follow(unfollow_data)
+                    if not success:
+                        self.logger.warning(
+                            f"Failed to add unfollow for agent {act.agent_id}",
                             extra={"extra_data": {"agent_id": act.agent_id, "target_user_id": act.target_user_id}},
                         )
                 
