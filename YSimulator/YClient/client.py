@@ -154,6 +154,7 @@ class SimulationClient:
         # Load agent behavior configuration
         agents_config = simulation_config.get("agents", {})
         self.probability_of_secondary_follow = agents_config.get("probability_of_secondary_follow", 0.0)
+        self.probability_of_daily_follow = agents_config.get("probability_of_daily_follow", 0.0)
 
         # Create agents from configuration
         self.agent_profiles = []
@@ -712,6 +713,10 @@ class SimulationClient:
 
         slot_count = 0
         last_heartbeat_time = time.time()
+        
+        # Track active agents per day for daily follow evaluation
+        current_day = start_day
+        active_agents_today = set()  # Set of agent IDs active during current day
 
         try:
             while True:
@@ -747,8 +752,27 @@ class SimulationClient:
 
                 # Process Logic
                 sim_start = time.time()
-                actions = self._simulate(instruction.day, instruction.slot, instruction.recent_post_ids)
+                actions, active_agent_ids = self._simulate(instruction.day, instruction.slot, instruction.recent_post_ids)
                 sim_time = (time.time() - sim_start) * 1000
+                
+                # Track active agents for this day
+                active_agents_today.update(active_agent_ids)
+                
+                # Check if this is the last slot of the day (end of day)
+                is_last_slot = (instruction.slot == self.num_slots_per_day - 1)
+                day_changed = (instruction.day != current_day)
+                
+                # Evaluate daily follows at the end of each day
+                if (is_last_slot or day_changed) and self.probability_of_daily_follow > 0 and active_agents_today:
+                    self.logger.info(f"End of day {current_day}: Evaluating daily follows for {len(active_agents_today)} active agents, probability={self.probability_of_daily_follow}")
+                    daily_follow_actions = self._evaluate_daily_follows(active_agents_today, instruction.day)
+                    if daily_follow_actions:
+                        actions.extend(daily_follow_actions)
+                        self.logger.info(f"Added {len(daily_follow_actions)} daily follow actions")
+                    
+                    # Reset for next day
+                    active_agents_today = set()
+                    current_day = instruction.day
 
                 # Submit
                 submit_start = time.time()
@@ -1335,8 +1359,71 @@ class SimulationClient:
                         # Unfollow the author
                         actions.append(ActionDTO(agent_id, cluster_id, "UNFOLLOW", target_user_id=author_id))
         
-        self.logger.info(f"Returning {len(actions)} total actions")
-        return actions
+        self.logger.info(f"Returning {len(actions)} total actions, {len(active_agents)} active agents")
+        return actions, {agent.id for agent in active_agents}
+    
+    def _evaluate_daily_follows(self, active_agent_ids: set, current_day: int) -> list:
+        """
+        Evaluate daily follow actions for agents that were active during the day.
+        
+        For each active agent, with probability_of_daily_follow, use the agent's
+        follow recommendation system to suggest users and create a follow action.
+        
+        Args:
+            active_agent_ids: Set of agent IDs that were active during the day
+            current_day: Current simulation day
+            
+        Returns:
+            list: List of ActionDTO objects for follow actions
+        """
+        daily_follow_actions = []
+        
+        # Get agent profiles for active agents
+        active_agents = [agent for agent in self.agent_profiles if agent.id in active_agent_ids]
+        
+        for agent in active_agents:
+            # With probability, evaluate follow action for this agent
+            if random.random() > self.probability_of_daily_follow:
+                continue
+            
+            # Get agent's follow recommendation strategy
+            agent_frecsys_mode = getattr(agent, 'frecsys_type', None) or 'random'
+            frecsys_class = FOLLOW_RECSYS_CLASS_MAP.get(agent_frecsys_mode, RandomFollowRecSys)
+            
+            # Initialize follow recsys
+            frecsys = frecsys_class(
+                n_neighbors=10,  # Request top 10 suggestions
+                leaning_weight=0.0  # No political bias for daily follows
+            )
+            
+            # Get follow suggestions from server
+            try:
+                follow_suggestions = ray.get(
+                    frecsys.get_suggestions.remote(
+                        self.server,
+                        agent.id,
+                        agent.leaning if hasattr(agent, 'leaning') else 'neutral'
+                    )
+                )
+                
+                if follow_suggestions:
+                    # Randomly select one candidate to follow
+                    target_user_id = random.choice(follow_suggestions)
+                    
+                    # Create follow action
+                    action = ActionDTO(
+                        agent.id,
+                        agent.cluster,
+                        "FOLLOW",
+                        target_user_id=target_user_id
+                    )
+                    daily_follow_actions.append(action)
+                    self.logger.debug(f"Daily follow: Agent {agent.id} will follow user {target_user_id}")
+                    
+            except Exception as e:
+                self.logger.warning(f"Failed to get follow suggestions for agent {agent.id}: {e}")
+        
+        return daily_follow_actions
 
     def shutdown(self):
         ray.get(self.server.deregister_client.remote(self.client_id))

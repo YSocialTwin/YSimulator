@@ -119,7 +119,47 @@ In `agent_population.json`, specify the follow recommendation strategy:
 
 If not specified, defaults to `"random"`.
 
-### 2. Secondary Follow Behavior
+### 2. Daily Follow Evaluation
+
+At the end of each simulation day, agents that were active during the day can establish new follow relationships. This is controlled by the `probability_of_daily_follow` configuration parameter.
+
+**Configuration:**
+
+In `simulation_config.json`, add under the `agents` section:
+
+```json
+{
+  "agents": {
+    "probability_of_daily_follow": 0.1
+  }
+}
+```
+
+**Behavior:**
+
+At the end of each day (last time slot), for each agent that was active during the day:
+
+- With probability `daily_follow`, the agent evaluates new follow candidates
+- Uses the agent's `frecsys_type` recommendation strategy to get top-10 suggestions
+- Randomly selects one candidate from suggestions to follow
+- Creates a FOLLOW action in the Follow table
+
+**Implementation:**
+
+- Tracks all agents active during each simulation day
+- Evaluates daily follows at transition to next day (slot 23 → day+1)
+- Uses agent-specific follow recommendation strategies
+- No political leaning bias applied (neutral selection)
+- Independent of other follow mechanisms (action-based, secondary)
+
+**Use Cases:**
+
+- Model gradual network growth over time
+- Simulate daily social discovery behaviors
+- Create realistic follow patterns independent of content
+- Study long-term network evolution
+
+### 3. Secondary Follow Behavior
 
 After reading or commenting on posts, agents can establish or break social ties with content authors. This is controlled by the `probability_of_secondary_follow` configuration parameter.
 
@@ -421,6 +461,7 @@ Main configuration for client simulation parameters:
 - `llm.temperature`: LLM temperature for generation (0.0-1.0)
 - `simulation.num_days`: Number of days to simulate (0 = infinite, continues until manually stopped)
 - `simulation.num_slots_per_day`: Time slots per day (typically 24)
+- `agents.probability_of_daily_follow`: Probability (0.0-1.0) of evaluating new follows at end of each day for active agents (default: 0.0)
 - `agents.probability_of_secondary_follow`: Probability (0.0-1.0) of evaluating follow/unfollow after read/comment actions (default: 0.0)
 
 **Agent Behavior Configuration:**
@@ -442,8 +483,8 @@ The `agents` section controls agent behavior parameters:
 - `reading_from_follower_ratio`: Proportion of posts from followed users in recommendations (0.0-1.0)
 - `max_length_thread_reading`: Maximum comment thread depth to read
 - `attention_window`: Time slots of content visibility (default: 336 = 14 days × 24 slots)
-- `probability_of_daily_follow`: Reserved for future use
-- `probability_of_secondary_follow`: Probability of follow/unfollow evaluation after content interactions
+- `probability_of_daily_follow`: Probability of evaluating new follows at end of each day for active agents (0.0-1.0, default: 0.0)
+- `probability_of_secondary_follow`: Probability of follow/unfollow evaluation after content interactions (0.0-1.0, default: 0.0)
 
 ### 4. `llm_prompts.json` - LLM Prompt Templates
 

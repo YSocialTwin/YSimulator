@@ -589,6 +589,29 @@ Agent reads/comments → Track interaction → Evaluate with probability → Che
 
 **Use Case**: Model organic network growth through content discovery
 
+### 4. Daily Follow Evaluation
+
+At the end of each simulation day, active agents evaluate new follow relationships.
+
+**Architecture**:
+```
+Track active agents → End of day → Evaluate with probability → Get suggestions → Select candidate → FOLLOW
+```
+
+**Process**:
+1. Track all agents active during each simulation day
+2. At day end (last time slot), for each active agent:
+   - With probability `daily_follow`, evaluate new follows
+   - Request top-10 suggestions using agent's `frecsys_type`
+   - Randomly select one candidate from suggestions
+3. Create FOLLOW action in Follow table
+
+**Configuration**: Global via `probability_of_daily_follow` in simulation_config.json
+
+**Timing**: Evaluated when transitioning to next day (slot 23 → day+1)
+
+**Use Case**: Model gradual network growth independent of content interactions
+
 ## Technology Stack
 
 ### Core Technologies
@@ -642,6 +665,8 @@ Agent reads/comments → Track interaction → Evaluate with probability → Che
 - ✅ Request content recommendations
 - ✅ Request follow recommendations
 - ✅ Evaluate secondary follow (after interactions)
+- ✅ Evaluate daily follows (at end of each day)
+- ✅ Track active agents per day
 - ✅ Select action types based on agent archetypes
 
 ### What the Client Does NOT Do
