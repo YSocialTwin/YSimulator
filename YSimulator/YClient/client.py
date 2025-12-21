@@ -18,10 +18,12 @@ import ray
 from YSimulator.YClient.actions import (
     generate_llm_post_async,
     generate_llm_reaction_async,
+    generate_llm_read_async,
     generate_rule_based_post,
     generate_rule_based_reaction,
     generate_rule_based_comment,
     generate_rule_based_share,
+    generate_rule_based_read,
     generate_news_post_async,
     generate_rule_based_news_post,
 )
@@ -814,9 +816,63 @@ class SimulationClient:
                         actions.append(action)
                 
                 elif action_type == "read":
-                    # Stub: Read action - agent reads a post without creating content
-                    # This could track engagement metrics in the future
-                    pass
+                    # Read action: Get recommended posts, save recommendations, randomly select one, and decide reaction
+                    # Use recsys to get recommended posts
+                    # Initialize recsys based on agent's recsys_type preference
+                    # Fall back to global config if agent doesn't specify
+                    agent_recsys_mode = getattr(agent, 'recsys_type', None) or self.recsys_mode
+                    
+                    # Map recsys mode to appropriate class
+                    recsys_class_map = {
+                        "random": RandomOrder,
+                        "rchrono": ReverseChrono,
+                        "rchrono_popularity": ReverseChronoPopularity,
+                        "rchrono_followers": ReverseChronoFollowers,
+                        "rchrono_followers_popularity": ReverseChronoFollowersPopularity,
+                        "rchrono_comments": ReverseChronoComments,
+                        "common_interests": CommonInterests,
+                        "common_user_interests": CommonUserInterests,
+                        "similar_users_react": SimilarUsersReact,
+                        "similar_users_posts": SimilarUsersPosts,
+                    }
+                    
+                    # Get the appropriate recsys class, default to RandomOrder if unknown
+                    recsys_class = recsys_class_map.get(agent_recsys_mode, RandomOrder)
+                    
+                    # Initialize the recsys with configuration parameters
+                    recsys = recsys_class(
+                        n_posts=self.recsys_n_posts,
+                        visibility_rounds=self.recsys_visibility_rounds
+                    )
+                    
+                    # Get recommended posts from server
+                    # Note: _save_recommendation is already called inside get_recommendations via server
+                    recommended_posts = recsys.get_recommendations(self.server, agent.id)
+                    
+                    if not recommended_posts:
+                        # No posts available to read, skip this action
+                        continue
+                    
+                    # Select one post randomly from recommendations
+                    target_post = random.choice(recommended_posts)
+                    
+                    if agent_type == "llm":
+                        # LLM: Get the post content and ask for a reaction decision
+                        # First, fetch the post content
+                        post_data = ray.get(self.server.get_post.remote(target_post))
+                        if post_data:
+                            post_content = post_data.get("tweet", "")
+                            # Fire off async LLM call to decide reaction
+                            future = generate_llm_read_async(self.llm, agent.cluster, post_content)
+                            pending_llm_reactions.append((agent.id, agent.cluster, target_post, future))
+                        else:
+                            # Post not found, skip
+                            continue
+                    else:
+                        # Rule-based: Randomly choose LIKE, DISLIKE (ANGRY), or IGNORE
+                        action = generate_rule_based_read(agent.id, agent.cluster, target_post)
+                        if action:  # Only add if not IGNORE
+                            actions.append(action)
                 
                 elif action_type == "image":
                     # Stub: Image post action - agent creates a post with an image

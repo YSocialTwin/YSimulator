@@ -188,3 +188,61 @@ Write a brief, thoughtful comment to continue the discussion. Max 100 characters
         except Exception as e:
             # Fallback if LLM fails
             return "Interesting perspective!"
+    
+    def generate_read_reaction(self, cluster_id: int, post_content: str) -> str:
+        """
+        Decide how to react to a post discovered via read/recommendation.
+        
+        This method is called remotely via Ray actor for the read action.
+        
+        Args:
+            cluster_id: Cluster/persona ID of the agent
+            post_content: Content of the post to react to
+            
+        Returns:
+            str: Reaction type - one of: LIKE, LOVE, LAUGH, ANGRY, SAD, IGNORE
+        """
+        # Get persona from configuration
+        persona = self.prompts_config["personas"].get(
+            str(cluster_id),
+            "You are a social media user."
+        )
+        
+        # Create a prompt asking LLM to decide reaction
+        system_msg = f"{persona} You're deciding how to react to content you discovered."
+        user_msg = f"""You found this post:
+
+"{post_content}"
+
+How do you react? Reply with ONLY ONE WORD from these options:
+- LIKE (positive, agree)
+- LOVE (strongly positive)
+- LAUGH (funny, humorous)
+- ANGRY (negative, disagree, dislike)
+- SAD (disappointing, concerning)
+- IGNORE (not interested, skip)
+
+Your reaction:"""
+        
+        prompt = ChatPromptTemplate.from_messages([
+            ("system", system_msg),
+            ("user", user_msg)
+        ])
+        
+        try:
+            chain = prompt | self.llm | StrOutputParser()
+            result = chain.invoke({}).strip().upper()
+            
+            # Parse LLM response - look for valid reactions
+            if "LOVE" in result: return "LOVE"
+            if "LIKE" in result: return "LIKE"
+            if "LAUGH" in result: return "LAUGH"
+            if "ANGRY" in result or "DISLIKE" in result: return "ANGRY"  # Map DISLIKE to ANGRY
+            if "SAD" in result: return "SAD"
+            if "IGNORE" in result: return "IGNORE"
+            
+            # Default to LIKE if unclear
+            return "LIKE"
+        except Exception as e:
+            # Fallback if LLM fails - default to LIKE
+            return "LIKE"
