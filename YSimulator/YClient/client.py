@@ -643,10 +643,14 @@ class SimulationClient:
         
         # Check if we should load the social network topology from network.csv
         # This works regardless of when the client joins (multi-client scenarios)
-        network_csv_path = self.config_path / "network.csv"
+        # Try client-specific network file first, then fall back to generic
+        network_csv_path = self.config_path / f"{self.client_id}_network.csv"
+        if not network_csv_path.exists():
+            network_csv_path = self.config_path / "network.csv"
+        
         if network_csv_path.exists():
             # First, parse the network edges from CSV
-            print(f"[{self.client_id}] Checking if social network needs to be loaded...")
+            print(f"[{self.client_id}] Checking if social network needs to be loaded from {network_csv_path.name}...")
             edges = self._parse_network_edges(network_csv_path)
             
             if edges:
@@ -654,13 +658,13 @@ class SimulationClient:
                 edges_exist = ray.get(self.server.check_network_edges_exist.remote(edges))
                 
                 if not edges_exist:
-                    print(f"[{self.client_id}] Loading social network topology from network.csv...")
+                    print(f"[{self.client_id}] Loading social network topology from {network_csv_path.name}...")
                     self._load_and_create_social_network(network_csv_path)
                 else:
                     self.logger.info("Network already loaded (edges exist in database)")
                     print(f"[{self.client_id}] Social network already loaded, skipping")
             else:
-                self.logger.warning("No valid edges found in network.csv")
+                self.logger.warning(f"No valid edges found in {network_csv_path.name}")
         else:
             self.logger.info("No network.csv found, skipping social network creation")
         

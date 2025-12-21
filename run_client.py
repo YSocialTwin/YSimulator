@@ -98,15 +98,37 @@ if __name__ == "__main__":
         ],
     )
 
-    # Use conventional file names
+    # Load simulation config first to get client name
     sim_config_file = config_dir / "simulation_config.json"
-    agent_config_file = config_dir / "agent_population.json"
-    prompts_config_file = config_dir / "llm_prompts.json"
+    try:
+        with open(sim_config_file, "r") as f:
+            sim_config = json.load(f)
+    except json.JSONDecodeError as e:
+        print(f"❌ Error: Invalid JSON in '{sim_config_file}': {e}")
+        sys.exit(1)
+
+    # Extract client name from config (not argparse)
+    client_name = sim_config.get("client_name", "client_1")
+
+    # Helper function to find client-specific or generic config file
+    def find_config_file(base_name: str) -> Path:
+        """Find client-specific config file or fall back to generic."""
+        client_specific = config_dir / f"{client_name}_{base_name}"
+        generic = config_dir / base_name
+        
+        if client_specific.exists():
+            print(f"Using client-specific config: {client_specific.name}")
+            return client_specific
+        else:
+            return generic
+
+    # Use client-specific file names with fallback to conventional names
+    agent_config_file = find_config_file("agent_population.json")
+    prompts_config_file = find_config_file("llm_prompts.json")
 
     # Load configuration files
     start_time = time.time()
     config_files = {
-        str(sim_config_file): "simulation configuration",
         str(agent_config_file): "agent population",
         str(prompts_config_file): "LLM prompts",
     }
@@ -120,12 +142,8 @@ if __name__ == "__main__":
             print(f"❌ Error: Invalid JSON in '{filename}': {e}")
             sys.exit(1)
 
-    sim_config = configs[str(sim_config_file)]
     agent_config = configs[str(agent_config_file)]
     prompts_config = configs[str(prompts_config_file)]
-
-    # Extract client name from config (not argparse)
-    client_name = sim_config.get("client_name", "client_1")
 
     # Set up logging in config directory
     logger = setup_logging(config_dir, client_name)

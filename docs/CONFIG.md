@@ -43,19 +43,42 @@ All configuration files, database, and logs are kept in the same directory:
 
 ```
 config_directory/
-├── server_config.json          # Server configuration
-├── simulation_config.json      # Client simulation configuration
-├── agent_population.json       # Agent profiles
-├── llm_prompts.json           # LLM prompts and personas
-├── network.csv                # Social network topology (optional)
-├── simulation.db              # Database (auto-created)
-├── ray_config.temp            # Ray address (auto-created)
-└── logs/                      # Log files (auto-created)
+├── server_config.json                    # Server configuration
+├── simulation_config.json                # Client simulation configuration
+├── agent_population.json                 # Agent profiles (generic)
+├── {client_name}_agent_population.json   # Client-specific agent profiles (optional)
+├── llm_prompts.json                      # LLM prompts and personas (generic)
+├── {client_name}_llm_prompts.json        # Client-specific LLM prompts (optional)
+├── network.csv                           # Social network topology (generic, optional)
+├── {client_name}_network.csv             # Client-specific network (optional)
+├── simulation.db                         # Database (auto-created)
+├── ray_config.temp                       # Ray address (auto-created)
+└── logs/                                 # Log files (auto-created)
     ├── {server_name}_server.log
     ├── {server_name}_actor.log
     ├── {client_name}_client.log
     └── {client_name}_actor.log
 ```
+
+## Client-Specific Configuration
+
+Clients can use client-specific configuration files by prefixing the file name with `{client_name}_`. The client name is defined in `simulation_config.json` under the `client_name` field.
+
+When a client starts, it will:
+1. Load `simulation_config.json` to get the client name
+2. Look for `{client_name}_agent_population.json`, `{client_name}_llm_prompts.json`, and `{client_name}_network.csv`
+3. Fall back to generic files (`agent_population.json`, `llm_prompts.json`, `network.csv`) if client-specific files don't exist
+
+This allows multiple clients to run with different configurations in multi-client scenarios.
+
+**Example:**
+
+For a client named "client_1":
+- `client_1_agent_population.json` - Client-specific agent profiles
+- `client_1_llm_prompts.json` - Client-specific LLM prompts
+- `client_1_network.csv` - Client-specific social network
+
+If these files don't exist, the client will use the generic files.
 
 ## Configuration Files
 
@@ -384,21 +407,24 @@ This creates a network where:
 
 **Behavior:**
 
-1. **Automatic Loading**: If `network.csv` exists in the configuration directory, it is automatically loaded when the first client connects.
+1. **Automatic Loading**: If `network.csv` (or `{client_name}_network.csv`) exists in the configuration directory, it is automatically loaded when the client connects.
 
-2. **Multi-Client Safe**: The system checks if any edges from the CSV already exist in the database before loading. This ensures the network is only loaded once, even in multi-client scenarios.
+2. **Client-Specific Files**: The client first looks for `{client_name}_network.csv`. If not found, it falls back to `network.csv`. This allows different clients to have different social networks.
 
-3. **Agent Validation**: Only edges between agents defined in `agent_population.json` are created. Invalid usernames are logged and skipped.
+3. **Multi-Client Safe**: The system checks if any edges from the CSV already exist in the database before loading. This ensures the network is only loaded once, even in multi-client scenarios.
 
-4. **Database Storage**: Follow relationships are stored in the `follow` table with:
+4. **Agent Validation**: Only edges between agents defined in `agent_population.json` (or `{client_name}_agent_population.json`) are created. Invalid usernames are logged and skipped.
+
+5. **Database Storage**: Follow relationships are stored in the `follow` table with:
    - `action`: Set to "follow"
    - `round`: Empty string (initial network has no associated simulation round)
 
-5. **Recommendation Systems**: Once loaded, the network influences content recommendation systems like `rchrono_followers` which prioritize posts from followed users.
+6. **Recommendation Systems**: Once loaded, the network influences content recommendation systems like `rchrono_followers` which prioritize posts from followed users.
 
 **Notes:**
 
 - The file is optional. If not present, agents start with no follow relationships.
+- Client-specific files (e.g., `client_1_network.csv`) take precedence over generic files.
 - Usernames must exactly match those in `agent_population.json` (case-sensitive).
 - The CSV should not have a header row.
 - Empty lines are ignored.
