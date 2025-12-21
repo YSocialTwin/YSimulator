@@ -77,6 +77,9 @@ class OrchestratorServer:
         
         # Track last archetype transition day (start at 0, so first transition at day 7)
         self.last_archetype_transition_day = 0
+        
+        # Simulation timing configuration
+        self.num_slots_per_day = simulation_config.get("simulation", {}).get("num_slots_per_day", 24)
 
         # Client tracking
         self.registered_clients = set()  # All registered clients
@@ -933,10 +936,13 @@ class OrchestratorServer:
         Returns:
             tuple: (visibility_day, visibility_hour) representing the oldest round to show
         """
-        total_hours = (self.day - 1) * self.num_slots_per_day + self.slot
+        # Use num_slots_per_day from config, with fallback to 24
+        slots_per_day = getattr(self, 'num_slots_per_day', 24)
+        
+        total_hours = (self.day - 1) * slots_per_day + self.slot
         visibility_hours = max(1, total_hours - visibility_rounds)
-        visibility_day = (visibility_hours - 1) // self.num_slots_per_day + 1
-        visibility_hour = (visibility_hours - 1) % self.num_slots_per_day + 1
+        visibility_day = (visibility_hours - 1) // slots_per_day + 1
+        visibility_hour = (visibility_hours - 1) % slots_per_day + 1
         return visibility_day, visibility_hour
     
     def _save_recommendation(self, agent_id: str, post_ids: List[str]) -> None:
