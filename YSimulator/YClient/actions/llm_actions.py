@@ -12,7 +12,7 @@ of multiple LLM calls using the scatter/gather pattern.
 import ray
 
 
-def generate_llm_post_async(llm_handle, cluster_id: int, day: int, slot: int):
+def generate_llm_post_async(llm_handle, cluster_id: int, day: int, slot: int, agent_attrs: dict = None):
     """
     Initiate async LLM post generation.
     
@@ -23,6 +23,7 @@ def generate_llm_post_async(llm_handle, cluster_id: int, day: int, slot: int):
     The LLM service will generate contextual content based on:
     - Cluster ID (determines persona/behavior)
     - Current simulation time (day and slot)
+    - Agent attributes for dynamic persona building
     - Any additional context from the LLM service
     
     Args:
@@ -30,6 +31,7 @@ def generate_llm_post_async(llm_handle, cluster_id: int, day: int, slot: int):
         cluster_id: Cluster/group the agent belongs to (determines persona)
         day: Current simulation day
         slot: Current time slot within the day
+        agent_attrs: Optional dict with agent attributes (name, age, gender, etc.)
         
     Returns:
         Ray ObjectRef: Future that will resolve to generated post content (str)
@@ -38,7 +40,8 @@ def generate_llm_post_async(llm_handle, cluster_id: int, day: int, slot: int):
         # Scatter phase - fire off multiple LLM calls in parallel
         futures = []
         for agent in agents:
-            future = generate_llm_post_async(llm, agent.cluster, day, slot)
+            attrs = {"name": agent.username, "age": agent.age, ...}
+            future = generate_llm_post_async(llm, agent.cluster, day, slot, attrs)
             futures.append((agent.id, agent.cluster, future))
         
         # Gather phase - wait for all results at once
@@ -49,7 +52,7 @@ def generate_llm_post_async(llm_handle, cluster_id: int, day: int, slot: int):
             agent_id, cluster_id, _ = futures[i]
             actions.append(ActionDTO(agent_id, cluster_id, "POST", content=content))
     """
-    return llm_handle.generate_post.remote(cluster_id, day, slot)
+    return llm_handle.generate_post.remote(cluster_id, day, slot, agent_attrs)
 
 
 def generate_llm_reaction_async(llm_handle, cluster_id: int, content: str):
@@ -127,7 +130,7 @@ def generate_news_post_async(news_service, llm_service, agent_cluster: int, arti
     return commentary_future, article_id
 
 
-def generate_llm_read_async(llm_handle, cluster_id: int, content: str):
+def generate_llm_read_async(llm_handle, cluster_id: int, content: str, agent_attrs: dict = None):
     """
     Initiate async LLM read reaction decision.
     
@@ -141,6 +144,7 @@ def generate_llm_read_async(llm_handle, cluster_id: int, content: str):
         llm_handle: Ray actor handle for the LLM service
         cluster_id: Cluster/group the agent belongs to (determines persona)
         content: Content of the post being reacted to
+        agent_attrs: Optional dict with agent attributes for dynamic persona building
         
     Returns:
         Ray ObjectRef: Future that will resolve to reaction type (str)
@@ -149,7 +153,8 @@ def generate_llm_read_async(llm_handle, cluster_id: int, content: str):
         # Scatter phase - fire off multiple LLM calls in parallel
         futures = []
         for agent, target_post, post_content in agent_post_pairs:
-            future = generate_llm_read_async(llm, agent.cluster, post_content)
+            attrs = {"name": agent.username, "age": agent.age, ...}
+            future = generate_llm_read_async(llm, agent.cluster, post_content, attrs)
             futures.append((agent.id, agent.cluster, target_post, future))
         
         # Gather phase - wait for all results at once
@@ -161,7 +166,7 @@ def generate_llm_read_async(llm_handle, cluster_id: int, content: str):
             if reaction_type != "IGNORE":
                 actions.append(ActionDTO(agent_id, cluster_id, reaction_type, target_post_id=target))
     """
-    return llm_handle.generate_read_reaction.remote(cluster_id, content)
+    return llm_handle.generate_read_reaction.remote(cluster_id, content, agent_attrs)
 
 
 def generate_llm_follow_async(llm_handle, cluster_id: int, candidate_users: list):

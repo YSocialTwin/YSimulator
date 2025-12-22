@@ -47,20 +47,61 @@ class LLMService:
             base_url=base_url
         )
 
-    def generate_post(self, cluster_id: int, day: int, slot: int) -> str:
-        """Generate content based on Persona."""
-        # Get persona from configuration
-        persona = self.prompts_config["personas"].get(
+    def _build_persona(self, cluster_id: int, agent_attrs: dict = None) -> str:
+        """
+        Build a persona string for an agent using either attributes or fallback.
+        
+        Args:
+            cluster_id: Cluster/persona ID for fallback
+            agent_attrs: Dict with agent attributes (name, age, gender, nationality, 
+                        profession, political_leaning, oe, co, ex, ag, ne, toxicity)
+        
+        Returns:
+            str: Formatted persona string
+        """
+        # If agent attributes are provided, use the persona template
+        if agent_attrs and self.prompts_config.get("persona_template"):
+            template = self.prompts_config["persona_template"]
+            try:
+                # Build persona from template with agent attributes
+                persona = template.format(
+                    name=agent_attrs.get("name", "Anonymous"),
+                    age=agent_attrs.get("age", "unknown"),
+                    gender=agent_attrs.get("gender", "person"),
+                    nationality=agent_attrs.get("nationality", "citizen"),
+                    profession=agent_attrs.get("profession", "individual"),
+                    political_leaning=agent_attrs.get("political_leaning", "neutral"),
+                    oe=agent_attrs.get("oe", "average in openness"),
+                    co=agent_attrs.get("co", "average in conscientiousness"),
+                    ex=agent_attrs.get("ex", "average in extraversion"),
+                    ag=agent_attrs.get("ag", "average in agreeableness"),
+                    ne=agent_attrs.get("ne", "average in neuroticism")
+                )
+                return persona
+            except KeyError as e:
+                # If template formatting fails, fall back to cluster-based persona
+                pass
+        
+        # Fallback to cluster-based persona
+        return self.prompts_config["personas"].get(
             str(cluster_id),
             "You are a social media user."
         )
+
+    def generate_post(self, cluster_id: int, day: int, slot: int, agent_attrs: dict = None) -> str:
+        """Generate content based on Persona."""
+        # Build persona using attributes or fallback
+        persona = self._build_persona(cluster_id, agent_attrs)
+        
+        # Get toxicity level (default to "no" if not provided)
+        toxicity = agent_attrs.get("toxicity", "no") if agent_attrs else "no"
         
         # Get prompt templates from configuration
         system_template = self.prompts_config["generate_post"]["system_template"]
         user_template = self.prompts_config["generate_post"]["user_template"]
         
         # Format templates
-        system_msg = system_template.format(persona=persona)
+        system_msg = system_template.format(persona=persona, toxicity=toxicity)
         user_msg = user_template.format(day=day, slot=slot)
 
         prompt = ChatPromptTemplate.from_messages([
@@ -149,7 +190,7 @@ class LLMService:
             title = article_title if len(article_title) <= 97 else article_title[:97] + "..."
             return f"Check out this article: {title}"
     
-    def generate_comment(self, cluster_id: int, post_content: str) -> str:
+    def generate_comment(self, cluster_id: int, post_content: str, agent_attrs: dict = None) -> str:
         """
         Generate a comment on a post to continue the discussion.
         
@@ -158,21 +199,22 @@ class LLMService:
         Args:
             cluster_id: Cluster/persona ID of the agent
             post_content: Content of the post to comment on
+            agent_attrs: Dict with agent attributes for dynamic persona building
             
         Returns:
             str: Generated comment text
         """
-        # Get persona from configuration
-        persona = self.prompts_config["personas"].get(
-            str(cluster_id),
-            "You are a social media user."
-        )
+        # Build persona using attributes or fallback
+        persona = self._build_persona(cluster_id, agent_attrs)
+        
+        # Get toxicity level (default to "no" if not provided)
+        toxicity = agent_attrs.get("toxicity", "no") if agent_attrs else "no"
         
         # Get prompt templates from configuration
         prompts = self.prompts_config.get("generate_comment", {})
         system_template = prompts.get(
             "system_template",
-            "{persona} You engage in discussions by commenting on posts."
+            "{persona} You engage in discussions by commenting on posts. Generate {toxicity} confrontational language contents."
         )
         user_template = prompts.get(
             "user_template",
@@ -180,7 +222,7 @@ class LLMService:
         )
         
         # Format templates
-        system_msg = system_template.format(persona=persona)
+        system_msg = system_template.format(persona=persona, toxicity=toxicity)
         user_msg = user_template.format(post_content=post_content)
         
         prompt = ChatPromptTemplate.from_messages([
@@ -201,7 +243,7 @@ class LLMService:
             # Fallback if LLM fails
             return "Interesting perspective!"
     
-    def generate_read_reaction(self, cluster_id: int, post_content: str) -> str:
+    def generate_read_reaction(self, cluster_id: int, post_content: str, agent_attrs: dict = None) -> str:
         """
         Decide how to react to a post discovered via read/recommendation.
         
@@ -210,15 +252,13 @@ class LLMService:
         Args:
             cluster_id: Cluster/persona ID of the agent
             post_content: Content of the post to react to
+            agent_attrs: Dict with agent attributes for dynamic persona building
             
         Returns:
             str: Reaction type - one of: LIKE, LOVE, LAUGH, ANGRY, SAD, IGNORE
         """
-        # Get persona from configuration
-        persona = self.prompts_config["personas"].get(
-            str(cluster_id),
-            "You are a social media user."
-        )
+        # Build persona using attributes or fallback
+        persona = self._build_persona(cluster_id, agent_attrs)
         
         # Get prompt templates from configuration
         prompts = self.prompts_config.get("generate_read_reaction", {})

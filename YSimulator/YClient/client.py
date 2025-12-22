@@ -909,11 +909,37 @@ class SimulationClient:
         
         return selected_action, agent_type, target
 
+    def _extract_agent_attrs(self, agent) -> dict:
+        """
+        Extract agent attributes for dynamic persona building.
+        
+        Args:
+            agent: AgentProfile object
+            
+        Returns:
+            dict: Agent attributes for persona template
+        """
+        return {
+            "name": agent.username,
+            "age": agent.age if agent.age else "unknown",
+            "gender": agent.gender if agent.gender else "person",
+            "nationality": agent.nationality if agent.nationality else "citizen",
+            "profession": agent.profession if agent.profession else "individual",
+            "political_leaning": agent.leaning if agent.leaning else "neutral",
+            "oe": agent.oe if agent.oe else "average in openness",
+            "co": agent.co if agent.co else "average in conscientiousness",
+            "ex": agent.ex if agent.ex else "average in extraversion",
+            "ag": agent.ag if agent.ag else "average in agreeableness",
+            "ne": agent.ne if agent.ne else "average in neuroticism",
+            "toxicity": agent.toxicity if agent.toxicity else "no"
+        }
+
     def _handle_post_action(self, agent, agent_type, day, slot, pending_llm_posts, actions):
         """Handle post action for an agent."""
         if agent_type == "llm":
             # LLM: Fire off async call (don't wait for result yet)
-            future = generate_llm_post_async(self.llm, agent.cluster, day, slot)
+            agent_attrs = self._extract_agent_attrs(agent)
+            future = generate_llm_post_async(self.llm, agent.cluster, day, slot, agent_attrs)
             pending_llm_posts.append((agent.id, agent.cluster, future, None))
         else:
             # Rule-based: Execute immediately
@@ -943,8 +969,9 @@ class SimulationClient:
             post_data = ray.get(self.server.get_post.remote(target_post))
             if post_data:
                 post_content = post_data.get("tweet", "")
-                # Fire off async LLM call to generate comment
-                future = self.llm.generate_comment.remote(agent.cluster, post_content)
+                # Fire off async LLM call to generate comment with agent attributes
+                agent_attrs = self._extract_agent_attrs(agent)
+                future = self.llm.generate_comment.remote(agent.cluster, post_content, agent_attrs)
                 pending_llm_reactions.append((agent.id, agent.cluster, target_post, future))
         else:
             # Rule-based: Just comment "COMMENT"
@@ -978,8 +1005,9 @@ class SimulationClient:
             post_data = ray.get(self.server.get_post.remote(target_post))
             if post_data:
                 post_content = post_data.get("tweet", "")
-                # Fire off async LLM call to decide reaction
-                future = generate_llm_read_async(self.llm, agent.cluster, post_content)
+                # Fire off async LLM call to decide reaction with agent attributes
+                agent_attrs = self._extract_agent_attrs(agent)
+                future = generate_llm_read_async(self.llm, agent.cluster, post_content, agent_attrs)
                 pending_llm_reactions.append((agent.id, agent.cluster, target_post, future))
         else:
             # Rule-based: Randomly choose LIKE, DISLIKE (ANGRY), or IGNORE
