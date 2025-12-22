@@ -901,6 +901,199 @@ class SimulationClient:
         
         return selected_action, agent_type, target
 
+    def _handle_post_action(self, agent, agent_type, day, slot, pending_llm_posts, actions):
+        """Handle post action for an agent."""
+        if agent_type == "llm":
+            # LLM: Fire off async call (don't wait for result yet)
+            future = generate_llm_post_async(self.llm, agent.cluster, day, slot)
+            pending_llm_posts.append((agent.id, agent.cluster, future, None))
+        else:
+            # Rule-based: Execute immediately
+            action = generate_rule_based_post(agent.id, agent.cluster)
+            actions.append(action)
+    
+    def _handle_comment_action(self, agent, agent_type, pending_llm_reactions, actions, rule_based_interactions):
+        """Handle comment action for an agent."""
+        # Use recsys to get recommended posts to comment on
+        agent_recsys_mode = getattr(agent, 'recsys_type', None) or self.recsys_mode
+        recsys_class = RECSYS_CLASS_MAP.get(agent_recsys_mode, RandomOrder)
+        recsys = recsys_class(
+            n_posts=self.recsys_n_posts,
+            visibility_rounds=self.recsys_visibility_rounds
+        )
+        
+        # Get recommended posts from server
+        recommended_posts = recsys.get_recommendations(self.server, agent.id)
+        
+        if not recommended_posts:
+            return  # No posts available to comment on
+        
+        # Select one post randomly from recommendations
+        target_post = random.choice(recommended_posts)
+        
+        if agent_type == "llm":
+            # LLM: Get the post content and ask for a comment
+            post_data = ray.get(self.server.get_post.remote(target_post))
+            if post_data:
+                post_content = post_data.get("tweet", "")
+                # Fire off async LLM call to generate comment
+                future = self.llm.generate_comment.remote(agent.cluster, post_content)
+                pending_llm_reactions.append((agent.id, agent.cluster, target_post, future))
+        else:
+            # Rule-based: Just comment "COMMENT"
+            action = generate_rule_based_comment(agent.id, agent.cluster, target_post)
+            actions.append(action)
+            # Track for secondary follow (rule-based comment)
+            post_data = ray.get(self.server.get_post.remote(target_post))
+            if post_data:
+                rule_based_interactions.append((agent.id, agent.cluster, post_data.get("user_id"), post_data.get("tweet", ""), False))
+    
+    def _handle_read_action(self, agent, agent_type, pending_llm_reactions, actions, rule_based_interactions):
+        """Handle read action for an agent."""
+        # Use recsys to get recommended posts
+        agent_recsys_mode = getattr(agent, 'recsys_type', None) or self.recsys_mode
+        recsys_class = RECSYS_CLASS_MAP.get(agent_recsys_mode, RandomOrder)
+        recsys = recsys_class(
+            n_posts=self.recsys_n_posts,
+            visibility_rounds=self.recsys_visibility_rounds
+        )
+        
+        # Get recommended posts from server
+        recommended_posts = recsys.get_recommendations(self.server, agent.id)
+        
+        if not recommended_posts:
+            return  # No posts available to read
+        
+        # Select one post randomly from recommendations
+        target_post = random.choice(recommended_posts)
+        
+        if agent_type == "llm":
+            # LLM: Get the post content and ask for a reaction decision
+            post_data = ray.get(self.server.get_post.remote(target_post))
+            if post_data:
+                post_content = post_data.get("tweet", "")
+                # Fire off async LLM call to decide reaction
+                future = generate_llm_read_async(self.llm, agent.cluster, post_content)
+                pending_llm_reactions.append((agent.id, agent.cluster, target_post, future))
+        else:
+            # Rule-based: Randomly choose LIKE, DISLIKE (ANGRY), or IGNORE
+            action = generate_rule_based_read(agent.id, agent.cluster, target_post)
+            if action:  # Only add if not IGNORE
+                actions.append(action)
+                # Track for secondary follow (rule-based read)
+                post_data = ray.get(self.server.get_post.remote(target_post))
+                if post_data:
+                    rule_based_interactions.append((agent.id, agent.cluster, post_data.get("user_id"), post_data.get("tweet", ""), False))
+    
+    def _handle_follow_action(self, agent, agent_type, pending_llm_follows, actions):
+        """Handle follow action for an agent."""
+        # Use follow recsys to get suggested users
+        agent_frecsys_mode = getattr(agent, 'frecsys_type', None) or "random"
+        frecsys_class = FOLLOW_RECSYS_CLASS_MAP.get(agent_frecsys_mode, RandomFollowRecSys)
+        frecsys = frecsys_class(n_neighbors=10, leaning_bias=1)
+        
+        # Get follow suggestions from server
+        suggested_users = frecsys.get_follow_suggestions(self.server, agent.id)
+        
+        if not suggested_users:
+            return  # No users available to follow
+        
+        if agent_type == "llm":
+            # LLM: Ask to decide which user to follow
+            future = generate_llm_follow_async(self.llm, agent.cluster, suggested_users)
+            pending_llm_follows.append((agent.id, agent.cluster, future))
+        else:
+            # Rule-based: Randomly select one user to follow
+            target_user = random.choice(suggested_users)
+            action = generate_rule_based_follow(agent.id, agent.cluster, target_user)
+            actions.append(action)
+    
+    def _handle_share_link_action(self, agent, agent_type, day, slot, pending_llm_posts, actions):
+        """Handle share_link action for page agents (news sharing)."""
+        self.logger.info(f"share_link action: agent={agent.username}, is_page={agent.is_page}, feed_url={agent.feed_url[:50] if agent.feed_url else None}, news_service={self.news_service is not None}")
+        
+        if agent.is_page != 1:
+            self.logger.warning(f"share_link skipped: {agent.username} is not a page agent")
+            return
+        
+        if not agent.feed_url:
+            self.logger.warning(f"share_link skipped: {agent.username} has no feed_url")
+            return
+        
+        if not self.news_service:
+            self.logger.warning(f"share_link skipped: {agent.username} - news_service is None")
+            return
+        
+        # Get an article from this page's specific feed
+        try:
+            self.logger.info(f"Page {agent.username} fetching article from {agent.feed_url[:50]}")
+            article_future = self.news_service.get_article_from_feed.remote(agent.feed_url)
+            article = ray.get(article_future)
+            
+            if article:
+                self.logger.info(f"Page {agent.username} got article: {article.get('title', 'NO TITLE')[:50]}")
+                
+                # Verify the article's website_id matches the page's user_id
+                article_website_id = article.get("website_id")
+                if article_website_id:
+                    normalized_article_id = str(article_website_id).lower()
+                    normalized_agent_id = str(agent.id).lower()
+                    if normalized_article_id != normalized_agent_id:
+                        self.logger.warning(
+                            f"Page {agent.username} attempted to share from wrong feed. "
+                            f"Page ID: {agent.id}, Article Website ID: {article_website_id}"
+                        )
+                        return
+                
+                if agent_type == "llm":
+                    # LLM page posts news with commentary
+                    self.logger.info(f"LLM Page {agent.username} generating news post async")
+                    future, article_id = generate_news_post_async(
+                        self.news_service, self.llm, agent.cluster, article, agent.username
+                    )
+                    self.logger.info(f"LLM Page {agent.username} got article_id: {article_id}")
+                    pending_llm_posts.append((agent.id, agent.cluster, future, article_id))
+                else:
+                    # Rule-based page posts news directly
+                    self.logger.info(f"Rule-based Page {agent.username} generating news post")
+                    action, article_id = generate_rule_based_news_post(
+                        agent.id, agent.cluster, article, self.news_service
+                    )
+                    self.logger.info(f"Rule-based Page {agent.username} got article_id: {article_id}")
+                    action.article_id = article_id
+                    actions.append(action)
+            else:
+                self.logger.warning(f"Page {agent.username} got no article from feed")
+        except Exception as e:
+            self.logger.warning(f"Share link action failed for page {agent.username}: {e}")
+            import traceback
+            self.logger.warning(f"Traceback: {traceback.format_exc()}")
+    
+    def _handle_share_action(self, agent, agent_type, target, actions):
+        """Handle share action (reshare existing post)."""
+        # For now, only rule-based agents share
+        if agent_type == "rule_based" and target:
+            action = generate_rule_based_share(agent.id, agent.cluster, target)
+            actions.append(action)
+    
+    def _handle_image_action(self, agent, agent_type, day, slot, pending_llm_posts, actions):
+        """Handle image post action (stub for future image generation)."""
+        if agent_type == "llm":
+            future = generate_llm_post_async(self.llm, agent.cluster, day, slot)
+            pending_llm_posts.append((agent.id, agent.cluster, future, None))
+        else:
+            action = generate_rule_based_post(agent.id, agent.cluster)
+            actions.append(action)
+    
+    def _handle_cast_action(self, agent, agent_type, day, slot, pending_llm_posts, actions):
+        """Handle cast/broadcast action (stub for future broadcast mechanism)."""
+        if agent_type == "llm":
+            future = generate_llm_post_async(self.llm, agent.cluster, day, slot)
+            pending_llm_posts.append((agent.id, agent.cluster, future, None))
+        else:
+            action = generate_rule_based_post(agent.id, agent.cluster)
+            actions.append(action)
+    
     def _simulate(self, day: int, slot: int, recent_posts: list) -> list:
         """
         Simulate agent behaviors for a given time slot using modular action implementations.
@@ -999,251 +1192,26 @@ class SimulationClient:
                 if agent.is_page == 1:
                     self.logger.info(f"Page agent {agent.username} action {action_idx+1}/{num_actions}: type={action_type}, agent_type={agent_type}")
                 
+                # Dispatch to appropriate action handler
                 if action_type == "post":
-                    if agent_type == "llm":
-                        # LLM: Fire off async call (don't wait for result yet)
-                        future = generate_llm_post_async(self.llm, agent.cluster, day, slot)
-                        pending_llm_posts.append((agent.id, agent.cluster, future, None))
-                    else:
-                        # Rule-based: Execute immediately
-                        action = generate_rule_based_post(agent.id, agent.cluster)
-                        actions.append(action)
-                
+                    self._handle_post_action(agent, agent_type, day, slot, pending_llm_posts, actions)
                 elif action_type == "comment":
-                    # Use recsys to get recommended posts to comment on
-                    # Initialize recsys based on agent's recsys_type preference
-                    # Fall back to global config if agent doesn't specify
-                    agent_recsys_mode = getattr(agent, 'recsys_type', None) or self.recsys_mode
-                    
-                    # Get the appropriate recsys class, default to RandomOrder if unknown
-                    recsys_class = RECSYS_CLASS_MAP.get(agent_recsys_mode, RandomOrder)
-                    
-                    # Initialize the recsys with configuration parameters
-                    recsys = recsys_class(
-                        n_posts=self.recsys_n_posts,
-                        visibility_rounds=self.recsys_visibility_rounds
-                    )
-                    
-                    # Get recommended posts from server
-                    recommended_posts = recsys.get_recommendations(self.server, agent.id)
-                    
-                    if not recommended_posts:
-                        # No posts available to comment on, skip this action
-                        continue
-                    
-                    # Select one post randomly from recommendations
-                    target_post = random.choice(recommended_posts)
-                    
-                    if agent_type == "llm":
-                        # LLM: Get the post content and ask for a comment
-                        # First, fetch the post content
-                        post_data = ray.get(self.server.get_post.remote(target_post))
-                        if post_data:
-                            post_content = post_data.get("tweet", "")
-                            # Fire off async LLM call to generate comment
-                            future = self.llm.generate_comment.remote(agent.cluster, post_content)
-                            pending_llm_reactions.append((agent.id, agent.cluster, target_post, future))
-                        else:
-                            # Post not found, skip
-                            continue
-                    else:
-                        # Rule-based: Just comment "COMMENT"
-                        action = generate_rule_based_comment(agent.id, agent.cluster, target_post)
-                        actions.append(action)
-                        # Track for secondary follow (rule-based comment)
-                        post_data = ray.get(self.server.get_post.remote(target_post))
-                        if post_data:
-                            rule_based_interactions.append((agent.id, agent.cluster, post_data.get("user_id"), post_data.get("tweet", ""), False))
-                
+                    self._handle_comment_action(agent, agent_type, pending_llm_reactions, actions, rule_based_interactions)
                 elif action_type == "read":
-                    # Read action: Get recommended posts, save recommendations, randomly select one, and decide reaction
-                    # Use recsys to get recommended posts
-                    # Initialize recsys based on agent's recsys_type preference
-                    # Fall back to global config if agent doesn't specify
-                    agent_recsys_mode = getattr(agent, 'recsys_type', None) or self.recsys_mode
-                    
-                    # Get the appropriate recsys class, default to RandomOrder if unknown
-                    recsys_class = RECSYS_CLASS_MAP.get(agent_recsys_mode, RandomOrder)
-                    
-                    # Initialize the recsys with configuration parameters
-                    recsys = recsys_class(
-                        n_posts=self.recsys_n_posts,
-                        visibility_rounds=self.recsys_visibility_rounds
-                    )
-                    
-                    # Get recommended posts from server
-                    # Note: _save_recommendation is already called inside get_recommendations via server
-                    recommended_posts = recsys.get_recommendations(self.server, agent.id)
-                    
-                    if not recommended_posts:
-                        # No posts available to read, skip this action
-                        continue
-                    
-                    # Select one post randomly from recommendations
-                    target_post = random.choice(recommended_posts)
-                    
-                    if agent_type == "llm":
-                        # LLM: Get the post content and ask for a reaction decision
-                        # First, fetch the post content
-                        post_data = ray.get(self.server.get_post.remote(target_post))
-                        if post_data:
-                            post_content = post_data.get("tweet", "")
-                            # Fire off async LLM call to decide reaction
-                            future = generate_llm_read_async(self.llm, agent.cluster, post_content)
-                            pending_llm_reactions.append((agent.id, agent.cluster, target_post, future))
-                        else:
-                            # Post not found, skip
-                            continue
-                    else:
-                        # Rule-based: Randomly choose LIKE, DISLIKE (ANGRY), or IGNORE
-                        action = generate_rule_based_read(agent.id, agent.cluster, target_post)
-                        if action:  # Only add if not IGNORE
-                            actions.append(action)
-                            # Track for secondary follow (rule-based read)
-                            post_data = ray.get(self.server.get_post.remote(target_post))
-                            if post_data:
-                                rule_based_interactions.append((agent.id, agent.cluster, post_data.get("user_id"), post_data.get("tweet", ""), False))
-                
+                    self._handle_read_action(agent, agent_type, pending_llm_reactions, actions, rule_based_interactions)
                 elif action_type == "follow":
-                    # Follow action: Get follow suggestions, randomly select one, create follow relationship
-                    # Use follow recsys to get suggested users
-                    # Initialize recsys based on agent's frecsys_type preference
-                    agent_frecsys_mode = getattr(agent, 'frecsys_type', None) or "random"
-                    
-                    # Get the appropriate follow recsys class, default to RandomFollowRecSys if unknown
-                    frecsys_class = FOLLOW_RECSYS_CLASS_MAP.get(agent_frecsys_mode, RandomFollowRecSys)
-                    
-                    # Initialize the follow recsys with default parameters
-                    frecsys = frecsys_class(n_neighbors=10, leaning_bias=1)
-                    
-                    # Get follow suggestions from server
-                    suggested_users = frecsys.get_follow_suggestions(self.server, agent.id)
-                    
-                    if not suggested_users:
-                        # No users available to follow, skip this action
-                        continue
-                    
-                    if agent_type == "llm":
-                        # LLM: Ask to decide which user to follow
-                        future = generate_llm_follow_async(self.llm, agent.cluster, suggested_users)
-                        pending_llm_follows.append((agent.id, agent.cluster, future))
-                    else:
-                        # Rule-based: Randomly select one user to follow
-                        target_user = random.choice(suggested_users)
-                        action = generate_rule_based_follow(agent.id, agent.cluster, target_user)
-                        actions.append(action)
-                
+                    self._handle_follow_action(agent, agent_type, pending_llm_follows, actions)
                 elif action_type == "image":
-                    # Stub: Image post action - agent creates a post with an image
-                    # Future implementation: integrate with image generation
-                    if agent_type == "llm":
-                        future = generate_llm_post_async(self.llm, agent.cluster, day, slot)
-                        pending_llm_posts.append((agent.id, agent.cluster, future, None))
-                    else:
-                        action = generate_rule_based_post(agent.id, agent.cluster)
-                        actions.append(action)
-                
+                    self._handle_image_action(agent, agent_type, day, slot, pending_llm_posts, actions)
                 elif action_type == "share_link":
-                    # News sharing action - ONLY page agents can perform this action
-                    # Page agents share news articles from their assigned RSS feed
-                    # The feed must be associated with a Website that has the same ID as the page
-                    self.logger.info(f"share_link action: agent={agent.username}, is_page={agent.is_page}, feed_url={agent.feed_url[:50] if agent.feed_url else None}, news_service={self.news_service is not None}")
-                    
-                    if agent.is_page != 1:
-                        # Non-page agents cannot perform share_link action, skip
-                        self.logger.warning(f"share_link skipped: {agent.username} is not a page agent")
-                        continue
-                    
-                    if not agent.feed_url:
-                        # Page without feed URL, skip
-                        self.logger.warning(f"share_link skipped: {agent.username} has no feed_url")
-                        continue
-                    
-                    if self.news_service:
-                        # Get an article from this page's specific feed
-                        # The feed is already registered with the page's ID as website_id
-                        try:
-                            self.logger.info(f"Page {agent.username} fetching article from {agent.feed_url[:50]}")
-                            article_future = self.news_service.get_article_from_feed.remote(
-                                agent.feed_url
-                            )
-                            article = ray.get(article_future)
-                            
-                            if article:
-                                self.logger.info(f"Page {agent.username} got article: {article.get('title', 'NO TITLE')[:50]}")
-                                
-                                # Verify the article's website_id matches the page's user_id
-                                # This ensures pages can only share from their own feeds
-                                article_website_id = article.get("website_id")
-                                # Both IDs should be UUID strings - normalize for comparison
-                                if article_website_id:
-                                    # Normalize both IDs to lowercase strings for comparison
-                                    normalized_article_id = str(article_website_id).lower()
-                                    normalized_agent_id = str(agent.id).lower()
-                                    if normalized_article_id != normalized_agent_id:
-                                        # Article is from a different website, skip
-                                        self.logger.warning(
-                                            f"Page {agent.username} attempted to share from wrong feed. "
-                                            f"Page ID: {agent.id}, Article Website ID: {article_website_id}"
-                                        )
-                                        continue
-                                
-                                if agent_type == "llm":
-                                    # LLM page posts news with commentary
-                                    self.logger.info(f"LLM Page {agent.username} generating news post async")
-                                    future, article_id = generate_news_post_async(
-                                        self.news_service, self.llm, agent.cluster, article, agent.username
-                                    )
-                                    self.logger.info(f"LLM Page {agent.username} got article_id: {article_id}")
-                                    pending_llm_posts.append((agent.id, agent.cluster, future, article_id))
-                                else:
-                                    # Rule-based page posts news directly
-                                    self.logger.info(f"Rule-based Page {agent.username} generating news post")
-                                    action, article_id = generate_rule_based_news_post(
-                                        agent.id, agent.cluster, article, self.news_service
-                                    )
-                                    self.logger.info(f"Rule-based Page {agent.username} got article_id: {article_id}")
-                                    # Store article_id with the action for later use when submitting
-                                    action.article_id = article_id
-                                    actions.append(action)
-                            else:
-                                # No article available from this feed, skip
-                                self.logger.warning(f"Page {agent.username} got no article from feed")
-                        except Exception as e:
-                            # News service unavailable or error, skip action
-                            self.logger.warning(f"Share link action failed for page {agent.username}: {e}")
-                            import traceback
-                            self.logger.warning(f"Traceback: {traceback.format_exc()}")
-                    else:
-                        # News service not configured, skip (pages can only share links)
-                        self.logger.warning(f"share_link skipped: {agent.username} - news_service is None")
-                        pass
-                
+                    self._handle_share_link_action(agent, agent_type, day, slot, pending_llm_posts, actions)
                 elif action_type == "share":
-                    # Share action - agent shares an existing post
-                    # Select a post from recent_posts to share
-                    if recent_posts:
-                        # For now, only rule-based agents share (LLM share can be added later)
-                        if agent_type == "rule_based":
-                            action = generate_rule_based_share(agent.id, agent.cluster, target)
-                            actions.append(action)
-                        # LLM share could generate commentary using LLM in the future
-                    # If no posts available, skip
-                
+                    self._handle_share_action(agent, agent_type, target, actions)
                 elif action_type == "search":
-                    # Stub: Search action - agent searches for content
-                    # Future implementation: integrate with search functionality
+                    # Stub: Search action - future implementation
                     pass
-                
                 elif action_type == "cast":
-                    # Stub: Cast/broadcast action - agent broadcasts to wider audience
-                    # Future implementation: special broadcast mechanism
-                    if agent_type == "llm":
-                        future = generate_llm_post_async(self.llm, agent.cluster, day, slot)
-                        pending_llm_posts.append((agent.id, agent.cluster, future, None))
-                    else:
-                        action = generate_rule_based_post(agent.id, agent.cluster)
-                        actions.append(action)
+                    self._handle_cast_action(agent, agent_type, day, slot, pending_llm_posts, actions)
         
         # --- GATHER PHASE: Wait for all LLM results in parallel ---
         
