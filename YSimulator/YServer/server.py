@@ -18,6 +18,7 @@ import ray
 from sqlalchemy import text
 
 from YSimulator.YClient.classes.ray_models import SimulationInstruction
+from YSimulator.YServer.recsys import content_recsys_db
 
 
 # Constants
@@ -1623,45 +1624,15 @@ class OrchestratorServer:
                     
                     if mode == "rchrono":
                         # Reverse chronological: newest posts first
-                        query = text("""
-                            SELECT p.id FROM post p
-                            INNER JOIN rounds rd ON p.round = rd.id
-                            WHERE (rd.day > :vis_day OR (rd.day = :vis_day AND rd.hour >= :vis_hour))
-                                AND p.user_id != :agent_id
-                            ORDER BY rd.day DESC, rd.hour DESC
-                            LIMIT :limit
-                        """)
-                        result = connection.execute(query, {
-                            "vis_day": visibility_day,
-                            "vis_hour": visibility_hour,
-                            "agent_id": agent_id,
-                            "limit": limit
-                        })
-                        post_ids = [row[0] for row in result]
+                        post_ids = content_recsys_db.recommend_rchrono(
+                            connection, agent_id, visibility_day, visibility_hour, limit
+                        )
                         
                     elif mode == "rchrono_popularity":
                         # Reverse chronological with popularity (reaction count)
-                        query = text("""
-                            SELECT p.id 
-                            FROM post p
-                            INNER JOIN rounds rd ON p.round = rd.id
-                            LEFT JOIN (
-                                SELECT post_id, COUNT(*) as reaction_count
-                                FROM reaction
-                                GROUP BY post_id
-                            ) r ON p.id = r.post_id
-                            WHERE (rd.day > :vis_day OR (rd.day = :vis_day AND rd.hour >= :vis_hour))
-                                AND p.user_id != :agent_id
-                            ORDER BY rd.day DESC, rd.hour DESC, COALESCE(r.reaction_count, 0) DESC
-                            LIMIT :limit
-                        """)
-                        result = connection.execute(query, {
-                            "vis_day": visibility_day,
-                            "vis_hour": visibility_hour,
-                            "agent_id": agent_id,
-                            "limit": limit
-                        })
-                        post_ids = [row[0] for row in result]
+                        post_ids = content_recsys_db.recommend_rchrono_popularity(
+                            connection, agent_id, visibility_day, visibility_hour, limit
+                        )
                         
                     elif mode == "rchrono_followers":
                         # Prioritize posts from followed users
