@@ -1189,40 +1189,6 @@ class SimulationClient:
                         )
                         return
                 
-                # Extract and store article topics if not already done
-                article_id = article.get("id")
-                if article_id:
-                    try:
-                        # Check if article already has topics (avoid duplicate extraction)
-                        existing_topics = ray.get(self.server.get_article_topics.remote(article_id))
-                        
-                        if not existing_topics:
-                            # Extract topics using LLM (client-side)
-                            self.logger.info(f"Extracting topics for article {article_id}: {article.get('title', '')[:50]}...")
-                            topics_future = self.llm.extract_topics_from_article.remote(
-                                article.get("title", ""),
-                                article.get("summary", "")
-                            )
-                            topic_names = ray.get(topics_future)
-                            self.logger.info(f"LLM extracted topics: {topic_names}")
-                            
-                            if topic_names:
-                                # Store topics in database (server-side)
-                                topic_ids = ray.get(
-                                    self.server.store_article_topics.remote(
-                                        article_id,
-                                        topic_names[:2]  # Up to 2 topics
-                                    )
-                                )
-                                if topic_ids:
-                                    self.logger.info(f"Stored {len(topic_ids)} topics for article {article_id}")
-                        else:
-                            self.logger.info(f"Article {article_id} already has {len(existing_topics)} topics")
-                    except Exception as e:
-                        self.logger.warning(f"Failed to extract/store topics for article {article_id}: {e}")
-                        import traceback
-                        self.logger.warning(f"Traceback: {traceback.format_exc()}")
-                
                 if agent_type == "llm":
                     # LLM page posts news with commentary
                     self.logger.info(f"LLM Page {agent.username} generating news post async")
@@ -1230,6 +1196,40 @@ class SimulationClient:
                         self.news_service, self.llm, agent.cluster, article, agent.username
                     )
                     self.logger.info(f"LLM Page {agent.username} got article_id: {article_id}")
+                    
+                    # Extract and store article topics after article is saved
+                    if article_id:
+                        try:
+                            # Check if article already has topics (avoid duplicate extraction)
+                            existing_topics = ray.get(self.server.get_article_topics.remote(article_id))
+                            
+                            if not existing_topics:
+                                # Extract topics using LLM (client-side)
+                                self.logger.info(f"Extracting topics for article {article_id}: {article.get('title', '')[:50]}...")
+                                topics_future = self.llm.extract_topics_from_article.remote(
+                                    article.get("title", ""),
+                                    article.get("summary", "")
+                                )
+                                topic_names = ray.get(topics_future)
+                                self.logger.info(f"LLM extracted topics: {topic_names}")
+                                
+                                if topic_names:
+                                    # Store topics in database (server-side)
+                                    topic_ids = ray.get(
+                                        self.server.store_article_topics.remote(
+                                            article_id,
+                                            topic_names[:2]  # Up to 2 topics
+                                        )
+                                    )
+                                    if topic_ids:
+                                        self.logger.info(f"Stored {len(topic_ids)} topics for article {article_id}")
+                            else:
+                                self.logger.info(f"Article {article_id} already has {len(existing_topics)} topics")
+                        except Exception as e:
+                            self.logger.warning(f"Failed to extract/store topics for article {article_id}: {e}")
+                            import traceback
+                            self.logger.warning(f"Traceback: {traceback.format_exc()}")
+                    
                     pending_llm_posts.append((agent.id, agent.cluster, future, article_id))
                 else:
                     # Rule-based page posts news directly
@@ -1238,6 +1238,40 @@ class SimulationClient:
                         agent.id, agent.cluster, article, self.news_service
                     )
                     self.logger.info(f"Rule-based Page {agent.username} got article_id: {article_id}")
+                    
+                    # Extract and store article topics after article is saved
+                    if article_id:
+                        try:
+                            # Check if article already has topics (avoid duplicate extraction)
+                            existing_topics = ray.get(self.server.get_article_topics.remote(article_id))
+                            
+                            if not existing_topics:
+                                # Extract topics using LLM (client-side)
+                                self.logger.info(f"Extracting topics for article {article_id}: {article.get('title', '')[:50]}...")
+                                topics_future = self.llm.extract_topics_from_article.remote(
+                                    article.get("title", ""),
+                                    article.get("summary", "")
+                                )
+                                topic_names = ray.get(topics_future)
+                                self.logger.info(f"LLM extracted topics: {topic_names}")
+                                
+                                if topic_names:
+                                    # Store topics in database (server-side)
+                                    topic_ids = ray.get(
+                                        self.server.store_article_topics.remote(
+                                            article_id,
+                                            topic_names[:2]  # Up to 2 topics
+                                        )
+                                    )
+                                    if topic_ids:
+                                        self.logger.info(f"Stored {len(topic_ids)} topics for article {article_id}")
+                            else:
+                                self.logger.info(f"Article {article_id} already has {len(existing_topics)} topics")
+                        except Exception as e:
+                            self.logger.warning(f"Failed to extract/store topics for article {article_id}: {e}")
+                            import traceback
+                            self.logger.warning(f"Traceback: {traceback.format_exc()}")
+                    
                     action.article_id = article_id
                     actions.append(action)
             else:
