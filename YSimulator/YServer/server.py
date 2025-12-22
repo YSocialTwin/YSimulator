@@ -1373,8 +1373,6 @@ class OrchestratorServer:
                         post_ids = content_recsys_db.recommend_random(
                             session, agent_id, visibility_day, visibility_hour, limit
                         )
-                finally:
-                    session.close()
                     
                     self.logger.info(
                         f"Recommended {len(post_ids)} posts (SQL, mode={mode})",
@@ -1392,6 +1390,8 @@ class OrchestratorServer:
                     self._save_recommendation(agent_id, post_ids)
                     
                     return post_ids
+                finally:
+                    session.close()
                 
         except Exception as e:
             self.logger.error(
