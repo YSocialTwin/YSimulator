@@ -1,25 +1,63 @@
 {
-  "ray": {
+    "server_name": "orchestrator_server",
+    "namespace": "social_sim",
     "address": "auto",
-    "namespace": "social_sim"
-  },
-  "database": {
-    "type": "sqlite",
-    "path": "./simulation.db",
-    "echo": false
-  },
-  "redis": {
-    "enabled": true,
-    "host": "localhost",
-    "port": 6379,
-    "db": 0
-  },
-  "api": {
-    "host": "0.0.0.0",
-    "port": 8000
-  },
-  "logging": {
-    "level": "INFO",
-    "format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-  }
+    "port": null,
+    "database": {
+        "type": "sqlite",
+        "sqlite": {
+            "filename": "simulation.db"
+        },
+        "postgresql": {
+            "host": "localhost",
+            "port": 5432,
+            "database": "ysimulator",
+            "username": "postgres",
+            "password": "password"
+        },
+        "mysql": {
+            "host": "localhost",
+            "port": 3306,
+            "database": "ysimulator",
+            "username": "root",
+            "password": "password"
+        }
+    },
+    "min_to_start": 1,
+    "timeout_seconds": 60,
+    "redis": {
+        "enabled": false,
+        "host": "localhost",
+        "port": 6379,
+        "db": 0,
+        "password": null,
+        "sliding_window_days": 2
+    },
+    "simulation": {
+        "agent_archetypes": {
+            "enabled": true,
+            "distribution": {
+                "validator": 0.33,
+                "broadcaster": 0.33,
+                "explorer": 0.34
+            },
+            "transitions": {
+                "validator": {
+                    "validator": 0.85,
+                    "broadcaster": 0.10,
+                    "explorer": 0.05
+                },
+                "broadcaster": {
+                    "validator": 0.10,
+                    "broadcaster": 0.80,
+                    "explorer": 0.10
+                },
+                "explorer": {
+                    "validator": 0.05,
+                    "broadcaster": 0.10,
+                    "explorer": 0.85
+                }
+            }
+        }
+    }
 }
