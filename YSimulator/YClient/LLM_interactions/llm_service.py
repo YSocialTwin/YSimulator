@@ -114,15 +114,20 @@ class LLMService:
         if not website_name:
             website_name = "this website"
         
-        # Create a prompt asking LLM to act as social media manager
-        system_msg = f"You are the social media manager for {website_name}. Your job is to present news articles to your audience in an engaging way."
-        user_msg = f"""Here's a news article to share:
-
-Title: {article_title}
-
-Content: {article_text}
-
-Write a brief, engaging tweet (max 280 characters) to present this article to your followers. Be professional but engaging. Do NOT include hashtags or links - just your commentary."""
+        # Get prompt templates from configuration
+        prompts = self.prompts_config.get("generate_news_commentary", {})
+        system_template = prompts.get(
+            "system_template",
+            "You are the social media manager for {website_name}. Your job is to present news articles to your audience in an engaging way."
+        )
+        user_template = prompts.get(
+            "user_template",
+            "Here's a news article to share:\n\nTitle: {article_title}\n\nContent: {article_text}\n\nWrite a brief, engaging tweet (max 280 characters) to present this article to your followers. Be professional but engaging. Do NOT include hashtags or links - just your commentary."
+        )
+        
+        # Format templates
+        system_msg = system_template.format(website_name=website_name)
+        user_msg = user_template.format(article_title=article_title, article_text=article_text)
         
         prompt = ChatPromptTemplate.from_messages([
             ("system", system_msg),
@@ -163,13 +168,20 @@ Write a brief, engaging tweet (max 280 characters) to present this article to yo
             "You are a social media user."
         )
         
-        # Create a prompt asking LLM to generate a thoughtful comment
-        system_msg = f"{persona} You engage in discussions by commenting on posts."
-        user_msg = f"""Someone posted this:
-
-"{post_content}"
-
-Write a brief, thoughtful comment to continue the discussion. Max 100 characters. Be authentic to your persona."""
+        # Get prompt templates from configuration
+        prompts = self.prompts_config.get("generate_comment", {})
+        system_template = prompts.get(
+            "system_template",
+            "{persona} You engage in discussions by commenting on posts."
+        )
+        user_template = prompts.get(
+            "user_template",
+            "Someone posted this:\n\n\"{post_content}\"\n\nWrite a brief, thoughtful comment to continue the discussion. Max 100 characters. Be authentic to your persona."
+        )
+        
+        # Format templates
+        system_msg = system_template.format(persona=persona)
+        user_msg = user_template.format(post_content=post_content)
         
         prompt = ChatPromptTemplate.from_messages([
             ("system", system_msg),
@@ -208,21 +220,20 @@ Write a brief, thoughtful comment to continue the discussion. Max 100 characters
             "You are a social media user."
         )
         
-        # Create a prompt asking LLM to decide reaction
-        system_msg = f"{persona} You're deciding how to react to content you discovered."
-        user_msg = f"""You found this post:
-
-"{post_content}"
-
-How do you react? Reply with ONLY ONE WORD from these options:
-- LIKE (positive, agree)
-- LOVE (strongly positive)
-- LAUGH (funny, humorous)
-- ANGRY (negative, disagree, dislike)
-- SAD (disappointing, concerning)
-- IGNORE (not interested, skip)
-
-Your reaction:"""
+        # Get prompt templates from configuration
+        prompts = self.prompts_config.get("generate_read_reaction", {})
+        system_template = prompts.get(
+            "system_template",
+            "{persona} You're deciding how to react to content you discovered."
+        )
+        user_template = prompts.get(
+            "user_template",
+            "You found this post:\n\n\"{post_content}\"\n\nHow do you react? Reply with ONLY ONE WORD from these options:\n- LIKE (positive, agree)\n- LOVE (strongly positive)\n- LAUGH (funny, humorous)\n- ANGRY (negative, disagree, dislike)\n- SAD (disappointing, concerning)\n- IGNORE (not interested, skip)\n\nYour reaction:"
+        )
+        
+        # Format templates
+        system_msg = system_template.format(persona=persona)
+        user_msg = user_template.format(post_content=post_content)
         
         prompt = ChatPromptTemplate.from_messages([
             ("system", system_msg),
@@ -266,18 +277,12 @@ Your reaction:"""
         if not candidate_users:
             return None
         
-        # Get persona from configuration
-        persona = self.prompts_config["personas"].get(
-            str(cluster_id),
-            "You are a social media user."
-        )
+        # Get follow probability from configuration
+        follow_config = self.prompts_config.get("generate_follow_decision", {})
+        follow_probability = follow_config.get("follow_probability", 0.7)
         
-        # For simplicity, LLM-based agents randomly select from candidates
-        # In future versions, this could query user profiles and make informed decisions
-        # For now, we keep it simple: randomly select one candidate
-        
-        # Simple heuristic: follow with 70% probability
-        if random.random() < 0.7:
+        # Simple heuristic: follow with configured probability
+        if random.random() < follow_probability:
             return random.choice(candidate_users)
         else:
             return None  # Skip following this time
@@ -299,24 +304,18 @@ Your reaction:"""
         """
         import random
         
-        # Get persona from configuration
-        persona = self.prompts_config["personas"].get(
-            str(cluster_id),
-            "You are a social media user."
-        )
-        
-        # For simplicity, use a heuristic approach:
-        # - If not following: 30% chance to follow
-        # - If following: 10% chance to unfollow
-        # This could be enhanced with actual LLM prompts in future versions
+        # Get follow decision probabilities from configuration
+        follow_config = self.prompts_config.get("generate_secondary_follow_decision", {})
+        follow_prob = follow_config.get("follow_probability_when_not_following", 0.3)
+        unfollow_prob = follow_config.get("unfollow_probability_when_following", 0.1)
         
         if not is_currently_following:
             # Not following yet, consider following
-            if random.random() < 0.3:
+            if random.random() < follow_prob:
                 return "follow"
         else:
             # Already following, consider unfollowing
-            if random.random() < 0.1:
+            if random.random() < unfollow_prob:
                 return "unfollow"
         
         return "no_change"

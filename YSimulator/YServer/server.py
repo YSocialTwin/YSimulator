@@ -1150,12 +1150,15 @@ class OrchestratorServer:
             return
         
         try:
+            from sqlalchemy.orm import Session
+            
             # Format post IDs as pipe-separated string (original implementation format)
             post_ids_str = "|".join(post_ids)
             recommendation_id = str(uuid.uuid4())
             
             # Save to SQL database using SQLAlchemy ORM
-            with self.db.get_session() as session:
+            session = Session(self.db.engine)
+            try:
                 recommendation = Recommendation(
                     id=recommendation_id,
                     user_id=agent_id,
@@ -1164,6 +1167,8 @@ class OrchestratorServer:
                 )
                 session.add(recommendation)
                 session.commit()
+            finally:
+                session.close()
             
             # Also save to Redis if enabled
             if self.db.use_redis:
