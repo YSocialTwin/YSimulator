@@ -86,6 +86,9 @@ class OrchestratorServer:
         
         # Store visibility_rounds for server use
         self.visibility_rounds = simulation_config.get("posts", {}).get("visibility_rounds", 36)
+        
+        # Store attention_window for interest decay (sliding window)
+        self.attention_window = simulation_config.get("agents", {}).get("attention_window", 336)
 
         # Client tracking
         self.registered_clients = set()  # All registered clients
@@ -194,8 +197,49 @@ class OrchestratorServer:
         
         return topics, counts
     
+    def _recompute_agent_interests_from_window(self, agent_id: str):
+        """
+        Recompute agent interests based on the sliding attention window.
+        This replaces the incremental counter approach with a query-based approach.
+        
+        Args:
+            agent_id: Agent UUID
+        """
+        agent_id = str(agent_id)
+        
+        # Get interest counts within the attention window
+        interest_counts_by_id = self.db.compute_interest_counts_in_window(
+            agent_id, 
+            self.current_round_id, 
+            self.attention_window
+        )
+        
+        # Convert interest IDs to names
+        topics = []
+        counts = []
+        
+        for interest_id, count in interest_counts_by_id.items():
+            if count > 0:  # Only include topics with count > 0
+                topic_name = self._get_topic_name_from_id(interest_id)
+                if topic_name:
+                    topics.append(topic_name)
+                    counts.append(count)
+        
+        # Update in-memory state
+        if topics:
+            self.agent_interests[agent_id] = {
+                "topics": topics,
+                "counts": counts
+            }
+        elif agent_id in self.agent_interests:
+            # Remove agent from interests if no topics remain
+            del self.agent_interests[agent_id]
+    
     def _update_agent_interest_counter(self, agent_id: str, topic_name: str, increment: int = 1):
         """
+        DEPRECATED: This method is replaced by _recompute_agent_interests_from_window.
+        Kept for backward compatibility during transition.
+        
         Update the interest counter for an agent in memory.
         
         Args:
@@ -203,23 +247,8 @@ class OrchestratorServer:
             topic_name: Name of the topic
             increment: Amount to increment the counter (default: 1)
         """
-        agent_id = str(agent_id)
-        
-        # Initialize agent interests if not present
-        if agent_id not in self.agent_interests:
-            self.agent_interests[agent_id] = {"topics": [], "counts": []}
-        
-        topics = self.agent_interests[agent_id]["topics"]
-        counts = self.agent_interests[agent_id]["counts"]
-        
-        # Find topic index
-        if topic_name in topics:
-            idx = topics.index(topic_name)
-            counts[idx] += increment
-        else:
-            # Add new topic
-            topics.append(topic_name)
-            counts.append(increment)
+        # Now we just recompute from the database instead of incrementing
+        self._recompute_agent_interests_from_window(agent_id)
     
     def _get_topic_name_from_id(self, topic_id: str) -> Optional[str]:
         """
@@ -239,6 +268,29 @@ class OrchestratorServer:
             return None
         finally:
             session.close()
+    
+    def _recompute_all_agent_interests(self):
+        """
+        Recompute interests for all registered agents based on the sliding attention window.
+        This implements the forgetting mechanism - as user_interest entries fall outside
+        the attention window, their counts decrease and topics with count 0 are removed.
+        """
+        # Get all registered agent IDs
+        agent_ids = list(self.registered_agents.keys())
+        
+        self.logger.info(
+            f"Recomputing interests for {len(agent_ids)} agents using attention window of {self.attention_window} rounds"
+        )
+        
+        for agent_id in agent_ids:
+            self._recompute_agent_interests_from_window(agent_id)
+        
+        # Log summary
+        agents_with_interests = len(self.agent_interests)
+        total_topics = sum(len(data["topics"]) for data in self.agent_interests.values())
+        self.logger.info(
+            f"Interest recomputation complete: {agents_with_interests} agents have interests, {total_topics} total topics"
+        )
     
     def _save_updated_agent_population(self):
         """
@@ -1135,6 +1187,10 @@ class OrchestratorServer:
                         f"Removed {consolidation_result.get('removed_posts', 0)} old posts, "
                         f"{consolidation_result.get('removed_interactions', 0)} old interactions from Redis"
                     )
+                
+                # Recompute all agent interests based on the sliding attention window
+                # This handles the forgetting mechanism - interests decay as entries fall out of window
+                self._recompute_all_agent_interests()
                 
                 # Save updated agent interests to agent_population.json
                 self._save_updated_agent_population()

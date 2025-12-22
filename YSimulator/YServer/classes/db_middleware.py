@@ -1270,3 +1270,81 @@ class DatabaseMiddleware:
             return []
         finally:
             session.close()
+    
+    def get_user_interests_in_window(self, user_id: str, current_round_id: str, attention_window: int) -> List[Dict[str, str]]:
+        """
+        Get user interests within the attention window (sliding window for forgetting).
+        
+        Args:
+            user_id: User UUID
+            current_round_id: Current round UUID
+            attention_window: Number of rounds to look back
+            
+        Returns:
+            List[Dict]: List of user interest records with interest_id and round_id
+        """
+        from YSimulator.YServer.classes.models import UserInterest, Round
+        
+        session = Session(self.engine)
+        try:
+            # Get current round details
+            current_round = session.query(Round).filter(Round.id == current_round_id).first()
+            if not current_round:
+                return []
+            
+            current_day = current_round.day
+            current_hour = current_round.hour
+            
+            # Calculate the round number (day * 24 + hour)
+            current_round_num = (current_day - 1) * 24 + current_hour
+            cutoff_round_num = max(0, current_round_num - attention_window)
+            
+            # Calculate cutoff day and hour
+            cutoff_day = (cutoff_round_num // 24) + 1
+            cutoff_hour = cutoff_round_num % 24
+            
+            # Query user interests within the window
+            user_interests = session.query(UserInterest, Round).join(
+                Round, UserInterest.round_id == Round.id
+            ).filter(
+                UserInterest.user_id == user_id
+            ).filter(
+                (Round.day > cutoff_day) | 
+                ((Round.day == cutoff_day) & (Round.hour >= cutoff_hour))
+            ).all()
+            
+            return [
+                {"interest_id": ui.interest_id, "round_id": ui.round_id}
+                for ui, _ in user_interests
+            ]
+            
+        except Exception as e:
+            self.logger.error(
+                f"Error getting user interests in window: {e}",
+                extra={"extra_data": {"error": str(e), "user_id": user_id}}
+            )
+            return []
+        finally:
+            session.close()
+    
+    def compute_interest_counts_in_window(self, user_id: str, current_round_id: str, attention_window: int) -> Dict[str, int]:
+        """
+        Compute interest counts for a user within the attention window.
+        
+        Args:
+            user_id: User UUID
+            current_round_id: Current round UUID
+            attention_window: Number of rounds to look back
+            
+        Returns:
+            Dict[str, int]: Map of interest_id to count within the window
+        """
+        interests_in_window = self.get_user_interests_in_window(user_id, current_round_id, attention_window)
+        
+        # Count occurrences of each interest
+        interest_counts = {}
+        for entry in interests_in_window:
+            interest_id = entry["interest_id"]
+            interest_counts[interest_id] = interest_counts.get(interest_id, 0) + 1
+        
+        return interest_counts
