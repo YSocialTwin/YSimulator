@@ -1855,147 +1855,46 @@ class OrchestratorServer:
     ) -> List[str]:
         """
         Get follow suggestions using Redis for better scalability with key-value storage.
+        Dispatcher method that delegates to specific recommendation functions.
         """
+        from YSimulator.YServer.recsys import follow_recsys_redis
+        
         try:
-            # Get all user IDs from Redis
-            user_ids_key = self.db._redis_key("user_mgmt", "ids")
-            all_user_ids = list(self.db.redis_client.smembers(user_ids_key))
-            
-            if not all_user_ids:
-                return []
-            
-            # Get agent info
-            agent_key = self.db._redis_key("user_mgmt", agent_id)
-            agent_data = self.db.redis_client.hgetall(agent_key)
-            if not agent_data:
-                return []
-            
-            # Get users agent is following
-            # Check all follow records for this agent
-            follow_pattern = self.db._redis_key("follow", "*")
-            follow_keys = self.db.redis_client.keys(follow_pattern)
-            
-            following_ids = set()
-            for key in follow_keys:
-                follow_data = self.db.redis_client.hgetall(key)
-                if follow_data.get("follower_id") == agent_id and follow_data.get("action") == "follow":
-                    following_ids.add(follow_data.get("user_id"))
-            
-            # Get candidates (not following, not self)
-            candidates = [uid for uid in all_user_ids if uid != agent_id and uid not in following_ids]
-            
-            if not candidates:
-                return []
-            
+            # Dispatch to appropriate recommendation function
             if mode == "random":
-                # Random selection
-                random.shuffle(candidates)
-                return candidates[:n_neighbors]
-            
+                recommendations = follow_recsys_redis.recommend_random_follows_redis(
+                    self.db.redis_client, self.db._redis_key, agent_id, n_neighbors, self.logger
+                )
             elif mode == "preferential_attachment":
-                # Count followers for each candidate
-                follower_counts = {}
-                for candidate in candidates:
-                    count = 0
-                    for key in follow_keys:
-                        follow_data = self.db.redis_client.hgetall(key)
-                        if follow_data.get("user_id") == candidate and follow_data.get("action") == "follow":
-                            count += 1
-                    follower_counts[candidate] = count
-                
-                # Sort by follower count
-                sorted_candidates = sorted(follower_counts.items(), key=lambda x: x[1], reverse=True)
-                return [uid for uid, _ in sorted_candidates[:n_neighbors]]
-            
-            elif mode in ["common_neighbors", "jaccard"]:
-                # These modes require common neighbors analysis
-                if not following_ids:
-                    random.shuffle(candidates)
-                    return candidates[:n_neighbors]
-                
-                # Find users that agent's friends also follow
-                common_neighbor_counts = {}
-                for candidate in candidates:
-                    common_count = 0
-                    # Check how many of agent's friends also follow this candidate
-                    for friend_id in following_ids:
-                        # Check if friend follows candidate
-                        for key in follow_keys:
-                            follow_data = self.db.redis_client.hgetall(key)
-                            if (follow_data.get("follower_id") == friend_id and 
-                                follow_data.get("user_id") == candidate and 
-                                follow_data.get("action") == "follow"):
-                                common_count += 1
-                                break
-                    common_neighbor_counts[candidate] = common_count
-                
-                # Sort by common neighbor count
-                sorted_candidates = sorted(common_neighbor_counts.items(), key=lambda x: x[1], reverse=True)
-                return [uid for uid, _ in sorted_candidates[:n_neighbors]]
-            
+                recommendations = follow_recsys_redis.recommend_preferential_attachment_redis(
+                    self.db.redis_client, self.db._redis_key, agent_id, n_neighbors, self.logger
+                )
+            elif mode == "common_neighbors":
+                recommendations = follow_recsys_redis.recommend_common_neighbors_redis(
+                    self.db.redis_client, self.db._redis_key, agent_id, n_neighbors, self.logger
+                )
+            elif mode == "jaccard":
+                recommendations = follow_recsys_redis.recommend_jaccard_redis(
+                    self.db.redis_client, self.db._redis_key, agent_id, n_neighbors, self.logger
+                )
             elif mode == "adamic_adar":
-                # Adamic/Adar: sum of 1/log(degree) for common neighbors
-                # Two-step approach: 1) Find common neighbors, 2) Calculate Adamic/Adar scores
-                if not following_ids:
-                    random.shuffle(candidates)
-                    return candidates[:n_neighbors]
-                
-                # Step 1: Build candidate -> common neighbors mapping
-                candidate_common_neighbors = {}
-                for candidate in candidates:
-                    common_neighbors = []
-                    # Find which of agent's friends also follow this candidate
-                    for friend_id in following_ids:
-                        # Check if friend follows candidate
-                        for key in follow_keys:
-                            follow_data = self.db.redis_client.hgetall(key)
-                            if (follow_data.get("follower_id") == friend_id and 
-                                follow_data.get("user_id") == candidate and 
-                                follow_data.get("action") == "follow"):
-                                common_neighbors.append(friend_id)
-                                break
-                    if common_neighbors:
-                        candidate_common_neighbors[candidate] = common_neighbors
-                
-                if not candidate_common_neighbors:
-                    # No common neighbors found
-                    random.shuffle(candidates)
-                    return candidates[:n_neighbors]
-                
-                # Step 2: Calculate degree for each common neighbor
-                neighbor_degrees = {}
-                all_common_neighbors = set()
-                for neighbors in candidate_common_neighbors.values():
-                    all_common_neighbors.update(neighbors)
-                
-                for neighbor in all_common_neighbors:
-                    # Count how many users this neighbor follows
-                    degree = 0
-                    for key in follow_keys:
-                        follow_data = self.db.redis_client.hgetall(key)
-                        if follow_data.get("follower_id") == neighbor and follow_data.get("action") == "follow":
-                            degree += 1
-                    neighbor_degrees[neighbor] = max(degree, 1)  # At least 1 to avoid division issues
-                
-                # Step 3: Calculate Adamic/Adar score for each candidate
-                import math
-                adamic_adar_scores = {}
-                for candidate, neighbors in candidate_common_neighbors.items():
-                    score = 0.0
-                    for neighbor in neighbors:
-                        degree = neighbor_degrees.get(neighbor, 1)
-                        if degree > 1:  # Only count if degree > 1 (log(1) = 0)
-                            score += 1.0 / math.log(degree)
-                    adamic_adar_scores[candidate] = score
-                
-                # Sort by Adamic/Adar score (highest first)
-                sorted_candidates = sorted(adamic_adar_scores.items(), key=lambda x: x[1], reverse=True)
-                return [uid for uid, _ in sorted_candidates[:n_neighbors]]
-            
+                recommendations = follow_recsys_redis.recommend_adamic_adar_redis(
+                    self.db.redis_client, self.db._redis_key, agent_id, n_neighbors, self.logger
+                )
             else:
                 # Unknown mode, fallback to random
-                random.shuffle(candidates)
-                return candidates[:n_neighbors]
+                self.logger.warning(f"Unknown follow recommendation mode: {mode}, using random")
+                recommendations = follow_recsys_redis.recommend_random_follows_redis(
+                    self.db.redis_client, self.db._redis_key, agent_id, n_neighbors, self.logger
+                )
+            
+            # Apply political leaning bias if specified
+            if leaning_bias > 0 and recommendations:
+                recommendations = follow_recsys_redis.apply_leaning_bias_redis(
+                    self.db.redis_client, self.db._redis_key, agent_id, recommendations, leaning_bias, self.logger
+                )
+            
+            return recommendations
                 
         except Exception as e:
             self.logger.error(
