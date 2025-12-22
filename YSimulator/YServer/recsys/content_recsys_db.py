@@ -280,7 +280,7 @@ def recommend_rchrono_comments(session, agent_id: str, visibility_day: int, visi
             and_(Round.day == visibility_day, Round.hour >= visibility_hour)
         ),
         Post.user_id != agent_id,
-        Post.comment_to == None
+        Post.comment_to.is_(None)
     ).group_by(Post.id).order_by(
         desc(func.count(CommentPost.id)),
         desc(Round.day),

@@ -280,6 +280,7 @@ def recommend_common_interests_redis(
         from sqlalchemy.orm import Session
         with Session(db_engine) as session:
             from sqlalchemy import desc
+            from YSimulator.YServer.classes.models import Post
             query = session.query(UserInterest.interest_id).filter(
                 UserInterest.user_id == agent_id
             ).distinct()
@@ -288,10 +289,10 @@ def recommend_common_interests_redis(
             
             if user_interests:
                 post_query = session.query(PostTopic.post_id).join(
-                    PostTopic.post
+                    Post, PostTopic.post_id == Post.id
                 ).filter(
                     PostTopic.topic_id.in_(user_interests),
-                    PostTopic.post.has(user_id__ne=agent_id)
+                    Post.user_id != agent_id
                 ).distinct().order_by(desc(PostTopic.post_id)).limit(limit)
                 
                 sql_post_ids = [row[0] for row in post_query.all()]
@@ -388,16 +389,17 @@ def recommend_common_user_interests_redis(
             UserInterest2 = aliased(UserInterest)
             
             # Find posts liked by users with common interests
+            from YSimulator.YServer.classes.models import Post
             query = session.query(Reaction.post_id).distinct().join(
                 UserInterest1, Reaction.user_id == UserInterest1.user_id
             ).join(
                 UserInterest2, UserInterest1.interest_id == UserInterest2.interest_id
             ).join(
-                Reaction.post
+                Post, Reaction.post_id == Post.id
             ).filter(
                 UserInterest2.user_id == agent_id,
                 Reaction.user_id != agent_id,
-                Reaction.post.has(user_id__ne=agent_id),
+                Post.user_id != agent_id,
                 Reaction.type == 'like'
             ).order_by(desc(Reaction.post_id)).limit(limit)
             
@@ -494,14 +496,15 @@ def recommend_similar_users_react_redis(
             ReactorUser = aliased(User_mgmt)
             TargetUser = aliased(User_mgmt)
             
+            from YSimulator.YServer.classes.models import Post
             query = session.query(Reaction.post_id).distinct().join(
                 ReactorUser, Reaction.user_id == ReactorUser.id
             ).join(
                 TargetUser, TargetUser.id == agent_id
             ).join(
-                Reaction.post
+                Post, Reaction.post_id == Post.id
             ).filter(
-                Reaction.post.has(user_id__ne=agent_id),
+                Post.user_id != agent_id,
                 ReactorUser.id != agent_id,
                 Reaction.type == 'like',
                 or_(

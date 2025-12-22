@@ -188,9 +188,10 @@ def recommend_jaccard(
         ).subquery()
         
         # Calculate Jaccard score
+        from sqlalchemy import Float
         jaccard_query = session.query(
             union_query.c.candidate_id,
-            (func.cast(union_query.c.common_count, func.type_coerce(1.0, type_=func.literal_column('REAL'))) / 
+            (func.cast(union_query.c.common_count, Float) / 
              func.nullif(
                  agent_following_count + union_query.c.candidate_following_count - union_query.c.common_count,
                  0
