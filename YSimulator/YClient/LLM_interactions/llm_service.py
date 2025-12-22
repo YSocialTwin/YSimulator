@@ -96,13 +96,20 @@ class LLMService:
         # Get toxicity level (default to "no" if not provided)
         toxicity = agent_attrs.get("toxicity", "no") if agent_attrs else "no"
         
+        # Get topic if available
+        topic = agent_attrs.get("topic") if agent_attrs else None
+        
         # Get prompt templates from configuration
         system_template = self.prompts_config["generate_post"]["system_template"]
         user_template = self.prompts_config["generate_post"]["user_template"]
         
         # Format templates
         system_msg = system_template.format(persona=persona, toxicity=toxicity)
-        user_msg = user_template.format(day=day, slot=slot)
+        # Include topic in user message if available
+        if topic:
+            user_msg = user_template.format(day=day, slot=slot, topic=topic)
+        else:
+            user_msg = user_template.format(day=day, slot=slot)
 
         prompt = ChatPromptTemplate.from_messages([
             ("system", system_msg),

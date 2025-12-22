@@ -21,7 +21,8 @@
       "round_actions": 5,
       "is_page": 1,
       "feed_url": "https://techcrunch.com/feed/",
-      "recsys_type": "random"
+      "recsys_type": "random",
+      "interests": [["Technology", "Innovation", "Startups"], [5, 3, 2]]
     },
     {
       "id": "5342c737-7c60-5d9b-aa9f-14bda3d36f97",
@@ -44,7 +45,8 @@
       "round_actions": 6,
       "is_page": 1,
       "feed_url": "http://feeds.bbci.co.uk/news/rss.xml",
-      "recsys_type": "rchrono"
+      "recsys_type": "rchrono",
+      "interests": [["World News", "Politics", "Business"], [8, 6, 4]]
     },
     {
       "id": "981e9434-7dfc-5bf1-8bd8-9c6f97c27c57",
@@ -67,7 +69,8 @@
       "round_actions": 8,
       "is_page": 1,
       "feed_url": "https://www.reutersagency.com/feed/",
-      "recsys_type": "random"
+      "recsys_type": "random",
+      "interests": [["Breaking News", "International Affairs", "Finance"], [10, 7, 5]]
     }
   ],
   "generation_config": {

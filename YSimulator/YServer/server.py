@@ -221,6 +221,25 @@ class OrchestratorServer:
                     registered_count += 1
                     self.registered_agents[agent_profile.id] = agent_profile.username
                     
+                    # Save agent interests if provided
+                    if agent_profile.interests and len(agent_profile.interests) == 2:
+                        topics = agent_profile.interests[0]  # List of topic names
+                        counts = agent_profile.interests[1]  # List of interaction counts
+                        
+                        # Save each interest for the agent
+                        for i, topic in enumerate(topics):
+                            # Get or create the interest in the interests table
+                            interest_id = self.db.add_or_get_interest(topic)
+                            if interest_id:
+                                # Add user_interest entries based on interaction count
+                                interaction_count = counts[i] if i < len(counts) else 1
+                                for _ in range(interaction_count):
+                                    self.db.add_user_interest(
+                                        user_id=str(agent_profile.id),
+                                        interest_id=interest_id,
+                                        round_id=self.current_round_id
+                                    )
+                    
                     # If this is a page agent, create a Website entry
                     if agent_profile.is_page == 1 and agent_profile.feed_url:
                         website_data = {
@@ -703,6 +722,14 @@ class OrchestratorServer:
                     post_id = self.db.add_post(post_data)
                     if post_id:
                         new_ids.append(post_id)
+                        
+                        # Save post topic if provided
+                        if hasattr(act, 'topic') and act.topic:
+                            # Get or create the topic in interests table
+                            topic_id = self.db.add_or_get_interest(act.topic)
+                            if topic_id:
+                                # Save post-topic association
+                                self.db.add_post_topic(post_id, topic_id)
                     else:
                         self.logger.warning(
                             f"Failed to add post for agent {act.agent_id}",
@@ -736,6 +763,16 @@ class OrchestratorServer:
                         post_id = self.db.add_post(post_data)
                         if post_id:
                             new_ids.append(post_id)
+                            
+                            # When commenting on a post, save the post's topics as user interests
+                            parent_post_id = act.target_post_id
+                            topic_ids = self.db.get_post_topics(parent_post_id)
+                            for topic_id in topic_ids:
+                                self.db.add_user_interest(
+                                    user_id=str(act.agent_id),
+                                    interest_id=topic_id,
+                                    round_id=self.current_round_id
+                                )
                         else:
                             self.logger.warning(
                                 f"Failed to add comment for agent {act.agent_id}",

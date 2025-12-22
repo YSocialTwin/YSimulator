@@ -1131,3 +1131,142 @@ class DatabaseMiddleware:
             return None
         finally:
             session.close()
+
+    def add_or_get_interest(self, interest_name: str) -> Optional[str]:
+        """
+        Add an interest to the database or get its ID if it already exists.
+        
+        Args:
+            interest_name: Name of the interest/topic
+            
+        Returns:
+            str: Interest UUID (iid) if successful, None otherwise
+        """
+        from YSimulator.YServer.classes.models import Interest
+        import uuid
+        
+        session = Session(self.engine)
+        try:
+            # Check if interest already exists
+            existing = session.query(Interest).filter(Interest.interest == interest_name).first()
+            if existing:
+                return existing.iid
+            
+            # Create new interest
+            interest_id = str(uuid.uuid4())
+            interest = Interest(iid=interest_id, interest=interest_name)
+            session.add(interest)
+            session.commit()
+            return interest_id
+            
+        except Exception as e:
+            session.rollback()
+            self.logger.error(
+                f"Error adding interest: {e}",
+                extra={"extra_data": {"error": str(e), "interest_name": interest_name}}
+            )
+            return None
+        finally:
+            session.close()
+
+    def add_user_interest(self, user_id: str, interest_id: str, round_id: str) -> bool:
+        """
+        Add a user interest association to the database.
+        
+        Args:
+            user_id: User UUID
+            interest_id: Interest UUID (iid)
+            round_id: Round UUID
+            
+        Returns:
+            bool: True if successful, False otherwise
+        """
+        from YSimulator.YServer.classes.models import UserInterest
+        import uuid
+        
+        session = Session(self.engine)
+        try:
+            # Create user interest record
+            user_interest_id = str(uuid.uuid4())
+            user_interest = UserInterest(
+                id=user_interest_id,
+                user_id=user_id,
+                interest_id=interest_id,
+                round_id=round_id
+            )
+            session.add(user_interest)
+            session.commit()
+            return True
+            
+        except Exception as e:
+            session.rollback()
+            self.logger.error(
+                f"Error adding user interest: {e}",
+                extra={"extra_data": {"error": str(e), "user_id": user_id, "interest_id": interest_id}}
+            )
+            return False
+        finally:
+            session.close()
+
+    def add_post_topic(self, post_id: str, topic_id: str) -> bool:
+        """
+        Add a post topic association to the database.
+        
+        Args:
+            post_id: Post UUID
+            topic_id: Topic UUID (from interests table)
+            
+        Returns:
+            bool: True if successful, False otherwise
+        """
+        from YSimulator.YServer.classes.models import PostTopic
+        import uuid
+        
+        session = Session(self.engine)
+        try:
+            # Create post topic record
+            post_topic_id = str(uuid.uuid4())
+            post_topic = PostTopic(
+                id=post_topic_id,
+                post_id=post_id,
+                topic_id=topic_id
+            )
+            session.add(post_topic)
+            session.commit()
+            return True
+            
+        except Exception as e:
+            session.rollback()
+            self.logger.error(
+                f"Error adding post topic: {e}",
+                extra={"extra_data": {"error": str(e), "post_id": post_id, "topic_id": topic_id}}
+            )
+            return False
+        finally:
+            session.close()
+
+    def get_post_topics(self, post_id: str) -> List[str]:
+        """
+        Get all topic IDs associated with a post.
+        
+        Args:
+            post_id: Post UUID
+            
+        Returns:
+            List[str]: List of topic UUIDs
+        """
+        from YSimulator.YServer.classes.models import PostTopic
+        
+        session = Session(self.engine)
+        try:
+            post_topics = session.query(PostTopic).filter(PostTopic.post_id == post_id).all()
+            return [pt.topic_id for pt in post_topics]
+            
+        except Exception as e:
+            self.logger.error(
+                f"Error getting post topics: {e}",
+                extra={"extra_data": {"error": str(e), "post_id": post_id}}
+            )
+            return []
+        finally:
+            session.close()

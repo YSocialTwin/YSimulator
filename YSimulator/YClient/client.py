@@ -395,6 +395,7 @@ class SimulationClient:
                     round_actions=agent_data.get("round_actions", 3),
                     is_page=agent_data.get("is_page", 0),
                     feed_url=agent_data.get("feed_url"),  # RSS feed for page agents
+                    interests=agent_data.get("interests"),  # Interest topics and counts
                 )
                 agents.append(profile)
 
@@ -919,6 +920,16 @@ class SimulationClient:
         Returns:
             dict: Agent attributes for persona template
         """
+        # Sample a topic from agent's interests if available
+        selected_topic = None
+        if agent.interests and len(agent.interests) == 2:
+            topics = agent.interests[0]
+            counts = agent.interests[1]
+            if topics and counts and len(topics) > 0:
+                # Weight topics by their interaction counts
+                import random
+                selected_topic = random.choices(topics, weights=counts, k=1)[0]
+        
         return {
             "name": agent.username,
             "age": agent.age if agent.age else "unknown",
@@ -931,7 +942,8 @@ class SimulationClient:
             "ex": agent.ex if agent.ex else "average in extraversion",
             "ag": agent.ag if agent.ag else "average in agreeableness",
             "ne": agent.ne if agent.ne else "average in neuroticism",
-            "toxicity": agent.toxicity if agent.toxicity and agent.toxicity != "" else "no"
+            "toxicity": agent.toxicity if agent.toxicity and agent.toxicity != "" else "no",
+            "topic": selected_topic  # Include the sampled topic
         }
 
     def _handle_post_action(self, agent, agent_type, day, slot, pending_llm_posts, actions):
@@ -939,8 +951,9 @@ class SimulationClient:
         if agent_type == "llm":
             # LLM: Fire off async call (don't wait for result yet)
             agent_attrs = self._extract_agent_attrs(agent)
+            selected_topic = agent_attrs.get("topic")  # Get the sampled topic
             future = generate_llm_post_async(self.llm, agent.cluster, day, slot, agent_attrs)
-            pending_llm_posts.append((agent.id, agent.cluster, future, None))
+            pending_llm_posts.append((agent.id, agent.cluster, future, selected_topic))
         else:
             # Rule-based: Execute immediately
             action = generate_rule_based_post(agent.id, agent.cluster)
@@ -1287,7 +1300,7 @@ class SimulationClient:
         Gather and resolve all pending LLM post generation calls.
         
         Args:
-            pending_llm_posts: List of (agent_id, cluster_id, future, article_id) tuples
+            pending_llm_posts: List of (agent_id, cluster_id, future, topic_or_article_id) tuples
             actions: List to append resolved post actions to
         """
         if not pending_llm_posts:
@@ -1298,14 +1311,21 @@ class SimulationClient:
         results = ray.get(futures)  # Blocks once for ALL posts
         
         for i, res_txt in enumerate(results):
-            a_id, cid, _, article_id = pending_llm_posts[i]
+            a_id, cid, _, topic_or_article = pending_llm_posts[i]
             action = ActionDTO(a_id, cid, "POST", content=res_txt)
-            # Add article_id as attribute if present (for news posts)
-            if article_id:
-                action.article_id = article_id
-                self.logger.info(f"LLM post for agent {a_id}: article_id={article_id}, content_len={len(res_txt)}")
+            
+            # Check if the fourth element is an article_id (UUID format) or a topic (string)
+            if topic_or_article:
+                # Simple heuristic: if it contains hyphens and looks like UUID, it's article_id
+                # Otherwise it's a topic string
+                if isinstance(topic_or_article, str) and len(topic_or_article) == 36 and topic_or_article.count('-') == 4:
+                    action.article_id = topic_or_article
+                    self.logger.info(f"LLM post for agent {a_id}: article_id={topic_or_article}, content_len={len(res_txt)}")
+                else:
+                    action.topic = topic_or_article
+                    self.logger.info(f"LLM post for agent {a_id}: topic={topic_or_article}, content_len={len(res_txt)}")
             else:
-                self.logger.info(f"LLM post for agent {a_id}: NO article_id, content_len={len(res_txt)}")
+                self.logger.info(f"LLM post for agent {a_id}: NO article_id/topic, content_len={len(res_txt)}")
             actions.append(action)
     
     def _gather_pending_llm_reactions(self, pending_llm_reactions: list, actions: list) -> list:
