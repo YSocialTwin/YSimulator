@@ -9,7 +9,7 @@ from typing import Optional, Dict, List, Tuple
 import logging
 from sqlalchemy.orm import Session
 
-from ..classes.db_models import Interest
+from YSimulator.YServer.classes.models import Interest
 
 
 class InterestManager:
