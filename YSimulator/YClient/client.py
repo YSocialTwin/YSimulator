@@ -1428,13 +1428,7 @@ class SimulationClient:
             
             # Get follow suggestions from server
             try:
-                follow_suggestions = ray.get(
-                    frecsys.get_suggestions.remote(
-                        self.server,
-                        agent.id,
-                        agent.leaning if hasattr(agent, 'leaning') else 'neutral'
-                    )
-                )
+                follow_suggestions = frecsys.get_follow_suggestions(self.server, agent.id)
                 
                 if follow_suggestions:
                     # Randomly select one candidate to follow
