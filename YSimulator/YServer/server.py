@@ -18,8 +18,8 @@ import ray
 
 from YSimulator.YClient.classes.ray_models import SimulationInstruction
 from YSimulator.YServer.recsys import content_recsys_db, content_recsys_redis, follow_recsys_db
-from YSimulator.YServer.classes.models import Recommendation, Interest
-from sqlalchemy.orm import Session
+from YSimulator.YServer.classes.models import Recommendation
+from YSimulator.YServer.interests_modeling import InterestManager
 
 
 # Constants
@@ -96,10 +96,6 @@ class OrchestratorServer:
         self.submitted_clients = set()  # Clients that submitted for current slot
         self.last_heartbeat = {}  # {client_id: timestamp}
         self.registered_agents = {}  # {agent_id: username}
-        
-        # Agent interests tracking - maintain in-memory state
-        # Format: {agent_id: {"topics": [topic_names], "counts": [interaction_counts]}}
-        self.agent_interests = {}
 
         # Simulation state
         self.day = 1
@@ -119,8 +115,15 @@ class OrchestratorServer:
             simulation_config=simulation_config,
         )
         
+        # Initialize Interest Manager for topic/interest tracking
+        self.interest_manager = InterestManager(
+            db_middleware=self.db,
+            attention_window=self.attention_window
+        )
+        
         # Initialize the first round entry
         self.current_round_id = self.db.get_or_create_round(self.day, self.slot)
+        self.interest_manager.set_current_round(self.current_round_id)
 
         self.logger.info(
             "Orchestrator server initialized",
@@ -176,6 +179,7 @@ class OrchestratorServer:
     def _validate_and_extract_interests(self, interests):
         """
         Validate interests structure and extract topics and counts.
+        Delegates to InterestManager.
         
         Args:
             interests: Interest data in format [["Topic1", "Topic2"], [1, 2]]
@@ -183,76 +187,34 @@ class OrchestratorServer:
         Returns:
             tuple: (topics, counts) or (None, None) if invalid
         """
-        if not interests or not isinstance(interests, (list, tuple)) or len(interests) != 2:
-            return None, None
-        
-        topics = interests[0]
-        counts = interests[1]
-        
-        if not topics or not counts or not isinstance(topics, list) or not isinstance(counts, list):
-            return None, None
-        
-        if len(topics) == 0:
-            return None, None
-        
-        return topics, counts
+        return self.interest_manager.validate_and_extract_interests(interests)
     
     def _recompute_agent_interests_from_window(self, agent_id: str):
         """
         Recompute agent interests based on the sliding attention window.
-        This replaces the incremental counter approach with a query-based approach.
+        Delegates to InterestManager.
         
         Args:
             agent_id: Agent UUID
         """
-        agent_id = str(agent_id)
-        
-        # Get interest counts within the attention window
-        interest_counts_by_id = self.db.compute_interest_counts_in_window(
-            agent_id, 
-            self.current_round_id, 
-            self.attention_window
-        )
-        
-        # Convert interest IDs to names
-        topics = []
-        counts = []
-        
-        for interest_id, count in interest_counts_by_id.items():
-            if count > 0:  # Only include topics with count > 0
-                topic_name = self._get_topic_name_from_id(interest_id)
-                if topic_name:
-                    topics.append(topic_name)
-                    counts.append(count)
-        
-        # Update in-memory state
-        if topics:
-            self.agent_interests[agent_id] = {
-                "topics": topics,
-                "counts": counts
-            }
-        elif agent_id in self.agent_interests:
-            # Remove agent from interests if no topics remain
-            del self.agent_interests[agent_id]
+        self.interest_manager.recompute_agent_interests_from_window(agent_id)
     
     def _update_agent_interest_counter(self, agent_id: str, topic_name: str, increment: int = 1):
         """
         DEPRECATED: This method is replaced by _recompute_agent_interests_from_window.
-        Kept for backward compatibility during transition.
-        
-        Update the interest counter for an agent in memory.
+        Delegates to InterestManager.
         
         Args:
             agent_id: Agent UUID
             topic_name: Name of the topic
             increment: Amount to increment the counter (default: 1)
         """
-        # Now we just recompute from the database instead of incrementing
-        self._recompute_agent_interests_from_window(agent_id)
+        self.interest_manager.update_agent_interest_counter(agent_id, topic_name, increment)
     
     def _get_topic_name_from_id(self, topic_id: str) -> Optional[str]:
         """
         Get topic name from topic UUID.
+        Delegates to InterestManager.
         
         Args:
             topic_id: Topic UUID (iid)
@@ -260,50 +222,30 @@ class OrchestratorServer:
         Returns:
             str: Topic name or None if not found
         """
-        session = Session(self.db.engine)
-        try:
-            interest = session.query(Interest).filter(Interest.iid == topic_id).first()
-            if interest:
-                return interest.interest
-            return None
-        finally:
-            session.close()
+        return self.interest_manager.get_topic_name_from_id(topic_id)
     
     def _recompute_all_agent_interests(self):
         """
         Recompute interests for all registered agents based on the sliding attention window.
-        This implements the forgetting mechanism - as user_interest entries fall outside
-        the attention window, their counts decrease and topics with count 0 are removed.
+        Delegates to InterestManager.
         """
-        # Get all registered agent IDs
         agent_ids = list(self.registered_agents.keys())
-        
-        self.logger.info(
-            f"Recomputing interests for {len(agent_ids)} agents using attention window of {self.attention_window} rounds"
-        )
-        
-        for agent_id in agent_ids:
-            self._recompute_agent_interests_from_window(agent_id)
-        
-        # Log summary
-        agents_with_interests = len(self.agent_interests)
-        total_topics = sum(len(data["topics"]) for data in self.agent_interests.values())
-        self.logger.info(
-            f"Interest recomputation complete: {agents_with_interests} agents have interests, {total_topics} total topics"
-        )
+        self.interest_manager.recompute_all_agent_interests(agent_ids)
     
     def get_updated_agent_interests(self) -> Dict[str, Dict[str, list]]:
         """
         Get the current agent interests dictionary for clients to save.
+        Delegates to InterestManager.
         
         Returns:
             Dict: agent_interests dictionary with format {agent_id: {"topics": [...], "counts": [...]}}
         """
-        return dict(self.agent_interests)
+        return self.interest_manager.get_agent_interests()
     
     def get_article_topics(self, article_id: str) -> List[str]:
         """
         Get topic IDs for an article.
+        Delegates to InterestManager.
         
         Args:
             article_id: Article UUID
@@ -311,12 +253,12 @@ class OrchestratorServer:
         Returns:
             List[str]: List of topic IDs (uuids)
         """
-        return self.db.get_article_topics(article_id)
+        return self.interest_manager.get_article_topics(article_id)
     
     def store_article_topics(self, article_id: str, topic_names: List[str]) -> List[str]:
         """
         Store topics for an article in the database.
-        Topics are added to interests table if not present, then linked to article.
+        Delegates to InterestManager.
         
         Args:
             article_id: Article UUID
@@ -325,33 +267,7 @@ class OrchestratorServer:
         Returns:
             List[str]: List of topic IDs (uuids) that were stored
         """
-        self.logger.info(f"store_article_topics called for article {article_id} with topics: {topic_names}")
-        
-        # Verify article exists in database
-        article_data = self.db.get_article(article_id)
-        if not article_data:
-            self.logger.warning(f"Article {article_id} not found in database, cannot store topics")
-            return []
-        
-        topic_ids = []
-        for topic_name in topic_names:
-            # Add or get topic in interests table
-            topic_id = self.db.add_or_get_interest(topic_name)
-            self.logger.info(f"Interest topic_id for '{topic_name}': {topic_id}")
-            
-            if topic_id:
-                # Add to article_topics table
-                success = self.db.add_article_topic(article_id, topic_id)
-                self.logger.info(f"add_article_topic({article_id}, {topic_id}) returned: {success}")
-                
-                if success:
-                    topic_ids.append(topic_id)
-                    self.logger.info(f"Successfully added topic '{topic_name}' (ID: {topic_id}) to article {article_id}")
-                else:
-                    self.logger.error(f"Failed to add topic '{topic_name}' to article {article_id}")
-        
-        self.logger.info(f"Final topic_ids for article {article_id}: {topic_ids}")
-        return topic_ids
+        return self.interest_manager.store_article_topics(article_id, topic_names)
 
     def register_agents(self, agents: list) -> dict:
         """
@@ -409,32 +325,13 @@ class OrchestratorServer:
                     registered_count += 1
                     self.registered_agents[agent_profile.id] = agent_profile.username
                     
-                    # Store initial agent interests in memory
-                    topics, counts = self._validate_and_extract_interests(agent_profile.interests)
-                    if topics and counts:
-                        self.agent_interests[str(agent_profile.id)] = {
-                            "topics": list(topics),
-                            "counts": list(counts)
-                        }
-                    
-                    # Save agent interests if provided
-                    if topics and counts:
-                        # Save each interest for the agent
-                        # Note: We create multiple user_interest entries (one per interaction count)
-                        # to represent historical interactions. This follows the schema design where
-                        # user_interest tracks interests per round, allowing temporal analysis.
-                        for i, topic in enumerate(topics):
-                            # Get or create the interest in the interests table
-                            interest_id = self.db.add_or_get_interest(topic)
-                            if interest_id:
-                                # Add user_interest entries based on interaction count
-                                interaction_count = counts[i] if i < len(counts) else 1
-                                for _ in range(interaction_count):
-                                    self.db.add_user_interest(
-                                        user_id=str(agent_profile.id),
-                                        interest_id=interest_id,
-                                        round_id=self.current_round_id
-                                    )
+                    # Initialize agent interests using InterestManager
+                    if agent_profile.interests:
+                        self.interest_manager.initialize_agent_interests(
+                            agent_id=str(agent_profile.id),
+                            interests=agent_profile.interests,
+                            round_id=self.current_round_id
+                        )
                     
                     # If this is a page agent, create a Website entry
                     if agent_profile.is_page == 1 and agent_profile.feed_url:
@@ -1260,6 +1157,7 @@ class OrchestratorServer:
 
             # Update Round table with new time
             self.current_round_id = self.db.get_or_create_round(self.day, self.slot)
+            self.interest_manager.set_current_round(self.current_round_id)
 
             execution_time = (time.time() - execution_start) * 1000
 
