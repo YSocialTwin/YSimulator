@@ -1417,6 +1417,18 @@ class OrchestratorServer:
         """
         return self.db.get_post(post_id)
 
+    def get_user(self, user_id: str) -> Optional[Dict[str, Any]]:
+        """
+        Get a user by their ID.
+        
+        Args:
+            user_id: UUID of the user to retrieve
+            
+        Returns:
+            Dictionary with user data or None if not found
+        """
+        return self.db.get_user(user_id)
+
     def get_follow_suggestions(
         self,
         agent_id: str,
