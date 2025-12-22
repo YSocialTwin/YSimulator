@@ -1,0 +1,17 @@
+# Core dependencies
+sqlalchemy>=2.0.0
+ray>=2.0.0
+redis>=4.0.0
+
+# LLM and NLP
+langchain-core>=0.1.0
+langchain-ollama>=0.1.0
+
+# Data processing
+feedparser>=6.0.0
+requests>=2.28.0
+
+# Development dependencies
+# For testing, add these as needed:
+# pytest>=7.0.0
+# pytest-cov>=4.0.0
