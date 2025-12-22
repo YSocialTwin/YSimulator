@@ -18,7 +18,8 @@ import ray
 
 from YSimulator.YClient.classes.ray_models import SimulationInstruction
 from YSimulator.YServer.recsys import content_recsys_db, content_recsys_redis, follow_recsys_db
-from YSimulator.YServer.classes.models import Recommendation
+from YSimulator.YServer.classes.models import Recommendation, Interest
+from sqlalchemy.orm import Session
 
 
 # Constants
@@ -230,9 +231,6 @@ class OrchestratorServer:
         Returns:
             str: Topic name or None if not found
         """
-        from YSimulator.YServer.classes.models import Interest
-        from sqlalchemy.orm import Session
-        
         session = Session(self.db.engine)
         try:
             interest = session.query(Interest).filter(Interest.iid == topic_id).first()
@@ -246,9 +244,6 @@ class OrchestratorServer:
         """
         Save updated agent interests to agent_population.json at end of day.
         """
-        import json
-        from pathlib import Path
-        
         # Find the agent_population.json file in the config path
         agent_pop_file = self.config_path / "agent_population.json"
         
