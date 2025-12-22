@@ -1,7 +1,7 @@
 # Mixed Population Example with Initial Social Network
 
 This example demonstrates a complete YSimulator configuration with:
-- **101 agents total**: 50 rule-based, 50 LLM-enabled, and 1 news page
+- **101 agents total**: 100 regular agents (50 rule-based + 50 LLM-enabled) and 1 news page
 - **Initial random social network** with ~1000 follow relationships (~10 connections per agent)
 - **Dynamic follow actions** using multiple recommendation strategies
 - **Secondary follow behavior** after content interactions

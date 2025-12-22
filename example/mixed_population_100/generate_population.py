@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Generate a mixed population of 50 rule-based agents, 50 LLM agents, and 1 page agent
-with an initial random social network.
+Generate a mixed population of 100 regular agents (50 rule-based, 50 LLM) and 1 page agent
+with an initial random social network (total: 101 agents).
 """
 
 import json
