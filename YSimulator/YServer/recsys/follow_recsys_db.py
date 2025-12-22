@@ -10,7 +10,7 @@ import math
 from typing import List
 from sqlalchemy import text
 from sqlalchemy.orm import Session
-from YSimulator.YServer.classes.User_mgmt import User_mgmt
+from YSimulator.YServer.classes.models import User_mgmt
 
 
 def recommend_random_follows(
