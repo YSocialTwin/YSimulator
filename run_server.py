@@ -18,7 +18,7 @@ import ray
 
 from YSimulator.common_utils import validate_config_directory
 from YSimulator.YServer.server import OrchestratorServer
-from init_db import initialize_database, database_exists
+from YSimulator.utils.init_db import initialize_database, database_exists
 
 
 def setup_logging(config_path: Path, server_name: str) -> logging.Logger:
