@@ -23,6 +23,9 @@ from sqlalchemy.orm import Session
 
 from YSimulator.YServer.classes.models import Base, Reaction, Post, User_mgmt, Round, Follow
 
+# Constants
+DEFAULT_USERNAME = "Someone"  # Default username when user data is not found
+
 
 class DatabaseMiddleware:
     """
@@ -470,11 +473,15 @@ class DatabaseMiddleware:
 
     def get_thread_context(self, post_id: str, max_length: int = 5) -> List[Dict[str, Any]]:
         """
-        Get thread context for a post - retrieve up to max_length posts/comments
-        that immediately precede the target post in the discussion thread.
+        Get thread context for a post - retrieve up to max_length of the most recent
+        posts/comments that precede the target post in the discussion thread.
+        
+        If the thread has more than max_length posts/comments before the target,
+        only the most recent max_length items are returned (to provide the most
+        relevant recent context).
         
         Returns posts in chronological order (oldest first) to allow the agent
-        to follow the discussion thread.
+        to follow the discussion thread naturally.
         
         Args:
             post_id: Post UUID to get context for
@@ -482,7 +489,8 @@ class DatabaseMiddleware:
             
         Returns:
             List of dicts with keys: id, user_id, username, tweet, round
-            in chronological order (oldest first)
+            in chronological order (oldest first), containing up to max_length
+            of the most recent posts before the target
         """
         try:
             # First, get the target post to find its thread_id
@@ -525,7 +533,7 @@ class DatabaseMiddleware:
                     if post_dict.get("thread_id") == thread_id:
                         # Get username for this post
                         user_id = post_dict.get("user_id")
-                        username = "Someone"
+                        username = DEFAULT_USERNAME
                         if user_id:
                             user_key = self._redis_key("users", user_id)
                             user_data = self.redis_client.hgetall(user_key)
@@ -549,7 +557,7 @@ class DatabaseMiddleware:
                                     hour_int = int(hour.decode('utf-8') if isinstance(hour, bytes) else hour)
                                     round_data = (day_int, hour_int)
                         
-                        # If no round data, skip this post
+                        # If no round data, skip this post and log a warning
                         if round_data:
                             thread_posts.append({
                                 "id": pid_str,
@@ -559,6 +567,11 @@ class DatabaseMiddleware:
                                 "round": post_dict.get("round"),
                                 "sort_key": round_data  # Tuple of (day, hour) for sorting
                             })
+                        else:
+                            self.logger.warning(
+                                f"Skipping post {pid_str} in thread context: missing or invalid round data",
+                                extra={"extra_data": {"post_id": pid_str, "round_id": round_id}}
+                            )
                 
                 # Sort by day and hour chronologically (oldest first)
                 thread_posts.sort(key=lambda x: x.get("sort_key", (0, 0)))
@@ -597,7 +610,7 @@ class DatabaseMiddleware:
                         {
                             "id": row[0],
                             "user_id": row[1],
-                            "username": row[2] or "Someone",
+                            "username": row[2] or DEFAULT_USERNAME,
                             "tweet": row[3],
                             "round": row[4]
                         }
