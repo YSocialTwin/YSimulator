@@ -149,7 +149,6 @@ class SimulationClient:
         recsys_config = simulation_config["simulation"].get("recsys", {})
         self.recsys_mode = recsys_config.get("mode", "random")  # "random" or "rchrono"
         self.recsys_n_posts = recsys_config.get("n_posts", 5)
-        self.recsys_visibility_rounds = recsys_config.get("visibility_rounds", 36)
         
         # Load agent behavior configuration
         agents_config = simulation_config.get("agents", {})
@@ -927,8 +926,7 @@ class SimulationClient:
         agent_recsys_mode = getattr(agent, 'recsys_type', None) or self.recsys_mode
         recsys_class = RECSYS_CLASS_MAP.get(agent_recsys_mode, RandomOrder)
         recsys = recsys_class(
-            n_posts=self.recsys_n_posts,
-            visibility_rounds=self.recsys_visibility_rounds
+            n_posts=self.recsys_n_posts
         )
         
         # Get recommended posts from server
@@ -963,8 +961,7 @@ class SimulationClient:
         agent_recsys_mode = getattr(agent, 'recsys_type', None) or self.recsys_mode
         recsys_class = RECSYS_CLASS_MAP.get(agent_recsys_mode, RandomOrder)
         recsys = recsys_class(
-            n_posts=self.recsys_n_posts,
-            visibility_rounds=self.recsys_visibility_rounds
+            n_posts=self.recsys_n_posts
         )
         
         # Get recommended posts from server

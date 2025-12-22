@@ -33,6 +33,9 @@
         "password": null,
         "sliding_window_days": 2
     },
+    "posts": {
+        "visibility_rounds": 36
+    },
     "simulation": {
         "agent_archetypes": {
             "enabled": true,

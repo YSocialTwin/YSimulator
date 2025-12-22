@@ -215,10 +215,6 @@ def generate_simulation_config():
             },
             "emotion_annotation": False
         },
-        "posts": {
-            "visibility_rounds": 36,
-            "emotions": {}
-        },
         "agents": {
             "reading_from_follower_ratio": 0.6,
             "max_length_thread_reading": 5,

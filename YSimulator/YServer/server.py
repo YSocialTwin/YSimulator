@@ -82,6 +82,9 @@ class OrchestratorServer:
         
         # Simulation timing configuration
         self.num_slots_per_day = simulation_config.get("simulation", {}).get("num_slots_per_day", 24)
+        
+        # Store visibility_rounds for server use
+        self.visibility_rounds = simulation_config.get("posts", {}).get("visibility_rounds", 36)
 
         # Client tracking
         self.registered_clients = set()  # All registered clients
@@ -1192,7 +1195,6 @@ class OrchestratorServer:
         agent_id: str,
         mode: str = "random",
         limit: int = 5,
-        visibility_rounds: int = 36,
         followers_ratio: float = 0.6
     ) -> List[str]:
         """
@@ -1212,15 +1214,15 @@ class OrchestratorServer:
                 - "similar_users_react": Posts from similar users (by reactions)
                 - "similar_users_posts": Posts from similar users (by posting)
             limit: Number of posts to recommend (default: 5)
-            visibility_rounds: Number of rounds (time slots) to look back for posts (default: 36)
             followers_ratio: Ratio of posts from followers vs others (default: 0.6)
             
         Returns:
             List[str]: List of post UUIDs recommended for the agent
         """
         try:
+            # Use server's configured visibility_rounds
             # Calculate visibility threshold based on day/hour (not UUID arithmetic)
-            visibility_day, visibility_hour = self._calculate_visibility_params(visibility_rounds)
+            visibility_day, visibility_hour = self._calculate_visibility_params(self.visibility_rounds)
             
             if self.db.use_redis:
                 # Use Redis for recommendations - dispatch to modular functions

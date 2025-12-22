@@ -140,6 +140,11 @@ if __name__ == "__main__":
     
     redis_config = config.get("redis")  # Redis configuration (optional)
     simulation_config = config.get("simulation", {})  # Simulation configuration (optional)
+    
+    # Add posts configuration to simulation_config for consistency
+    posts_config = config.get("posts", {})
+    if posts_config:
+        simulation_config["posts"] = posts_config
 
     # Set up logging in config directory
     logger = setup_logging(config_dir, server_name)
