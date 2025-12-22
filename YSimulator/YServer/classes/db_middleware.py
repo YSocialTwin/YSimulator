@@ -1424,6 +1424,8 @@ class DatabaseMiddleware:
         from YSimulator.YServer.classes.models import ArticleTopic
         import uuid
         
+        self.logger.info(f"add_article_topic called: article_id={article_id}, topic_id={topic_id}")
+        
         session = Session(self.engine)
         try:
             # Check if already exists
@@ -1433,6 +1435,7 @@ class DatabaseMiddleware:
             ).first()
             
             if existing:
+                self.logger.info(f"Article-topic association already exists: {article_id} - {topic_id}")
                 return True  # Already exists, no need to add
             
             # Create article topic record
@@ -1444,6 +1447,7 @@ class DatabaseMiddleware:
             )
             session.add(article_topic)
             session.commit()
+            self.logger.info(f"Successfully created article_topic entry: id={article_topic_id}, article_id={article_id}, topic_id={topic_id}")
             return True
             
         except Exception as e:
@@ -1452,6 +1456,8 @@ class DatabaseMiddleware:
                 f"Error adding article topic: {e}",
                 extra={"extra_data": {"error": str(e), "article_id": article_id, "topic_id": topic_id}}
             )
+            import traceback
+            self.logger.error(f"Traceback: {traceback.format_exc()}")
             return False
         finally:
             session.close()

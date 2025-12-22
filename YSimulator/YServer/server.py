@@ -317,16 +317,27 @@ class OrchestratorServer:
         """
         import ray
         
+        self.logger.info(f"extract_and_store_article_topics called for article {article_id}")
+        
         # Check if article already has topics
         existing_topics = self.db.get_article_topics(article_id)
         if existing_topics:
             self.logger.info(f"Article {article_id} already has {len(existing_topics)} topics, skipping extraction")
             return existing_topics
         
+        # Verify article exists in database
+        article_data = self.db.get_article(article_id)
+        if not article_data:
+            self.logger.warning(f"Article {article_id} not found in database, cannot extract topics")
+            return []
+        
         # Extract topics using LLM
         try:
-            topics_future = llm_service.extract_topics_from_article.remote(article_title, article_summary)
+            self.logger.info(f"Extracting topics for article: {article_title[:50]}...")
+            topics_future = llm_service.extract_topics_from_article.remote(article_title, article_summary or "")
             topic_names = ray.get(topics_future)
+            
+            self.logger.info(f"LLM extracted topics: {topic_names}")
             
             if not topic_names:
                 self.logger.warning(f"No topics extracted for article {article_id}")
@@ -336,12 +347,20 @@ class OrchestratorServer:
             for topic_name in topic_names[:2]:  # Up to 2 topics
                 # Add or get topic in interests table
                 topic_id = self.db.add_or_get_interest(topic_name)
+                self.logger.info(f"Interest topic_id for '{topic_name}': {topic_id}")
+                
                 if topic_id:
                     # Add to article_topics table
-                    if self.db.add_article_topic(article_id, topic_id):
+                    success = self.db.add_article_topic(article_id, topic_id)
+                    self.logger.info(f"add_article_topic({article_id}, {topic_id}) returned: {success}")
+                    
+                    if success:
                         topic_ids.append(topic_id)
-                        self.logger.info(f"Added topic '{topic_name}' to article {article_id}")
+                        self.logger.info(f"Successfully added topic '{topic_name}' (ID: {topic_id}) to article {article_id}")
+                    else:
+                        self.logger.error(f"Failed to add topic '{topic_name}' to article {article_id}")
             
+            self.logger.info(f"Final topic_ids for article {article_id}: {topic_ids}")
             return topic_ids
             
         except Exception as e:
@@ -349,6 +368,8 @@ class OrchestratorServer:
                 f"Error extracting topics for article {article_id}: {e}",
                 extra={"extra_data": {"error": str(e), "article_id": article_id}}
             )
+            import traceback
+            self.logger.error(f"Traceback: {traceback.format_exc()}")
             return []
 
     def register_agents(self, agents: list) -> dict:
