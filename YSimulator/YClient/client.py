@@ -1183,14 +1183,23 @@ class SimulationClient:
         # --- SCATTER PHASE: Select and dispatch actions ---
         for agent in active_agents:
             # Sample number of actions for this agent based on daily_activity_level
-            # Random from 1 to daily_activity_level (minimum 1)
+            # Page agents can perform at most 1 action (0 or 1)
+            # Regular agents: Random from 1 to daily_activity_level (minimum 1)
             if agent.daily_activity_level <= 0:
                 # Skip agents with 0 or negative activity level
                 continue
-            num_actions = random.randint(1, agent.daily_activity_level)
             
             if agent.is_page == 1:
-                self.logger.info(f"Page agent {agent.username} will perform {num_actions} actions")
+                # Page agents perform at most 1 action (0 or 1)
+                # Use a probability-based decision: 50% chance to act
+                num_actions = 1 if random.random() < 0.5 else 0
+                if num_actions > 0:
+                    self.logger.info(f"Page agent {agent.username} will perform 1 action")
+                else:
+                    self.logger.debug(f"Page agent {agent.username} will skip this round")
+            else:
+                # Regular agents perform 1 to daily_activity_level actions
+                num_actions = random.randint(1, agent.daily_activity_level)
             
             for action_idx in range(num_actions):
                 action_type, agent_type, target = self.__select_action(agent, recent_posts)
