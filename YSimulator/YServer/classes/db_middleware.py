@@ -1348,3 +1348,110 @@ class DatabaseMiddleware:
             interest_counts[interest_id] = interest_counts.get(interest_id, 0) + 1
         
         return interest_counts
+    
+    def get_article_topics(self, article_id: str) -> List[str]:
+        """
+        Get all topic IDs associated with an article.
+        
+        Args:
+            article_id: Article UUID
+            
+        Returns:
+            List[str]: List of topic UUIDs
+        """
+        from YSimulator.YServer.classes.models import ArticleTopic
+        
+        session = Session(self.engine)
+        try:
+            article_topics = session.query(ArticleTopic).filter(ArticleTopic.article_id == article_id).all()
+            return [at.topic_id for at in article_topics]
+            
+        except Exception as e:
+            self.logger.error(
+                f"Error getting article topics: {e}",
+                extra={"extra_data": {"error": str(e), "article_id": article_id}}
+            )
+            return []
+        finally:
+            session.close()
+    
+    def get_article(self, article_id: str) -> Optional[dict]:
+        """
+        Get article details by ID.
+        
+        Args:
+            article_id: Article UUID
+            
+        Returns:
+            dict: Article data or None if not found
+        """
+        from YSimulator.YServer.classes.models import Article
+        
+        session = Session(self.engine)
+        try:
+            article = session.query(Article).filter(Article.id == article_id).first()
+            if article:
+                return {
+                    "id": article.id,
+                    "title": article.title,
+                    "summary": article.summary,
+                    "website_id": article.website_id,
+                    "link": article.link,
+                    "fetched_on": article.fetched_on
+                }
+            return None
+            
+        except Exception as e:
+            self.logger.error(
+                f"Error getting article: {e}",
+                extra={"extra_data": {"error": str(e), "article_id": article_id}}
+            )
+            return None
+        finally:
+            session.close()
+    
+    def add_article_topic(self, article_id: str, topic_id: str) -> bool:
+        """
+        Add an article topic association to the database.
+        
+        Args:
+            article_id: Article UUID
+            topic_id: Topic UUID (from interests table)
+            
+        Returns:
+            bool: True if successful, False otherwise
+        """
+        from YSimulator.YServer.classes.models import ArticleTopic
+        import uuid
+        
+        session = Session(self.engine)
+        try:
+            # Check if already exists
+            existing = session.query(ArticleTopic).filter(
+                ArticleTopic.article_id == article_id,
+                ArticleTopic.topic_id == topic_id
+            ).first()
+            
+            if existing:
+                return True  # Already exists, no need to add
+            
+            # Create article topic record
+            article_topic_id = str(uuid.uuid4())
+            article_topic = ArticleTopic(
+                id=article_topic_id,
+                article_id=article_id,
+                topic_id=topic_id
+            )
+            session.add(article_topic)
+            session.commit()
+            return True
+            
+        except Exception as e:
+            session.rollback()
+            self.logger.error(
+                f"Error adding article topic: {e}",
+                extra={"extra_data": {"error": str(e), "article_id": article_id, "topic_id": topic_id}}
+            )
+            return False
+        finally:
+            session.close()

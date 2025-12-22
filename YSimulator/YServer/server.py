@@ -300,6 +300,56 @@ class OrchestratorServer:
             Dict: agent_interests dictionary with format {agent_id: {"topics": [...], "counts": [...]}}
         """
         return dict(self.agent_interests)
+    
+    def extract_and_store_article_topics(self, article_id: str, article_title: str, article_summary: str, llm_service) -> List[str]:
+        """
+        Extract topics from article using LLM and store them in database.
+        Checks if article already has topics to avoid duplicate extraction.
+        
+        Args:
+            article_id: Article UUID
+            article_title: Title of the article
+            article_summary: Summary/content of the article
+            llm_service: Ray handle to LLM service
+            
+        Returns:
+            List[str]: List of topic IDs (uuids) extracted/stored
+        """
+        import ray
+        
+        # Check if article already has topics
+        existing_topics = self.db.get_article_topics(article_id)
+        if existing_topics:
+            self.logger.info(f"Article {article_id} already has {len(existing_topics)} topics, skipping extraction")
+            return existing_topics
+        
+        # Extract topics using LLM
+        try:
+            topics_future = llm_service.extract_topics_from_article.remote(article_title, article_summary)
+            topic_names = ray.get(topics_future)
+            
+            if not topic_names:
+                self.logger.warning(f"No topics extracted for article {article_id}")
+                return []
+            
+            topic_ids = []
+            for topic_name in topic_names[:2]:  # Up to 2 topics
+                # Add or get topic in interests table
+                topic_id = self.db.add_or_get_interest(topic_name)
+                if topic_id:
+                    # Add to article_topics table
+                    if self.db.add_article_topic(article_id, topic_id):
+                        topic_ids.append(topic_id)
+                        self.logger.info(f"Added topic '{topic_name}' to article {article_id}")
+            
+            return topic_ids
+            
+        except Exception as e:
+            self.logger.error(
+                f"Error extracting topics for article {article_id}: {e}",
+                extra={"extra_data": {"error": str(e), "article_id": article_id}}
+            )
+            return []
 
     def register_agents(self, agents: list) -> dict:
         """
@@ -860,15 +910,34 @@ class OrchestratorServer:
                         "round": self.current_round_id,  # FK to rounds.id
                     }
                     # Add article_id (news_id) if this is a news post
+                    article_id = None
                     if hasattr(act, 'article_id') and act.article_id:
                         post_data["news_id"] = act.article_id
+                        article_id = act.article_id
                     
                     post_id = self.db.add_post(post_data)
                     if post_id:
                         new_ids.append(post_id)
                         
-                        # Save post topic if provided
-                        if hasattr(act, 'topic') and act.topic:
+                        # If this is an article post, extract and store topics
+                        if article_id:
+                            # Get article details from database
+                            article_data = self.db.get_article(article_id)
+                            if article_data:
+                                # Extract topics using LLM (checks if already extracted)
+                                # Note: We need the LLM service handle - we'll get it from the client context
+                                # For now, check if article already has topics
+                                existing_topic_ids = self.db.get_article_topics(article_id)
+                                
+                                if existing_topic_ids:
+                                    # Article already has topics, link them to the post
+                                    for topic_id in existing_topic_ids:
+                                        self.db.add_post_topic(post_id, topic_id)
+                                    self.logger.info(f"Linked {len(existing_topic_ids)} existing article topics to post {post_id}")
+                                # If no existing topics, they will need to be extracted by client before posting
+                        
+                        # Save post topic if provided (for non-article posts)
+                        elif hasattr(act, 'topic') and act.topic:
                             # Get or create the topic in interests table
                             topic_id = self.db.add_or_get_interest(act.topic)
                             if topic_id:

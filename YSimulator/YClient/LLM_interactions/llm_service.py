@@ -368,3 +368,37 @@ class LLMService:
                 return "unfollow"
         
         return "no_change"
+    
+    def extract_topics_from_article(self, article_title: str, article_summary: str) -> list:
+        """
+        Extract up to 2 topics from an article using LLM.
+        
+        Args:
+            article_title: Title of the article
+            article_summary: Summary/content of the article
+            
+        Returns:
+            list: List of up to 2 topic strings
+        """
+        # Combine title and summary for analysis
+        article_text = f"Title: {article_title}\n\nSummary: {article_summary}" if article_summary else f"Title: {article_title}"
+        
+        # Create prompt for topic extraction
+        system_msg = "You are a topic extraction assistant. Extract exactly 1 or 2 main topics from the article. Return ONLY the topics, separated by commas, no other text."
+        user_msg = f"Extract 1-2 main topics from this article:\n\n{article_text}\n\nTopics (comma-separated):"
+        
+        prompt = ChatPromptTemplate.from_messages([
+            ("system", system_msg),
+            ("user", user_msg)
+        ])
+        chain = prompt | self.llm | StrOutputParser()
+        
+        try:
+            response = chain.invoke({})
+            # Parse response - split by comma and clean up
+            topics = [t.strip() for t in response.split(',') if t.strip()]
+            # Return up to 2 topics
+            return topics[:2]
+        except Exception as e:
+            # If extraction fails, return empty list
+            return []

@@ -1189,6 +1189,24 @@ class SimulationClient:
                         )
                         return
                 
+                # Extract and store article topics if not already done
+                article_id = article.get("id")
+                if article_id:
+                    try:
+                        # Call server to extract and store article topics
+                        topic_ids = ray.get(
+                            self.server.extract_and_store_article_topics.remote(
+                                article_id,
+                                article.get("title", ""),
+                                article.get("summary", ""),
+                                self.llm
+                            )
+                        )
+                        if topic_ids:
+                            self.logger.info(f"Extracted/stored {len(topic_ids)} topics for article {article_id}")
+                    except Exception as e:
+                        self.logger.warning(f"Failed to extract topics for article {article_id}: {e}")
+                
                 if agent_type == "llm":
                     # LLM page posts news with commentary
                     self.logger.info(f"LLM Page {agent.username} generating news post async")
