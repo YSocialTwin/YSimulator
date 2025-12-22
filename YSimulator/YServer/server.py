@@ -92,6 +92,10 @@ class OrchestratorServer:
         self.submitted_clients = set()  # Clients that submitted for current slot
         self.last_heartbeat = {}  # {client_id: timestamp}
         self.registered_agents = {}  # {agent_id: username}
+        
+        # Agent interests tracking - maintain in-memory state
+        # Format: {agent_id: {"topics": [topic_names], "counts": [interaction_counts]}}
+        self.agent_interests = {}
 
         # Simulation state
         self.day = 1
@@ -188,6 +192,102 @@ class OrchestratorServer:
             return None, None
         
         return topics, counts
+    
+    def _update_agent_interest_counter(self, agent_id: str, topic_name: str, increment: int = 1):
+        """
+        Update the interest counter for an agent in memory.
+        
+        Args:
+            agent_id: Agent UUID
+            topic_name: Name of the topic
+            increment: Amount to increment the counter (default: 1)
+        """
+        agent_id = str(agent_id)
+        
+        # Initialize agent interests if not present
+        if agent_id not in self.agent_interests:
+            self.agent_interests[agent_id] = {"topics": [], "counts": []}
+        
+        topics = self.agent_interests[agent_id]["topics"]
+        counts = self.agent_interests[agent_id]["counts"]
+        
+        # Find topic index
+        if topic_name in topics:
+            idx = topics.index(topic_name)
+            counts[idx] += increment
+        else:
+            # Add new topic
+            topics.append(topic_name)
+            counts.append(increment)
+    
+    def _get_topic_name_from_id(self, topic_id: str) -> Optional[str]:
+        """
+        Get topic name from topic UUID.
+        
+        Args:
+            topic_id: Topic UUID (iid)
+            
+        Returns:
+            str: Topic name or None if not found
+        """
+        from YSimulator.YServer.classes.models import Interest
+        from sqlalchemy.orm import Session
+        
+        session = Session(self.db.engine)
+        try:
+            interest = session.query(Interest).filter(Interest.iid == topic_id).first()
+            if interest:
+                return interest.interest
+            return None
+        finally:
+            session.close()
+    
+    def _save_updated_agent_population(self):
+        """
+        Save updated agent interests to agent_population.json at end of day.
+        """
+        import json
+        from pathlib import Path
+        
+        # Find the agent_population.json file in the config path
+        agent_pop_file = self.config_path / "agent_population.json"
+        
+        if not agent_pop_file.exists():
+            self.logger.warning(
+                f"agent_population.json not found at {agent_pop_file}, skipping interests update"
+            )
+            return
+        
+        try:
+            # Load current agent_population.json
+            with open(agent_pop_file, 'r') as f:
+                agent_data = json.load(f)
+            
+            # Update interests for each agent
+            if "agents" in agent_data:
+                for agent in agent_data["agents"]:
+                    agent_id = agent.get("id")
+                    if agent_id and str(agent_id) in self.agent_interests:
+                        interests_data = self.agent_interests[str(agent_id)]
+                        # Update the interests field with current topics and counts
+                        agent["interests"] = [
+                            interests_data["topics"],
+                            interests_data["counts"]
+                        ]
+            
+            # Write updated data back to file
+            with open(agent_pop_file, 'w') as f:
+                json.dump(agent_data, f, indent=2)
+            
+            self.logger.info(
+                f"Updated agent_population.json with current interests for {len(self.agent_interests)} agents"
+            )
+            
+        except Exception as e:
+            self.logger.error(
+                f"Error updating agent_population.json: {e}",
+                extra={"extra_data": {"error": str(e)}}
+            )
 
     def register_agents(self, agents: list) -> dict:
         """
@@ -245,8 +345,15 @@ class OrchestratorServer:
                     registered_count += 1
                     self.registered_agents[agent_profile.id] = agent_profile.username
                     
-                    # Save agent interests if provided
+                    # Store initial agent interests in memory
                     topics, counts = self._validate_and_extract_interests(agent_profile.interests)
+                    if topics and counts:
+                        self.agent_interests[str(agent_profile.id)] = {
+                            "topics": list(topics),
+                            "counts": list(counts)
+                        }
+                    
+                    # Save agent interests if provided
                     if topics and counts:
                         # Save each interest for the agent
                         # Note: We create multiple user_interest entries (one per interaction count)
@@ -755,6 +862,9 @@ class OrchestratorServer:
                             if topic_id:
                                 # Save post-topic association
                                 self.db.add_post_topic(post_id, topic_id)
+                                
+                                # Increment the agent's interest counter for this topic
+                                self._update_agent_interest_counter(act.agent_id, act.topic, increment=1)
                     else:
                         self.logger.warning(
                             f"Failed to add post for agent {act.agent_id}",
@@ -798,6 +908,11 @@ class OrchestratorServer:
                                     interest_id=topic_id,
                                     round_id=self.current_round_id
                                 )
+                                
+                                # Increment the agent's interest counter for this topic
+                                topic_name = self._get_topic_name_from_id(topic_id)
+                                if topic_name:
+                                    self._update_agent_interest_counter(act.agent_id, topic_name, increment=1)
                         else:
                             self.logger.warning(
                                 f"Failed to add comment for agent {act.agent_id}",
@@ -1025,6 +1140,9 @@ class OrchestratorServer:
                         f"Removed {consolidation_result.get('removed_posts', 0)} old posts, "
                         f"{consolidation_result.get('removed_interactions', 0)} old interactions from Redis"
                     )
+                
+                # Save updated agent interests to agent_population.json
+                self._save_updated_agent_population()
                 
                 # Clean up old posts from Redis based on visibility_rounds (temporal sliding window)
                 cleanup_result = self.db.cleanup_old_posts_from_redis(self.day, self.slot)
