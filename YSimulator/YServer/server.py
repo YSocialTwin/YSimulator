@@ -1684,7 +1684,8 @@ class OrchestratorServer:
                         """)
                         result = connection.execute(query_followers, {
                             "agent_id": agent_id,
-                            "visibility": visibility,
+                            "vis_day": visibility_day,
+                            "vis_hour": visibility_hour,
                             "follower_limit": follower_posts_limit
                         })
                         post_ids = [row[0] for row in result]
@@ -1751,7 +1752,8 @@ class OrchestratorServer:
                         """)
                         result = connection.execute(query_followers, {
                             "agent_id": agent_id,
-                            "visibility": visibility,
+                            "vis_day": visibility_day,
+                            "vis_hour": visibility_hour,
                             "follower_limit": follower_posts_limit
                         })
                         post_ids = [row[0] for row in result]
@@ -1761,19 +1763,21 @@ class OrchestratorServer:
                                 query_additional = text("""
                                     SELECT p.id 
                                     FROM post p
+                                    INNER JOIN rounds rd ON p.round = rd.id
                                     LEFT JOIN (
                                         SELECT post_id, COUNT(*) as reaction_count
                                         FROM reaction
                                         GROUP BY post_id
                                     ) r ON p.id = r.post_id
-                                    WHERE rd.id = p.round AND (rd.day > :vis_day OR (rd.day = :vis_day AND rd.hour >= :vis_hour)) 
+                                    WHERE (rd.day > :vis_day OR (rd.day = :vis_day AND rd.hour >= :vis_hour)) 
                                         AND p.user_id != :agent_id
                                         AND p.id NOT IN :existing_ids
                                     ORDER BY p.round DESC, COALESCE(r.reaction_count, 0) DESC
                                     LIMIT :additional_limit
                                 """)
                                 result = connection.execute(query_additional, {
-                                    "visibility": visibility,
+                                    "vis_day": visibility_day,
+                                    "vis_hour": visibility_hour,
                                     "agent_id": agent_id,
                                     "existing_ids": tuple(post_ids),
                                     "additional_limit": additional_posts_limit
@@ -1782,18 +1786,20 @@ class OrchestratorServer:
                                 query_additional = text("""
                                     SELECT p.id 
                                     FROM post p
+                                    INNER JOIN rounds rd ON p.round = rd.id
                                     LEFT JOIN (
                                         SELECT post_id, COUNT(*) as reaction_count
                                         FROM reaction
                                         GROUP BY post_id
                                     ) r ON p.id = r.post_id
-                                    WHERE rd.id = p.round AND (rd.day > :vis_day OR (rd.day = :vis_day AND rd.hour >= :vis_hour)) 
+                                    WHERE (rd.day > :vis_day OR (rd.day = :vis_day AND rd.hour >= :vis_hour)) 
                                         AND p.user_id != :agent_id
                                     ORDER BY p.round DESC, COALESCE(r.reaction_count, 0) DESC
                                     LIMIT :additional_limit
                                 """)
                                 result = connection.execute(query_additional, {
-                                    "visibility": visibility,
+                                    "vis_day": visibility_day,
+                                    "vis_hour": visibility_hour,
                                     "agent_id": agent_id,
                                     "additional_limit": additional_posts_limit
                                 })
