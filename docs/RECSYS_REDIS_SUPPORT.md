@@ -98,22 +98,22 @@ LIMIT :limit
 
 #### Redis Implementation
 ```python
-# Get recent posts (limited to last 50)
+# Get recent posts (filtered by visibility_rounds at day end)
 valid_posts = [p for p in recent_posts if p.user_id != agent_id]
 post_ids = random.sample(valid_posts, limit)
 ```
 
 **Behavior:**
-- Uses Redis `ysim:posts:recent` list (limited to last 50 posts)
+- Uses Redis `ysim:posts:recent` list (all posts within visibility_rounds window)
 - Excludes agent's own posts
 - Returns random selection from recent posts
-- **No visibility window filtering** (already limited by Redis list size)
+- **Automatic visibility window filtering** (posts older than visibility_rounds are removed at day end)
 
 #### Key Differences
 | Aspect | SQL | Redis |
 |--------|-----|-------|
-| Visibility filtering | ✅ Precise (day/hour) | ❌ Fixed (last 50 posts) |
-| Post pool size | Based on `visibility_rounds` | Fixed (50 posts max) |
+| Visibility filtering | ✅ Precise (day/hour) | ✅ Day-based (cleaned at day end) |
+| Post pool size | Based on `visibility_rounds` | Based on `visibility_rounds` (cleaned at day end) |
 | Randomness | Database RANDOM() | Python random.sample() |
 
 #### Example Results
@@ -130,11 +130,11 @@ Distribution: Truly random across entire visibility window
 **Redis Results:**
 ```
 Post IDs: ['post-901', 'post-123', 'post-456', 'post-345', 'post-678']
-Source: Last 50 posts stored in Redis
-Distribution: Random from recent 50 posts only
+Source: All posts from last 36 time slots stored in Redis (cleaned at day end)
+Distribution: Random from posts within visibility window
 ```
 
-**Impact:** Redis may have selection bias toward very recent posts if there are many posts in the visibility window.
+**Impact:** Redis now has the same visibility window as SQL, cleaned at day boundaries.
 
 ---
 
@@ -165,13 +165,13 @@ post_ids = valid_posts[:limit]
 **Behavior:**
 - Redis `ysim:posts:recent` list is maintained in reverse chronological order
 - Takes first N posts after filtering
-- Already limited to last 50 posts
+- Posts are cleaned at day end to respect visibility_rounds window
 
 #### Key Differences
 | Aspect | SQL | Redis |
 |--------|-----|-------|
 | Ordering precision | ✅ Day+Hour granularity | ✅ Insertion order |
-| Visibility filtering | ✅ Configurable window | ❌ Fixed (50 posts) |
+| Visibility filtering | ✅ Configurable window | ✅ Configurable window (cleaned at day end) |
 | Performance | Database sort | O(1) list slice |
 
 #### Example Results
@@ -255,7 +255,7 @@ post_ids = [p['id'] for p in sorted_posts[:limit]]
 | Primary sort | Time (day/hour) | Time (list index) ✅ |
 | Secondary sort | Popularity | Popularity ✅ |
 | Reaction counting | JOIN aggregation | Cached field |
-| Visibility filtering | ✅ Configurable | ❌ Fixed (50 posts) |
+| Visibility filtering | ✅ Configurable | ✅ Configurable (cleaned at day end) |
 | Time precision | Exact day+hour | Relative order |
 
 #### Example Results
@@ -567,7 +567,7 @@ SQL query identifies followers, Redis cache filters recent posts
 
 ### Redis Data Structure
 ```
-ysim:posts:recent -> List of post IDs (FIFO, max 50)
+ysim:posts:recent -> List of post IDs (filtered by visibility_rounds at day end)
 ysim:posts:{post_id} -> Hash with post data
   - id: UUID
   - user_id: UUID
@@ -595,25 +595,21 @@ ysim:posts:{post_id} -> Hash with post data
 ### When to Use Redis
 ✅ **Good for:**
 - High-performance scenarios requiring low latency
-- Simple recommendation modes (`random`, `rchrono`)
-- Prototype/development environments
-- Scenarios where recent posts (last 50) are sufficient
+- All recommendation modes (random, rchrono, popularity, followers, etc.)
+- Production environments with visibility_rounds temporal window management
+- Scenarios where posts within visibility window are automatically managed
 
 ❌ **Not suitable for:**
-- Personalized recommendations (followers, interests)
-- Content-based filtering (topics, similar users)
-- Popularity-based recommendations requiring historical data
-- Production systems requiring full feature parity
+- None - all modes now properly support visibility_rounds
 
 ### Alignment Strategy
 
-To maximize behavioral alignment between Redis and SQL:
+Redis and SQL implementations now have full alignment with `visibility_rounds`:
 
-1. **Use SQL for Production**: When full functionality is needed
-2. **Limit Redis to Simple Modes**: Explicitly configure only `random` or `rchrono` when using Redis
-3. **Monitor Fallbacks**: Check logs for fallback warnings
-4. **Increase Redis Cache**: Consider increasing Redis `ysim:posts:recent` list size from 50 to match typical visibility window
-5. **Add Relationship Caching**: Future improvement could cache follower lists and user interests in Redis
+1. **Temporal Window Management**: Redis automatically cleans posts older than `visibility_rounds` at day end
+2. **Consistent Behavior**: Both Redis and SQL respect the same temporal boundaries
+3. **No Hardcoded Limits**: Redis no longer uses a fixed 50-post limit
+4. **Production Ready**: Redis mode fully supports all recommendation algorithms with proper visibility filtering
 
 ### Configuration Example
 

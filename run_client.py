@@ -94,7 +94,7 @@ if __name__ == "__main__":
         required_files=[
             "simulation_config.json",
             "agent_population.json",
-            "llm_prompts.json",
+            "prompts.json",
         ],
     )
 
@@ -124,7 +124,7 @@ if __name__ == "__main__":
 
     # Use client-specific file names with fallback to conventional names
     agent_config_file = find_config_file("agent_population.json")
-    prompts_config_file = find_config_file("llm_prompts.json")
+    prompts_config_file = find_config_file("prompts.json")
 
     # Load configuration files
     start_time = time.time()

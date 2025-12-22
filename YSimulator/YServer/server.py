@@ -82,6 +82,9 @@ class OrchestratorServer:
         
         # Simulation timing configuration
         self.num_slots_per_day = simulation_config.get("simulation", {}).get("num_slots_per_day", 24)
+        
+        # Store visibility_rounds for server use
+        self.visibility_rounds = simulation_config.get("posts", {}).get("visibility_rounds", 36)
 
         # Client tracking
         self.registered_clients = set()  # All registered clients
@@ -105,6 +108,7 @@ class OrchestratorServer:
             config_path=str(self.config_path),
             redis_config=redis_config,
             logger=self.logger,
+            simulation_config=simulation_config,
         )
         
         # Initialize the first round entry
@@ -960,6 +964,28 @@ class OrchestratorServer:
                         f"{consolidation_result.get('removed_interactions', 0)} old interactions from Redis"
                     )
                 
+                # Clean up old posts from Redis based on visibility_rounds (temporal sliding window)
+                cleanup_result = self.db.cleanup_old_posts_from_redis(self.day, self.slot)
+                if cleanup_result.get("removed_posts", 0) > 0 or cleanup_result.get("removed_interactions", 0) > 0:
+                    self.logger.info(
+                        f"Redis temporal cleanup complete - removed posts older than visibility_rounds",
+                        extra={
+                            "extra_data": {
+                                "day": self.day,
+                                "slot": self.slot,
+                                "removed_posts": cleanup_result.get("removed_posts", 0),
+                                "removed_interactions": cleanup_result.get("removed_interactions", 0),
+                                "remaining_posts": cleanup_result.get("remaining_posts", 0),
+                            }
+                        },
+                    )
+                    print(
+                        f"[Server] 🧹 Redis cleanup - "
+                        f"Removed {cleanup_result.get('removed_posts', 0)} old posts, "
+                        f"{cleanup_result.get('removed_interactions', 0)} old interactions. "
+                        f"Remaining: {cleanup_result.get('remaining_posts', 0)} posts in Redis"
+                    )
+                
                 # Check if it's time for archetype transitions (every 7 days)
                 if self.archetypes_enabled and self.day - self.last_archetype_transition_day >= 7:
                     self._perform_archetype_transitions()
@@ -1124,12 +1150,15 @@ class OrchestratorServer:
             return
         
         try:
+            from sqlalchemy.orm import Session
+            
             # Format post IDs as pipe-separated string (original implementation format)
             post_ids_str = "|".join(post_ids)
             recommendation_id = str(uuid.uuid4())
             
             # Save to SQL database using SQLAlchemy ORM
-            with self.db.get_session() as session:
+            session = Session(self.db.engine)
+            try:
                 recommendation = Recommendation(
                     id=recommendation_id,
                     user_id=agent_id,
@@ -1138,6 +1167,8 @@ class OrchestratorServer:
                 )
                 session.add(recommendation)
                 session.commit()
+            finally:
+                session.close()
             
             # Also save to Redis if enabled
             if self.db.use_redis:
@@ -1169,7 +1200,6 @@ class OrchestratorServer:
         agent_id: str,
         mode: str = "random",
         limit: int = 5,
-        visibility_rounds: int = 36,
         followers_ratio: float = 0.6
     ) -> List[str]:
         """
@@ -1189,15 +1219,15 @@ class OrchestratorServer:
                 - "similar_users_react": Posts from similar users (by reactions)
                 - "similar_users_posts": Posts from similar users (by posting)
             limit: Number of posts to recommend (default: 5)
-            visibility_rounds: Number of rounds (time slots) to look back for posts (default: 36)
             followers_ratio: Ratio of posts from followers vs others (default: 0.6)
             
         Returns:
             List[str]: List of post UUIDs recommended for the agent
         """
         try:
+            # Use server's configured visibility_rounds
             # Calculate visibility threshold based on day/hour (not UUID arithmetic)
-            visibility_day, visibility_hour = self._calculate_visibility_params(visibility_rounds)
+            visibility_day, visibility_hour = self._calculate_visibility_params(self.visibility_rounds)
             
             if self.db.use_redis:
                 # Use Redis for recommendations - dispatch to modular functions
@@ -1286,66 +1316,67 @@ class OrchestratorServer:
                 
             else:
                 # Use SQL database for recommendations
-                with self.db.engine.begin() as connection:
-                    
+                from sqlalchemy.orm import Session
+                session = Session(self.db.engine)
+                try:
                     if mode == "rchrono":
                         # Reverse chronological: newest posts first
                         post_ids = content_recsys_db.recommend_rchrono(
-                            connection, agent_id, visibility_day, visibility_hour, limit
+                            session, agent_id, visibility_day, visibility_hour, limit
                         )
                         
                     elif mode == "rchrono_popularity":
                         # Reverse chronological with popularity (reaction count)
                         post_ids = content_recsys_db.recommend_rchrono_popularity(
-                            connection, agent_id, visibility_day, visibility_hour, limit
+                            session, agent_id, visibility_day, visibility_hour, limit
                         )
                         
                     elif mode == "rchrono_followers":
                         # Prioritize posts from followed users
                         post_ids = content_recsys_db.recommend_rchrono_followers(
-                            connection, agent_id, visibility_day, visibility_hour, limit, followers_ratio
+                            session, agent_id, visibility_day, visibility_hour, limit, followers_ratio
                         )
                         
                     elif mode == "rchrono_followers_popularity":
                         # Followers with popularity boost
                         post_ids = content_recsys_db.recommend_rchrono_followers_popularity(
-                            connection, agent_id, visibility_day, visibility_hour, limit, followers_ratio
+                            session, agent_id, visibility_day, visibility_hour, limit, followers_ratio
                         )
                             
                     elif mode == "rchrono_comments":
                         # Prioritize posts with more comments (thread activity)
                         post_ids = content_recsys_db.recommend_rchrono_comments(
-                            connection, agent_id, visibility_day, visibility_hour, limit
+                            session, agent_id, visibility_day, visibility_hour, limit
                         )
                         
                     elif mode == "common_interests":
                         # Posts with common topic interests
                         post_ids = content_recsys_db.recommend_common_interests(
-                            connection, agent_id, visibility_day, visibility_hour, limit, followers_ratio
+                            session, agent_id, visibility_day, visibility_hour, limit, followers_ratio
                         )
                     
                     elif mode == "common_user_interests":
                         # Posts by users with common interests (most interacted)
                         post_ids = content_recsys_db.recommend_common_user_interests(
-                            connection, agent_id, visibility_day, visibility_hour, limit, followers_ratio
+                            session, agent_id, visibility_day, visibility_hour, limit, followers_ratio
                         )
                     
                     elif mode == "similar_users_react":
                         # Posts from similar users (based on demographics/personality)
                         post_ids = content_recsys_db.recommend_similar_users_react(
-                            connection, agent_id, visibility_day, visibility_hour, limit
+                            session, agent_id, visibility_day, visibility_hour, limit
                         )
                     
                     elif mode == "similar_users_posts":
                         # Posts created by similar users
                         post_ids = content_recsys_db.recommend_similar_users_posts(
-                            connection, agent_id, visibility_day, visibility_hour, limit
+                            session, agent_id, visibility_day, visibility_hour, limit
                         )
                         
                     else:
                         # Random ordering (default)
                         post_ids = content_recsys_db.recommend_random(
-                            connection, agent_id, visibility_day, visibility_hour, limit
+                            session, agent_id, visibility_day, visibility_hour, limit
                         )
                     
                     self.logger.info(
@@ -1364,6 +1395,8 @@ class OrchestratorServer:
                     self._save_recommendation(agent_id, post_ids)
                     
                     return post_ids
+                finally:
+                    session.close()
                 
         except Exception as e:
             self.logger.error(
@@ -1383,6 +1416,18 @@ class OrchestratorServer:
             Dictionary with post data or None if not found
         """
         return self.db.get_post(post_id)
+
+    def get_user(self, user_id: str) -> Optional[Dict[str, Any]]:
+        """
+        Get a user by their ID.
+        
+        Args:
+            user_id: UUID of the user to retrieve
+            
+        Returns:
+            Dictionary with user data or None if not found
+        """
+        return self.db.get_user(user_id)
 
     def get_follow_suggestions(
         self,

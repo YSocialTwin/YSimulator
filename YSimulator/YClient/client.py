@@ -149,7 +149,6 @@ class SimulationClient:
         recsys_config = simulation_config["simulation"].get("recsys", {})
         self.recsys_mode = recsys_config.get("mode", "random")  # "random" or "rchrono"
         self.recsys_n_posts = recsys_config.get("n_posts", 5)
-        self.recsys_visibility_rounds = recsys_config.get("visibility_rounds", 36)
         
         # Load agent behavior configuration
         agents_config = simulation_config.get("agents", {})
@@ -910,11 +909,37 @@ class SimulationClient:
         
         return selected_action, agent_type, target
 
+    def _extract_agent_attrs(self, agent) -> dict:
+        """
+        Extract agent attributes for dynamic persona building.
+        
+        Args:
+            agent: AgentProfile object
+            
+        Returns:
+            dict: Agent attributes for persona template
+        """
+        return {
+            "name": agent.username,
+            "age": agent.age if agent.age else "unknown",
+            "gender": agent.gender if agent.gender else "person",
+            "nationality": agent.nationality if agent.nationality else "citizen",
+            "profession": agent.profession if agent.profession else "individual",
+            "political_leaning": agent.leaning if agent.leaning else "neutral",
+            "oe": agent.oe if agent.oe else "average in openness",
+            "co": agent.co if agent.co else "average in conscientiousness",
+            "ex": agent.ex if agent.ex else "average in extraversion",
+            "ag": agent.ag if agent.ag else "average in agreeableness",
+            "ne": agent.ne if agent.ne else "average in neuroticism",
+            "toxicity": agent.toxicity if agent.toxicity and agent.toxicity != "" else "no"
+        }
+
     def _handle_post_action(self, agent, agent_type, day, slot, pending_llm_posts, actions):
         """Handle post action for an agent."""
         if agent_type == "llm":
             # LLM: Fire off async call (don't wait for result yet)
-            future = generate_llm_post_async(self.llm, agent.cluster, day, slot)
+            agent_attrs = self._extract_agent_attrs(agent)
+            future = generate_llm_post_async(self.llm, agent.cluster, day, slot, agent_attrs)
             pending_llm_posts.append((agent.id, agent.cluster, future, None))
         else:
             # Rule-based: Execute immediately
@@ -927,8 +952,7 @@ class SimulationClient:
         agent_recsys_mode = getattr(agent, 'recsys_type', None) or self.recsys_mode
         recsys_class = RECSYS_CLASS_MAP.get(agent_recsys_mode, RandomOrder)
         recsys = recsys_class(
-            n_posts=self.recsys_n_posts,
-            visibility_rounds=self.recsys_visibility_rounds
+            n_posts=self.recsys_n_posts
         )
         
         # Get recommended posts from server
@@ -945,8 +969,16 @@ class SimulationClient:
             post_data = ray.get(self.server.get_post.remote(target_post))
             if post_data:
                 post_content = post_data.get("tweet", "")
-                # Fire off async LLM call to generate comment
-                future = self.llm.generate_comment.remote(agent.cluster, post_content)
+                author_id = post_data.get("user_id")
+                # Get author username
+                author_name = "Someone"
+                if author_id:
+                    author_user = ray.get(self.server.get_user.remote(author_id))
+                    if author_user:
+                        author_name = author_user.get("username", "Someone")
+                # Fire off async LLM call to generate comment with agent attributes and author name
+                agent_attrs = self._extract_agent_attrs(agent)
+                future = self.llm.generate_comment.remote(agent.cluster, post_content, agent_attrs, author_name)
                 pending_llm_reactions.append((agent.id, agent.cluster, target_post, future))
         else:
             # Rule-based: Just comment "COMMENT"
@@ -963,8 +995,7 @@ class SimulationClient:
         agent_recsys_mode = getattr(agent, 'recsys_type', None) or self.recsys_mode
         recsys_class = RECSYS_CLASS_MAP.get(agent_recsys_mode, RandomOrder)
         recsys = recsys_class(
-            n_posts=self.recsys_n_posts,
-            visibility_rounds=self.recsys_visibility_rounds
+            n_posts=self.recsys_n_posts
         )
         
         # Get recommended posts from server
@@ -981,8 +1012,9 @@ class SimulationClient:
             post_data = ray.get(self.server.get_post.remote(target_post))
             if post_data:
                 post_content = post_data.get("tweet", "")
-                # Fire off async LLM call to decide reaction
-                future = generate_llm_read_async(self.llm, agent.cluster, post_content)
+                # Fire off async LLM call to decide reaction with agent attributes
+                agent_attrs = self._extract_agent_attrs(agent)
+                future = generate_llm_read_async(self.llm, agent.cluster, post_content, agent_attrs)
                 pending_llm_reactions.append((agent.id, agent.cluster, target_post, future))
         else:
             # Rule-based: Randomly choose LIKE, DISLIKE (ANGRY), or IGNORE
@@ -1186,14 +1218,23 @@ class SimulationClient:
         # --- SCATTER PHASE: Select and dispatch actions ---
         for agent in active_agents:
             # Sample number of actions for this agent based on daily_activity_level
-            # Random from 1 to daily_activity_level (minimum 1)
+            # Page agents can perform at most 1 action (0 or 1)
+            # Regular agents: Random from 1 to daily_activity_level (minimum 1)
             if agent.daily_activity_level <= 0:
                 # Skip agents with 0 or negative activity level
                 continue
-            num_actions = random.randint(1, agent.daily_activity_level)
             
             if agent.is_page == 1:
-                self.logger.info(f"Page agent {agent.username} will perform {num_actions} actions")
+                # Page agents perform at most 1 action (0 or 1)
+                # Use a probability-based decision: 50% chance to act
+                num_actions = 1 if random.random() < 0.5 else 0
+                if num_actions > 0:
+                    self.logger.info(f"Page agent {agent.username} will perform 1 action")
+                else:
+                    self.logger.debug(f"Page agent {agent.username} will skip this round")
+            else:
+                # Regular agents perform 1 to daily_activity_level actions
+                num_actions = random.randint(1, agent.daily_activity_level)
             
             for action_idx in range(num_actions):
                 action_type, agent_type, target = self.__select_action(agent, recent_posts)
@@ -1431,13 +1472,7 @@ class SimulationClient:
             
             # Get follow suggestions from server
             try:
-                follow_suggestions = ray.get(
-                    frecsys.get_suggestions.remote(
-                        self.server,
-                        agent.id,
-                        agent.leaning if hasattr(agent, 'leaning') else 'neutral'
-                    )
-                )
+                follow_suggestions = frecsys.get_follow_suggestions(self.server, agent.id)
                 
                 if follow_suggestions:
                     # Randomly select one candidate to follow

@@ -18,7 +18,7 @@ import ray
 
 from YSimulator.common_utils import validate_config_directory
 from YSimulator.YServer.server import OrchestratorServer
-from init_db import initialize_database, database_exists
+from YSimulator.utils.init_db import initialize_database, database_exists
 
 
 def setup_logging(config_path: Path, server_name: str) -> logging.Logger:
@@ -140,6 +140,11 @@ if __name__ == "__main__":
     
     redis_config = config.get("redis")  # Redis configuration (optional)
     simulation_config = config.get("simulation", {})  # Simulation configuration (optional)
+    
+    # Add posts configuration to simulation_config for consistency
+    posts_config = config.get("posts", {})
+    if posts_config:
+        simulation_config["posts"] = posts_config
 
     # Set up logging in config directory
     logger = setup_logging(config_dir, server_name)

@@ -29,11 +29,10 @@ class ContentRecSys:
     Attributes:
         mode (str): Recommendation strategy mode
         n_posts (int): Number of posts to recommend
-        visibility_rounds (int): How many time slots back to look for posts
         followers_ratio (float): Ratio of posts from followers vs others
     """
     
-    def __init__(self, mode="random", n_posts=5, visibility_rounds=36, followers_ratio=0.6):
+    def __init__(self, mode="random", n_posts=5, followers_ratio=0.6):
         """
         Initialize the content recommendation system.
         
@@ -46,14 +45,11 @@ class ContentRecSys:
                 - "rchrono_followers_popularity": Followers + popularity
                 - "rchrono_comments": Prioritizes highly commented posts
             n_posts (int, optional): Number of posts to recommend. Defaults to 5.
-            visibility_rounds (int, optional): Number of time slots posts remain visible.
-                                               Defaults to 36.
             followers_ratio (float, optional): Ratio of posts from followers (0.0-1.0).
                                               Defaults to 0.6.
         """
         self.mode = mode
         self.n_posts = n_posts
-        self.visibility_rounds = visibility_rounds
         self.followers_ratio = followers_ratio
     
     def get_recommendations(self, server_handle, agent_id: str) -> list:
@@ -76,7 +72,6 @@ class ContentRecSys:
                     agent_id=agent_id,
                     mode=self.mode,
                     limit=self.n_posts,
-                    visibility_rounds=self.visibility_rounds,
                     followers_ratio=self.followers_ratio
                 )
             )
@@ -94,16 +89,14 @@ class ReverseChrono(ContentRecSys):
     personalization or filtering.
     """
     
-    def __init__(self, n_posts=5, visibility_rounds=36):
+    def __init__(self, n_posts=5):
         """
         Initialize reverse chronological recommendation system.
         
         Args:
             n_posts (int, optional): Number of posts to recommend. Defaults to 5.
-            visibility_rounds (int, optional): Number of time slots posts remain visible.
-                                               Defaults to 36.
         """
-        super().__init__(mode="rchrono", n_posts=n_posts, visibility_rounds=visibility_rounds)
+        super().__init__(mode="rchrono", n_posts=n_posts)
 
 
 class ReverseChronoPopularity(ContentRecSys):
@@ -113,16 +106,14 @@ class ReverseChronoPopularity(ContentRecSys):
     Orders posts by recency and reaction count for more engaging content.
     """
     
-    def __init__(self, n_posts=5, visibility_rounds=36):
+    def __init__(self, n_posts=5):
         """
         Initialize reverse chronological with popularity recommendation system.
         
         Args:
             n_posts (int, optional): Number of posts to recommend. Defaults to 5.
-            visibility_rounds (int, optional): Number of time slots posts remain visible.
-                                               Defaults to 36.
         """
-        super().__init__(mode="rchrono_popularity", n_posts=n_posts, visibility_rounds=visibility_rounds)
+        super().__init__(mode="rchrono_popularity", n_posts=n_posts)
 
 
 class ReverseChronoFollowers(ContentRecSys):
@@ -132,19 +123,17 @@ class ReverseChronoFollowers(ContentRecSys):
     Shows a mix of posts from followed users and the general network.
     """
     
-    def __init__(self, n_posts=5, visibility_rounds=36, followers_ratio=0.6):
+    def __init__(self, n_posts=5, followers_ratio=0.6):
         """
         Initialize followers-prioritizing recommendation system.
         
         Args:
             n_posts (int, optional): Number of posts to recommend. Defaults to 5.
-            visibility_rounds (int, optional): Number of time slots posts remain visible.
-                                               Defaults to 36.
             followers_ratio (float, optional): Proportion of posts from followed users.
                                               Defaults to 0.6.
         """
         super().__init__(mode="rchrono_followers", n_posts=n_posts, 
-                        visibility_rounds=visibility_rounds, followers_ratio=followers_ratio)
+                        followers_ratio=followers_ratio)
 
 
 class ReverseChronoFollowersPopularity(ContentRecSys):
@@ -154,19 +143,17 @@ class ReverseChronoFollowersPopularity(ContentRecSys):
     Prioritizes popular posts from followed users.
     """
     
-    def __init__(self, n_posts=5, visibility_rounds=36, followers_ratio=0.6):
+    def __init__(self, n_posts=5, followers_ratio=0.6):
         """
         Initialize followers + popularity recommendation system.
         
         Args:
             n_posts (int, optional): Number of posts to recommend. Defaults to 5.
-            visibility_rounds (int, optional): Number of time slots posts remain visible.
-                                               Defaults to 36.
             followers_ratio (float, optional): Proportion of posts from followed users.
                                               Defaults to 0.6.
         """
         super().__init__(mode="rchrono_followers_popularity", n_posts=n_posts,
-                        visibility_rounds=visibility_rounds, followers_ratio=followers_ratio)
+                        followers_ratio=followers_ratio)
 
 
 class ReverseChronoComments(ContentRecSys):
@@ -176,16 +163,14 @@ class ReverseChronoComments(ContentRecSys):
     Surfaces posts with more comments to encourage engagement.
     """
     
-    def __init__(self, n_posts=5, visibility_rounds=36):
+    def __init__(self, n_posts=5):
         """
         Initialize comment-prioritizing recommendation system.
         
         Args:
             n_posts (int, optional): Number of posts to recommend. Defaults to 5.
-            visibility_rounds (int, optional): Number of time slots posts remain visible.
-                                               Defaults to 36.
         """
-        super().__init__(mode="rchrono_comments", n_posts=n_posts, visibility_rounds=visibility_rounds)
+        super().__init__(mode="rchrono_comments", n_posts=n_posts)
 
 
 class RandomOrder(ContentRecSys):
@@ -196,16 +181,14 @@ class RandomOrder(ContentRecSys):
     without recency or popularity bias.
     """
     
-    def __init__(self, n_posts=5, visibility_rounds=36):
+    def __init__(self, n_posts=5):
         """
         Initialize random ordering recommendation system.
         
         Args:
             n_posts (int, optional): Number of posts to recommend. Defaults to 5.
-            visibility_rounds (int, optional): Number of time slots posts remain visible.
-                                               Defaults to 36.
         """
-        super().__init__(mode="random", n_posts=n_posts, visibility_rounds=visibility_rounds)
+        super().__init__(mode="random", n_posts=n_posts)
 
 
 class CommonInterests(ContentRecSys):
@@ -215,19 +198,17 @@ class CommonInterests(ContentRecSys):
     Recommends posts that match topics the agent is interested in.
     """
     
-    def __init__(self, n_posts=5, visibility_rounds=36, followers_ratio=0.6):
+    def __init__(self, n_posts=5, followers_ratio=0.6):
         """
         Initialize common interests recommendation system.
         
         Args:
             n_posts (int, optional): Number of posts to recommend. Defaults to 5.
-            visibility_rounds (int, optional): Number of time slots posts remain visible.
-                                               Defaults to 36.
             followers_ratio (float, optional): Proportion of posts from followed users.
                                               Defaults to 0.6.
         """
         super().__init__(mode="common_interests", n_posts=n_posts,
-                        visibility_rounds=visibility_rounds, followers_ratio=followers_ratio)
+                        followers_ratio=followers_ratio)
 
 
 class CommonUserInterests(ContentRecSys):
@@ -237,19 +218,17 @@ class CommonUserInterests(ContentRecSys):
     Recommends posts that were interacted with by users who share interests with the agent.
     """
     
-    def __init__(self, n_posts=5, visibility_rounds=36, followers_ratio=0.6):
+    def __init__(self, n_posts=5, followers_ratio=0.6):
         """
         Initialize common user interests recommendation system.
         
         Args:
             n_posts (int, optional): Number of posts to recommend. Defaults to 5.
-            visibility_rounds (int, optional): Number of time slots posts remain visible.
-                                               Defaults to 36.
             followers_ratio (float, optional): Proportion of posts from followed users.
                                               Defaults to 0.6.
         """
         super().__init__(mode="common_user_interests", n_posts=n_posts,
-                        visibility_rounds=visibility_rounds, followers_ratio=followers_ratio)
+                        followers_ratio=followers_ratio)
 
 
 class SimilarUsersReact(ContentRecSys):
@@ -259,16 +238,14 @@ class SimilarUsersReact(ContentRecSys):
     Recommends posts that similar users (based on demographics/personality) have liked.
     """
     
-    def __init__(self, n_posts=5, visibility_rounds=36):
+    def __init__(self, n_posts=5):
         """
         Initialize similar users reactions recommendation system.
         
         Args:
             n_posts (int, optional): Number of posts to recommend. Defaults to 5.
-            visibility_rounds (int, optional): Number of time slots posts remain visible.
-                                               Defaults to 36.
         """
-        super().__init__(mode="similar_users_react", n_posts=n_posts, visibility_rounds=visibility_rounds)
+        super().__init__(mode="similar_users_react", n_posts=n_posts)
 
 
 class SimilarUsersPosts(ContentRecSys):
@@ -278,13 +255,11 @@ class SimilarUsersPosts(ContentRecSys):
     Recommends posts created by users similar to the agent (based on demographics/personality).
     """
     
-    def __init__(self, n_posts=5, visibility_rounds=36):
+    def __init__(self, n_posts=5):
         """
         Initialize similar users posts recommendation system.
         
         Args:
             n_posts (int, optional): Number of posts to recommend. Defaults to 5.
-            visibility_rounds (int, optional): Number of time slots posts remain visible.
-                                               Defaults to 36.
         """
-        super().__init__(mode="similar_users_posts", n_posts=n_posts, visibility_rounds=visibility_rounds)
+        super().__init__(mode="similar_users_posts", n_posts=n_posts)
