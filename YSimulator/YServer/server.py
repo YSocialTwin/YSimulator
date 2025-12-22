@@ -292,49 +292,14 @@ class OrchestratorServer:
             f"Interest recomputation complete: {agents_with_interests} agents have interests, {total_topics} total topics"
         )
     
-    def _save_updated_agent_population(self):
+    def get_updated_agent_interests(self) -> Dict[str, Dict[str, list]]:
         """
-        Save updated agent interests to agent_population.json at end of day.
+        Get the current agent interests dictionary for clients to save.
+        
+        Returns:
+            Dict: agent_interests dictionary with format {agent_id: {"topics": [...], "counts": [...]}}
         """
-        # Find the agent_population.json file in the config path
-        agent_pop_file = self.config_path / "agent_population.json"
-        
-        if not agent_pop_file.exists():
-            self.logger.warning(
-                f"agent_population.json not found at {agent_pop_file}, skipping interests update"
-            )
-            return
-        
-        try:
-            # Load current agent_population.json
-            with open(agent_pop_file, 'r') as f:
-                agent_data = json.load(f)
-            
-            # Update interests for each agent
-            if "agents" in agent_data:
-                for agent in agent_data["agents"]:
-                    agent_id = agent.get("id")
-                    if agent_id and str(agent_id) in self.agent_interests:
-                        interests_data = self.agent_interests[str(agent_id)]
-                        # Update the interests field with current topics and counts
-                        agent["interests"] = [
-                            interests_data["topics"],
-                            interests_data["counts"]
-                        ]
-            
-            # Write updated data back to file
-            with open(agent_pop_file, 'w') as f:
-                json.dump(agent_data, f, indent=2)
-            
-            self.logger.info(
-                f"Updated agent_population.json with current interests for {len(self.agent_interests)} agents"
-            )
-            
-        except Exception as e:
-            self.logger.error(
-                f"Error updating agent_population.json: {e}",
-                extra={"extra_data": {"error": str(e)}}
-            )
+        return dict(self.agent_interests)
 
     def register_agents(self, agents: list) -> dict:
         """
@@ -1192,8 +1157,8 @@ class OrchestratorServer:
                 # This handles the forgetting mechanism - interests decay as entries fall out of window
                 self._recompute_all_agent_interests()
                 
-                # Save updated agent interests to agent_population.json
-                self._save_updated_agent_population()
+                # Note: Saving updated agent_population.json is handled by clients,
+                # not the server, to respect client-specific naming conventions
                 
                 # Clean up old posts from Redis based on visibility_rounds (temporal sliding window)
                 cleanup_result = self.db.cleanup_old_posts_from_redis(self.day, self.slot)

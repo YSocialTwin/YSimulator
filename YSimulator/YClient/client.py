@@ -100,6 +100,7 @@ class SimulationClient:
         config_path: str = ".",
         parent_logger=None,
         news_service_handle=None,
+        agent_config_file: str = None,
     ):
         """
         Initialize the simulation client.
@@ -112,11 +113,13 @@ class SimulationClient:
             config_path: Path to configuration directory for logs
             parent_logger: Parent logger (not used in Ray actor, we create our own)
             news_service_handle: Ray actor handle for NewsFeedService (optional)
+            agent_config_file: Path to agent_population.json file (for saving updates)
         """
         self.client_id = client_id
         self.llm = llm_handle
         self.news_service = news_service_handle
         self.config_path = Path(config_path)
+        self.agent_config_file = Path(agent_config_file) if agent_config_file else None
 
         # Load simulation configuration with defaults
         if simulation_config is None:
@@ -782,6 +785,19 @@ class SimulationClient:
                     # Reset for next day
                     active_agents_today = set()
                     current_day = instruction.day
+                
+                # At end of day, save updated agent interests from server
+                if is_last_slot or day_changed:
+                    try:
+                        # Get updated interests from server
+                        updated_interests = ray.get(self.server.get_updated_agent_interests.remote())
+                        if updated_interests:
+                            self._save_updated_agent_population(updated_interests)
+                    except Exception as e:
+                        self.logger.error(
+                            f"Error saving updated agent interests: {e}",
+                            extra={"extra_data": {"error": str(e)}}
+                        )
 
                 # Submit
                 submit_start = time.time()
@@ -943,6 +959,51 @@ class SimulationClient:
             "toxicity": agent.toxicity if agent.toxicity and agent.toxicity != "" else "no",
             "topic": selected_topic  # Include the sampled topic
         }
+    
+    def _save_updated_agent_population(self, updated_interests: dict):
+        """
+        Save updated agent interests to agent_population.json at end of day.
+        Respects client-specific naming convention (e.g., client_1_agent_population.json).
+        
+        Args:
+            updated_interests: Dict of {agent_id: {"topics": [...], "counts": [...]}}
+        """
+        if not self.agent_config_file or not self.agent_config_file.exists():
+            self.logger.warning(
+                f"Agent config file not found, skipping interests update"
+            )
+            return
+        
+        try:
+            # Load current agent_population.json
+            with open(self.agent_config_file, 'r') as f:
+                agent_data = json.load(f)
+            
+            # Update interests for each agent
+            if "agents" in agent_data:
+                for agent in agent_data["agents"]:
+                    agent_id = agent.get("id")
+                    if agent_id and str(agent_id) in updated_interests:
+                        interests_data = updated_interests[str(agent_id)]
+                        # Update the interests field with current topics and counts
+                        agent["interests"] = [
+                            interests_data["topics"],
+                            interests_data["counts"]
+                        ]
+            
+            # Write updated data back to file
+            with open(self.agent_config_file, 'w') as f:
+                json.dump(agent_data, f, indent=2)
+            
+            self.logger.info(
+                f"Updated {self.agent_config_file.name} with current interests for {len(updated_interests)} agents"
+            )
+            
+        except Exception as e:
+            self.logger.error(
+                f"Error updating agent population file: {e}",
+                extra={"extra_data": {"error": str(e), "file": str(self.agent_config_file)}}
+            )
     
     def _validate_and_extract_interests(self, interests):
         """
