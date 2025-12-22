@@ -375,6 +375,30 @@ class OrchestratorServer:
             # On error, assume network not loaded to be safe
             return False
 
+    def get_first_round_id(self) -> str:
+        """
+        Get the UUID of the first round (day 1, slot 1).
+        
+        This method retrieves or creates the first round entry in the database,
+        which is used as the Round reference for initial network edges loaded
+        from network.csv.
+        
+        Returns:
+            str: UUID of the first round (day 1, slot 1)
+        """
+        try:
+            # Get or create the first round (day 1, slot 1)
+            first_round_id = self.db.get_or_create_round(1, 1)
+            self.logger.info(f"Retrieved first round ID: {first_round_id}")
+            return first_round_id
+        except Exception as e:
+            self.logger.error(
+                f"Error getting first round ID: {e}",
+                extra={"extra_data": {"error": str(e)}}
+            )
+            # Return empty string as fallback (better than crashing)
+            return ""
+
     def check_follow_relationship(self, follower_id: str, user_id: str) -> bool:
         """
         Check if a follow relationship exists between two users.

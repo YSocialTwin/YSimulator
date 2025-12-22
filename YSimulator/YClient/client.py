@@ -580,14 +580,23 @@ class SimulationClient:
                     follower_id = username_to_id[follower_name]
                     user_id = username_to_id[user_name]
                     
+                    # Get first round UUID from server (for initial network setup)
+                    # We only need to fetch this once for all edges
+                    if follow_count == 0:
+                        try:
+                            first_round_id = ray.get(self.server.get_first_round_id.remote())
+                        except Exception as e:
+                            self.logger.error(f"Error getting first round ID: {e}")
+                            first_round_id = ""
+                    
                     # Create follow relationship via server
                     # We use the server's method to insert follow data
-                    # The round is set to None/empty for initial network setup
+                    # The round is set to first round UUID for initial network setup
                     follow_data = {
                         "follower_id": follower_id,
                         "user_id": user_id,
                         "action": "follow",
-                        "round": "",  # Empty round for initial network setup
+                        "round": first_round_id,  # First round UUID for initial network setup
                     }
                     
                     # Call server to add the follow relationship
@@ -1417,7 +1426,7 @@ class SimulationClient:
             # Initialize follow recsys
             frecsys = frecsys_class(
                 n_neighbors=10,  # Request top 10 suggestions
-                leaning_weight=0.0  # No political bias for daily follows
+                leaning_bias=1  # No political bias for daily follows (1 = neutral)
             )
             
             # Get follow suggestions from server
