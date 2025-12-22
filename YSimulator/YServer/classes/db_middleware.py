@@ -468,6 +468,134 @@ class DatabaseMiddleware:
             )
             return None
 
+    def get_thread_context(self, post_id: str, max_length: int = 5) -> List[Dict[str, Any]]:
+        """
+        Get thread context for a post - retrieve up to max_length posts/comments
+        that immediately precede the target post in the discussion thread.
+        
+        Returns posts in chronological order (oldest first) to allow the agent
+        to follow the discussion thread.
+        
+        Args:
+            post_id: Post UUID to get context for
+            max_length: Maximum number of preceding posts/comments to return
+            
+        Returns:
+            List of dicts with keys: id, user_id, username, tweet, round
+            in chronological order (oldest first)
+        """
+        try:
+            # First, get the target post to find its thread_id
+            target_post = self.get_post(post_id)
+            if not target_post:
+                return []
+            
+            thread_id = target_post.get("thread_id")
+            if not thread_id:
+                return []
+            
+            if self.use_redis:
+                # Redis implementation: get all posts in thread, filter and sort
+                thread_posts = []
+                
+                # Get all recent post IDs to check
+                all_post_ids = self.redis_client.lrange(
+                    self._redis_key("posts", "recent"), 0, -1
+                )
+                
+                for pid in all_post_ids:
+                    pid_str = pid.decode('utf-8') if isinstance(pid, bytes) else str(pid)
+                    if pid_str == post_id:
+                        continue  # Skip the target post itself
+                    
+                    key = self._redis_key("posts", pid_str)
+                    post_data = self.redis_client.hgetall(key)
+                    
+                    if not post_data:
+                        continue
+                    
+                    # Decode bytes to strings
+                    post_dict = {}
+                    for k, v in post_data.items():
+                        k_str = k.decode('utf-8') if isinstance(k, bytes) else k
+                        v_str = v.decode('utf-8') if isinstance(v, bytes) else v
+                        post_dict[k_str] = v_str
+                    
+                    # Check if this post is in the same thread
+                    if post_dict.get("thread_id") == thread_id:
+                        # Get username for this post
+                        user_id = post_dict.get("user_id")
+                        username = "Someone"
+                        if user_id:
+                            user_key = self._redis_key("users", user_id)
+                            user_data = self.redis_client.hgetall(user_key)
+                            if user_data:
+                                username_bytes = user_data.get(b"username") or user_data.get("username")
+                                if username_bytes:
+                                    username = username_bytes.decode('utf-8') if isinstance(username_bytes, bytes) else username_bytes
+                        
+                        thread_posts.append({
+                            "id": pid_str,
+                            "user_id": post_dict.get("user_id"),
+                            "username": username,
+                            "tweet": post_dict.get("tweet", ""),
+                            "round": post_dict.get("round")
+                        })
+                
+                # Sort by round chronologically (oldest first)
+                # Note: round is stored as string in Redis
+                thread_posts.sort(key=lambda x: x.get("round", ""))
+                
+                # Return up to max_length posts, ending just before target post
+                return thread_posts[-max_length:] if len(thread_posts) > max_length else thread_posts
+                
+            else:
+                # Database implementation using SQLAlchemy
+                session = Session(self.engine)
+                try:
+                    # Get all posts in the same thread except the target post
+                    query = session.query(
+                        Post.id,
+                        Post.user_id,
+                        User_mgmt.username,
+                        Post.tweet,
+                        Post.round
+                    ).join(
+                        User_mgmt, Post.user_id == User_mgmt.id
+                    ).join(
+                        Round, Post.round == Round.id
+                    ).filter(
+                        Post.thread_id == thread_id,
+                        Post.id != post_id
+                    ).order_by(
+                        Round.day.asc(),
+                        Round.hour.asc()
+                    ).all()
+                    
+                    thread_posts = [
+                        {
+                            "id": row[0],
+                            "user_id": row[1],
+                            "username": row[2] or "Someone",
+                            "tweet": row[3],
+                            "round": row[4]
+                        }
+                        for row in query
+                    ]
+                    
+                    # Return up to max_length posts (already in chronological order)
+                    return thread_posts[-max_length:] if len(thread_posts) > max_length else thread_posts
+                    
+                finally:
+                    session.close()
+                    
+        except Exception as e:
+            self.logger.error(
+                f"Error getting thread context: {e}",
+                extra={"extra_data": {"error": str(e), "post_id": post_id}}
+            )
+            return []
+
     def get_recent_posts(self, limit: int = 50) -> List[str]:
         """
         Get recent post IDs.

@@ -1582,6 +1582,24 @@ class OrchestratorServer:
         """
         return self.db.get_post(post_id)
 
+    def get_thread_context(self, post_id: str, max_length: int = 5) -> List[Dict[str, Any]]:
+        """
+        Get thread context for a post - retrieve up to max_length posts/comments
+        that immediately precede the target post in the discussion thread.
+        
+        Returns posts in chronological order (oldest first) to allow the agent
+        to follow the discussion thread.
+        
+        Args:
+            post_id: UUID of the post to get context for
+            max_length: Maximum number of preceding posts/comments to return
+            
+        Returns:
+            List of dicts with keys: id, user_id, username, tweet, round
+            in chronological order (oldest first)
+        """
+        return self.db.get_thread_context(post_id, max_length)
+
     def get_user(self, user_id: str) -> Optional[Dict[str, Any]]:
         """
         Get a user by their ID.
