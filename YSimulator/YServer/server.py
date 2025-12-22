@@ -18,7 +18,7 @@ import ray
 from sqlalchemy import text
 
 from YSimulator.YClient.classes.ray_models import SimulationInstruction
-from YSimulator.YServer.recsys import content_recsys_db
+from YSimulator.YServer.recsys import content_recsys_db, follow_recsys_db
 
 
 # Constants
@@ -2090,21 +2090,22 @@ class OrchestratorServer:
     ) -> List[str]:
         """
         Get follow suggestions using SQL queries for better scalability.
+        
+        Dispatcher method that delegates to modular functions in follow_recsys_db module.
         """
         try:
             from sqlalchemy.orm import Session
             from YSimulator.YServer.classes.models import User_mgmt, Follow
-            from sqlalchemy import func, and_, or_
+            from sqlalchemy import func, and_
             
             with Session(self.db.engine) as session:
-                # Get agent's info for leaning-based filtering
+                # Get agent's info
                 agent = session.query(User_mgmt).filter_by(id=agent_id).first()
                 if not agent:
                     self.logger.warning(f"Agent {agent_id} not found for follow suggestions")
                     return []
                 
                 # Get users that agent is currently following (with latest action = "follow")
-                # Subquery to get latest follow action per user pair
                 latest_follows_subq = session.query(
                     Follow.follower_id,
                     Follow.user_id,
@@ -2124,283 +2125,37 @@ class OrchestratorServer:
                 ).all()
                 following_ids = {f.user_id for f in following}
                 
-                # Get candidate users (not following, not self)
-                candidates_query = session.query(User_mgmt.id, User_mgmt.leaning).filter(
-                    User_mgmt.id != agent_id,
-                    User_mgmt.id.notin_(following_ids) if following_ids else True
-                )
-                
+                # Dispatch to appropriate recommendation function
                 if mode == "random":
-                    # Random selection from candidates
-                    candidates = candidates_query.all()
-                    if not candidates:
-                        return []
-                    
-                    candidate_ids = [c.id for c in candidates]
-                    random.shuffle(candidate_ids)
-                    suggestions = candidate_ids[:n_neighbors]
-                    
+                    suggestions = follow_recsys_db.recommend_random_follows(
+                        session, agent_id, following_ids, n_neighbors
+                    )
                 elif mode == "common_neighbors":
-                    # Find users with most mutual connections (friend-of-friend)
-                    # Users that agent's friends also follow
-                    if not following_ids:
-                        # No one to compute common neighbors with, fallback to random
-                        candidates = candidates_query.all()
-                        candidate_ids = [c.id for c in candidates]
-                        random.shuffle(candidate_ids)
-                        return candidate_ids[:n_neighbors]
-                    
-                    # SQL query to count common neighbors
-                    common_neighbors = text("""
-                        SELECT f2.user_id, COUNT(DISTINCT f2.follower_id) as common_count
-                        FROM follow f1
-                        JOIN follow f2 ON f1.user_id = f2.follower_id
-                        WHERE f1.follower_id = :agent_id
-                          AND f1.action = 'follow'
-                          AND f2.action = 'follow'
-                          AND f2.user_id != :agent_id
-                          AND f2.user_id NOT IN :following_ids
-                        GROUP BY f2.user_id
-                        ORDER BY common_count DESC
-                        LIMIT :limit
-                    """)
-                    
-                    # Handle empty following_ids case for SQL
-                    following_list = list(following_ids) if following_ids else [agent_id]
-                    
-                    result = session.execute(
-                        common_neighbors,
-                        {
-                            "agent_id": agent_id,
-                            "following_ids": tuple(following_list),
-                            "limit": n_neighbors
-                        }
+                    suggestions = follow_recsys_db.recommend_common_neighbors(
+                        session, agent_id, following_ids, n_neighbors
                     )
-                    suggestions = [row[0] for row in result]
-                    
-                    # If not enough suggestions, add random ones
-                    if len(suggestions) < n_neighbors:
-                        remaining = n_neighbors - len(suggestions)
-                        extra_candidates = candidates_query.filter(
-                            User_mgmt.id.notin_(suggestions) if suggestions else True
-                        ).limit(remaining * 2).all()
-                        extra_ids = [c.id for c in extra_candidates]
-                        random.shuffle(extra_ids)
-                        suggestions.extend(extra_ids[:remaining])
-                    
                 elif mode == "jaccard":
-                    # Jaccard similarity: intersection over union of follow sets
-                    if not following_ids:
-                        # No one to compute similarity with, fallback to random
-                        candidates = candidates_query.all()
-                        candidate_ids = [c.id for c in candidates]
-                        random.shuffle(candidate_ids)
-                        return candidate_ids[:n_neighbors]
-                    
-                    # This is complex in pure SQL, use a simplified approach:
-                    # Score by common neighbors normalized by total unique neighbors
-                    jaccard_query = text("""
-                        SELECT 
-                            candidate_id,
-                            CAST(common_count AS FLOAT) / NULLIF(union_count, 0) as jaccard_score
-                        FROM (
-                            SELECT 
-                                f2.user_id as candidate_id,
-                                COUNT(DISTINCT CASE WHEN f1.user_id = f2.follower_id THEN f1.user_id END) as common_count,
-                                COUNT(DISTINCT f1.user_id) + COUNT(DISTINCT f3.user_id) as union_count
-                            FROM follow f1
-                            CROSS JOIN follow f2
-                            LEFT JOIN follow f3 ON f2.user_id = f3.follower_id AND f3.action = 'follow'
-                            WHERE f1.follower_id = :agent_id
-                              AND f1.action = 'follow'
-                              AND f2.action = 'follow'
-                              AND f2.user_id != :agent_id
-                              AND f2.user_id NOT IN :following_ids
-                            GROUP BY f2.user_id
-                        ) subq
-                        ORDER BY jaccard_score DESC
-                        LIMIT :limit
-                    """)
-                    
-                    following_list = list(following_ids) if following_ids else [agent_id]
-                    result = session.execute(
-                        jaccard_query,
-                        {
-                            "agent_id": agent_id,
-                            "following_ids": tuple(following_list),
-                            "limit": n_neighbors
-                        }
+                    suggestions = follow_recsys_db.recommend_jaccard(
+                        session, agent_id, following_ids, n_neighbors
                     )
-                    suggestions = [row[0] for row in result]
-                    
-                    # Fill with random if needed
-                    if len(suggestions) < n_neighbors:
-                        remaining = n_neighbors - len(suggestions)
-                        extra_candidates = candidates_query.filter(
-                            User_mgmt.id.notin_(suggestions) if suggestions else True
-                        ).limit(remaining * 2).all()
-                        extra_ids = [c.id for c in extra_candidates]
-                        random.shuffle(extra_ids)
-                        suggestions.extend(extra_ids[:remaining])
-                    
                 elif mode == "adamic_adar":
-                    # Adamic/Adar: sum of 1/log(degree) for common neighbors
-                    # Two-step approach: 1) Find common neighbors, 2) Calculate Adamic/Adar scores
-                    if not following_ids:
-                        candidates = candidates_query.all()
-                        candidate_ids = [c.id for c in candidates]
-                        random.shuffle(candidate_ids)
-                        return candidate_ids[:n_neighbors]
-                    
-                    # Step 1: Get common neighbors (friend-of-friend) candidates
-                    common_neighbors_query = text("""
-                        SELECT f2.user_id, f2.follower_id as common_neighbor
-                        FROM follow f1
-                        JOIN follow f2 ON f1.user_id = f2.follower_id
-                        WHERE f1.follower_id = :agent_id
-                          AND f1.action = 'follow'
-                          AND f2.action = 'follow'
-                          AND f2.user_id != :agent_id
-                          AND f2.user_id NOT IN :following_ids
-                    """)
-                    
-                    following_list = list(following_ids) if following_ids else [agent_id]
-                    result = session.execute(
-                        common_neighbors_query,
-                        {
-                            "agent_id": agent_id,
-                            "following_ids": tuple(following_list)
-                        }
+                    suggestions = follow_recsys_db.recommend_adamic_adar(
+                        session, agent_id, following_ids, n_neighbors
                     )
-                    
-                    # Build mapping of candidate -> list of common neighbors
-                    candidate_common_neighbors = {}
-                    for row in result:
-                        candidate_id, common_neighbor = row
-                        if candidate_id not in candidate_common_neighbors:
-                            candidate_common_neighbors[candidate_id] = []
-                        candidate_common_neighbors[candidate_id].append(common_neighbor)
-                    
-                    if not candidate_common_neighbors:
-                        # No common neighbors found, fallback to random
-                        candidates = candidates_query.all()
-                        candidate_ids = [c.id for c in candidates]
-                        random.shuffle(candidate_ids)
-                        return candidate_ids[:n_neighbors]
-                    
-                    # Step 2: Calculate Adamic/Adar score for each candidate
-                    # For each common neighbor, get their degree (out-degree = users they follow)
-                    common_neighbor_ids = set()
-                    for neighbors in candidate_common_neighbors.values():
-                        common_neighbor_ids.update(neighbors)
-                    
-                    # Query to get degree for each common neighbor
-                    degree_query = text("""
-                        SELECT follower_id, COUNT(*) as out_degree
-                        FROM follow
-                        WHERE follower_id IN :neighbor_ids
-                          AND action = 'follow'
-                        GROUP BY follower_id
-                    """)
-                    
-                    degree_result = session.execute(
-                        degree_query,
-                        {"neighbor_ids": tuple(common_neighbor_ids)}
-                    )
-                    
-                    # Build degree map
-                    neighbor_degrees = {row[0]: row[1] for row in degree_result}
-                    
-                    # Calculate Adamic/Adar score for each candidate
-                    import math
-                    adamic_adar_scores = {}
-                    for candidate_id, neighbors in candidate_common_neighbors.items():
-                        score = 0.0
-                        for neighbor in neighbors:
-                            degree = neighbor_degrees.get(neighbor, 1)  # Default to 1 to avoid division by zero
-                            if degree > 1:  # Only count if degree > 1 (log(1) = 0)
-                                score += 1.0 / math.log(degree)
-                        adamic_adar_scores[candidate_id] = score
-                    
-                    # Sort by Adamic/Adar score (highest first)
-                    sorted_candidates = sorted(adamic_adar_scores.items(), key=lambda x: x[1], reverse=True)
-                    suggestions = [uid for uid, score in sorted_candidates[:n_neighbors]]
-                    
-                    # Fill with random if needed
-                    if len(suggestions) < n_neighbors:
-                        remaining = n_neighbors - len(suggestions)
-                        extra_candidates = candidates_query.filter(
-                            User_mgmt.id.notin_(suggestions) if suggestions else True
-                        ).limit(remaining * 2).all()
-                        extra_ids = [c.id for c in extra_candidates]
-                        random.shuffle(extra_ids)
-                        suggestions.extend(extra_ids[:remaining])
-                    
                 elif mode == "preferential_attachment":
-                    # Prefer users with many followers (popularity-based)
-                    popular_users = text("""
-                        SELECT f.user_id, COUNT(*) as follower_count
-                        FROM follow f
-                        WHERE f.action = 'follow'
-                          AND f.user_id != :agent_id
-                          AND f.user_id NOT IN :following_ids
-                        GROUP BY f.user_id
-                        ORDER BY follower_count DESC
-                        LIMIT :limit
-                    """)
-                    
-                    following_list = list(following_ids) if following_ids else [agent_id]
-                    result = session.execute(
-                        popular_users,
-                        {
-                            "agent_id": agent_id,
-                            "following_ids": tuple(following_list),
-                            "limit": n_neighbors
-                        }
+                    suggestions = follow_recsys_db.recommend_preferential_attachment(
+                        session, agent_id, following_ids, n_neighbors
                     )
-                    suggestions = [row[0] for row in result]
-                    
-                    if len(suggestions) < n_neighbors:
-                        remaining = n_neighbors - len(suggestions)
-                        extra_candidates = candidates_query.filter(
-                            User_mgmt.id.notin_(suggestions) if suggestions else True
-                        ).limit(remaining * 2).all()
-                        extra_ids = [c.id for c in extra_candidates]
-                        random.shuffle(extra_ids)
-                        suggestions.extend(extra_ids[:remaining])
-                    
                 else:
                     # Unknown mode, fallback to random
-                    candidates = candidates_query.all()
-                    candidate_ids = [c.id for c in candidates]
-                    random.shuffle(candidate_ids)
-                    suggestions = candidate_ids[:n_neighbors]
+                    suggestions = follow_recsys_db.recommend_random_follows(
+                        session, agent_id, following_ids, n_neighbors
+                    )
                 
-                # Apply leaning bias if > 1
-                if leaning_bias > 1 and suggestions:
-                    # Get leaning info for suggestions
-                    user_leanings = session.query(User_mgmt.id, User_mgmt.leaning).filter(
-                        User_mgmt.id.in_(suggestions)
-                    ).all()
-                    leaning_map = {u.id: u.leaning for u in user_leanings}
-                    agent_leaning = agent.leaning
-                    
-                    if agent_leaning:
-                        # Score candidates by leaning match
-                        leaning_scores = {}
-                        for candidate in suggestions:
-                            if leaning_map.get(candidate) == agent_leaning:
-                                leaning_scores[candidate] = leaning_bias
-                            else:
-                                leaning_scores[candidate] = 1
-                        
-                        # Weighted random selection
-                        weighted_suggestions = random.choices(
-                            list(leaning_scores.keys()),
-                            weights=list(leaning_scores.values()),
-                            k=min(n_neighbors, len(leaning_scores))
-                        )
-                        suggestions = weighted_suggestions
+                # Apply leaning bias if requested
+                suggestions = follow_recsys_db.apply_leaning_bias(
+                    session, agent_id, suggestions, leaning_bias, n_neighbors
+                )
                 
                 return suggestions[:n_neighbors]
                 
@@ -2411,6 +2166,8 @@ class OrchestratorServer:
             )
             # Fallback to simple random
             try:
+                from sqlalchemy.orm import Session
+                from YSimulator.YServer.classes.models import User_mgmt
                 with Session(self.db.engine) as session:
                     candidates = session.query(User_mgmt.id).filter(
                         User_mgmt.id != agent_id
