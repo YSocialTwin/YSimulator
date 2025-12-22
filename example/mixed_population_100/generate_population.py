@@ -1,0 +1,346 @@
+#!/usr/bin/env python3
+"""
+Generate a mixed population of 100 regular agents (50 rule-based, 50 LLM) and 1 page agent
+with an initial random social network (total: 101 agents).
+"""
+
+import json
+import random
+import uuid
+
+# Set seed for reproducibility
+random.seed(42)
+
+def generate_agent_population():
+    """Generate 50 rule-based agents, 50 LLM agents, and 1 page agent."""
+    agents = []
+    
+    # 1 Page agent (always LLM-enabled)
+    page_agent = {
+        "id": str(uuid.uuid5(uuid.NAMESPACE_DNS, "NewsPage")),
+        "username": "NewsPage",
+        "email": "news@pages.local",
+        "leaning": "neutral",
+        "user_type": "page",
+        "age": 0,
+        "language": "en",
+        "education_level": "graduate",
+        "gender": "other",
+        "nationality": "US",
+        "profession": "News Publisher",
+        "activity_profile": "Always On",
+        "archetype": None,
+        "cluster": 0,
+        "llm": True,
+        "toxicity": "no",
+        "daily_activity_level": 4,
+        "round_actions": 6,
+        "is_page": 1,
+        "feed_url": "https://techcrunch.com/feed/",
+        "recsys_type": "random",
+        "frecsys_type": "random"
+    }
+    agents.append(page_agent)
+    
+    # Archetypes distribution
+    archetypes = ["validator", "broadcaster", "explorer"]
+    
+    # Political leanings
+    leanings = ["left", "center", "right", "neutral"]
+    
+    # Activity profiles
+    activity_profiles = ["Always On", "Morning Active", "Evening Active"]
+    
+    # Recommendation systems
+    recsys_types = ["random", "rchrono", "rchrono_followers"]
+    frecsys_types = ["random", "common_neighbors", "jaccard", "adamic_adar", "preferential_attachment"]
+    
+    # Generate 100 regular agents
+    for i in range(100):
+        # First 50 are rule-based, next 50 are LLM
+        is_llm = i >= 50
+        
+        username = f"agent_{i:03d}"
+        agent_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, username))
+        
+        # Distribute across archetypes evenly
+        archetype = archetypes[i % 3]
+        cluster = i % 3
+        
+        # Random attributes
+        age = random.randint(18, 65)
+        leaning = random.choice(leanings)
+        activity_profile = random.choice(activity_profiles)
+        daily_activity_level = random.randint(1, 3)
+        round_actions = random.randint(2, 5)
+        
+        agent = {
+            "id": agent_id,
+            "username": username,
+            "email": f"{username}@simulation.local",
+            "leaning": leaning,
+            "user_type": "agent",
+            "age": age,
+            "language": "en",
+            "education_level": random.choice(["high_school", "college", "graduate"]),
+            "gender": random.choice(["male", "female", "other"]),
+            "nationality": random.choice(["US", "UK", "CA", "AU"]),
+            "profession": random.choice(["Engineer", "Teacher", "Doctor", "Artist", "Student"]),
+            "activity_profile": activity_profile,
+            "archetype": archetype,
+            "cluster": cluster,
+            "llm": is_llm,
+            "toxicity": "no",
+            "daily_activity_level": daily_activity_level,
+            "round_actions": round_actions,
+            "is_page": 0,
+            "recsys_type": random.choice(recsys_types),
+            "frecsys_type": random.choice(frecsys_types)
+        }
+        agents.append(agent)
+    
+    return {
+        "agents": agents,
+        "generation_config": {
+            "num_additional_agents": 0,
+            "cluster_distribution": {
+                "weights": [0.33, 0.33, 0.34]
+            },
+            "llm_enabled_probability": 0.5,
+            "age_range": [18, 65],
+            "default_settings": {
+                "leaning": "neutral",
+                "user_type": "agent",
+                "language": "en",
+                "toxicity": "no",
+                "password": "simulation_agent",
+                "education_level": "college",
+                "round_actions": 3,
+                "is_page": 0,
+                "recsys_type": "random",
+                "frecsys_type": "random"
+            }
+        }
+    }
+
+def generate_random_network(agents, avg_degree=10):
+    """
+    Generate a random social network with approximately avg_degree connections per node.
+    Uses Erdős–Rényi random graph model.
+    """
+    edges = []
+    usernames = [agent["username"] for agent in agents]
+    n = len(usernames)
+    
+    # Calculate probability for desired average degree
+    # avg_degree ≈ p * (n - 1), so p = avg_degree / (n - 1)
+    p = avg_degree / (n - 1) if n > 1 else 0
+    
+    # Generate edges
+    for i, follower in enumerate(usernames):
+        for j, followee in enumerate(usernames):
+            if i != j and random.random() < p:
+                edges.append((follower, followee))
+    
+    return edges
+
+def write_network_csv(edges, filepath):
+    """Write network edges to CSV file."""
+    with open(filepath, 'w') as f:
+        for follower, followee in edges:
+            f.write(f"{follower},{followee}\n")
+
+def generate_simulation_config():
+    """Generate simulation configuration."""
+    return {
+        "client_name": "client_1",
+        "namespace": "social_sim",
+        "server": {
+            "address": None,
+            "port": None
+        },
+        "llm": {
+            "address": "localhost",
+            "port": 11434,
+            "model": "llama3.2",
+            "temperature": 0.9,
+            "llm_api_key": "NULL",
+            "llm_max_tokens": -1
+        },
+        "llm_v": {
+            "address": "localhost",
+            "port": 11434,
+            "model": "minicpm-v",
+            "temperature": 0.5,
+            "llm_api_key": "NULL",
+            "llm_max_tokens": 300
+        },
+        "simulation": {
+            "num_days": 3,
+            "num_slots_per_day": 24,
+            "heartbeat_interval": 5,
+            "note": "num_days=0 means infinite simulation",
+            "percentage_new_agents_iteration": 0.0,
+            "percentage_removed_agents_iteration": 0.0,
+            "activity_profiles": {
+                "Always On": "0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23",
+                "Morning Active": "6,7,8,9,10,11,12",
+                "Evening Active": "17,18,19,20,21,22,23"
+            },
+            "hourly_activity": {
+                "0": 0.023, "1": 0.021, "2": 0.02, "3": 0.02, "4": 0.018, "5": 0.017,
+                "6": 0.017, "7": 0.018, "8": 0.02, "9": 0.02, "10": 0.021, "11": 0.022,
+                "12": 0.024, "13": 0.027, "14": 0.03, "15": 0.032, "16": 0.032, "17": 0.032,
+                "18": 0.032, "19": 0.031, "20": 0.03, "21": 0.029, "22": 0.027, "23": 0.025
+            },
+            "actions_likelihood": {
+                "post": 3.0,
+                "image": 0.0,
+                "news": 0.0,
+                "comment": 5.0,
+                "read": 2.0,
+                "share": 1.0,
+                "search": 5.0,
+                "cast": 0.0,
+                "share_link": 0,
+                "follow": 0.5
+            },
+            "agent_archetypes": {
+                "enabled": True,
+                "distribution": {
+                    "validator": 0.33,
+                    "broadcaster": 0.33,
+                    "explorer": 0.34
+                }
+            },
+            "emotion_annotation": False
+        },
+        "posts": {
+            "visibility_rounds": 36,
+            "emotions": {}
+        },
+        "agents": {
+            "reading_from_follower_ratio": 0.6,
+            "max_length_thread_reading": 5,
+            "attention_window": 336,
+            "probability_of_daily_follow": 0.15,
+            "probability_of_secondary_follow": 0.1
+        }
+    }
+
+def generate_llm_prompts():
+    """Generate LLM prompts configuration."""
+    return {
+        "personas": {
+            "0": "You are a 'Validator'. You are skeptical, brief, and value authenticity. You fact-check and question claims.",
+            "1": "You are a 'Broadcaster'. You are high energy, viral-focused, and sometimes controversial. You love engagement and sharing.",
+            "2": "You are an 'Explorer'. You are curious, always asking questions, and eager to learn new perspectives."
+        },
+        "generate_post": {
+            "system_template": "{persona}",
+            "user_template": "Write a social media post for Day {day} Slot {slot}. Keep it under 280 characters. Be authentic to your persona."
+        },
+        "decide_reaction": {
+            "system_template": "You are user archetype {cluster_id}. {persona} Read the following post and decide how to react. Reply with ONLY ONE of these exact words: 'LIKE', 'COMMENT', or 'IGNORE'.",
+            "user_template": "Post: {post_content}"
+        },
+        "generate_comment": {
+            "system_template": "{persona}",
+            "user_template": "Write a comment on this post. Keep it under 200 characters. Be authentic to your persona.\n\nPost: {post_content}"
+        },
+        "decide_follow": {
+            "system_template": "{persona}",
+            "user_template": "Should you follow user @{target_username}? They are a {target_archetype}. Reply with ONLY 'YES' or 'NO'."
+        },
+        "decide_secondary_follow": {
+            "system_template": "{persona}",
+            "user_template": "You just interacted with this post: {post_content}\n\nShould you follow the author @{author_username}? Reply with ONLY 'FOLLOW', 'UNFOLLOW', or 'NOCHANGE'."
+        }
+    }
+
+def generate_server_config():
+    """Generate server configuration."""
+    return {
+        "ray": {
+            "address": "auto",
+            "namespace": "social_sim"
+        },
+        "database": {
+            "type": "sqlite",
+            "path": "./simulation.db",
+            "echo": False
+        },
+        "redis": {
+            "enabled": True,
+            "host": "localhost",
+            "port": 6379,
+            "db": 0
+        },
+        "api": {
+            "host": "0.0.0.0",
+            "port": 8000
+        },
+        "logging": {
+            "level": "INFO",
+            "format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+        }
+    }
+
+def main():
+    """Generate all configuration files."""
+    import os
+    
+    output_dir = os.path.dirname(os.path.abspath(__file__))
+    
+    print("Generating agent population...")
+    agent_data = generate_agent_population()
+    
+    with open(os.path.join(output_dir, "agent_population.json"), 'w') as f:
+        json.dump(agent_data, f, indent=2)
+    print(f"✓ Created agent_population.json with {len(agent_data['agents'])} agents")
+    print(f"  - 1 page agent (LLM-enabled)")
+    print(f"  - 50 rule-based agents")
+    print(f"  - 50 LLM-enabled agents")
+    
+    print("\nGenerating random social network...")
+    edges = generate_random_network(agent_data['agents'], avg_degree=10)
+    network_path = os.path.join(output_dir, "network.csv")
+    write_network_csv(edges, network_path)
+    print(f"✓ Created network.csv with {len(edges)} follow relationships")
+    print(f"  - Average degree: ~{len(edges) / len(agent_data['agents']):.1f} connections per agent")
+    
+    print("\nGenerating simulation configuration...")
+    sim_config = generate_simulation_config()
+    with open(os.path.join(output_dir, "simulation_config.json"), 'w') as f:
+        json.dump(sim_config, f, indent=2)
+    print("✓ Created simulation_config.json")
+    
+    print("\nGenerating LLM prompts...")
+    llm_prompts = generate_llm_prompts()
+    with open(os.path.join(output_dir, "llm_prompts.json"), 'w') as f:
+        json.dump(llm_prompts, f, indent=2)
+    print("✓ Created llm_prompts.json")
+    
+    print("\nGenerating server configuration...")
+    server_config = generate_server_config()
+    with open(os.path.join(output_dir, "server_config.json"), 'w') as f:
+        json.dump(server_config, f, indent=2)
+    print("✓ Created server_config.json")
+    
+    print("\n" + "="*60)
+    print("Configuration generation complete!")
+    print("="*60)
+    print("\nTo use this configuration:")
+    print(f"1. Copy files from {output_dir}")
+    print("2. Start server: python run_server.py --config path/to/server_config.json")
+    print("3. Start client: python run_client.py --config path/to/simulation_config.json")
+    print("\nFeatures enabled:")
+    print("  - Initial random network with ~10 connections per agent")
+    print("  - Mixed population (50% rule-based, 50% LLM agents)")
+    print("  - Multiple recommendation strategies (content & follow)")
+    print("  - Daily follow evaluation (15% probability)")
+    print("  - Secondary follow after interactions (10% probability)")
+    print("  - 3 agent archetypes: Validator, Broadcaster, Explorer")
+
+if __name__ == "__main__":
+    main()

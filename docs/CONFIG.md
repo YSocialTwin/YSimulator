@@ -43,18 +43,162 @@ All configuration files, database, and logs are kept in the same directory:
 
 ```
 config_directory/
-├── server_config.json          # Server configuration
-├── simulation_config.json      # Client simulation configuration
-├── agent_population.json       # Agent profiles
-├── llm_prompts.json           # LLM prompts and personas
-├── simulation.db              # Database (auto-created)
-├── ray_config.temp            # Ray address (auto-created)
-└── logs/                      # Log files (auto-created)
+├── server_config.json                    # Server configuration
+├── simulation_config.json                # Client simulation configuration
+├── agent_population.json                 # Agent profiles (generic)
+├── {client_name}_agent_population.json   # Client-specific agent profiles (optional)
+├── llm_prompts.json                      # LLM prompts and personas (generic)
+├── {client_name}_llm_prompts.json        # Client-specific LLM prompts (optional)
+├── network.csv                           # Social network topology (generic, optional)
+├── {client_name}_network.csv             # Client-specific network (optional)
+├── simulation.db                         # Database (auto-created)
+├── ray_config.temp                       # Ray address (auto-created)
+└── logs/                                 # Log files (auto-created)
     ├── {server_name}_server.log
     ├── {server_name}_actor.log
     ├── {client_name}_client.log
     └── {client_name}_actor.log
 ```
+
+## Client-Specific Configuration
+
+Clients can use client-specific configuration files by prefixing the file name with `{client_name}_`. The client name is defined in `simulation_config.json` under the `client_name` field.
+
+When a client starts, it will:
+1. Load `simulation_config.json` to get the client name
+2. Look for `{client_name}_agent_population.json`, `{client_name}_llm_prompts.json`, and `{client_name}_network.csv`
+3. Fall back to generic files (`agent_population.json`, `llm_prompts.json`, `network.csv`) if client-specific files don't exist
+
+This allows multiple clients to run with different configurations in multi-client scenarios.
+
+**Example:**
+
+For a client named "client_1":
+- `client_1_agent_population.json` - Client-specific agent profiles
+- `client_1_llm_prompts.json` - Client-specific LLM prompts
+- `client_1_network.csv` - Client-specific social network
+
+If these files don't exist, the client will use the generic files.
+
+## Dynamic Social Network Features
+
+YSimulator includes advanced social network features that allow agents to form and break relationships during simulation:
+
+### 1. Dynamic Follow Actions
+
+Agents can discover and follow other users during simulation using recommendation algorithms. This is configured per-agent using the `frecsys_type` field in agent profiles.
+
+**Available Recommendation Strategies:**
+
+- `random`: Random user selection from non-following users
+- `common_neighbors`: Friend-of-friend recommendations (users with mutual connections)
+- `jaccard`: Jaccard similarity of follow sets
+- `adamic_adar`: Adamic/Adar index scoring (weighted by common neighbor connectivity)
+- `preferential_attachment`: Popular users with many followers (rich-get-richer)
+
+**Implementation Details:**
+
+- Server uses efficient query-based approaches (no in-memory graph construction)
+- SQL backend: JOIN queries, subqueries, and aggregations
+- Redis backend: Key-value operations with minimal iterations
+- Supports political leaning bias for homophily
+- Follow action available to Explorer archetype by default
+
+**Agent Configuration:**
+
+In `agent_population.json`, specify the follow recommendation strategy:
+
+```json
+{
+  "id": 1,
+  "username": "explorer_001",
+  "archetype": "Explorer",
+  "frecsys_type": "common_neighbors"
+}
+```
+
+If not specified, defaults to `"random"`.
+
+### 2. Daily Follow Evaluation
+
+At the end of each simulation day, agents that were active during the day can establish new follow relationships. This is controlled by the `probability_of_daily_follow` configuration parameter.
+
+**Configuration:**
+
+In `simulation_config.json`, add under the `agents` section:
+
+```json
+{
+  "agents": {
+    "probability_of_daily_follow": 0.1
+  }
+}
+```
+
+**Behavior:**
+
+At the end of each day (last time slot), for each agent that was active during the day:
+
+- With probability `daily_follow`, the agent evaluates new follow candidates
+- Uses the agent's `frecsys_type` recommendation strategy to get top-10 suggestions
+- Randomly selects one candidate from suggestions to follow
+- Creates a FOLLOW action in the Follow table
+
+**Implementation:**
+
+- Tracks all agents active during each simulation day
+- Evaluates daily follows at transition to next day (slot 23 → day+1)
+- Uses agent-specific follow recommendation strategies
+- No political leaning bias applied (neutral selection)
+- Independent of other follow mechanisms (action-based, secondary)
+
+**Use Cases:**
+
+- Model gradual network growth over time
+- Simulate daily social discovery behaviors
+- Create realistic follow patterns independent of content
+- Study long-term network evolution
+
+### 3. Secondary Follow Behavior
+
+After reading or commenting on posts, agents can establish or break social ties with content authors. This is controlled by the `probability_of_secondary_follow` configuration parameter.
+
+**Configuration:**
+
+In `simulation_config.json`, add under the `agents` section:
+
+```json
+{
+  "agents": {
+    "probability_of_secondary_follow": 0.3
+  }
+}
+```
+
+**Behavior:**
+
+With probability `secondary_follow`, after a read or comment action:
+
+- **Rule-based agents**: Randomly decide to follow, unfollow, or make no change (equal probabilities)
+- **LLM agents**: Heuristic decision based on current follow status:
+  - If not following: 30% chance to follow the author
+  - If already following: 10% chance to unfollow the author
+  - Otherwise: No change
+
+**Implementation:**
+
+- Tracks all read/comment interactions with post authors
+- Evaluates secondary follow after main action pipeline completes
+- Checks current follow status before making decision
+- Creates FOLLOW or UNFOLLOW actions in Follow table
+- Both actions include round timestamp for temporal analysis
+
+**Use Cases:**
+
+- Model organic network growth through content interactions
+- Simulate unfollowing based on content disagreement
+- Create realistic social network evolution
+- Study relationship formation patterns
 
 ## Configuration Files
 
@@ -265,6 +409,8 @@ Defines the agent population with detailed profiles based on the User_mgmt model
 - `toxicity`: Toxicity setting (yes/no)
 - `leaning`: Political leaning (neutral/left/right)
 - `language`: Language code (en/es/fr/de)
+- `recsys_type`: Content recommendation strategy (random/rchrono/rchrono_popularity/rchrono_followers/etc.)
+- `frecsys_type`: Follow recommendation strategy (random/common_neighbors/jaccard/adamic_adar/preferential_attachment)
 
 **Generation Config**:
 - `num_additional_agents`: Number of agents to generate automatically
@@ -315,6 +461,30 @@ Main configuration for client simulation parameters:
 - `llm.temperature`: LLM temperature for generation (0.0-1.0)
 - `simulation.num_days`: Number of days to simulate (0 = infinite, continues until manually stopped)
 - `simulation.num_slots_per_day`: Time slots per day (typically 24)
+- `agents.probability_of_daily_follow`: Probability (0.0-1.0) of evaluating new follows at end of each day for active agents (default: 0.0)
+- `agents.probability_of_secondary_follow`: Probability (0.0-1.0) of evaluating follow/unfollow after read/comment actions (default: 0.0)
+
+**Agent Behavior Configuration:**
+
+The `agents` section controls agent behavior parameters:
+
+```json
+{
+  "agents": {
+    "reading_from_follower_ratio": 0.6,
+    "max_length_thread_reading": 5,
+    "attention_window": 336,
+    "probability_of_daily_follow": 0.0,
+    "probability_of_secondary_follow": 0.0
+  }
+}
+```
+
+- `reading_from_follower_ratio`: Proportion of posts from followed users in recommendations (0.0-1.0)
+- `max_length_thread_reading`: Maximum comment thread depth to read
+- `attention_window`: Time slots of content visibility (default: 336 = 14 days × 24 slots)
+- `probability_of_daily_follow`: Probability of evaluating new follows at end of each day for active agents (0.0-1.0, default: 0.0)
+- `probability_of_secondary_follow`: Probability of follow/unfollow evaluation after content interactions (0.0-1.0, default: 0.0)
 
 ### 4. `llm_prompts.json` - LLM Prompt Templates
 
@@ -348,6 +518,63 @@ Defines personas and prompt templates for LLM interactions:
   - Available variables: `{cluster_id}`
 - `decide_reaction.user_template`: User prompt template for reaction decisions
   - Available variables: `{post_content}`
+
+### 5. `network.csv` - Social Network Topology (Optional)
+
+Defines the initial social network structure by specifying follow relationships between agents.
+
+**Format:**
+
+Each row in the CSV represents a directed edge (follow relationship):
+```csv
+follower_username,user_username
+```
+
+Where:
+- `follower_username`: Username of the agent who follows
+- `user_username`: Username of the agent being followed
+
+**Example:**
+
+```csv
+validator_001,TechNewsPage
+broadcaster_001,TechNewsPage
+explorer_001,TechNewsPage
+validator_001,broadcaster_001
+broadcaster_001,explorer_001
+explorer_001,validator_001
+```
+
+This creates a network where:
+- All three agents follow TechNewsPage
+- validator_001 follows broadcaster_001
+- broadcaster_001 follows explorer_001
+- explorer_001 follows validator_001
+
+**Behavior:**
+
+1. **Automatic Loading**: If `network.csv` (or `{client_name}_network.csv`) exists in the configuration directory, it is automatically loaded when the client connects.
+
+2. **Client-Specific Files**: The client first looks for `{client_name}_network.csv`. If not found, it falls back to `network.csv`. This allows different clients to have different social networks.
+
+3. **Multi-Client Safe**: The system checks if any edges from the CSV already exist in the database before loading. This ensures the network is only loaded once, even in multi-client scenarios.
+
+4. **Agent Validation**: Only edges between agents defined in `agent_population.json` (or `{client_name}_agent_population.json`) are created. Invalid usernames are logged and skipped.
+
+5. **Database Storage**: Follow relationships are stored in the `follow` table with:
+   - `action`: Set to "follow"
+   - `round`: Empty string (initial network has no associated simulation round)
+
+6. **Recommendation Systems**: Once loaded, the network influences content recommendation systems like `rchrono_followers` which prioritize posts from followed users.
+
+**Notes:**
+
+- The file is optional. If not present, agents start with no follow relationships.
+- Client-specific files (e.g., `client_1_network.csv`) take precedence over generic files.
+- Usernames must exactly match those in `agent_population.json` (case-sensitive).
+- The CSV should not have a header row.
+- Empty lines are ignored.
+- Follow relationships can still be created dynamically during simulation through agent actions.
 
 ## Usage
 

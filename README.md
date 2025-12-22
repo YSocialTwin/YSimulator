@@ -37,6 +37,7 @@ All configuration files are kept in the same directory:
 - `simulation_config.json` - Client parameters, LLM settings, simulation duration
 - `agent_population.json` - Agent profiles and distribution
 - `llm_prompts.json` - LLM prompt templates and personas
+- `network.csv` - (Optional) Initial social network topology defining follow relationships
 
 ## Quick Start
 

@@ -49,10 +49,11 @@ class ActionDTO:
     """Action data transfer object for agent actions."""
     agent_id: str
     cluster_id: int
-    action_type: Literal['POST', 'LIKE', 'COMMENT', 'SHARE']
+    action_type: Literal['POST', 'LIKE', 'COMMENT', 'SHARE', 'FOLLOW', 'UNFOLLOW']
     content: Optional[str] = None
     target_post_id: Optional[str] = None  # UUID string - for comments, reactions, and shares
     article_id: Optional[str] = None  # UUID string for news posts
+    target_user_id: Optional[str] = None  # UUID string for follow/unfollow actions
 
 
 @dataclass

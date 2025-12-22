@@ -212,6 +212,15 @@ consolidate_day()              # Move Redis data to SQL (daily)
 - Links to both user and target post
 - Includes temporal and spatial context
 
+**Follow**: Social network relationships
+- Tracks follow/unfollow actions between users
+- follower_id: User who is following
+- user_id: User being followed
+- action: "follow" or "unfollow"
+- round: Temporal context (simulation round)
+- Supports dynamic network evolution
+- Used by follow recommendation algorithms
+
 #### Ray Communication Models
 **Location**: `classes/ray_models.py`
 
@@ -297,8 +306,20 @@ For each client (parallel):
     ├─ If PROCEED:
     │   ├─ Execute slot actions
     │   │   ├─ For each agent:
-    │   │   │   ├─ Decide action (post, interact, idle)
-    │   │   │   ├─ Generate content (via LLM)
+    │   │   │   ├─ Decide action type (post, read, comment, share, follow, etc.)
+    │   │   │   ├─ For FOLLOW action:
+    │   │   │   │   ├─ Request follow suggestions from server (based on agent's frecsys_type)
+    │   │   │   │   ├─ Server computes using recommendation algorithm
+    │   │   │   │   ├─ Select one candidate (LLM decision or random)
+    │   │   │   │   └─ Create FOLLOW action
+    │   │   │   ├─ For READ/COMMENT action:
+    │   │   │   │   ├─ Get recommended posts (based on recsys_type)
+    │   │   │   │   ├─ Select post and generate reaction/comment
+    │   │   │   │   └─ Secondary follow evaluation (with probability):
+    │   │   │   │       ├─ Check if following post author
+    │   │   │   │       ├─ Decide follow/unfollow/no_change
+    │   │   │   │       └─ Create FOLLOW/UNFOLLOW action if needed
+    │   │   │   ├─ Generate content (via LLM for LLM agents)
     │   │   │   └─ Submit action to server
     │   │   │       └─→ Server stores via DatabaseMiddleware
     │   │   └─ Complete
@@ -475,6 +496,122 @@ if current_day >= max_day:
 - Client autonomy (manages own timeline)
 - Clear separation of concerns
 
+## Recommendation Systems
+
+### 1. Content Recommendation System
+
+Agents discover posts to read and react to using configurable recommendation strategies.
+
+**Architecture**:
+```
+Agent → ContentRecSys → Server.get_recommended_posts() → Database Query → Post IDs
+```
+
+**Strategies**:
+- `random`: Random post ordering
+- `rchrono`: Reverse chronological (newest first)
+- `rchrono_popularity`: Chronological with popularity boost
+- `rchrono_followers`: Prioritizes posts from followed users
+- `rchrono_followers_popularity`: Combines followers and popularity
+- `rchrono_comments`: Prioritizes highly commented posts
+- `common_interests`: Posts with common topic interests
+- `common_user_interests`: Posts by users with common interests
+- `similar_users_react`: Posts from similar users (by reactions)
+- `similar_users_posts`: Posts from similar users (by posting)
+
+**Configuration**: Per-agent via `recsys_type` field
+
+### 2. Follow Recommendation System
+
+Agents discover users to follow using link prediction and network analysis algorithms.
+
+**Architecture**:
+```
+Agent → FollowRecSysRay → Server.get_follow_suggestions() → Query-Based Algorithm → User IDs
+```
+
+**Strategies**:
+
+1. **Random**: Random selection from non-following users
+   - SQL: Direct query with filtering
+   - Redis: SMEMBERS with filtering
+
+2. **Common Neighbors**: Friend-of-friend recommendations
+   - SQL: JOIN query to find users agent's friends follow
+   - Redis: Iterate through friend's follows
+   - Score: Count of mutual connections
+
+3. **Jaccard Similarity**: Similarity of follow sets
+   - SQL: Intersection/union via subqueries
+   - Redis: Set operations on follows
+   - Score: |intersection| / |union|
+
+4. **Adamic/Adar Index**: Weighted common neighbors
+   - SQL: Two-step approach:
+     1. Find common neighbors via JOIN
+     2. Batch query degrees for scoring
+   - Redis: Same two-step logic with key lookups
+   - Score: Σ(1/log(degree)) for each common neighbor
+   - Prefers connections through less-connected intermediaries
+
+5. **Preferential Attachment**: Popularity-based
+   - SQL: COUNT query for follower popularity
+   - Redis: Iterate and count followers
+   - Score: Number of followers (rich-get-richer)
+
+**Implementation Details**:
+- No NetworkX dependency (eliminated for scalability)
+- Query-based approaches for both SQL and Redis
+- Efficient batch operations
+- Graceful fallback to random if queries fail
+- Supports political leaning bias (homophily parameter)
+
+**Configuration**: Per-agent via `frecsys_type` field
+
+### 3. Secondary Follow Mechanism
+
+After content interactions (read/comment), agents evaluate relationship changes.
+
+**Architecture**:
+```
+Agent reads/comments → Track interaction → Evaluate with probability → Check status → FOLLOW/UNFOLLOW
+```
+
+**Process**:
+1. Track all read/comment interactions with post authors
+2. With probability `secondary_follow`, evaluate each interaction:
+   - Check if currently following author
+   - Rule-based: Random decision (follow/unfollow/no_change)
+   - LLM: Heuristic (30% follow if not following, 10% unfollow if following)
+3. Create FOLLOW or UNFOLLOW action in Follow table
+
+**Configuration**: Global via `probability_of_secondary_follow` in simulation_config.json
+
+**Use Case**: Model organic network growth through content discovery
+
+### 4. Daily Follow Evaluation
+
+At the end of each simulation day, active agents evaluate new follow relationships.
+
+**Architecture**:
+```
+Track active agents → End of day → Evaluate with probability → Get suggestions → Select candidate → FOLLOW
+```
+
+**Process**:
+1. Track all agents active during each simulation day
+2. At day end (last time slot), for each active agent:
+   - With probability `daily_follow`, evaluate new follows
+   - Request top-10 suggestions using agent's `frecsys_type`
+   - Randomly select one candidate from suggestions
+3. Create FOLLOW action in Follow table
+
+**Configuration**: Global via `probability_of_daily_follow` in simulation_config.json
+
+**Timing**: Evaluated when transitioning to next day (slot 23 → day+1)
+
+**Use Case**: Model gradual network growth independent of content interactions
+
 ## Technology Stack
 
 ### Core Technologies
@@ -507,6 +644,9 @@ if current_day >= max_day:
 - ✅ Store actions via DatabaseMiddleware
 - ✅ Trigger daily Redis consolidation
 - ✅ Provide starting point to clients
+- ✅ Compute content recommendations (posts to read)
+- ✅ Compute follow recommendations (users to follow)
+- ✅ Execute follow recommendation algorithms (query-based)
 
 ### What the Server Does NOT Do
 - ❌ Track per-client simulation progress
@@ -522,6 +662,12 @@ if current_day >= max_day:
 - ✅ Send heartbeats regularly
 - ✅ Submit actions to server
 - ✅ Generate content via LLM
+- ✅ Request content recommendations
+- ✅ Request follow recommendations
+- ✅ Evaluate secondary follow (after interactions)
+- ✅ Evaluate daily follows (at end of each day)
+- ✅ Track active agents per day
+- ✅ Select action types based on agent archetypes
 
 ### What the Client Does NOT Do
 - ❌ Coordinate with other clients directly

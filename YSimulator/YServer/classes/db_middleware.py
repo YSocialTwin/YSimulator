@@ -21,7 +21,7 @@ except ImportError:
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
-from YSimulator.YServer.classes.models import Base, Reaction, Post, User_mgmt, Round
+from YSimulator.YServer.classes.models import Base, Reaction, Post, User_mgmt, Round, Follow
 
 
 class DatabaseMiddleware:
@@ -382,6 +382,47 @@ class DatabaseMiddleware:
             )
             return False
 
+    def add_follow(self, follow_data: Dict[str, Any]) -> bool:
+        """
+        Add a follow relationship to the database.
+
+        Args:
+            follow_data: Dictionary containing follow data with keys:
+                - user_id: UUID of user being followed
+                - follower_id: UUID of follower
+                - action: 'follow' or 'unfollow'
+                - round: Round ID (optional)
+
+        Returns:
+            bool: True if successful, False otherwise
+        """
+        try:
+            # Generate UUID for follow record
+            follow_id = str(uuid.uuid4())
+            follow_data["id"] = follow_id
+
+            if self.use_redis:
+                # Store follow relationship in Redis
+                key = self._redis_key("follow", follow_id)
+                # Filter out None values for Redis (Redis cannot store None)
+                redis_data = {k: v for k, v in follow_data.items() if v is not None}
+                self.redis_client.hset(key, mapping=redis_data)
+                return True
+            else:
+                session = Session(self.engine)
+                try:
+                    follow = Follow(**follow_data)
+                    session.add(follow)
+                    session.commit()
+                    return True
+                finally:
+                    session.close()
+        except Exception as e:
+            self.logger.error(
+                f"Error adding follow relationship: {e}", extra={"extra_data": {"error": str(e)}}
+            )
+            return False
+
     def get_post(self, post_id: str) -> Optional[Dict[str, Any]]:
         """
         Get post data by ID.
@@ -469,6 +510,7 @@ class DatabaseMiddleware:
             return {
                 "posts": 0,
                 "interactions": 0,
+                "follows": 0,
                 "removed_posts": 0,
                 "removed_interactions": 0,
                 "message": "Not using Redis",
@@ -535,6 +577,36 @@ class DatabaseMiddleware:
                             session.add(interaction)
                             interactions_count += 1
 
+                # Get all follow keys
+                follow_pattern = self._redis_key("follow", "*")
+                follow_keys = [
+                    k
+                    for k in self.redis_client.keys(follow_pattern)
+                    if not k.endswith(":counter")
+                ]
+
+                # Transfer all follow relationships to SQL
+                follows_count = 0
+                for key in follow_keys:
+                    follow_data = self.redis_client.hgetall(key)
+                    if follow_data and "id" in follow_data:
+                        # Check if follow relationship already exists in SQLite
+                        existing = (
+                            session.query(Follow)
+                            .filter_by(id=follow_data["id"])
+                            .first()
+                        )
+                        if not existing:
+                            follow = Follow(
+                                id=follow_data["id"],
+                                user_id=str(follow_data.get("user_id", "")),
+                                follower_id=str(follow_data.get("follower_id", "")),
+                                action=follow_data.get("action", "follow"),
+                                round=str(follow_data.get("round", "")),
+                            )
+                            session.add(follow)
+                            follows_count += 1
+
                 # Commit all to SQLite
                 session.commit()
 
@@ -550,6 +622,7 @@ class DatabaseMiddleware:
                             "day": day,
                             "posts_saved": posts_count,
                             "interactions_saved": interactions_count,
+                            "follows_saved": follows_count,
                         }
                     },
                 )
@@ -557,6 +630,7 @@ class DatabaseMiddleware:
                 return {
                     "posts": posts_count,
                     "interactions": interactions_count,
+                    "follows": follows_count,
                     "removed_posts": removed_posts_count,
                     "removed_interactions": removed_interactions_count,
                     "message": "Consolidation successful",
@@ -576,6 +650,7 @@ class DatabaseMiddleware:
             return {
                 "posts": 0,
                 "interactions": 0,
+                "follows": 0,
                 "removed_posts": 0,
                 "removed_interactions": 0,
                 "message": f"Consolidation failed: {str(e)}",

@@ -18,10 +18,12 @@ import ray
 from sqlalchemy import text
 
 from YSimulator.YClient.classes.ray_models import SimulationInstruction
+from YSimulator.YServer.recsys import content_recsys_db, content_recsys_redis, follow_recsys_db
 
 
 # Constants
 RECOMMENDATION_TTL_SECONDS = 7 * 24 * 60 * 60  # 7 days in seconds
+NETWORK_EDGE_CHECK_LIMIT = 10  # Number of edges to check when verifying network load
 
 
 @ray.remote
@@ -298,6 +300,138 @@ class OrchestratorServer:
             )
             print(f"[Server] ❌ Agent registration error: {e}")
             raise
+
+    def add_follow_relationship(self, follow_data: dict) -> bool:
+        """
+        Add a follow relationship to the database.
+        
+        This method is called by clients to create follow relationships,
+        typically during initial social network setup from network.csv.
+        
+        Args:
+            follow_data: Dictionary containing:
+                - user_id: UUID of user being followed
+                - follower_id: UUID of follower
+                - action: 'follow' or 'unfollow'
+                - round: Round ID (can be empty for initial setup)
+        
+        Returns:
+            bool: True if successful, False otherwise
+        """
+        try:
+            success = self.db.add_follow(follow_data)
+            return success
+        except Exception as e:
+            self.logger.error(
+                f"Error adding follow relationship: {e}",
+                extra={"extra_data": {"error": str(e), "follow_data": follow_data}}
+            )
+            return False
+
+    def check_network_edges_exist(self, edges: list) -> bool:
+        """
+        Check if any of the network edges already exist in the Follow table.
+        
+        This method checks if the social network from network.csv has already been loaded
+        by verifying if any of the specified edges exist in the database.
+        
+        Args:
+            edges: List of tuples (follower_id, user_id) representing network edges
+        
+        Returns:
+            bool: True if any edge exists, False if none exist
+        """
+        if not edges:
+            return False
+        
+        try:
+            from sqlalchemy.orm import Session
+            from YSimulator.YServer.classes.models import Follow
+            
+            with Session(self.db.engine) as session:
+                # Check if any of the edges exist
+                # We only need to find one to know the network was loaded
+                for follower_id, user_id in edges[:NETWORK_EDGE_CHECK_LIMIT]:
+                    exists = session.query(Follow).filter_by(
+                        follower_id=follower_id,
+                        user_id=user_id,
+                        action="follow"
+                    ).first()
+                    
+                    if exists:
+                        self.logger.info(
+                            f"Network already loaded (found edge: {follower_id} -> {user_id})"
+                        )
+                        return True
+                
+                # None of the checked edges exist
+                self.logger.info("Network not yet loaded (no edges found in database)")
+                return False
+                
+        except Exception as e:
+            self.logger.error(
+                f"Error checking network edges: {e}",
+                extra={"extra_data": {"error": str(e)}}
+            )
+            # On error, assume network not loaded to be safe
+            return False
+
+    def get_first_round_id(self) -> str:
+        """
+        Get the UUID of the first round (day 1, slot 1).
+        
+        This method retrieves or creates the first round entry in the database,
+        which is used as the Round reference for initial network edges loaded
+        from network.csv.
+        
+        Returns:
+            str: UUID of the first round (day 1, slot 1)
+        """
+        try:
+            # Get or create the first round (day 1, slot 1)
+            first_round_id = self.db.get_or_create_round(1, 1)
+            self.logger.info(f"Retrieved first round ID: {first_round_id}")
+            return first_round_id
+        except Exception as e:
+            self.logger.error(
+                f"Error getting first round ID: {e}",
+                extra={"extra_data": {"error": str(e)}}
+            )
+            # Return empty string as fallback (better than crashing)
+            return ""
+
+    def check_follow_relationship(self, follower_id: str, user_id: str) -> bool:
+        """
+        Check if a follow relationship exists between two users.
+        
+        Args:
+            follower_id: UUID of the follower
+            user_id: UUID of the user being followed
+        
+        Returns:
+            bool: True if follower follows user with action="follow", False otherwise
+        """
+        try:
+            from sqlalchemy.orm import Session
+            from YSimulator.YServer.classes.models import Follow
+            
+            with Session(self.db.engine) as session:
+                # Check for active follow relationship
+                # Get the most recent follow action between these users
+                latest_follow = session.query(Follow).filter_by(
+                    follower_id=follower_id,
+                    user_id=user_id
+                ).order_by(Follow.round.desc()).first()
+                
+                # Return True if latest action is "follow", False otherwise
+                return latest_follow and latest_follow.action == "follow"
+                
+        except Exception as e:
+            self.logger.error(
+                f"Error checking follow relationship: {e}",
+                extra={"extra_data": {"error": str(e), "follower_id": follower_id, "user_id": user_id}}
+            )
+            return False
 
     def register_client(self, client_id: str, num_days: int = 0) -> dict:
         """
@@ -638,6 +772,36 @@ class OrchestratorServer:
                         self.logger.warning(
                             f"Original post not found for share: {act.target_post_id}",
                             extra={"extra_data": {"agent_id": act.agent_id, "target_post_id": act.target_post_id}},
+                        )
+                
+                elif act.action_type == "FOLLOW":
+                    # Follow action: create follow relationship
+                    follow_data = {
+                        "follower_id": str(act.agent_id),  # FK to user_mgmt.id (UUID string) - agent who is following
+                        "user_id": act.target_user_id,  # FK to user_mgmt.id (UUID string) - user being followed
+                        "action": "follow",
+                        "round": self.current_round_id,  # FK to rounds.id
+                    }
+                    success = self.db.add_follow(follow_data)
+                    if not success:
+                        self.logger.warning(
+                            f"Failed to add follow for agent {act.agent_id}",
+                            extra={"extra_data": {"agent_id": act.agent_id, "target_user_id": act.target_user_id}},
+                        )
+                
+                elif act.action_type == "UNFOLLOW":
+                    # Unfollow action: create unfollow relationship record
+                    unfollow_data = {
+                        "follower_id": str(act.agent_id),  # FK to user_mgmt.id (UUID string) - agent who is unfollowing
+                        "user_id": act.target_user_id,  # FK to user_mgmt.id (UUID string) - user being unfollowed
+                        "action": "unfollow",
+                        "round": self.current_round_id,  # FK to rounds.id
+                    }
+                    success = self.db.add_follow(unfollow_data)
+                    if not success:
+                        self.logger.warning(
+                            f"Failed to add unfollow for agent {act.agent_id}",
+                            extra={"extra_data": {"agent_id": act.agent_id, "target_user_id": act.target_user_id}},
                         )
                 
                 else:
@@ -1038,10 +1202,7 @@ class OrchestratorServer:
             visibility_day, visibility_hour = self._calculate_visibility_params(visibility_rounds)
             
             if self.db.use_redis:
-                # Use Redis for recommendations
-                # Note: Redis has limited support for complex queries
-                # For modes requiring joins (followers, topics, etc.), we fallback to simpler modes
-                
+                # Use Redis for recommendations - dispatch to modular functions
                 # Get recent posts from Redis
                 recent_posts_key = self.db._redis_key("posts", "recent")
                 all_post_ids = self.db.redis_client.lrange(recent_posts_key, 0, -1)
@@ -1057,8 +1218,6 @@ class OrchestratorServer:
                     posts_data = pipeline.execute()
                     
                     # Build list of valid posts with metadata
-                    # For Redis, we don't filter by round visibility (UUID comparison issue)
-                    # The recent list is already limited to last 50 posts
                     valid_posts_with_data = []
                     for i, post_data in enumerate(posts_data):
                         if post_data:
@@ -1073,369 +1232,42 @@ class OrchestratorServer:
                 else:
                     valid_posts_with_data = []
                 
-                # Apply mode-specific ordering
+                # Prepare common kwargs for all recommendation functions
+                common_kwargs = {
+                    'valid_posts_with_data': valid_posts_with_data,
+                    'limit': limit,
+                    'agent_id': agent_id,
+                    'all_post_ids': all_post_ids,
+                    'posts_data': posts_data,
+                    'followers_ratio': followers_ratio,
+                    'db_engine': self.db.engine,
+                    'redis_client': self.db.redis_client,
+                    'redis_key_fn': self.db._redis_key,
+                    'logger': self.logger
+                }
+                
+                # Dispatch to appropriate recommendation function
                 if mode == "rchrono":
-                    # Redis recent list is already in reverse chronological order (newest first)
-                    # Just take the first 'limit' items
-                    post_ids = [p['id'] for p in valid_posts_with_data[:limit]]
-                    
+                    post_ids = content_recsys_redis.recommend_rchrono_redis(**common_kwargs)
                 elif mode == "rchrono_popularity":
-                    # Sort by index (time proxy) first, then by reaction_count
-                    # This aligns better with SQL which sorts by time first, then popularity
-                    sorted_posts = sorted(valid_posts_with_data, 
-                                        key=lambda x: (x['index'], -x['reaction_count']))
-                    post_ids = [p['id'] for p in sorted_posts[:limit]]
-                    
+                    post_ids = content_recsys_redis.recommend_rchrono_popularity_redis(**common_kwargs)
                 elif mode == "rchrono_followers":
-                    # Filter posts from followed users using hybrid SQL+Redis
-                    follower_posts_limit = int(limit * followers_ratio)
-                    additional_posts_limit = limit - follower_posts_limit
-                    
-                    # Helper: Get followed user IDs (shared with rchrono_followers_popularity)
-                    with self.db.engine.begin() as connection:
-                        result = connection.execute(
-                            text("SELECT follower_id FROM follow WHERE user_id = :agent_id AND action = 'follow'"),
-                            {"agent_id": agent_id}
-                        )
-                        followed_user_ids = set(row[0] for row in result)
-                    
-                    # Create mapping for efficient lookup (avoid O(n²))
-                    post_id_to_data = {all_post_ids[i]: posts_data[i] for i in range(len(all_post_ids))}
-                    
-                    # Filter posts by followed users
-                    follower_posts = []
-                    other_posts = []
-                    for post in valid_posts_with_data:
-                        post_data = post_id_to_data.get(post['id'])
-                        if post_data and post_data.get('user_id') in followed_user_ids:
-                            follower_posts.append(post)
-                        else:
-                            other_posts.append(post)
-                    
-                    # Take from followers first, then fill with others
-                    post_ids = [p['id'] for p in follower_posts[:follower_posts_limit]]
-                    if len(post_ids) < limit:
-                        post_ids.extend([p['id'] for p in other_posts[:additional_posts_limit]])
-                    
+                    post_ids = content_recsys_redis.recommend_rchrono_followers_redis(**common_kwargs)
                 elif mode == "rchrono_followers_popularity":
-                    # Combine followers and popularity with hybrid approach
-                    follower_posts_limit = int(limit * followers_ratio)
-                    additional_posts_limit = limit - follower_posts_limit
-                    
-                    # Get follow relationships (same query as rchrono_followers)
-                    with self.db.engine.begin() as connection:
-                        result = connection.execute(
-                            text("SELECT follower_id FROM follow WHERE user_id = :agent_id AND action = 'follow'"),
-                            {"agent_id": agent_id}
-                        )
-                        followed_user_ids = set(row[0] for row in result)
-                    
-                    # Create mapping for efficient lookup
-                    post_id_to_data = {all_post_ids[i]: posts_data[i] for i in range(len(all_post_ids))}
-                    
-                    # Filter and sort
-                    follower_posts = []
-                    other_posts = []
-                    for post in valid_posts_with_data:
-                        post_data = post_id_to_data.get(post['id'])
-                        if post_data and post_data.get('user_id') in followed_user_ids:
-                            follower_posts.append(post)
-                        else:
-                            other_posts.append(post)
-                    
-                    # Sort by index (time) then popularity
-                    follower_posts_sorted = sorted(follower_posts, key=lambda x: (x['index'], -x['reaction_count']))
-                    other_posts_sorted = sorted(other_posts, key=lambda x: (x['index'], -x['reaction_count']))
-                    
-                    post_ids = [p['id'] for p in follower_posts_sorted[:follower_posts_limit]]
-                    if len(post_ids) < limit:
-                        post_ids.extend([p['id'] for p in other_posts_sorted[:additional_posts_limit]])
-                    
+                    post_ids = content_recsys_redis.recommend_rchrono_followers_popularity_redis(**common_kwargs)
                 elif mode == "rchrono_comments":
-                    # Count comments for each post using Redis
-                    # For each post, count how many posts have comment_to = this post_id
-                    posts_with_comment_counts = []
-                    for i, post_data in enumerate(posts_data):
-                        if post_data and post_data.get('user_id') != agent_id:
-                            post_id = all_post_ids[i]
-                            # Check if this is a top-level post (not a comment itself)
-                            if post_data.get('comment_to', '-1') == '-1':
-                                # Count comments by checking other posts
-                                comment_count = sum(1 for pd in posts_data if pd and pd.get('comment_to') == post_id)
-                                posts_with_comment_counts.append({
-                                    'id': post_id,
-                                    'index': i,
-                                    'comment_count': comment_count,
-                                    'reaction_count': int(post_data.get("reaction_count", 0) or 0)
-                                })
-                    
-                    # Sort by comment count desc, then by recency
-                    sorted_posts = sorted(posts_with_comment_counts, 
-                                        key=lambda x: (-x['comment_count'], x['index']))
-                    post_ids = [p['id'] for p in sorted_posts[:limit]]
-                    
+                    post_ids = content_recsys_redis.recommend_rchrono_comments_redis(**common_kwargs)
                 elif mode == "common_interests":
-                    # Posts matching user's topic interests
-                    # Assumes Redis will have: ysim:user:{user_id}:interests (set), ysim:post:{post_id}:topics (set)
-                    # Note: Redis client uses decode_responses=True, so SMEMBERS returns strings
-                    
-                    # Try to get user interests from Redis (future: will be cached)
-                    user_interests_key = self.db._redis_key("user", agent_id) + ":interests"
-                    if self.db.redis_client.exists(user_interests_key):
-                        # Redis implementation when data is available
-                        user_interests = self.db.redis_client.smembers(user_interests_key)
-                        
-                        # Create mapping for efficient lookup
-                        post_id_to_data = {all_post_ids[i]: posts_data[i] for i in range(len(all_post_ids))}
-                        
-                        # Score posts by number of matching interests
-                        posts_with_scores = []
-                        for post in valid_posts_with_data:
-                            post_topics_key = self.db._redis_key("post", post['id']) + ":topics"
-                            if self.db.redis_client.exists(post_topics_key):
-                                post_topics = self.db.redis_client.smembers(post_topics_key)
-                                # Calculate intersection (common interests)
-                                common_count = len(user_interests & post_topics)
-                                if common_count > 0:
-                                    posts_with_scores.append({
-                                        'id': post['id'],
-                                        'index': post['index'],
-                                        'score': common_count
-                                    })
-                        
-                        # Sort by score desc, then by recency
-                        sorted_posts = sorted(posts_with_scores, key=lambda x: (-x['score'], x['index']))
-                        post_ids = [p['id'] for p in sorted_posts[:limit]]
-                        
-                        # Fill with recent posts if needed
-                        if len(post_ids) < limit:
-                            additional = [p['id'] for p in valid_posts_with_data if p['id'] not in post_ids]
-                            post_ids.extend(additional[:limit - len(post_ids)])
-                    else:
-                        # Fallback to SQL query when Redis data not available yet
-                        self.logger.info(f"Mode {mode} - Redis cache for interests/topics not available yet, using SQL")
-                        with self.db.engine.begin() as connection:
-                            query = text("""
-                                SELECT DISTINCT p.id
-                                FROM post p
-                                INNER JOIN post_topic pt ON p.id = pt.post_id
-                                INNER JOIN user_interest ui ON pt.topic_id = ui.topic_id
-                                WHERE ui.user_id = :agent_id AND p.user_id != :agent_id
-                                ORDER BY p.id DESC
-                                LIMIT :limit
-                            """)
-                            result = connection.execute(query, {"agent_id": agent_id, "limit": limit})
-                            sql_post_ids = [row[0] for row in result]
-                            post_ids = [pid for pid in sql_post_ids if pid in all_post_ids][:limit]
-                            
-                            if len(post_ids) < limit:
-                                additional = [p['id'] for p in valid_posts_with_data if p['id'] not in post_ids]
-                                post_ids.extend(additional[:limit - len(post_ids)])
-                
+                    post_ids = content_recsys_redis.recommend_common_interests_redis(**common_kwargs)
                 elif mode == "common_user_interests":
-                    # Posts interacted with by users who share interests
-                    # Assumes Redis: ysim:user:{user_id}:interests (set), ysim:reaction:{reaction_id} (hash)
-                    
-                    user_interests_key = self.db._redis_key("user", agent_id) + ":interests"
-                    if self.db.redis_client.exists(user_interests_key):
-                        # Redis implementation when data is available
-                        user_interests = self.db.redis_client.smembers(user_interests_key)
-                        
-                        # Find users with common interests
-                        user_ids_key = self.db._redis_key("user_mgmt", "ids")
-                        all_user_ids = self.db.redis_client.smembers(user_ids_key) if self.db.redis_client.exists(user_ids_key) else []
-                        
-                        similar_users = set()
-                        for uid in all_user_ids:
-                            if uid != agent_id:
-                                other_interests_key = self.db._redis_key("user", uid) + ":interests"
-                                if self.db.redis_client.exists(other_interests_key):
-                                    other_interests = self.db.redis_client.smembers(other_interests_key)
-                                    if len(user_interests & other_interests) > 0:
-                                        similar_users.add(uid)
-                        
-                        # Get posts liked by similar users
-                        posts_with_scores = []
-                        post_id_to_data = {all_post_ids[i]: posts_data[i] for i in range(len(all_post_ids))}
-                        
-                        for post in valid_posts_with_data:
-                            # Check if any similar user liked this post
-                            # Future: Redis will cache reactions by post
-                            post_reactions_key = self.db._redis_key("post", post['id']) + ":reactions"
-                            if self.db.redis_client.exists(post_reactions_key):
-                                reaction_user_ids = self.db.redis_client.smembers(post_reactions_key)
-                                common_users = similar_users & reaction_user_ids
-                                if common_users:
-                                    posts_with_scores.append({
-                                        'id': post['id'],
-                                        'index': post['index'],
-                                        'score': len(common_users)
-                                    })
-                        
-                        sorted_posts = sorted(posts_with_scores, key=lambda x: (-x['score'], x['index']))
-                        post_ids = [p['id'] for p in sorted_posts[:limit]]
-                        
-                        if len(post_ids) < limit:
-                            additional = [p['id'] for p in valid_posts_with_data if p['id'] not in post_ids]
-                            post_ids.extend(additional[:limit - len(post_ids)])
-                    else:
-                        # Fallback to SQL
-                        self.logger.info(f"Mode {mode} - Redis cache for interests not available yet, using SQL")
-                        with self.db.engine.begin() as connection:
-                            query = text("""
-                                SELECT DISTINCT p.id
-                                FROM post p
-                                INNER JOIN reaction r ON p.id = r.post_id
-                                INNER JOIN user_interest ui1 ON r.user_id = ui1.user_id
-                                INNER JOIN user_interest ui2 ON ui1.topic_id = ui2.topic_id
-                                WHERE ui2.user_id = :agent_id 
-                                    AND r.user_id != :agent_id 
-                                    AND p.user_id != :agent_id
-                                    AND r.type = 'like'
-                                ORDER BY p.id DESC
-                                LIMIT :limit
-                            """)
-                            result = connection.execute(query, {"agent_id": agent_id, "limit": limit})
-                            sql_post_ids = [row[0] for row in result]
-                            post_ids = [pid for pid in sql_post_ids if pid in all_post_ids][:limit]
-                            
-                            if len(post_ids) < limit:
-                                additional = [p['id'] for p in valid_posts_with_data if p['id'] not in post_ids]
-                                post_ids.extend(additional[:limit - len(post_ids)])
-                
-                elif mode in ["similar_users_react", "similar_users_posts"]:
-                    # These modes use user demographics which should be in Redis user hashes
-                    # Assumes Redis: ysim:users:{user_id} has age_group, gender, leaning fields
-                    
-                    # Get agent demographics from Redis
-                    agent_key = self.db._redis_key("users", agent_id)
-                    agent_data = self.db.redis_client.hgetall(agent_key) if self.db.redis_client.exists(agent_key) else {}
-                    
-                    if agent_data:
-                        # Redis implementation using cached user data
-                        agent_age_group = agent_data.get('age_group')
-                        agent_gender = agent_data.get('gender')
-                        agent_leaning = agent_data.get('leaning')
-                        
-                        # Create mapping
-                        post_id_to_data = {all_post_ids[i]: posts_data[i] for i in range(len(all_post_ids))}
-                        
-                        if mode == "similar_users_react":
-                            # Get posts liked by similar users
-                            # Future: Redis will cache reactions with user_id
-                            posts_with_scores = []
-                            for post in valid_posts_with_data:
-                                # Check reactions for this post
-                                post_reactions_key = self.db._redis_key("post", post['id']) + ":reactions"
-                                if self.db.redis_client.exists(post_reactions_key):
-                                    reaction_user_ids = self.db.redis_client.smembers(post_reactions_key)
-                                    similar_count = 0
-                                    for uid in reaction_user_ids:
-                                        user_key = self.db._redis_key("users", uid)
-                                        user_data = self.db.redis_client.hgetall(user_key) if self.db.redis_client.exists(user_key) else {}
-                                        if user_data:
-                                            # Check similarity
-                                            if (user_data.get('age_group') == agent_age_group or
-                                                user_data.get('gender') == agent_gender or
-                                                user_data.get('leaning') == agent_leaning):
-                                                similar_count += 1
-                                    
-                                    if similar_count > 0:
-                                        posts_with_scores.append({
-                                            'id': post['id'],
-                                            'index': post['index'],
-                                            'score': similar_count
-                                        })
-                            
-                            sorted_posts = sorted(posts_with_scores, key=lambda x: (-x['score'], x['index']))
-                            post_ids = [p['id'] for p in sorted_posts[:limit]]
-                        else:  # similar_users_posts
-                            # Get posts from similar users
-                            posts_with_similarity = []
-                            for post in valid_posts_with_data:
-                                post_data = post_id_to_data.get(post['id'])
-                                if post_data:
-                                    author_id = post_data.get('user_id')
-                                    if author_id and author_id != agent_id:
-                                        author_key = self.db._redis_key("users", author_id)
-                                        author_data = self.db.redis_client.hgetall(author_key) if self.db.redis_client.exists(author_key) else {}
-                                        if author_data:
-                                            similarity_score = 0
-                                            if author_data.get('age_group') == agent_age_group:
-                                                similarity_score += 1
-                                            if author_data.get('gender') == agent_gender:
-                                                similarity_score += 1
-                                            if author_data.get('leaning') == agent_leaning:
-                                                similarity_score += 1
-                                            
-                                            if similarity_score > 0:
-                                                posts_with_similarity.append({
-                                                    'id': post['id'],
-                                                    'index': post['index'],
-                                                    'score': similarity_score
-                                                })
-                            
-                            sorted_posts = sorted(posts_with_similarity, key=lambda x: (-x['score'], x['index']))
-                            post_ids = [p['id'] for p in sorted_posts[:limit]]
-                        
-                        # Fill with recent posts if needed
-                        if len(post_ids) < limit:
-                            additional = [p['id'] for p in valid_posts_with_data if p['id'] not in post_ids]
-                            post_ids.extend(additional[:limit - len(post_ids)])
-                    else:
-                        # Fallback to SQL query
-                        self.logger.info(f"Mode {mode} - Using SQL for user demographics query")
-                        with self.db.engine.begin() as connection:
-                            if mode == "similar_users_react":
-                                query = text("""
-                                    SELECT DISTINCT p.id
-                                    FROM post p
-                                    INNER JOIN reaction r ON p.id = r.post_id
-                                    INNER JOIN user_mgmt um ON r.user_id = um.id
-                                    INNER JOIN user_mgmt target ON target.id = :agent_id
-                                    WHERE p.user_id != :agent_id
-                                        AND um.id != :agent_id
-                                        AND r.type = 'like'
-                                        AND (
-                                            (um.age_group = target.age_group) OR
-                                            (um.gender = target.gender) OR
-                                            (um.leaning = target.leaning)
-                                        )
-                                    ORDER BY p.id DESC
-                                    LIMIT :limit
-                                """)
-                            else:  # similar_users_posts
-                                query = text("""
-                                    SELECT p.id
-                                    FROM post p
-                                    INNER JOIN user_mgmt um ON p.user_id = um.id
-                                    INNER JOIN user_mgmt target ON target.id = :agent_id
-                                    WHERE p.user_id != :agent_id
-                                        AND (
-                                            (um.age_group = target.age_group) OR
-                                            (um.gender = target.gender) OR
-                                            (um.leaning = target.leaning)
-                                        )
-                                    ORDER BY p.id DESC
-                                    LIMIT :limit
-                                """)
-                            
-                            result = connection.execute(query, {"agent_id": agent_id, "limit": limit})
-                            sql_post_ids = [row[0] for row in result]
-                            post_ids = [pid for pid in sql_post_ids if pid in all_post_ids][:limit]
-                            
-                            if len(post_ids) < limit:
-                                additional = [p['id'] for p in valid_posts_with_data if p['id'] not in post_ids]
-                                post_ids.extend(additional[:limit - len(post_ids)])
-
-                    
+                    post_ids = content_recsys_redis.recommend_common_user_interests_redis(**common_kwargs)
+                elif mode == "similar_users_react":
+                    post_ids = content_recsys_redis.recommend_similar_users_react_redis(**common_kwargs)
+                elif mode == "similar_users_posts":
+                    post_ids = content_recsys_redis.recommend_similar_users_posts_redis(**common_kwargs)
                 else:
-                    # Random ordering (default for Redis)
-                    if len(valid_posts_with_data) > limit:
-                        selected = random.sample(valid_posts_with_data, limit)
-                        post_ids = [p['id'] for p in selected]
-                    else:
-                        post_ids = [p['id'] for p in valid_posts_with_data]
+                    # Default: random ordering
+                    post_ids = content_recsys_redis.recommend_random_redis(**common_kwargs)
                 
                 self.logger.info(
                     f"Recommended {len(post_ids)} posts (Redis, mode={mode})",
@@ -1460,418 +1292,63 @@ class OrchestratorServer:
                     
                     if mode == "rchrono":
                         # Reverse chronological: newest posts first
-                        query = text("""
-                            SELECT p.id FROM post p
-                            INNER JOIN rounds rd ON p.round = rd.id
-                            WHERE (rd.day > :vis_day OR (rd.day = :vis_day AND rd.hour >= :vis_hour))
-                                AND p.user_id != :agent_id
-                            ORDER BY rd.day DESC, rd.hour DESC
-                            LIMIT :limit
-                        """)
-                        result = connection.execute(query, {
-                            "vis_day": visibility_day,
-                            "vis_hour": visibility_hour,
-                            "agent_id": agent_id,
-                            "limit": limit
-                        })
-                        post_ids = [row[0] for row in result]
+                        post_ids = content_recsys_db.recommend_rchrono(
+                            connection, agent_id, visibility_day, visibility_hour, limit
+                        )
                         
                     elif mode == "rchrono_popularity":
                         # Reverse chronological with popularity (reaction count)
-                        query = text("""
-                            SELECT p.id 
-                            FROM post p
-                            INNER JOIN rounds rd ON p.round = rd.id
-                            LEFT JOIN (
-                                SELECT post_id, COUNT(*) as reaction_count
-                                FROM reaction
-                                GROUP BY post_id
-                            ) r ON p.id = r.post_id
-                            WHERE (rd.day > :vis_day OR (rd.day = :vis_day AND rd.hour >= :vis_hour))
-                                AND p.user_id != :agent_id
-                            ORDER BY rd.day DESC, rd.hour DESC, COALESCE(r.reaction_count, 0) DESC
-                            LIMIT :limit
-                        """)
-                        result = connection.execute(query, {
-                            "vis_day": visibility_day,
-                            "vis_hour": visibility_hour,
-                            "agent_id": agent_id,
-                            "limit": limit
-                        })
-                        post_ids = [row[0] for row in result]
+                        post_ids = content_recsys_db.recommend_rchrono_popularity(
+                            connection, agent_id, visibility_day, visibility_hour, limit
+                        )
                         
                     elif mode == "rchrono_followers":
                         # Prioritize posts from followed users
-                        # Note: user_id is the one being followed, follower_id is the one following
-                        follower_posts_limit = int(limit * followers_ratio)
-                        additional_posts_limit = limit - follower_posts_limit
-                        
-                        # Get posts from followed users
-                        query_followers = text("""
-                            SELECT DISTINCT p.id 
-                            FROM post p
-                            INNER JOIN rounds rd ON p.round = rd.id
-                            INNER JOIN follow f ON p.user_id = f.follower_id
-                            WHERE f.user_id = :agent_id 
-                                AND f.action = 'follow'
-                                AND (rd.day > :vis_day OR (rd.day = :vis_day AND rd.hour >= :vis_hour))
-                                AND p.user_id != :agent_id
-                            ORDER BY rd.day DESC, rd.hour DESC
-                            LIMIT :follower_limit
-                        """)
-                        result = connection.execute(query_followers, {
-                            "agent_id": agent_id,
-                            "visibility": visibility,
-                            "follower_limit": follower_posts_limit
-                        })
-                        post_ids = [row[0] for row in result]
-                        
-                        # If we need more posts, get additional ones
-                        if len(post_ids) < limit and additional_posts_limit > 0:
-                            # Use conditional query based on whether we have existing IDs
-                            if post_ids:
-                                query_additional = text("""
-                                    SELECT p.id FROM post p
-                                    INNER JOIN rounds rd ON p.round = rd.id
-                                    WHERE (rd.day > :vis_day OR (rd.day = :vis_day AND rd.hour >= :vis_hour))
-                                        AND p.user_id != :agent_id
-                                        AND p.id NOT IN :existing_ids
-                                    ORDER BY rd.day DESC, rd.hour DESC
-                                    LIMIT :additional_limit
-                                """)
-                                result = connection.execute(query_additional, {
-                                    "vis_day": visibility_day,
-                                    "vis_hour": visibility_hour,
-                                    "agent_id": agent_id,
-                                    "existing_ids": tuple(post_ids),
-                                    "additional_limit": additional_posts_limit
-                                })
-                            else:
-                                # No existing posts, skip the NOT IN clause
-                                query_additional = text("""
-                                    SELECT p.id FROM post p
-                                    INNER JOIN rounds rd ON p.round = rd.id
-                                    WHERE (rd.day > :vis_day OR (rd.day = :vis_day AND rd.hour >= :vis_hour))
-                                        AND p.user_id != :agent_id
-                                    ORDER BY rd.day DESC, rd.hour DESC
-                                    LIMIT :additional_limit
-                                """)
-                                result = connection.execute(query_additional, {
-                                    "vis_day": visibility_day,
-                                    "vis_hour": visibility_hour,
-                                    "agent_id": agent_id,
-                                    "additional_limit": additional_posts_limit
-                                })
-                            post_ids.extend([row[0] for row in result])
+                        post_ids = content_recsys_db.recommend_rchrono_followers(
+                            connection, agent_id, visibility_day, visibility_hour, limit, followers_ratio
+                        )
                         
                     elif mode == "rchrono_followers_popularity":
                         # Followers with popularity boost
-                        follower_posts_limit = int(limit * followers_ratio)
-                        additional_posts_limit = limit - follower_posts_limit
-                        
-                        query_followers = text("""
-                            SELECT DISTINCT p.id 
-                            FROM post p
-                            INNER JOIN rounds rd ON p.round = rd.id
-                            INNER JOIN follow f ON p.user_id = f.follower_id
-                            LEFT JOIN (
-                                SELECT post_id, COUNT(*) as reaction_count
-                                FROM reaction
-                                GROUP BY post_id
-                            ) r ON p.id = r.post_id
-                            WHERE f.user_id = :agent_id 
-                                AND f.action = 'follow'
-                                AND (rd.day > :vis_day OR (rd.day = :vis_day AND rd.hour >= :vis_hour))
-                                AND p.user_id != :agent_id
-                            ORDER BY p.round DESC, COALESCE(r.reaction_count, 0) DESC
-                            LIMIT :follower_limit
-                        """)
-                        result = connection.execute(query_followers, {
-                            "agent_id": agent_id,
-                            "visibility": visibility,
-                            "follower_limit": follower_posts_limit
-                        })
-                        post_ids = [row[0] for row in result]
-                        
-                        if len(post_ids) < limit and additional_posts_limit > 0:
-                            if post_ids:
-                                query_additional = text("""
-                                    SELECT p.id 
-                                    FROM post p
-                                    LEFT JOIN (
-                                        SELECT post_id, COUNT(*) as reaction_count
-                                        FROM reaction
-                                        GROUP BY post_id
-                                    ) r ON p.id = r.post_id
-                                    WHERE rd.id = p.round AND (rd.day > :vis_day OR (rd.day = :vis_day AND rd.hour >= :vis_hour)) 
-                                        AND p.user_id != :agent_id
-                                        AND p.id NOT IN :existing_ids
-                                    ORDER BY p.round DESC, COALESCE(r.reaction_count, 0) DESC
-                                    LIMIT :additional_limit
-                                """)
-                                result = connection.execute(query_additional, {
-                                    "visibility": visibility,
-                                    "agent_id": agent_id,
-                                    "existing_ids": tuple(post_ids),
-                                    "additional_limit": additional_posts_limit
-                                })
-                            else:
-                                query_additional = text("""
-                                    SELECT p.id 
-                                    FROM post p
-                                    LEFT JOIN (
-                                        SELECT post_id, COUNT(*) as reaction_count
-                                        FROM reaction
-                                        GROUP BY post_id
-                                    ) r ON p.id = r.post_id
-                                    WHERE rd.id = p.round AND (rd.day > :vis_day OR (rd.day = :vis_day AND rd.hour >= :vis_hour)) 
-                                        AND p.user_id != :agent_id
-                                    ORDER BY p.round DESC, COALESCE(r.reaction_count, 0) DESC
-                                    LIMIT :additional_limit
-                                """)
-                                result = connection.execute(query_additional, {
-                                    "visibility": visibility,
-                                    "agent_id": agent_id,
-                                    "additional_limit": additional_posts_limit
-                                })
-                            post_ids.extend([row[0] for row in result])
+                        post_ids = content_recsys_db.recommend_rchrono_followers_popularity(
+                            connection, agent_id, visibility_day, visibility_hour, limit, followers_ratio
+                        )
                             
                     elif mode == "rchrono_comments":
                         # Prioritize posts with more comments (thread activity)
-                        # Count comments by checking posts that reference this post via comment_to
-                        query = text("""
-                            SELECT p.id
-                            FROM post p
-                            INNER JOIN rounds rd ON p.round = rd.id
-                            LEFT JOIN post c ON p.id = c.comment_to
-                            WHERE (rd.day > :vis_day OR (rd.day = :vis_day AND rd.hour >= :vis_hour))
-                                AND p.user_id != :agent_id
-                                AND p.comment_to IS NULL
-                            GROUP BY p.id
-                            ORDER BY COUNT(c.id) DESC, rd.day DESC, rd.hour DESC
-                            LIMIT :limit
-                        """)
-                        result = connection.execute(query, {
-                            "vis_day": visibility_day,
-                            "vis_hour": visibility_hour,
-                            "agent_id": agent_id,
-                            "limit": limit
-                        })
-                        post_ids = [row[0] for row in result]
+                        post_ids = content_recsys_db.recommend_rchrono_comments(
+                            connection, agent_id, visibility_day, visibility_hour, limit
+                        )
                         
                     elif mode == "common_interests":
                         # Posts with common topic interests
-                        # This requires PostTopic and UserInterest tables
-                        follower_posts_limit = int(limit * followers_ratio)
-                        additional_posts_limit = limit - follower_posts_limit
-                        
-                        # Get posts matching user's interests from followers
-                        query = text("""
-                            SELECT DISTINCT p.id
-                            FROM post p
-                            INNER JOIN rounds rd ON p.round = rd.id
-                            INNER JOIN post_topics pt ON p.id = pt.post_id
-                            INNER JOIN user_interest ui ON pt.topic_id = ui.interest_id
-                            INNER JOIN follow f ON p.user_id = f.follower_id
-                            WHERE ui.user_id = :agent_id
-                                AND f.user_id = :agent_id
-                                AND f.action = 'follow'
-                                AND (rd.day > :vis_day OR (rd.day = :vis_day AND rd.hour >= :vis_hour))
-                                AND p.user_id != :agent_id
-                            GROUP BY p.id
-                            ORDER BY COUNT(pt.topic_id) DESC, rd.day DESC, rd.hour DESC
-                            LIMIT :follower_limit
-                        """)
-                        result = connection.execute(query, {
-                            "agent_id": agent_id,
-                            "vis_day": visibility_day,
-                            "vis_hour": visibility_hour,
-                            "follower_limit": follower_posts_limit
-                        })
-                        post_ids = [row[0] for row in result]
-                        
-                        # Get additional posts with common interests
-                        if len(post_ids) < limit and additional_posts_limit > 0:
-                            if post_ids:
-                                query_additional = text("""
-                                    SELECT DISTINCT p.id
-                                    FROM post p
-                                    INNER JOIN rounds rd ON p.round = rd.id
-                                    INNER JOIN post_topics pt ON p.id = pt.post_id
-                                    INNER JOIN user_interest ui ON pt.topic_id = ui.interest_id
-                                    WHERE ui.user_id = :agent_id
-                                        AND (rd.day > :vis_day OR (rd.day = :vis_day AND rd.hour >= :vis_hour))
-                                        AND p.user_id != :agent_id
-                                        AND p.id NOT IN :existing_ids
-                                    GROUP BY p.id
-                                    ORDER BY COUNT(pt.topic_id) DESC, rd.day DESC, rd.hour DESC
-                                    LIMIT :additional_limit
-                                """)
-                                result = connection.execute(query_additional, {
-                                    "agent_id": agent_id,
-                                    "vis_day": visibility_day,
-                                    "vis_hour": visibility_hour,
-                                    "existing_ids": tuple(post_ids),
-                                    "additional_limit": additional_posts_limit
-                                })
-                            else:
-                                query_additional = text("""
-                                    SELECT DISTINCT p.id
-                                    FROM post p
-                                    INNER JOIN rounds rd ON p.round = rd.id
-                                    INNER JOIN post_topics pt ON p.id = pt.post_id
-                                    INNER JOIN user_interest ui ON pt.topic_id = ui.interest_id
-                                    WHERE ui.user_id = :agent_id
-                                        AND (rd.day > :vis_day OR (rd.day = :vis_day AND rd.hour >= :vis_hour))
-                                        AND p.user_id != :agent_id
-                                    GROUP BY p.id
-                                    ORDER BY COUNT(pt.topic_id) DESC, rd.day DESC, rd.hour DESC
-                                    LIMIT :additional_limit
-                                """)
-                                result = connection.execute(query_additional, {
-                                    "agent_id": agent_id,
-                                    "vis_day": visibility_day,
-                                    "vis_hour": visibility_hour,
-                                    "additional_limit": additional_posts_limit
-                                })
-                            post_ids.extend([row[0] for row in result])
+                        post_ids = content_recsys_db.recommend_common_interests(
+                            connection, agent_id, visibility_day, visibility_hour, limit, followers_ratio
+                        )
                     
                     elif mode == "common_user_interests":
                         # Posts by users with common interests (most interacted)
-                        follower_posts_limit = int(limit * followers_ratio)
-                        additional_posts_limit = limit - follower_posts_limit
-                        
-                        # Get posts reacted to by users with common interests who are followers
-                        query = text("""
-                            SELECT DISTINCT p.id, COUNT(r.id) as reaction_count
-                            FROM post p
-                            INNER JOIN rounds rd ON p.round = rd.id
-                            INNER JOIN reaction r ON p.id = r.post_id
-                            INNER JOIN user_mgmt um ON r.user_id = um.id
-                            INNER JOIN user_interest ui1 ON um.id = ui1.user_id
-                            INNER JOIN user_interest ui2 ON ui1.interest_id = ui2.interest_id
-                            INNER JOIN follow f ON um.id = f.follower_id
-                            WHERE ui2.user_id = :agent_id
-                                AND f.user_id = :agent_id
-                                AND f.action = 'follow'
-                                AND (rd.day > :vis_day OR (rd.day = :vis_day AND rd.hour >= :vis_hour))
-                                AND p.user_id != :agent_id
-                            GROUP BY p.id
-                            ORDER BY reaction_count DESC, rd.day DESC, rd.hour DESC
-                            LIMIT :follower_limit
-                        """)
-                        result = connection.execute(query, {
-                            "agent_id": agent_id,
-                            "vis_day": visibility_day,
-                            "vis_hour": visibility_hour,
-                            "follower_limit": follower_posts_limit
-                        })
-                        post_ids = [row[0] for row in result]
-                        
-                        # Get additional from non-followers with common interests
-                        if len(post_ids) < limit and additional_posts_limit > 0:
-                            if post_ids:
-                                query_additional = text("""
-                                    SELECT DISTINCT p.id, COUNT(r.id) as reaction_count
-                                    FROM post p
-                                    INNER JOIN rounds rd ON p.round = rd.id
-                                    INNER JOIN reaction r ON p.id = r.post_id
-                                    INNER JOIN user_mgmt um ON r.user_id = um.id
-                                    INNER JOIN user_interest ui1 ON um.id = ui1.user_id
-                                    INNER JOIN user_interest ui2 ON ui1.interest_id = ui2.interest_id
-                                    WHERE ui2.user_id = :agent_id
-                                        AND (rd.day > :vis_day OR (rd.day = :vis_day AND rd.hour >= :vis_hour))
-                                        AND p.user_id != :agent_id
-                                        AND p.id NOT IN :existing_ids
-                                    GROUP BY p.id
-                                    ORDER BY reaction_count DESC, rd.day DESC, rd.hour DESC
-                                    LIMIT :additional_limit
-                                """)
-                                result = connection.execute(query_additional, {
-                                    "agent_id": agent_id,
-                                    "vis_day": visibility_day,
-                                    "vis_hour": visibility_hour,
-                                    "existing_ids": tuple(post_ids),
-                                    "additional_limit": additional_posts_limit
-                                })
-                                post_ids.extend([row[0] for row in result])
+                        post_ids = content_recsys_db.recommend_common_user_interests(
+                            connection, agent_id, visibility_day, visibility_hour, limit, followers_ratio
+                        )
                     
                     elif mode == "similar_users_react":
                         # Posts from similar users (based on demographics/personality)
-                        # Find similar users and get posts they reacted to
-                        query = text("""
-                            SELECT DISTINCT p.id
-                            FROM post p
-                            INNER JOIN rounds rd ON p.round = rd.id
-                            INNER JOIN reaction r ON p.id = r.post_id
-                            INNER JOIN user_mgmt um ON r.user_id = um.id
-                            INNER JOIN user_mgmt target ON target.id = :agent_id
-                            WHERE (rd.day > :vis_day OR (rd.day = :vis_day AND rd.hour >= :vis_hour))
-                                AND p.user_id != :agent_id
-                                AND um.id != :agent_id
-                                AND r.type = 'like'
-                                AND (
-                                    (um.age_group = target.age_group) OR
-                                    (um.gender = target.gender) OR
-                                    (um.leaning = target.leaning)
-                                )
-                            GROUP BY p.id
-                            ORDER BY rd.day DESC, rd.hour DESC
-                            LIMIT :limit
-                        """)
-                        result = connection.execute(query, {
-                            "agent_id": agent_id,
-                            "vis_day": visibility_day,
-                            "vis_hour": visibility_hour,
-                            "limit": limit
-                        })
-                        post_ids = [row[0] for row in result]
+                        post_ids = content_recsys_db.recommend_similar_users_react(
+                            connection, agent_id, visibility_day, visibility_hour, limit
+                        )
                     
                     elif mode == "similar_users_posts":
                         # Posts created by similar users
-                        query = text("""
-                            SELECT p.id
-                            FROM post p
-                            INNER JOIN rounds rd ON p.round = rd.id
-                            INNER JOIN user_mgmt um ON p.user_id = um.id
-                            INNER JOIN user_mgmt target ON target.id = :agent_id
-                            WHERE (rd.day > :vis_day OR (rd.day = :vis_day AND rd.hour >= :vis_hour))
-                                AND p.user_id != :agent_id
-                                AND (
-                                    (um.age_group = target.age_group) OR
-                                    (um.gender = target.gender) OR
-                                    (um.leaning = target.leaning)
-                                )
-                            ORDER BY rd.day DESC, rd.hour DESC
-                            LIMIT :limit
-                        """)
-                        result = connection.execute(query, {
-                            "agent_id": agent_id,
-                            "vis_day": visibility_day,
-                            "vis_hour": visibility_hour,
-                            "limit": limit
-                        })
-                        post_ids = [row[0] for row in result]
+                        post_ids = content_recsys_db.recommend_similar_users_posts(
+                            connection, agent_id, visibility_day, visibility_hour, limit
+                        )
                         
                     else:
                         # Random ordering (default)
-                        # Note: RANDOM() works for SQLite and PostgreSQL
-                        # For MySQL, use RAND() instead
-                        query = text("""
-                            SELECT p.id FROM post p
-                            INNER JOIN rounds rd ON p.round = rd.id
-                            WHERE (rd.day > :vis_day OR (rd.day = :vis_day AND rd.hour >= :vis_hour))
-                                AND p.user_id != :agent_id
-                            ORDER BY RANDOM()
-                            LIMIT :limit
-                        """)
-                        result = connection.execute(query, {
-                            "vis_day": visibility_day,
-                            "vis_hour": visibility_hour,
-                            "agent_id": agent_id,
-                            "limit": limit
-                        })
-                        post_ids = [row[0] for row in result]
+                        post_ids = content_recsys_db.recommend_random(
+                            connection, agent_id, visibility_day, visibility_hour, limit
+                        )
                     
                     self.logger.info(
                         f"Recommended {len(post_ids)} posts (SQL, mode={mode})",
@@ -1908,3 +1385,197 @@ class OrchestratorServer:
             Dictionary with post data or None if not found
         """
         return self.db.get_post(post_id)
+
+    def get_follow_suggestions(
+        self,
+        agent_id: str,
+        mode: str = "random",
+        n_neighbors: int = 10,
+        leaning_bias: int = 1
+    ) -> List[str]:
+        """
+        Get follow suggestions for an agent using the specified recommendation strategy.
+        
+        This method implements various link prediction and recommendation algorithms
+        using efficient query-based approaches for scalability.
+        
+        Args:
+            agent_id: UUID of the agent requesting follow suggestions
+            mode: Recommendation mode:
+                - "random": Random user suggestions (default)
+                - "common_neighbors": Users with mutual connections
+                - "jaccard": Jaccard coefficient-based similarity
+                - "adamic_adar": Adamic/Adar index for link prediction
+                - "preferential_attachment": Rich-get-richer recommendation
+            n_neighbors: Number of users to suggest (default: 10)
+            leaning_bias: Political leaning bias factor (1 = no bias, higher = more homophily)
+            
+        Returns:
+            List[str]: List of user UUIDs recommended for the agent to follow
+        """
+        if self.db.use_redis:
+            return self._get_follow_suggestions_redis(agent_id, mode, n_neighbors, leaning_bias)
+        else:
+            return self._get_follow_suggestions_sql(agent_id, mode, n_neighbors, leaning_bias)
+    
+    def _get_follow_suggestions_sql(
+        self,
+        agent_id: str,
+        mode: str,
+        n_neighbors: int,
+        leaning_bias: int
+    ) -> List[str]:
+        """
+        Get follow suggestions using SQL queries for better scalability.
+        
+        Dispatcher method that delegates to modular functions in follow_recsys_db module.
+        """
+        try:
+            from sqlalchemy.orm import Session
+            from YSimulator.YServer.classes.models import User_mgmt, Follow
+            from sqlalchemy import func, and_
+            
+            with Session(self.db.engine) as session:
+                # Get agent's info
+                agent = session.query(User_mgmt).filter_by(id=agent_id).first()
+                if not agent:
+                    self.logger.warning(f"Agent {agent_id} not found for follow suggestions")
+                    return []
+                
+                # Get users that agent is currently following (with latest action = "follow")
+                latest_follows_subq = session.query(
+                    Follow.follower_id,
+                    Follow.user_id,
+                    func.max(Follow.round).label('max_round')
+                ).filter(
+                    Follow.follower_id == agent_id
+                ).group_by(Follow.follower_id, Follow.user_id).subquery()
+                
+                following = session.query(Follow.user_id).join(
+                    latest_follows_subq,
+                    and_(
+                        Follow.follower_id == latest_follows_subq.c.follower_id,
+                        Follow.user_id == latest_follows_subq.c.user_id,
+                        Follow.round == latest_follows_subq.c.max_round,
+                        Follow.action == "follow"
+                    )
+                ).all()
+                following_ids = {f.user_id for f in following}
+                
+                # Dispatch to appropriate recommendation function
+                if mode == "random":
+                    suggestions = follow_recsys_db.recommend_random_follows(
+                        session, agent_id, following_ids, n_neighbors
+                    )
+                elif mode == "common_neighbors":
+                    suggestions = follow_recsys_db.recommend_common_neighbors(
+                        session, agent_id, following_ids, n_neighbors
+                    )
+                elif mode == "jaccard":
+                    suggestions = follow_recsys_db.recommend_jaccard(
+                        session, agent_id, following_ids, n_neighbors
+                    )
+                elif mode == "adamic_adar":
+                    suggestions = follow_recsys_db.recommend_adamic_adar(
+                        session, agent_id, following_ids, n_neighbors
+                    )
+                elif mode == "preferential_attachment":
+                    suggestions = follow_recsys_db.recommend_preferential_attachment(
+                        session, agent_id, following_ids, n_neighbors
+                    )
+                else:
+                    # Unknown mode, fallback to random
+                    suggestions = follow_recsys_db.recommend_random_follows(
+                        session, agent_id, following_ids, n_neighbors
+                    )
+                
+                # Apply leaning bias if requested
+                suggestions = follow_recsys_db.apply_leaning_bias(
+                    session, agent_id, suggestions, leaning_bias, n_neighbors
+                )
+                
+                return suggestions[:n_neighbors]
+                
+        except Exception as e:
+            self.logger.error(
+                f"Error getting SQL follow suggestions: {e}",
+                extra={"extra_data": {"error": str(e), "agent_id": agent_id, "mode": mode}}
+            )
+            # Fallback to simple random
+            try:
+                from sqlalchemy.orm import Session
+                from YSimulator.YServer.classes.models import User_mgmt
+                with Session(self.db.engine) as session:
+                    candidates = session.query(User_mgmt.id).filter(
+                        User_mgmt.id != agent_id
+                    ).limit(n_neighbors * 2).all()
+                    candidate_ids = [c.id for c in candidates]
+                    random.shuffle(candidate_ids)
+                    return candidate_ids[:n_neighbors]
+            except:
+                return []
+    
+    def _get_follow_suggestions_redis(
+        self,
+        agent_id: str,
+        mode: str,
+        n_neighbors: int,
+        leaning_bias: int
+    ) -> List[str]:
+        """
+        Get follow suggestions using Redis for better scalability with key-value storage.
+        Dispatcher method that delegates to specific recommendation functions.
+        """
+        from YSimulator.YServer.recsys import follow_recsys_redis
+        
+        try:
+            # Dispatch to appropriate recommendation function
+            if mode == "random":
+                recommendations = follow_recsys_redis.recommend_random_follows_redis(
+                    self.db.redis_client, self.db._redis_key, agent_id, n_neighbors, self.logger
+                )
+            elif mode == "preferential_attachment":
+                recommendations = follow_recsys_redis.recommend_preferential_attachment_redis(
+                    self.db.redis_client, self.db._redis_key, agent_id, n_neighbors, self.logger
+                )
+            elif mode == "common_neighbors":
+                recommendations = follow_recsys_redis.recommend_common_neighbors_redis(
+                    self.db.redis_client, self.db._redis_key, agent_id, n_neighbors, self.logger
+                )
+            elif mode == "jaccard":
+                recommendations = follow_recsys_redis.recommend_jaccard_redis(
+                    self.db.redis_client, self.db._redis_key, agent_id, n_neighbors, self.logger
+                )
+            elif mode == "adamic_adar":
+                recommendations = follow_recsys_redis.recommend_adamic_adar_redis(
+                    self.db.redis_client, self.db._redis_key, agent_id, n_neighbors, self.logger
+                )
+            else:
+                # Unknown mode, fallback to random
+                self.logger.warning(f"Unknown follow recommendation mode: {mode}, using random")
+                recommendations = follow_recsys_redis.recommend_random_follows_redis(
+                    self.db.redis_client, self.db._redis_key, agent_id, n_neighbors, self.logger
+                )
+            
+            # Apply political leaning bias if specified
+            if leaning_bias > 0 and recommendations:
+                recommendations = follow_recsys_redis.apply_leaning_bias_redis(
+                    self.db.redis_client, self.db._redis_key, agent_id, recommendations, leaning_bias, self.logger
+                )
+            
+            return recommendations
+                
+        except Exception as e:
+            self.logger.error(
+                f"Error getting Redis follow suggestions: {e}",
+                extra={"extra_data": {"error": str(e), "agent_id": agent_id, "mode": mode}}
+            )
+            # Fallback to random from user_mgmt ids
+            try:
+                user_ids_key = self.db._redis_key("user_mgmt", "ids")
+                all_user_ids = list(self.db.redis_client.smembers(user_ids_key))
+                candidates = [uid for uid in all_user_ids if uid != agent_id]
+                random.shuffle(candidates)
+                return candidates[:n_neighbors]
+            except:
+                return []

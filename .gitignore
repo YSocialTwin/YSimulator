@@ -212,3 +212,6 @@ ray_config.temp
 # Application logs
 logs/
 
+# Simulation state files
+simulation.db
+
