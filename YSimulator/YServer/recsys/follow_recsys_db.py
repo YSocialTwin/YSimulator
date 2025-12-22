@@ -2,15 +2,15 @@
 SQL-based follow recommendation strategies.
 
 This module contains isolated functions for each follow recommendation algorithm
-using SQL database queries. Each function is independent and testable.
+using SQLAlchemy ORM for DBMS independence. Each function is independent and testable.
 """
 
 import random
 import math
 from typing import List
-from sqlalchemy import text
-from sqlalchemy.orm import Session
-from YSimulator.YServer.classes.models import User_mgmt
+from sqlalchemy import func, desc
+from sqlalchemy.orm import Session, aliased
+from YSimulator.YServer.classes.models import User_mgmt, Follow
 
 
 def recommend_random_follows(
@@ -80,30 +80,26 @@ def recommend_common_neighbors(
             return recommend_random_follows(session, agent_id, following_ids, n_neighbors)
         
         # Find users with common neighbors (friend-of-friend)
-        fof_query = text("""
-            SELECT f2.user_id, COUNT(*) as common_count
-            FROM follow f1
-            JOIN follow f2 ON f1.user_id = f2.follower_id
-            WHERE f1.follower_id = :agent_id
-              AND f1.action = 'follow'
-              AND f2.action = 'follow'
-              AND f2.user_id != :agent_id
-              AND f2.user_id NOT IN :following_ids
-            GROUP BY f2.user_id
-            ORDER BY common_count DESC
-            LIMIT :limit
-        """)
+        # f1: agent's follows, f2: friends of friends
+        Follow1 = aliased(Follow)
+        Follow2 = aliased(Follow)
         
         following_list = list(following_ids) if following_ids else [agent_id]
-        result = session.execute(
-            fof_query,
-            {
-                "agent_id": agent_id,
-                "following_ids": tuple(following_list),
-                "limit": n_neighbors
-            }
-        )
-        suggestions = [row[0] for row in result]
+        
+        fof_query = session.query(
+            Follow2.user_id,
+            func.count().label('common_count')
+        ).select_from(Follow1).join(
+            Follow2, Follow1.user_id == Follow2.follower_id
+        ).filter(
+            Follow1.follower_id == agent_id,
+            Follow1.action == 'follow',
+            Follow2.action == 'follow',
+            Follow2.user_id != agent_id,
+            Follow2.user_id.notin_(following_list)
+        ).group_by(Follow2.user_id).order_by(desc('common_count')).limit(n_neighbors)
+        
+        suggestions = [row[0] for row in fof_query.all()]
         
         # Fill with random if needed
         if len(suggestions) < n_neighbors:
@@ -153,40 +149,56 @@ def recommend_jaccard(
         if not following_ids:
             return recommend_random_follows(session, agent_id, following_ids, n_neighbors)
         
-        # Calculate Jaccard similarity using SQL
-        jaccard_query = text("""
-            SELECT 
-                candidate_id,
-                CAST(common_count AS FLOAT) / NULLIF(union_count, 0) as jaccard_score
-            FROM (
-                SELECT 
-                    f2.user_id as candidate_id,
-                    COUNT(DISTINCT CASE WHEN f1.user_id = f2.follower_id THEN f1.user_id END) as common_count,
-                    COUNT(DISTINCT f1.user_id) + COUNT(DISTINCT f3.user_id) as union_count
-                FROM follow f1
-                CROSS JOIN follow f2
-                LEFT JOIN follow f3 ON f2.user_id = f3.follower_id AND f3.action = 'follow'
-                WHERE f1.follower_id = :agent_id
-                  AND f1.action = 'follow'
-                  AND f2.action = 'follow'
-                  AND f2.user_id != :agent_id
-                  AND f2.user_id NOT IN :following_ids
-                GROUP BY f2.user_id
-            ) subq
-            ORDER BY jaccard_score DESC
-            LIMIT :limit
-        """)
+        # Get friend-of-friend candidates with common neighbors count
+        Follow1 = aliased(Follow)
+        Follow2 = aliased(Follow)
         
-        following_list = list(following_ids) if following_ids else [agent_id]
-        result = session.execute(
-            jaccard_query,
-            {
-                "agent_id": agent_id,
-                "following_ids": tuple(following_list),
-                "limit": n_neighbors
-            }
-        )
-        suggestions = [row[0] for row in result]
+        following_list = list(following_ids)
+        
+        # Get common neighbors count for each candidate
+        common_query = session.query(
+            Follow2.user_id.label('candidate_id'),
+            func.count(func.distinct(Follow1.user_id)).label('common_count')
+        ).select_from(Follow1).join(
+            Follow2, Follow1.user_id == Follow2.follower_id
+        ).filter(
+            Follow1.follower_id == agent_id,
+            Follow1.action == 'follow',
+            Follow2.action == 'follow',
+            Follow2.user_id != agent_id,
+            Follow2.user_id.notin_(following_list)
+        ).group_by(Follow2.user_id).subquery()
+        
+        # Get union count (agent's following count + candidate's following count - common)
+        agent_following_count = len(following_ids)
+        
+        # For each candidate, get their following count
+        Follow3 = aliased(Follow)
+        union_query = session.query(
+            common_query.c.candidate_id,
+            common_query.c.common_count,
+            func.count(Follow3.user_id).label('candidate_following_count')
+        ).select_from(common_query).outerjoin(
+            Follow3, 
+            (common_query.c.candidate_id == Follow3.follower_id) & 
+            (Follow3.action == 'follow')
+        ).group_by(
+            common_query.c.candidate_id,
+            common_query.c.common_count
+        ).subquery()
+        
+        # Calculate Jaccard score
+        from sqlalchemy import Float
+        jaccard_query = session.query(
+            union_query.c.candidate_id,
+            (func.cast(union_query.c.common_count, Float) / 
+             func.nullif(
+                 agent_following_count + union_query.c.candidate_following_count - union_query.c.common_count,
+                 0
+             )).label('jaccard_score')
+        ).order_by(desc('jaccard_score')).limit(n_neighbors)
+        
+        suggestions = [row[0] for row in jaccard_query.all()]
         
         # Fill with random if needed
         if len(suggestions) < n_neighbors:
@@ -238,25 +250,25 @@ def recommend_adamic_adar(
             return recommend_random_follows(session, agent_id, following_ids, n_neighbors)
         
         # Step 1: Get common neighbors (friend-of-friend) candidates
-        common_neighbors_query = text("""
-            SELECT f2.user_id, f2.follower_id as common_neighbor
-            FROM follow f1
-            JOIN follow f2 ON f1.user_id = f2.follower_id
-            WHERE f1.follower_id = :agent_id
-              AND f1.action = 'follow'
-              AND f2.action = 'follow'
-              AND f2.user_id != :agent_id
-              AND f2.user_id NOT IN :following_ids
-        """)
+        Follow1 = aliased(Follow)
+        Follow2 = aliased(Follow)
         
-        following_list = list(following_ids) if following_ids else [agent_id]
-        result = session.execute(
-            common_neighbors_query,
-            {
-                "agent_id": agent_id,
-                "following_ids": tuple(following_list)
-            }
+        following_list = list(following_ids)
+        
+        common_neighbors_query = session.query(
+            Follow2.user_id,
+            Follow2.follower_id.label('common_neighbor')
+        ).select_from(Follow1).join(
+            Follow2, Follow1.user_id == Follow2.follower_id
+        ).filter(
+            Follow1.follower_id == agent_id,
+            Follow1.action == 'follow',
+            Follow2.action == 'follow',
+            Follow2.user_id != agent_id,
+            Follow2.user_id.notin_(following_list)
         )
+        
+        result = common_neighbors_query.all()
         
         # Build mapping of candidate -> list of common neighbors
         candidate_common_neighbors = {}
@@ -277,21 +289,16 @@ def recommend_adamic_adar(
             common_neighbor_ids.update(neighbors)
         
         # Query to get degree for each common neighbor
-        degree_query = text("""
-            SELECT follower_id, COUNT(*) as out_degree
-            FROM follow
-            WHERE follower_id IN :neighbor_ids
-              AND action = 'follow'
-            GROUP BY follower_id
-        """)
-        
-        degree_result = session.execute(
-            degree_query,
-            {"neighbor_ids": tuple(common_neighbor_ids)}
-        )
+        degree_query = session.query(
+            Follow.follower_id,
+            func.count().label('out_degree')
+        ).filter(
+            Follow.follower_id.in_(common_neighbor_ids),
+            Follow.action == 'follow'
+        ).group_by(Follow.follower_id)
         
         # Build degree map
-        neighbor_degrees = {row[0]: row[1] for row in degree_result}
+        neighbor_degrees = {row[0]: row[1] for row in degree_query.all()}
         
         # Calculate Adamic/Adar score for each candidate
         adamic_adar_scores = {}
@@ -353,27 +360,18 @@ def recommend_preferential_attachment(
     """
     try:
         # Prefer users with many followers (popularity-based)
-        popular_users = text("""
-            SELECT f.user_id, COUNT(*) as follower_count
-            FROM follow f
-            WHERE f.action = 'follow'
-              AND f.user_id != :agent_id
-              AND f.user_id NOT IN :following_ids
-            GROUP BY f.user_id
-            ORDER BY follower_count DESC
-            LIMIT :limit
-        """)
-        
         following_list = list(following_ids) if following_ids else [agent_id]
-        result = session.execute(
-            popular_users,
-            {
-                "agent_id": agent_id,
-                "following_ids": tuple(following_list),
-                "limit": n_neighbors
-            }
-        )
-        suggestions = [row[0] for row in result]
+        
+        popular_users_query = session.query(
+            Follow.user_id,
+            func.count().label('follower_count')
+        ).filter(
+            Follow.action == 'follow',
+            Follow.user_id != agent_id,
+            Follow.user_id.notin_(following_list)
+        ).group_by(Follow.user_id).order_by(desc('follower_count')).limit(n_neighbors)
+        
+        suggestions = [row[0] for row in popular_users_query.all()]
         
         # Fill with random if needed
         if len(suggestions) < n_neighbors:

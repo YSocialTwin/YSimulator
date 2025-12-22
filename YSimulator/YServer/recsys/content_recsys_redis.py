@@ -5,7 +5,7 @@ Each function implements a specific recommendation algorithm using Redis key-val
 """
 from typing import List, Dict, Any, Set, Optional
 import random
-from sqlalchemy import text
+from YSimulator.YServer.classes.models import Follow, UserInterest, PostTopic, User_mgmt, Reaction
 
 
 def recommend_rchrono_redis(
@@ -80,13 +80,14 @@ def recommend_rchrono_followers_redis(
     follower_posts_limit = int(limit * followers_ratio)
     additional_posts_limit = limit - follower_posts_limit
     
-    # Get followed user IDs from database
-    with db_engine.begin() as connection:
-        result = connection.execute(
-            text("SELECT follower_id FROM follow WHERE user_id = :agent_id AND action = 'follow'"),
-            {"agent_id": agent_id}
+    # Get followed user IDs from database using SQLAlchemy ORM
+    from sqlalchemy.orm import Session
+    with Session(db_engine) as session:
+        query = session.query(Follow.follower_id).filter(
+            Follow.user_id == agent_id,
+            Follow.action == 'follow'
         )
-        followed_user_ids = set(row[0] for row in result)
+        followed_user_ids = set(row[0] for row in query.all())
     
     # Create mapping for efficient lookup (avoid O(n²))
     post_id_to_data = {all_post_ids[i]: posts_data[i] for i in range(len(all_post_ids))}
@@ -137,13 +138,14 @@ def recommend_rchrono_followers_popularity_redis(
     follower_posts_limit = int(limit * followers_ratio)
     additional_posts_limit = limit - follower_posts_limit
     
-    # Get follow relationships
-    with db_engine.begin() as connection:
-        result = connection.execute(
-            text("SELECT follower_id FROM follow WHERE user_id = :agent_id AND action = 'follow'"),
-            {"agent_id": agent_id}
+    # Get follow relationships using SQLAlchemy ORM
+    from sqlalchemy.orm import Session
+    with Session(db_engine) as session:
+        query = session.query(Follow.follower_id).filter(
+            Follow.user_id == agent_id,
+            Follow.action == 'follow'
         )
-        followed_user_ids = set(row[0] for row in result)
+        followed_user_ids = set(row[0] for row in query.all())
     
     # Create mapping for efficient lookup
     post_id_to_data = {all_post_ids[i]: posts_data[i] for i in range(len(all_post_ids))}
@@ -274,20 +276,30 @@ def recommend_common_interests_redis(
             post_ids.extend(additional[:limit - len(post_ids)])
     else:
         # Fallback to SQL query when Redis data not available yet
-        logger.info(f"Mode common_interests - Redis cache for interests/topics not available yet, using SQL")
-        with db_engine.begin() as connection:
-            query = text("""
-                SELECT DISTINCT p.id
-                FROM post p
-                INNER JOIN post_topic pt ON p.id = pt.post_id
-                INNER JOIN user_interest ui ON pt.topic_id = ui.topic_id
-                WHERE ui.user_id = :agent_id AND p.user_id != :agent_id
-                ORDER BY p.id DESC
-                LIMIT :limit
-            """)
-            result = connection.execute(query, {"agent_id": agent_id, "limit": limit})
-            sql_post_ids = [row[0] for row in result]
-            post_ids = [pid for pid in sql_post_ids if pid in all_post_ids][:limit]
+        logger.info(f"Mode common_interests - Redis cache for interests/topics not available yet, using SQLAlchemy ORM")
+        from sqlalchemy.orm import Session
+        with Session(db_engine) as session:
+            from sqlalchemy import desc
+            from YSimulator.YServer.classes.models import Post
+            query = session.query(UserInterest.interest_id).filter(
+                UserInterest.user_id == agent_id
+            ).distinct()
+            
+            user_interests = set(row[0] for row in query.all())
+            
+            if user_interests:
+                post_query = session.query(PostTopic.post_id).join(
+                    Post, PostTopic.post_id == Post.id
+                ).filter(
+                    PostTopic.topic_id.in_(user_interests),
+                    Post.user_id != agent_id
+                ).distinct().order_by(desc(PostTopic.post_id)).limit(limit)
+                
+                sql_post_ids = [row[0] for row in post_query.all()]
+                post_ids = [pid for pid in sql_post_ids if pid in all_post_ids][:limit]
+            else:
+                sql_post_ids = []
+                post_ids = []
             
             if len(post_ids) < limit:
                 additional = [p['id'] for p in valid_posts_with_data if p['id'] not in post_ids]
@@ -367,24 +379,31 @@ def recommend_common_user_interests_redis(
             additional = [p['id'] for p in valid_posts_with_data if p['id'] not in post_ids]
             post_ids.extend(additional[:limit - len(post_ids)])
     else:
-        # Fallback to SQL
-        logger.info(f"Mode common_user_interests - Redis cache for interests not available yet, using SQL")
-        with db_engine.begin() as connection:
-            query = text("""
-                SELECT DISTINCT p.id
-                FROM post p
-                INNER JOIN reaction r ON p.id = r.post_id
-                INNER JOIN user_interest ui1 ON r.user_id = ui1.user_id
-                INNER JOIN user_interest ui2 ON ui1.topic_id = ui2.topic_id
-                WHERE ui2.user_id = :agent_id 
-                    AND r.user_id != :agent_id 
-                    AND p.user_id != :agent_id
-                    AND r.type = 'like'
-                ORDER BY p.id DESC
-                LIMIT :limit
-            """)
-            result = connection.execute(query, {"agent_id": agent_id, "limit": limit})
-            sql_post_ids = [row[0] for row in result]
+        # Fallback to SQLAlchemy ORM
+        logger.info(f"Mode common_user_interests - Redis cache for interests not available yet, using SQLAlchemy ORM")
+        from sqlalchemy.orm import Session, aliased
+        from sqlalchemy import desc
+        with Session(db_engine) as session:
+            # Get user interests
+            UserInterest1 = aliased(UserInterest)
+            UserInterest2 = aliased(UserInterest)
+            
+            # Find posts liked by users with common interests
+            from YSimulator.YServer.classes.models import Post
+            query = session.query(Reaction.post_id).distinct().join(
+                UserInterest1, Reaction.user_id == UserInterest1.user_id
+            ).join(
+                UserInterest2, UserInterest1.interest_id == UserInterest2.interest_id
+            ).join(
+                Post, Reaction.post_id == Post.id
+            ).filter(
+                UserInterest2.user_id == agent_id,
+                Reaction.user_id != agent_id,
+                Post.user_id != agent_id,
+                Reaction.type == 'like'
+            ).order_by(desc(Reaction.post_id)).limit(limit)
+            
+            sql_post_ids = [row[0] for row in query.all()]
             post_ids = [pid for pid in sql_post_ids if pid in all_post_ids][:limit]
             
             if len(post_ids) < limit:
@@ -469,28 +488,33 @@ def recommend_similar_users_react_redis(
             additional = [p['id'] for p in valid_posts_with_data if p['id'] not in post_ids]
             post_ids.extend(additional[:limit - len(post_ids)])
     else:
-        # Fallback to SQL query
-        logger.info(f"Mode similar_users_react - Using SQL for user demographics query")
-        with db_engine.begin() as connection:
-            query = text("""
-                SELECT DISTINCT p.id
-                FROM post p
-                INNER JOIN reaction r ON p.id = r.post_id
-                INNER JOIN user_mgmt um ON r.user_id = um.id
-                INNER JOIN user_mgmt target ON target.id = :agent_id
-                WHERE p.user_id != :agent_id
-                    AND um.id != :agent_id
-                    AND r.type = 'like'
-                    AND (
-                        (um.age_group = target.age_group) OR
-                        (um.gender = target.gender) OR
-                        (um.leaning = target.leaning)
-                    )
-                ORDER BY p.id DESC
-                LIMIT :limit
-            """)
-            result = connection.execute(query, {"agent_id": agent_id, "limit": limit})
-            sql_post_ids = [row[0] for row in result]
+        # Fallback to SQLAlchemy ORM query
+        logger.info(f"Mode similar_users_react - Using SQLAlchemy ORM for user demographics query")
+        from sqlalchemy.orm import Session, aliased
+        from sqlalchemy import desc, or_
+        with Session(db_engine) as session:
+            ReactorUser = aliased(User_mgmt)
+            TargetUser = aliased(User_mgmt)
+            
+            from YSimulator.YServer.classes.models import Post
+            query = session.query(Reaction.post_id).distinct().join(
+                ReactorUser, Reaction.user_id == ReactorUser.id
+            ).join(
+                TargetUser, TargetUser.id == agent_id
+            ).join(
+                Post, Reaction.post_id == Post.id
+            ).filter(
+                Post.user_id != agent_id,
+                ReactorUser.id != agent_id,
+                Reaction.type == 'like',
+                or_(
+                    ReactorUser.age_group == TargetUser.age_group,
+                    ReactorUser.gender == TargetUser.gender,
+                    ReactorUser.leaning == TargetUser.leaning
+                )
+            ).order_by(desc(Reaction.post_id)).limit(limit)
+            
+            sql_post_ids = [row[0] for row in query.all()]
             post_ids = [pid for pid in sql_post_ids if pid in all_post_ids][:limit]
             
             if len(post_ids) < limit:
@@ -575,25 +599,29 @@ def recommend_similar_users_posts_redis(
             additional = [p['id'] for p in valid_posts_with_data if p['id'] not in post_ids]
             post_ids.extend(additional[:limit - len(post_ids)])
     else:
-        # Fallback to SQL query
-        logger.info(f"Mode similar_users_posts - Using SQL for user demographics query")
-        with db_engine.begin() as connection:
-            query = text("""
-                SELECT p.id
-                FROM post p
-                INNER JOIN user_mgmt um ON p.user_id = um.id
-                INNER JOIN user_mgmt target ON target.id = :agent_id
-                WHERE p.user_id != :agent_id
-                    AND (
-                        (um.age_group = target.age_group) OR
-                        (um.gender = target.gender) OR
-                        (um.leaning = target.leaning)
-                    )
-                ORDER BY p.id DESC
-                LIMIT :limit
-            """)
-            result = connection.execute(query, {"agent_id": agent_id, "limit": limit})
-            sql_post_ids = [row[0] for row in result]
+        # Fallback to SQLAlchemy ORM query
+        logger.info(f"Mode similar_users_posts - Using SQLAlchemy ORM for user demographics query")
+        from sqlalchemy.orm import Session, aliased
+        from sqlalchemy import desc, or_
+        with Session(db_engine) as session:
+            PostAuthor = aliased(User_mgmt)
+            TargetUser = aliased(User_mgmt)
+            
+            from YSimulator.YServer.classes.models import Post
+            query = session.query(Post.id).join(
+                PostAuthor, Post.user_id == PostAuthor.id
+            ).join(
+                TargetUser, TargetUser.id == agent_id
+            ).filter(
+                Post.user_id != agent_id,
+                or_(
+                    PostAuthor.age_group == TargetUser.age_group,
+                    PostAuthor.gender == TargetUser.gender,
+                    PostAuthor.leaning == TargetUser.leaning
+                )
+            ).order_by(desc(Post.id)).limit(limit)
+            
+            sql_post_ids = [row[0] for row in query.all()]
             post_ids = [pid for pid in sql_post_ids if pid in all_post_ids][:limit]
             
             if len(post_ids) < limit:

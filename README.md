@@ -39,6 +39,22 @@ All configuration files are kept in the same directory:
 - `llm_prompts.json` - LLM prompt templates and personas
 - `network.csv` - (Optional) Initial social network topology defining follow relationships
 
+## Installation
+
+### Install Dependencies
+
+```bash
+pip install -r requirements.txt
+```
+
+### Initialize Database (Optional)
+
+If using PostgreSQL or MySQL, initialize the database schema:
+
+```bash
+python scripts/init_db.py --config my_config
+```
+
 ## Quick Start
 
 ### 1. Prepare Configuration
@@ -119,6 +135,47 @@ To add new agent actions or customize behavior:
 5. Integrate into the action loop
 
 See [docs/EXTENDING.md](docs/EXTENDING.md) for step-by-step instructions and examples.
+
+## Project Structure
+
+```
+YSimulator/
+├── YSimulator/          # Main package
+│   ├── YServer/        # Server orchestration logic
+│   ├── YClient/        # Client agent logic
+│   └── tests/          # Unit and integration tests
+├── scripts/            # Utility scripts
+│   ├── init_db.py              # Database initialization
+│   ├── convert_ids_to_uuid.py  # ID migration utility
+│   ├── validate_network_loading.py  # Network validation
+│   └── postgresql_server.sql   # PostgreSQL schema
+├── docs/               # Documentation
+├── example/            # Example configurations
+├── run_server.py       # Server entry point
+├── run_client.py       # Client entry point
+└── requirements.txt    # Python dependencies
+```
+
+## Testing
+
+Run the test suite:
+
+```bash
+# Run all tests
+python -m pytest YSimulator/tests/
+
+# Run specific test file
+python -m pytest YSimulator/tests/test_network_loading.py
+```
+
+## Utilities
+
+The `scripts/` directory contains utility scripts:
+
+- **init_db.py**: Initialize database schema for PostgreSQL/MySQL
+- **convert_ids_to_uuid.py**: Migrate existing data to UUID format
+- **validate_network_loading.py**: Validate network topology files
+- **postgresql_server.sql**: PostgreSQL database schema
 
 ## Contributing
 

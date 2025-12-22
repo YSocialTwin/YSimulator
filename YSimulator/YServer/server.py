@@ -15,10 +15,10 @@ from pathlib import Path
 from typing import Optional, Dict, Any, List
 
 import ray
-from sqlalchemy import text
 
 from YSimulator.YClient.classes.ray_models import SimulationInstruction
 from YSimulator.YServer.recsys import content_recsys_db, content_recsys_redis, follow_recsys_db
+from YSimulator.YServer.classes.models import Recommendation
 
 
 # Constants
@@ -1128,18 +1128,16 @@ class OrchestratorServer:
             post_ids_str = "|".join(post_ids)
             recommendation_id = str(uuid.uuid4())
             
-            # Save to SQL database
-            with self.db.engine.begin() as connection:
-                query = text("""
-                    INSERT INTO recommendations (id, user_id, post_ids, round)
-                    VALUES (:id, :user_id, :post_ids, :round)
-                """)
-                connection.execute(query, {
-                    "id": recommendation_id,
-                    "user_id": agent_id,
-                    "post_ids": post_ids_str,
-                    "round": self.current_round_id
-                })
+            # Save to SQL database using SQLAlchemy ORM
+            with self.db.get_session() as session:
+                recommendation = Recommendation(
+                    id=recommendation_id,
+                    user_id=agent_id,
+                    post_ids=post_ids_str,
+                    round=self.current_round_id
+                )
+                session.add(recommendation)
+                session.commit()
             
             # Also save to Redis if enabled
             if self.db.use_redis:
