@@ -105,6 +105,7 @@ class OrchestratorServer:
             config_path=str(self.config_path),
             redis_config=redis_config,
             logger=self.logger,
+            simulation_config=simulation_config,
         )
         
         # Initialize the first round entry
@@ -958,6 +959,28 @@ class OrchestratorServer:
                         f"{consolidation_result.get('interactions', 0)} interactions to SQLite. "
                         f"Removed {consolidation_result.get('removed_posts', 0)} old posts, "
                         f"{consolidation_result.get('removed_interactions', 0)} old interactions from Redis"
+                    )
+                
+                # Clean up old posts from Redis based on visibility_rounds (temporal sliding window)
+                cleanup_result = self.db.cleanup_old_posts_from_redis(self.day, self.slot)
+                if cleanup_result.get("removed_posts", 0) > 0 or cleanup_result.get("removed_interactions", 0) > 0:
+                    self.logger.info(
+                        f"Redis temporal cleanup complete - removed posts older than visibility_rounds",
+                        extra={
+                            "extra_data": {
+                                "day": self.day,
+                                "slot": self.slot,
+                                "removed_posts": cleanup_result.get("removed_posts", 0),
+                                "removed_interactions": cleanup_result.get("removed_interactions", 0),
+                                "remaining_posts": cleanup_result.get("remaining_posts", 0),
+                            }
+                        },
+                    )
+                    print(
+                        f"[Server] 🧹 Redis cleanup - "
+                        f"Removed {cleanup_result.get('removed_posts', 0)} old posts, "
+                        f"{cleanup_result.get('removed_interactions', 0)} old interactions. "
+                        f"Remaining: {cleanup_result.get('remaining_posts', 0)} posts in Redis"
                     )
                 
                 # Check if it's time for archetype transitions (every 7 days)

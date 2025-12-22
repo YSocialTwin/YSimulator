@@ -38,6 +38,7 @@ class DatabaseMiddleware:
         config_path: str = ".",
         redis_config: Optional[Dict[str, Any]] = None,
         logger: Optional[logging.Logger] = None,
+        simulation_config: Optional[Dict[str, Any]] = None,
     ):
         """
         Initialize the database middleware.
@@ -47,6 +48,7 @@ class DatabaseMiddleware:
             config_path: Path to configuration directory (for SQLite database file)
             redis_config: Redis configuration dict with keys: host, port, db, password, sliding_window_days (optional)
             logger: Logger instance for logging operations
+            simulation_config: Simulation configuration dict with posts.visibility_rounds (optional)
         """
         from pathlib import Path
 
@@ -56,6 +58,12 @@ class DatabaseMiddleware:
         self.redis_sliding_window_days = 2  # Default: keep last 2 days in Redis
         self.db_type = db_config.get("type", "sqlite").lower()
         self.config_path = Path(config_path)
+        
+        # Extract visibility_rounds from simulation_config
+        if simulation_config is None:
+            simulation_config = {}
+        self.visibility_rounds = simulation_config.get("posts", {}).get("visibility_rounds", 36)
+        self.num_slots_per_day = simulation_config.get("simulation", {}).get("num_slots_per_day", 24)
 
         # Try to initialize Redis if explicitly configured with enabled=true and host specified
         if redis_config and isinstance(redis_config, dict) and redis_config.get("enabled", False):
@@ -326,10 +334,8 @@ class DatabaseMiddleware:
                 redis_data = {k: v for k, v in post_data.items() if v is not None}
                 self.redis_client.hset(key, mapping=redis_data)
 
-                # Add to posts list
+                # Add to posts list (no limit - will be cleaned by visibility_rounds at day end)
                 self.redis_client.lpush(self._redis_key("posts", "recent"), post_id)
-                # Keep only last 50
-                self.redis_client.ltrim(self._redis_key("posts", "recent"), 0, 49)
 
                 return post_id
             else:
@@ -654,6 +660,134 @@ class DatabaseMiddleware:
                 "removed_posts": 0,
                 "removed_interactions": 0,
                 "message": f"Consolidation failed: {str(e)}",
+            }
+
+    def cleanup_old_posts_from_redis(self, current_day: int, current_slot: int) -> Dict[str, int]:
+        """
+        Remove posts older than visibility_rounds from Redis storage.
+        
+        This implements a temporal sliding window: at the end of each simulation day,
+        posts whose round is older than visibility_rounds are removed from Redis cache.
+        This ensures Redis only contains posts within the visibility window.
+        
+        Args:
+            current_day: Current simulation day
+            current_slot: Current simulation slot/hour
+            
+        Returns:
+            dict: Summary with counts of posts and interactions removed
+        """
+        if not self.use_redis:
+            return {
+                "removed_posts": 0,
+                "removed_interactions": 0,
+                "message": "Not using Redis"
+            }
+        
+        try:
+            # Calculate the visibility threshold (oldest round to keep)
+            total_slots = (current_day - 1) * self.num_slots_per_day + current_slot
+            visibility_slots = max(1, total_slots - self.visibility_rounds)
+            visibility_day = (visibility_slots - 1) // self.num_slots_per_day + 1
+            visibility_hour = (visibility_slots - 1) % self.num_slots_per_day + 1
+            
+            self.logger.info(
+                f"Cleaning Redis posts older than visibility window",
+                extra={
+                    "extra_data": {
+                        "current_day": current_day,
+                        "current_slot": current_slot,
+                        "visibility_rounds": self.visibility_rounds,
+                        "visibility_day": visibility_day,
+                        "visibility_hour": visibility_hour,
+                    }
+                }
+            )
+            
+            # Get all post IDs from recent list
+            recent_posts_key = self._redis_key("posts", "recent")
+            all_post_ids = self.redis_client.lrange(recent_posts_key, 0, -1)
+            
+            removed_posts_count = 0
+            removed_interactions_count = 0
+            posts_to_keep = []
+            
+            # Query database to get round info for each post
+            session = Session(self.engine)
+            try:
+                for post_id in all_post_ids:
+                    # Get post data from Redis
+                    post_key = self._redis_key("posts", post_id)
+                    post_data = self.redis_client.hgetall(post_key)
+                    
+                    if post_data and "round" in post_data:
+                        round_id = post_data["round"]
+                        
+                        # Get round day/hour from database
+                        round_obj = session.query(Round).filter_by(id=round_id).first()
+                        
+                        if round_obj:
+                            # Check if post is within visibility window
+                            if (round_obj.day > visibility_day or 
+                                (round_obj.day == visibility_day and round_obj.hour >= visibility_hour)):
+                                # Keep this post
+                                posts_to_keep.append(post_id)
+                            else:
+                                # Remove this post (too old)
+                                self.redis_client.delete(post_key)
+                                removed_posts_count += 1
+                                
+                                # Also remove associated interactions
+                                interaction_pattern = self._redis_key("interactions", f"*{post_id}*")
+                                interaction_keys = self.redis_client.keys(interaction_pattern)
+                                for int_key in interaction_keys:
+                                    self.redis_client.delete(int_key)
+                                    removed_interactions_count += 1
+                        else:
+                            # Round not found in DB, keep the post for safety
+                            posts_to_keep.append(post_id)
+                    else:
+                        # Missing round data, keep the post for safety
+                        posts_to_keep.append(post_id)
+                
+                # Rebuild the recent posts list with only posts to keep
+                self.redis_client.delete(recent_posts_key)
+                if posts_to_keep:
+                    # Use rpush to maintain the order (oldest first in list)
+                    # Then reverse to get newest first
+                    for post_id in reversed(posts_to_keep):
+                        self.redis_client.lpush(recent_posts_key, post_id)
+                
+                self.logger.info(
+                    f"Redis cleanup complete",
+                    extra={
+                        "extra_data": {
+                            "removed_posts": removed_posts_count,
+                            "removed_interactions": removed_interactions_count,
+                            "remaining_posts": len(posts_to_keep),
+                        }
+                    }
+                )
+                
+                return {
+                    "removed_posts": removed_posts_count,
+                    "removed_interactions": removed_interactions_count,
+                    "remaining_posts": len(posts_to_keep),
+                    "message": "Cleanup successful"
+                }
+                
+            finally:
+                session.close()
+                
+        except Exception as e:
+            self.logger.error(
+                f"Error cleaning old posts from Redis: {e}",
+                extra={"extra_data": {"error": str(e)}}
+            )
+            return {
+                "removed_posts": 0,
+                "removed_interactions": 0,
+                "message": f"Cleanup failed: {str(e)}"
             }
 
     def get_or_create_round(self, day: int, hour: int) -> str:
