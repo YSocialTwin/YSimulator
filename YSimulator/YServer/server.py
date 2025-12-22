@@ -1311,67 +1311,70 @@ class OrchestratorServer:
                 
             else:
                 # Use SQL database for recommendations
-                with self.db.engine.begin() as connection:
-                    
+                from sqlalchemy.orm import Session
+                session = Session(self.db.engine)
+                try:
                     if mode == "rchrono":
                         # Reverse chronological: newest posts first
                         post_ids = content_recsys_db.recommend_rchrono(
-                            connection, agent_id, visibility_day, visibility_hour, limit
+                            session, agent_id, visibility_day, visibility_hour, limit
                         )
                         
                     elif mode == "rchrono_popularity":
                         # Reverse chronological with popularity (reaction count)
                         post_ids = content_recsys_db.recommend_rchrono_popularity(
-                            connection, agent_id, visibility_day, visibility_hour, limit
+                            session, agent_id, visibility_day, visibility_hour, limit
                         )
                         
                     elif mode == "rchrono_followers":
                         # Prioritize posts from followed users
                         post_ids = content_recsys_db.recommend_rchrono_followers(
-                            connection, agent_id, visibility_day, visibility_hour, limit, followers_ratio
+                            session, agent_id, visibility_day, visibility_hour, limit, followers_ratio
                         )
                         
                     elif mode == "rchrono_followers_popularity":
                         # Followers with popularity boost
                         post_ids = content_recsys_db.recommend_rchrono_followers_popularity(
-                            connection, agent_id, visibility_day, visibility_hour, limit, followers_ratio
+                            session, agent_id, visibility_day, visibility_hour, limit, followers_ratio
                         )
                             
                     elif mode == "rchrono_comments":
                         # Prioritize posts with more comments (thread activity)
                         post_ids = content_recsys_db.recommend_rchrono_comments(
-                            connection, agent_id, visibility_day, visibility_hour, limit
+                            session, agent_id, visibility_day, visibility_hour, limit
                         )
                         
                     elif mode == "common_interests":
                         # Posts with common topic interests
                         post_ids = content_recsys_db.recommend_common_interests(
-                            connection, agent_id, visibility_day, visibility_hour, limit, followers_ratio
+                            session, agent_id, visibility_day, visibility_hour, limit, followers_ratio
                         )
                     
                     elif mode == "common_user_interests":
                         # Posts by users with common interests (most interacted)
                         post_ids = content_recsys_db.recommend_common_user_interests(
-                            connection, agent_id, visibility_day, visibility_hour, limit, followers_ratio
+                            session, agent_id, visibility_day, visibility_hour, limit, followers_ratio
                         )
                     
                     elif mode == "similar_users_react":
                         # Posts from similar users (based on demographics/personality)
                         post_ids = content_recsys_db.recommend_similar_users_react(
-                            connection, agent_id, visibility_day, visibility_hour, limit
+                            session, agent_id, visibility_day, visibility_hour, limit
                         )
                     
                     elif mode == "similar_users_posts":
                         # Posts created by similar users
                         post_ids = content_recsys_db.recommend_similar_users_posts(
-                            connection, agent_id, visibility_day, visibility_hour, limit
+                            session, agent_id, visibility_day, visibility_hour, limit
                         )
                         
                     else:
                         # Random ordering (default)
                         post_ids = content_recsys_db.recommend_random(
-                            connection, agent_id, visibility_day, visibility_hour, limit
+                            session, agent_id, visibility_day, visibility_hour, limit
                         )
+                finally:
+                    session.close()
                     
                     self.logger.info(
                         f"Recommended {len(post_ids)} posts (SQL, mode={mode})",
