@@ -301,76 +301,57 @@ class OrchestratorServer:
         """
         return dict(self.agent_interests)
     
-    def extract_and_store_article_topics(self, article_id: str, article_title: str, article_summary: str, llm_service) -> List[str]:
+    def get_article_topics(self, article_id: str) -> List[str]:
         """
-        Extract topics from article using LLM and store them in database.
-        Checks if article already has topics to avoid duplicate extraction.
+        Get topic IDs for an article.
         
         Args:
             article_id: Article UUID
-            article_title: Title of the article
-            article_summary: Summary/content of the article
-            llm_service: Ray handle to LLM service
             
         Returns:
-            List[str]: List of topic IDs (uuids) extracted/stored
+            List[str]: List of topic IDs (uuids)
         """
-        import ray
+        return self.db.get_article_topics(article_id)
+    
+    def store_article_topics(self, article_id: str, topic_names: List[str]) -> List[str]:
+        """
+        Store topics for an article in the database.
+        Topics are added to interests table if not present, then linked to article.
         
-        self.logger.info(f"extract_and_store_article_topics called for article {article_id}")
-        
-        # Check if article already has topics
-        existing_topics = self.db.get_article_topics(article_id)
-        if existing_topics:
-            self.logger.info(f"Article {article_id} already has {len(existing_topics)} topics, skipping extraction")
-            return existing_topics
+        Args:
+            article_id: Article UUID
+            topic_names: List of topic names to store
+            
+        Returns:
+            List[str]: List of topic IDs (uuids) that were stored
+        """
+        self.logger.info(f"store_article_topics called for article {article_id} with topics: {topic_names}")
         
         # Verify article exists in database
         article_data = self.db.get_article(article_id)
         if not article_data:
-            self.logger.warning(f"Article {article_id} not found in database, cannot extract topics")
+            self.logger.warning(f"Article {article_id} not found in database, cannot store topics")
             return []
         
-        # Extract topics using LLM
-        try:
-            self.logger.info(f"Extracting topics for article: {article_title[:50]}...")
-            topics_future = llm_service.extract_topics_from_article.remote(article_title, article_summary or "")
-            topic_names = ray.get(topics_future)
+        topic_ids = []
+        for topic_name in topic_names:
+            # Add or get topic in interests table
+            topic_id = self.db.add_or_get_interest(topic_name)
+            self.logger.info(f"Interest topic_id for '{topic_name}': {topic_id}")
             
-            self.logger.info(f"LLM extracted topics: {topic_names}")
-            
-            if not topic_names:
-                self.logger.warning(f"No topics extracted for article {article_id}")
-                return []
-            
-            topic_ids = []
-            for topic_name in topic_names[:2]:  # Up to 2 topics
-                # Add or get topic in interests table
-                topic_id = self.db.add_or_get_interest(topic_name)
-                self.logger.info(f"Interest topic_id for '{topic_name}': {topic_id}")
+            if topic_id:
+                # Add to article_topics table
+                success = self.db.add_article_topic(article_id, topic_id)
+                self.logger.info(f"add_article_topic({article_id}, {topic_id}) returned: {success}")
                 
-                if topic_id:
-                    # Add to article_topics table
-                    success = self.db.add_article_topic(article_id, topic_id)
-                    self.logger.info(f"add_article_topic({article_id}, {topic_id}) returned: {success}")
-                    
-                    if success:
-                        topic_ids.append(topic_id)
-                        self.logger.info(f"Successfully added topic '{topic_name}' (ID: {topic_id}) to article {article_id}")
-                    else:
-                        self.logger.error(f"Failed to add topic '{topic_name}' to article {article_id}")
-            
-            self.logger.info(f"Final topic_ids for article {article_id}: {topic_ids}")
-            return topic_ids
-            
-        except Exception as e:
-            self.logger.error(
-                f"Error extracting topics for article {article_id}: {e}",
-                extra={"extra_data": {"error": str(e), "article_id": article_id}}
-            )
-            import traceback
-            self.logger.error(f"Traceback: {traceback.format_exc()}")
-            return []
+                if success:
+                    topic_ids.append(topic_id)
+                    self.logger.info(f"Successfully added topic '{topic_name}' (ID: {topic_id}) to article {article_id}")
+                else:
+                    self.logger.error(f"Failed to add topic '{topic_name}' to article {article_id}")
+        
+        self.logger.info(f"Final topic_ids for article {article_id}: {topic_ids}")
+        return topic_ids
 
     def register_agents(self, agents: list) -> dict:
         """
