@@ -1217,118 +1217,174 @@ class SimulationClient:
         
         self.logger.info(f"Gather phase: pending_llm_posts={len(pending_llm_posts)}, pending_llm_reactions={len(pending_llm_reactions)}, pending_llm_follows={len(pending_llm_follows)}, actions_so_far={len(actions)}")
         
-        # Resolve Posts
-        if pending_llm_posts:
-            # Extract just the futures list to pass to ray.get
-            futures = [p[2] for p in pending_llm_posts]
-            results = ray.get(futures)  # Blocks once for ALL posts
-            
-            for i, res_txt in enumerate(results):
-                a_id, cid, _, article_id = pending_llm_posts[i]
-                action = ActionDTO(a_id, cid, "POST", content=res_txt)
-                # Add article_id as attribute if present (for news posts)
-                if article_id:
-                    action.article_id = article_id
-                    self.logger.info(f"LLM post for agent {a_id}: article_id={article_id}, content_len={len(res_txt)}")
-                else:
-                    self.logger.info(f"LLM post for agent {a_id}: NO article_id, content_len={len(res_txt)}")
-                actions.append(action)
+        # Gather LLM posts
+        self._gather_pending_llm_posts(pending_llm_posts, actions)
         
-        # Resolve Reactions and Comments
-        # Track interactions for secondary follow evaluation
-        secondary_follow_candidates = []  # List of (agent_id, cluster_id, post_author_id, post_content, is_llm)
+        # Gather LLM reactions and track interactions for secondary follow
+        secondary_follow_candidates = self._gather_pending_llm_reactions(pending_llm_reactions, actions)
         
-        if pending_llm_reactions:
-            futures = [r[3] for r in pending_llm_reactions]
-            results = ray.get(futures)  # Blocks once for ALL reactions/comments
-            
-            for i, res_act in enumerate(results):
-                a_id, cid, target, _ = pending_llm_reactions[i]
-                # Check if result is a comment (text) or a reaction type
-                if res_act and res_act.upper() not in REACTION_TYPES:
-                    # This is a comment text from LLM
-                    actions.append(ActionDTO(a_id, cid, "COMMENT", content=res_act, target_post_id=target))
-                    # Track for secondary follow (comment action)
-                    # Get post author from server
-                    post_data = ray.get(self.server.get_post.remote(target))
-                    if post_data:
-                        secondary_follow_candidates.append((a_id, cid, post_data.get("user_id"), post_data.get("tweet", ""), True))
-                elif res_act.upper() != "IGNORE":
-                    # This is a reaction type
-                    actions.append(ActionDTO(a_id, cid, res_act, target_post_id=target))
-                    # Track for secondary follow (read/reaction action)
-                    # Get post author from server
-                    post_data = ray.get(self.server.get_post.remote(target))
-                    if post_data:
-                        secondary_follow_candidates.append((a_id, cid, post_data.get("user_id"), post_data.get("tweet", ""), True))
-        
-        # Resolve Follows
-        if pending_llm_follows:
-            futures = [f[2] for f in pending_llm_follows]
-            results = ray.get(futures)  # Blocks once for ALL follow decisions
-            
-            for i, target_user in enumerate(results):
-                a_id, cid, _ = pending_llm_follows[i]
-                # LLM returns user_id to follow or None to skip
-                if target_user:
-                    actions.append(ActionDTO(a_id, cid, "FOLLOW", target_user_id=target_user))
+        # Gather LLM follows
+        self._gather_pending_llm_follows(pending_llm_follows, actions)
         
         # --- SECONDARY FOLLOW PHASE: Evaluate follow/unfollow for read/comment interactions ---
-        # Merge rule-based interactions into secondary follow candidates
-        secondary_follow_candidates.extend(rule_based_interactions)
-        
-        if self.probability_of_secondary_follow > 0 and secondary_follow_candidates:
-            self.logger.info(f"Secondary follow phase: {len(secondary_follow_candidates)} candidates, probability={self.probability_of_secondary_follow}")
-            
-            # Process each candidate for secondary follow
-            pending_secondary_follow_llm = []  # List of (agent_id, cluster_id, author_id, future)
-            
-            for agent_id, cluster_id, author_id, post_content, is_llm_agent in secondary_follow_candidates:
-                # Skip if author is self
-                if agent_id == author_id:
-                    continue
-                
-                # Decide whether to evaluate secondary follow based on probability
-                if random.random() >= self.probability_of_secondary_follow:
-                    continue
-                
-                # Get current follow relationship status
-                is_following = ray.get(self.server.check_follow_relationship.remote(agent_id, author_id))
-                
-                if is_llm_agent:
-                    # LLM-based: Ask LLM whether to follow/unfollow based on post content
-                    future = self.llm.generate_secondary_follow_decision.remote(
-                        cluster_id, post_content, is_following
-                    )
-                    pending_secondary_follow_llm.append((agent_id, cluster_id, author_id, is_following, future))
-                else:
-                    # Rule-based: Randomly decide to follow/unfollow
-                    decision = random.choice(["follow", "unfollow", "no_change"])
-                    
-                    if decision == "follow" and not is_following:
-                        # Follow the author
-                        actions.append(ActionDTO(agent_id, cluster_id, "FOLLOW", target_user_id=author_id))
-                    elif decision == "unfollow" and is_following:
-                        # Unfollow the author
-                        actions.append(ActionDTO(agent_id, cluster_id, "UNFOLLOW", target_user_id=author_id))
-            
-            # Resolve LLM-based secondary follow decisions
-            if pending_secondary_follow_llm:
-                futures = [f[4] for f in pending_secondary_follow_llm]
-                results = ray.get(futures)  # Blocks for all secondary follow decisions
-                
-                for i, decision in enumerate(results):
-                    agent_id, cluster_id, author_id, is_following, _ = pending_secondary_follow_llm[i]
-                    
-                    if decision == "follow" and not is_following:
-                        # Follow the author
-                        actions.append(ActionDTO(agent_id, cluster_id, "FOLLOW", target_user_id=author_id))
-                    elif decision == "unfollow" and is_following:
-                        # Unfollow the author
-                        actions.append(ActionDTO(agent_id, cluster_id, "UNFOLLOW", target_user_id=author_id))
+        self._process_secondary_follows(secondary_follow_candidates, rule_based_interactions, actions)
         
         self.logger.info(f"Returning {len(actions)} total actions, {len(active_agents)} active agents")
         return actions, {agent.id for agent in active_agents}
+    
+    def _gather_pending_llm_posts(self, pending_llm_posts: list, actions: list) -> None:
+        """
+        Gather and resolve all pending LLM post generation calls.
+        
+        Args:
+            pending_llm_posts: List of (agent_id, cluster_id, future, article_id) tuples
+            actions: List to append resolved post actions to
+        """
+        if not pending_llm_posts:
+            return
+        
+        # Extract futures and wait for all posts in parallel
+        futures = [p[2] for p in pending_llm_posts]
+        results = ray.get(futures)  # Blocks once for ALL posts
+        
+        for i, res_txt in enumerate(results):
+            a_id, cid, _, article_id = pending_llm_posts[i]
+            action = ActionDTO(a_id, cid, "POST", content=res_txt)
+            # Add article_id as attribute if present (for news posts)
+            if article_id:
+                action.article_id = article_id
+                self.logger.info(f"LLM post for agent {a_id}: article_id={article_id}, content_len={len(res_txt)}")
+            else:
+                self.logger.info(f"LLM post for agent {a_id}: NO article_id, content_len={len(res_txt)}")
+            actions.append(action)
+    
+    def _gather_pending_llm_reactions(self, pending_llm_reactions: list, actions: list) -> list:
+        """
+        Gather and resolve all pending LLM reaction/comment generation calls.
+        
+        Args:
+            pending_llm_reactions: List of (agent_id, cluster_id, target_post_id, future) tuples
+            actions: List to append resolved reaction/comment actions to
+            
+        Returns:
+            list: Secondary follow candidates [(agent_id, cluster_id, author_id, post_content, is_llm)]
+        """
+        secondary_follow_candidates = []
+        
+        if not pending_llm_reactions:
+            return secondary_follow_candidates
+        
+        # Extract futures and wait for all reactions in parallel
+        futures = [r[3] for r in pending_llm_reactions]
+        results = ray.get(futures)  # Blocks once for ALL reactions/comments
+        
+        for i, res_act in enumerate(results):
+            a_id, cid, target, _ = pending_llm_reactions[i]
+            # Check if result is a comment (text) or a reaction type
+            if res_act and res_act.upper() not in REACTION_TYPES:
+                # This is a comment text from LLM
+                actions.append(ActionDTO(a_id, cid, "COMMENT", content=res_act, target_post_id=target))
+                # Track for secondary follow (comment action)
+                post_data = ray.get(self.server.get_post.remote(target))
+                if post_data:
+                    secondary_follow_candidates.append((a_id, cid, post_data.get("user_id"), post_data.get("tweet", ""), True))
+            elif res_act.upper() != "IGNORE":
+                # This is a reaction type
+                actions.append(ActionDTO(a_id, cid, res_act, target_post_id=target))
+                # Track for secondary follow (read/reaction action)
+                post_data = ray.get(self.server.get_post.remote(target))
+                if post_data:
+                    secondary_follow_candidates.append((a_id, cid, post_data.get("user_id"), post_data.get("tweet", ""), True))
+        
+        return secondary_follow_candidates
+    
+    def _gather_pending_llm_follows(self, pending_llm_follows: list, actions: list) -> None:
+        """
+        Gather and resolve all pending LLM follow decision calls.
+        
+        Args:
+            pending_llm_follows: List of (agent_id, cluster_id, future) tuples
+            actions: List to append resolved follow actions to
+        """
+        if not pending_llm_follows:
+            return
+        
+        # Extract futures and wait for all follow decisions in parallel
+        futures = [f[2] for f in pending_llm_follows]
+        results = ray.get(futures)  # Blocks once for ALL follow decisions
+        
+        for i, target_user in enumerate(results):
+            a_id, cid, _ = pending_llm_follows[i]
+            # LLM returns user_id to follow or None to skip
+            if target_user:
+                actions.append(ActionDTO(a_id, cid, "FOLLOW", target_user_id=target_user))
+    
+    def _process_secondary_follows(self, secondary_follow_candidates: list, rule_based_interactions: list, actions: list) -> None:
+        """
+        Process secondary follow/unfollow decisions for agents who interacted with content.
+        
+        This method handles the secondary follow pipeline where agents may decide to follow
+        or unfollow content authors after reading or commenting on their posts.
+        
+        Args:
+            secondary_follow_candidates: List of LLM agent interactions [(agent_id, cluster_id, author_id, post_content, is_llm)]
+            rule_based_interactions: List of rule-based agent interactions (same format)
+            actions: List to append follow/unfollow actions to
+        """
+        # Merge rule-based interactions into secondary follow candidates
+        secondary_follow_candidates.extend(rule_based_interactions)
+        
+        if self.probability_of_secondary_follow <= 0 or not secondary_follow_candidates:
+            return
+        
+        self.logger.info(f"Secondary follow phase: {len(secondary_follow_candidates)} candidates, probability={self.probability_of_secondary_follow}")
+        
+        # Process each candidate for secondary follow
+        pending_secondary_follow_llm = []  # List of (agent_id, cluster_id, author_id, is_following, future)
+        
+        for agent_id, cluster_id, author_id, post_content, is_llm_agent in secondary_follow_candidates:
+            # Skip if author is self
+            if agent_id == author_id:
+                continue
+            
+            # Decide whether to evaluate secondary follow based on probability
+            if random.random() >= self.probability_of_secondary_follow:
+                continue
+            
+            # Get current follow relationship status
+            is_following = ray.get(self.server.check_follow_relationship.remote(agent_id, author_id))
+            
+            if is_llm_agent:
+                # LLM-based: Ask LLM whether to follow/unfollow based on post content
+                future = self.llm.generate_secondary_follow_decision.remote(
+                    cluster_id, post_content, is_following
+                )
+                pending_secondary_follow_llm.append((agent_id, cluster_id, author_id, is_following, future))
+            else:
+                # Rule-based: Randomly decide to follow/unfollow
+                decision = random.choice(["follow", "unfollow", "no_change"])
+                
+                if decision == "follow" and not is_following:
+                    # Follow the author
+                    actions.append(ActionDTO(agent_id, cluster_id, "FOLLOW", target_user_id=author_id))
+                elif decision == "unfollow" and is_following:
+                    # Unfollow the author
+                    actions.append(ActionDTO(agent_id, cluster_id, "UNFOLLOW", target_user_id=author_id))
+        
+        # Resolve LLM-based secondary follow decisions
+        if pending_secondary_follow_llm:
+            futures = [f[4] for f in pending_secondary_follow_llm]
+            results = ray.get(futures)  # Blocks for all secondary follow decisions
+            
+            for i, decision in enumerate(results):
+                agent_id, cluster_id, author_id, is_following, _ = pending_secondary_follow_llm[i]
+                
+                if decision == "follow" and not is_following:
+                    # Follow the author
+                    actions.append(ActionDTO(agent_id, cluster_id, "FOLLOW", target_user_id=author_id))
+                elif decision == "unfollow" and is_following:
+                    # Unfollow the author
+                    actions.append(ActionDTO(agent_id, cluster_id, "UNFOLLOW", target_user_id=author_id))
     
     def _evaluate_daily_follows(self, active_agent_ids: set, current_day: int) -> list:
         """

@@ -1,0 +1,25 @@
+{
+  "ray": {
+    "address": "auto",
+    "namespace": "social_sim"
+  },
+  "database": {
+    "type": "sqlite",
+    "path": "./simulation.db",
+    "echo": false
+  },
+  "redis": {
+    "enabled": true,
+    "host": "localhost",
+    "port": 6379,
+    "db": 0
+  },
+  "api": {
+    "host": "0.0.0.0",
+    "port": 8000
+  },
+  "logging": {
+    "level": "INFO",
+    "format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  }
+}
