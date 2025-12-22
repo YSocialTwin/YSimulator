@@ -1131,3 +1131,333 @@ class DatabaseMiddleware:
             return None
         finally:
             session.close()
+
+    def add_or_get_interest(self, interest_name: str) -> Optional[str]:
+        """
+        Add an interest to the database or get its ID if it already exists.
+        
+        Args:
+            interest_name: Name of the interest/topic
+            
+        Returns:
+            str: Interest UUID (iid) if successful, None otherwise
+        """
+        from YSimulator.YServer.classes.models import Interest
+        import uuid
+        
+        session = Session(self.engine)
+        try:
+            # Check if interest already exists
+            existing = session.query(Interest).filter(Interest.interest == interest_name).first()
+            if existing:
+                return existing.iid
+            
+            # Create new interest
+            interest_id = str(uuid.uuid4())
+            interest = Interest(iid=interest_id, interest=interest_name)
+            session.add(interest)
+            session.commit()
+            return interest_id
+            
+        except Exception as e:
+            session.rollback()
+            self.logger.error(
+                f"Error adding interest: {e}",
+                extra={"extra_data": {"error": str(e), "interest_name": interest_name}}
+            )
+            return None
+        finally:
+            session.close()
+
+    def add_user_interest(self, user_id: str, interest_id: str, round_id: str) -> bool:
+        """
+        Add a user interest association to the database.
+        
+        Args:
+            user_id: User UUID
+            interest_id: Interest UUID (iid)
+            round_id: Round UUID
+            
+        Returns:
+            bool: True if successful, False otherwise
+        """
+        from YSimulator.YServer.classes.models import UserInterest
+        import uuid
+        
+        session = Session(self.engine)
+        try:
+            # Create user interest record
+            user_interest_id = str(uuid.uuid4())
+            user_interest = UserInterest(
+                id=user_interest_id,
+                user_id=user_id,
+                interest_id=interest_id,
+                round_id=round_id
+            )
+            session.add(user_interest)
+            session.commit()
+            return True
+            
+        except Exception as e:
+            session.rollback()
+            self.logger.error(
+                f"Error adding user interest: {e}",
+                extra={"extra_data": {"error": str(e), "user_id": user_id, "interest_id": interest_id}}
+            )
+            return False
+        finally:
+            session.close()
+
+    def add_post_topic(self, post_id: str, topic_id: str) -> bool:
+        """
+        Add a post topic association to the database.
+        
+        Args:
+            post_id: Post UUID
+            topic_id: Topic UUID (from interests table)
+            
+        Returns:
+            bool: True if successful, False otherwise
+        """
+        from YSimulator.YServer.classes.models import PostTopic
+        import uuid
+        
+        session = Session(self.engine)
+        try:
+            # Create post topic record
+            post_topic_id = str(uuid.uuid4())
+            post_topic = PostTopic(
+                id=post_topic_id,
+                post_id=post_id,
+                topic_id=topic_id
+            )
+            session.add(post_topic)
+            session.commit()
+            return True
+            
+        except Exception as e:
+            session.rollback()
+            self.logger.error(
+                f"Error adding post topic: {e}",
+                extra={"extra_data": {"error": str(e), "post_id": post_id, "topic_id": topic_id}}
+            )
+            return False
+        finally:
+            session.close()
+
+    def get_post_topics(self, post_id: str) -> List[str]:
+        """
+        Get all topic IDs associated with a post.
+        
+        Args:
+            post_id: Post UUID
+            
+        Returns:
+            List[str]: List of topic UUIDs
+        """
+        from YSimulator.YServer.classes.models import PostTopic
+        
+        session = Session(self.engine)
+        try:
+            post_topics = session.query(PostTopic).filter(PostTopic.post_id == post_id).all()
+            return [pt.topic_id for pt in post_topics]
+            
+        except Exception as e:
+            self.logger.error(
+                f"Error getting post topics: {e}",
+                extra={"extra_data": {"error": str(e), "post_id": post_id}}
+            )
+            return []
+        finally:
+            session.close()
+    
+    def get_user_interests_in_window(self, user_id: str, current_round_id: str, attention_window: int) -> List[Dict[str, str]]:
+        """
+        Get user interests within the attention window (sliding window for forgetting).
+        
+        Args:
+            user_id: User UUID
+            current_round_id: Current round UUID
+            attention_window: Number of rounds to look back
+            
+        Returns:
+            List[Dict]: List of user interest records with interest_id and round_id
+        """
+        from YSimulator.YServer.classes.models import UserInterest, Round
+        
+        session = Session(self.engine)
+        try:
+            # Get current round details
+            current_round = session.query(Round).filter(Round.id == current_round_id).first()
+            if not current_round:
+                return []
+            
+            current_day = current_round.day
+            current_hour = current_round.hour
+            
+            # Calculate the round number (day * 24 + hour)
+            current_round_num = (current_day - 1) * 24 + current_hour
+            cutoff_round_num = max(0, current_round_num - attention_window)
+            
+            # Calculate cutoff day and hour
+            cutoff_day = (cutoff_round_num // 24) + 1
+            cutoff_hour = cutoff_round_num % 24
+            
+            # Query user interests within the window
+            user_interests = session.query(UserInterest, Round).join(
+                Round, UserInterest.round_id == Round.id
+            ).filter(
+                UserInterest.user_id == user_id
+            ).filter(
+                (Round.day > cutoff_day) | 
+                ((Round.day == cutoff_day) & (Round.hour >= cutoff_hour))
+            ).all()
+            
+            return [
+                {"interest_id": ui.interest_id, "round_id": ui.round_id}
+                for ui, _ in user_interests
+            ]
+            
+        except Exception as e:
+            self.logger.error(
+                f"Error getting user interests in window: {e}",
+                extra={"extra_data": {"error": str(e), "user_id": user_id}}
+            )
+            return []
+        finally:
+            session.close()
+    
+    def compute_interest_counts_in_window(self, user_id: str, current_round_id: str, attention_window: int) -> Dict[str, int]:
+        """
+        Compute interest counts for a user within the attention window.
+        
+        Args:
+            user_id: User UUID
+            current_round_id: Current round UUID
+            attention_window: Number of rounds to look back
+            
+        Returns:
+            Dict[str, int]: Map of interest_id to count within the window
+        """
+        interests_in_window = self.get_user_interests_in_window(user_id, current_round_id, attention_window)
+        
+        # Count occurrences of each interest
+        interest_counts = {}
+        for entry in interests_in_window:
+            interest_id = entry["interest_id"]
+            interest_counts[interest_id] = interest_counts.get(interest_id, 0) + 1
+        
+        return interest_counts
+    
+    def get_article_topics(self, article_id: str) -> List[str]:
+        """
+        Get all topic IDs associated with an article.
+        
+        Args:
+            article_id: Article UUID
+            
+        Returns:
+            List[str]: List of topic UUIDs
+        """
+        from YSimulator.YServer.classes.models import ArticleTopic
+        
+        session = Session(self.engine)
+        try:
+            article_topics = session.query(ArticleTopic).filter(ArticleTopic.article_id == article_id).all()
+            return [at.topic_id for at in article_topics]
+            
+        except Exception as e:
+            self.logger.error(
+                f"Error getting article topics: {e}",
+                extra={"extra_data": {"error": str(e), "article_id": article_id}}
+            )
+            return []
+        finally:
+            session.close()
+    
+    def get_article(self, article_id: str) -> Optional[dict]:
+        """
+        Get article details by ID.
+        
+        Args:
+            article_id: Article UUID
+            
+        Returns:
+            dict: Article data or None if not found
+        """
+        from YSimulator.YServer.classes.models import Article
+        
+        session = Session(self.engine)
+        try:
+            article = session.query(Article).filter(Article.id == article_id).first()
+            if article:
+                return {
+                    "id": article.id,
+                    "title": article.title,
+                    "summary": article.summary,
+                    "website_id": article.website_id,
+                    "link": article.link,
+                    "fetched_on": article.fetched_on
+                }
+            return None
+            
+        except Exception as e:
+            self.logger.error(
+                f"Error getting article: {e}",
+                extra={"extra_data": {"error": str(e), "article_id": article_id}}
+            )
+            return None
+        finally:
+            session.close()
+    
+    def add_article_topic(self, article_id: str, topic_id: str) -> bool:
+        """
+        Add an article topic association to the database.
+        
+        Args:
+            article_id: Article UUID
+            topic_id: Topic UUID (from interests table)
+            
+        Returns:
+            bool: True if successful, False otherwise
+        """
+        from YSimulator.YServer.classes.models import ArticleTopic
+        import uuid
+        
+        self.logger.info(f"add_article_topic called: article_id={article_id}, topic_id={topic_id}")
+        
+        session = Session(self.engine)
+        try:
+            # Check if already exists
+            existing = session.query(ArticleTopic).filter(
+                ArticleTopic.article_id == article_id,
+                ArticleTopic.topic_id == topic_id
+            ).first()
+            
+            if existing:
+                self.logger.info(f"Article-topic association already exists: {article_id} - {topic_id}")
+                return True  # Already exists, no need to add
+            
+            # Create article topic record
+            article_topic_id = str(uuid.uuid4())
+            article_topic = ArticleTopic(
+                id=article_topic_id,
+                article_id=article_id,
+                topic_id=topic_id
+            )
+            session.add(article_topic)
+            session.commit()
+            self.logger.info(f"Successfully created article_topic entry: id={article_topic_id}, article_id={article_id}, topic_id={topic_id}")
+            return True
+            
+        except Exception as e:
+            session.rollback()
+            self.logger.error(
+                f"Error adding article topic: {e}",
+                extra={"extra_data": {"error": str(e), "article_id": article_id, "topic_id": topic_id}}
+            )
+            import traceback
+            self.logger.error(f"Traceback: {traceback.format_exc()}")
+            return False
+        finally:
+            session.close()

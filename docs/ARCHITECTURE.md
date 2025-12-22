@@ -146,6 +146,7 @@ apply_persona()                # Tailor content to agent personality
 - Track heartbeats and detect stale clients
 - Distribute actions to storage
 - Trigger daily consolidation (if Redis enabled)
+- Delegate interest management to InterestManager
 
 **Key Methods**:
 ```python
@@ -155,6 +156,7 @@ submit_action()                # Store client actions (posts, interactions)
 complete_client()              # Mark client as finished
 heartbeat()                    # Update client liveness
 advance_time()                 # Move to next time slot
+get_updated_agent_interests()  # Get current interests for persistence
 ```
 
 **State**:
@@ -163,6 +165,35 @@ advance_time()                 # Move to next time slot
 - `completed_clients`: Set of finished clients
 - `last_heartbeat`: Dict mapping client_id to timestamp
 - `barrier`: Counter for synchronization
+- `interest_manager`: InterestManager instance for topic/interest operations
+
+#### InterestManager
+**Location**: `YServer/interests_modeling/interest_manager.py`
+
+**Responsibilities**:
+- Validate and extract agent interest data
+- Maintain in-memory agent interest state
+- Implement sliding window attention mechanism
+- Handle article topic extraction and storage
+- Map topic IDs to names
+- Recompute interests with forgetting mechanism
+
+**Key Methods**:
+```python
+validate_and_extract_interests()           # Validate interest format
+initialize_agent_interests()               # Setup during registration
+recompute_agent_interests_from_window()    # Single agent recomputation
+recompute_all_agent_interests()            # Batch recomputation (daily)
+get_agent_interests()                      # Get current state
+store_article_topics()                     # Persist article topics
+get_article_topics()                       # Retrieve article topics
+```
+
+**Features**:
+- **Sliding Window**: Queries user_interest entries within attention_window
+- **Forgetting Mechanism**: Topics with count 0 automatically removed
+- **Topic Mapping**: Efficient UUID-to-name lookups
+- **Article Topics**: LLM-extracted topics from news articles
 
 #### DatabaseMiddleware
 **Location**: `classes/db_middleware.py`
@@ -173,15 +204,22 @@ advance_time()                 # Move to next time slot
 - Manage Redis sliding window consolidation
 - Handle SQLAlchemy session management
 - Build appropriate connection strings
+- Support interest/topic database operations
 
 **Key Methods**:
 ```python
-register_user()                # Store agent profile in User_mgmt table
-add_post()                     # Store social media post
-add_interaction()              # Store interaction (like, comment, etc.)
-get_user()                     # Retrieve user profile
-get_recent_posts()             # Query recent posts
-consolidate_day()              # Move Redis data to SQL (daily)
+register_user()                            # Store agent profile in User_mgmt table
+add_post()                                 # Store social media post
+add_interaction()                          # Store interaction (like, comment, etc.)
+get_user()                                 # Retrieve user profile
+get_recent_posts()                         # Query recent posts
+consolidate_day()                          # Move Redis data to SQL (daily)
+add_or_get_interest()                      # Store/retrieve topic
+add_user_interest()                        # Record user-topic interaction
+add_post_topic()                           # Link post to topic
+get_post_topics()                          # Get topics for a post
+get_user_interests_in_window()             # Query interests in temporal window
+compute_interest_counts_in_window()        # Count interests in window
 ```
 
 **Storage Strategy**:
@@ -220,6 +258,31 @@ consolidate_day()              # Move Redis data to SQL (daily)
 - round: Temporal context (simulation round)
 - Supports dynamic network evolution
 - Used by follow recommendation algorithms
+
+**Interest**: Topic definitions
+- iid (UUID): Unique interest identifier
+- interest (Text): Topic name
+- Deduplicated storage of all topics
+- Referenced by user_interest, post_topics, article_topics
+
+**UserInterest**: User-topic interactions
+- id (UUID): Record identifier
+- user_id (UUID): Agent who has this interest
+- interest_id (UUID): Reference to Interest table
+- round_id (UUID): When this interest was recorded
+- Supports temporal analysis and sliding window forgetting
+
+**PostTopic**: Post-topic associations
+- id (UUID): Record identifier
+- post_id (UUID): The post
+- topic_id (UUID): Reference to Interest table
+- Links posts to their topics for analysis
+
+**ArticleTopic**: Article-topic associations
+- id (UUID): Record identifier
+- article_id (UUID): The news article
+- topic_id (UUID): Reference to Interest table
+- Stores LLM-extracted topics from articles
 
 #### Ray Communication Models
 **Location**: `classes/ray_models.py`

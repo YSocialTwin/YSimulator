@@ -19,6 +19,7 @@ import ray
 from YSimulator.YClient.classes.ray_models import SimulationInstruction
 from YSimulator.YServer.recsys import content_recsys_db, content_recsys_redis, follow_recsys_db
 from YSimulator.YServer.classes.models import Recommendation
+from YSimulator.YServer.interests_modeling import InterestManager
 
 
 # Constants
@@ -85,6 +86,9 @@ class OrchestratorServer:
         
         # Store visibility_rounds for server use
         self.visibility_rounds = simulation_config.get("posts", {}).get("visibility_rounds", 36)
+        
+        # Store attention_window for interest decay (sliding window)
+        self.attention_window = simulation_config.get("agents", {}).get("attention_window", 336)
 
         # Client tracking
         self.registered_clients = set()  # All registered clients
@@ -111,8 +115,15 @@ class OrchestratorServer:
             simulation_config=simulation_config,
         )
         
+        # Initialize Interest Manager for topic/interest tracking
+        self.interest_manager = InterestManager(
+            db_middleware=self.db,
+            attention_window=self.attention_window
+        )
+        
         # Initialize the first round entry
         self.current_round_id = self.db.get_or_create_round(self.day, self.slot)
+        self.interest_manager.set_current_round(self.current_round_id)
 
         self.logger.info(
             "Orchestrator server initialized",
@@ -164,6 +175,99 @@ class OrchestratorServer:
 
         handler.setFormatter(JsonFormatter())
         self.logger.addHandler(handler)
+    
+    def _validate_and_extract_interests(self, interests):
+        """
+        Validate interests structure and extract topics and counts.
+        Delegates to InterestManager.
+        
+        Args:
+            interests: Interest data in format [["Topic1", "Topic2"], [1, 2]]
+            
+        Returns:
+            tuple: (topics, counts) or (None, None) if invalid
+        """
+        return self.interest_manager.validate_and_extract_interests(interests)
+    
+    def _recompute_agent_interests_from_window(self, agent_id: str):
+        """
+        Recompute agent interests based on the sliding attention window.
+        Delegates to InterestManager.
+        
+        Args:
+            agent_id: Agent UUID
+        """
+        self.interest_manager.recompute_agent_interests_from_window(agent_id)
+    
+    def _update_agent_interest_counter(self, agent_id: str, topic_name: str, increment: int = 1):
+        """
+        DEPRECATED: This method is replaced by _recompute_agent_interests_from_window.
+        Delegates to InterestManager.
+        
+        Args:
+            agent_id: Agent UUID
+            topic_name: Name of the topic
+            increment: Amount to increment the counter (default: 1)
+        """
+        self.interest_manager.update_agent_interest_counter(agent_id, topic_name, increment)
+    
+    def _get_topic_name_from_id(self, topic_id: str) -> Optional[str]:
+        """
+        Get topic name from topic UUID.
+        Delegates to InterestManager.
+        
+        Args:
+            topic_id: Topic UUID (iid)
+            
+        Returns:
+            str: Topic name or None if not found
+        """
+        return self.interest_manager.get_topic_name_from_id(topic_id)
+    
+    def _recompute_all_agent_interests(self):
+        """
+        Recompute interests for all registered agents based on the sliding attention window.
+        Delegates to InterestManager.
+        """
+        agent_ids = list(self.registered_agents.keys())
+        self.interest_manager.recompute_all_agent_interests(agent_ids)
+    
+    def get_updated_agent_interests(self) -> Dict[str, Dict[str, list]]:
+        """
+        Get the current agent interests dictionary for clients to save.
+        Delegates to InterestManager.
+        
+        Returns:
+            Dict: agent_interests dictionary with format {agent_id: {"topics": [...], "counts": [...]}}
+        """
+        return self.interest_manager.get_agent_interests()
+    
+    def get_article_topics(self, article_id: str) -> List[str]:
+        """
+        Get topic IDs for an article.
+        Delegates to InterestManager.
+        
+        Args:
+            article_id: Article UUID
+            
+        Returns:
+            List[str]: List of topic IDs (uuids)
+        """
+        return self.interest_manager.get_article_topics(article_id)
+    
+    def store_article_topics(self, article_id: str, topic_names: List[str]) -> List[str]:
+        """
+        Store topics for an article in the database.
+        Delegates to InterestManager.
+        
+        Args:
+            article_id: Article UUID
+            topic_names: List of topic names to store
+            
+        Returns:
+            List[str]: List of topic IDs (uuids) that were stored
+        """
+        return self.interest_manager.store_article_topics(article_id, topic_names)
 
     def register_agents(self, agents: list) -> dict:
         """
@@ -220,6 +324,14 @@ class OrchestratorServer:
                 if user_registered:
                     registered_count += 1
                     self.registered_agents[agent_profile.id] = agent_profile.username
+                    
+                    # Initialize agent interests using InterestManager
+                    if agent_profile.interests:
+                        self.interest_manager.initialize_agent_interests(
+                            agent_id=str(agent_profile.id),
+                            interests=agent_profile.interests,
+                            round_id=self.current_round_id
+                        )
                     
                     # If this is a page agent, create a Website entry
                     if agent_profile.is_page == 1 and agent_profile.feed_url:
@@ -697,12 +809,42 @@ class OrchestratorServer:
                         "round": self.current_round_id,  # FK to rounds.id
                     }
                     # Add article_id (news_id) if this is a news post
+                    article_id = None
                     if hasattr(act, 'article_id') and act.article_id:
                         post_data["news_id"] = act.article_id
+                        article_id = act.article_id
                     
                     post_id = self.db.add_post(post_data)
                     if post_id:
                         new_ids.append(post_id)
+                        
+                        # If this is an article post, extract and store topics
+                        if article_id:
+                            # Get article details from database
+                            article_data = self.db.get_article(article_id)
+                            if article_data:
+                                # Extract topics using LLM (checks if already extracted)
+                                # Note: We need the LLM service handle - we'll get it from the client context
+                                # For now, check if article already has topics
+                                existing_topic_ids = self.db.get_article_topics(article_id)
+                                
+                                if existing_topic_ids:
+                                    # Article already has topics, link them to the post
+                                    for topic_id in existing_topic_ids:
+                                        self.db.add_post_topic(post_id, topic_id)
+                                    self.logger.info(f"Linked {len(existing_topic_ids)} existing article topics to post {post_id}")
+                                # If no existing topics, they will need to be extracted by client before posting
+                        
+                        # Save post topic if provided (for non-article posts)
+                        elif hasattr(act, 'topic') and act.topic:
+                            # Get or create the topic in interests table
+                            topic_id = self.db.add_or_get_interest(act.topic)
+                            if topic_id:
+                                # Save post-topic association
+                                self.db.add_post_topic(post_id, topic_id)
+                                
+                                # Increment the agent's interest counter for this topic
+                                self._update_agent_interest_counter(act.agent_id, act.topic, increment=1)
                     else:
                         self.logger.warning(
                             f"Failed to add post for agent {act.agent_id}",
@@ -736,6 +878,21 @@ class OrchestratorServer:
                         post_id = self.db.add_post(post_data)
                         if post_id:
                             new_ids.append(post_id)
+                            
+                            # When commenting on a post, save the post's topics as user interests
+                            parent_post_id = act.target_post_id
+                            topic_ids = self.db.get_post_topics(parent_post_id)
+                            for topic_id in topic_ids:
+                                self.db.add_user_interest(
+                                    user_id=str(act.agent_id),
+                                    interest_id=topic_id,
+                                    round_id=self.current_round_id
+                                )
+                                
+                                # Increment the agent's interest counter for this topic
+                                topic_name = self._get_topic_name_from_id(topic_id)
+                                if topic_name:
+                                    self._update_agent_interest_counter(act.agent_id, topic_name, increment=1)
                         else:
                             self.logger.warning(
                                 f"Failed to add comment for agent {act.agent_id}",
@@ -964,6 +1121,13 @@ class OrchestratorServer:
                         f"{consolidation_result.get('removed_interactions', 0)} old interactions from Redis"
                     )
                 
+                # Recompute all agent interests based on the sliding attention window
+                # This handles the forgetting mechanism - interests decay as entries fall out of window
+                self._recompute_all_agent_interests()
+                
+                # Note: Saving updated agent_population.json is handled by clients,
+                # not the server, to respect client-specific naming conventions
+                
                 # Clean up old posts from Redis based on visibility_rounds (temporal sliding window)
                 cleanup_result = self.db.cleanup_old_posts_from_redis(self.day, self.slot)
                 if cleanup_result.get("removed_posts", 0) > 0 or cleanup_result.get("removed_interactions", 0) > 0:
@@ -993,6 +1157,7 @@ class OrchestratorServer:
 
             # Update Round table with new time
             self.current_round_id = self.db.get_or_create_round(self.day, self.slot)
+            self.interest_manager.set_current_round(self.current_round_id)
 
             execution_time = (time.time() - execution_start) * 1000
 

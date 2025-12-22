@@ -23,7 +23,19 @@
       "llm": false,
       "toxicity": "no",
       "daily_activity_level": 1,
-      "recsys_type": "random"
+      "recsys_type": "random",
+      "interests": [
+        [
+          "Programming",
+          "Technology",
+          "Software"
+        ],
+        [
+          9,
+          8,
+          5
+        ]
+      ]
     },
     {
       "id": "0de14841-2c5c-5e94-87c5-bb9fac705308",
@@ -48,7 +60,19 @@
       "llm": true,
       "toxicity": "no",
       "daily_activity_level": 4,
-      "recsys_type": "rchrono"
+      "recsys_type": "rchrono",
+      "interests": [
+        [
+          "News",
+          "Politics",
+          "Technology"
+        ],
+        [
+          3,
+          4,
+          3
+        ]
+      ]
     },
     {
       "id": "5244e080-c488-5e63-b6bb-260de35b9b51",
@@ -73,7 +97,19 @@
       "llm": false,
       "toxicity": "no",
       "daily_activity_level": 3,
-      "recsys_type": "random"
+      "recsys_type": "random",
+      "interests": [
+        [
+          "News",
+          "Education",
+          "Health"
+        ],
+        [
+          3,
+          4,
+          1
+        ]
+      ]
     },
     {
       "id": "e7d66d7c-ff04-5d6e-86b0-2c61739de7d6",
@@ -98,7 +134,19 @@
       "llm": false,
       "toxicity": "no",
       "daily_activity_level": 3,
-      "recsys_type": "rchrono"
+      "recsys_type": "rchrono",
+      "interests": [
+        [
+          "Health",
+          "Technology",
+          "Entertainment"
+        ],
+        [
+          6,
+          4,
+          2
+        ]
+      ]
     },
     {
       "id": "ec2be7a9-c8e0-5a50-8cb4-5bb209782d88",
@@ -123,7 +171,19 @@
       "llm": true,
       "toxicity": "no",
       "daily_activity_level": 5,
-      "recsys_type": "random"
+      "recsys_type": "random",
+      "interests": [
+        [
+          "Science",
+          "Research",
+          "Innovation"
+        ],
+        [
+          9,
+          8,
+          6
+        ]
+      ]
     },
     {
       "id": "205d98d5-ba95-552e-8cc7-27484b9101ca",
@@ -148,7 +208,19 @@
       "llm": true,
       "toxicity": "no",
       "daily_activity_level": 5,
-      "recsys_type": "rchrono"
+      "recsys_type": "rchrono",
+      "interests": [
+        [
+          "Science",
+          "Research",
+          "Innovation"
+        ],
+        [
+          11,
+          9,
+          7
+        ]
+      ]
     },
     {
       "id": "e5012653-0c60-52a0-9532-0a0c3d4e86d2",
@@ -173,7 +245,19 @@
       "llm": true,
       "toxicity": "no",
       "daily_activity_level": 2,
-      "recsys_type": "random"
+      "recsys_type": "random",
+      "interests": [
+        [
+          "Programming",
+          "Technology",
+          "Software"
+        ],
+        [
+          10,
+          6,
+          5
+        ]
+      ]
     },
     {
       "id": "83b67e44-6bc6-5836-bee8-c3e9289ffe08",
@@ -198,7 +282,19 @@
       "llm": false,
       "toxicity": "no",
       "daily_activity_level": 2,
-      "recsys_type": "rchrono"
+      "recsys_type": "rchrono",
+      "interests": [
+        [
+          "Education",
+          "Learning",
+          "Teaching"
+        ],
+        [
+          8,
+          5,
+          4
+        ]
+      ]
     },
     {
       "id": "38b10d5a-6ee7-5365-83a8-3d9913e506ed",
@@ -223,7 +319,19 @@
       "llm": true,
       "toxicity": "no",
       "daily_activity_level": 2,
-      "recsys_type": "random"
+      "recsys_type": "random",
+      "interests": [
+        [
+          "Writing",
+          "Literature",
+          "Storytelling"
+        ],
+        [
+          8,
+          6,
+          4
+        ]
+      ]
     },
     {
       "id": "e2481d7d-6955-5198-8507-a3701bf01ae8",
@@ -248,7 +356,19 @@
       "llm": false,
       "toxicity": "no",
       "daily_activity_level": 2,
-      "recsys_type": "rchrono"
+      "recsys_type": "rchrono",
+      "interests": [
+        [
+          "Design",
+          "Art",
+          "Creativity"
+        ],
+        [
+          8,
+          4,
+          4
+        ]
+      ]
     },
     {
       "id": "68e41262-a439-5509-967b-10ff043584b4",
@@ -273,7 +393,19 @@
       "llm": false,
       "toxicity": "no",
       "daily_activity_level": 5,
-      "recsys_type": "random"
+      "recsys_type": "random",
+      "interests": [
+        [
+          "Entertainment",
+          "Politics",
+          "Science"
+        ],
+        [
+          5,
+          2,
+          3
+        ]
+      ]
     },
     {
       "id": "bc7be151-8bde-510a-8622-6cb9fdb52040",
@@ -298,7 +430,19 @@
       "llm": false,
       "toxicity": "no",
       "daily_activity_level": 5,
-      "recsys_type": "rchrono"
+      "recsys_type": "rchrono",
+      "interests": [
+        [
+          "Education",
+          "Learning",
+          "Teaching"
+        ],
+        [
+          7,
+          5,
+          4
+        ]
+      ]
     },
     {
       "id": "6df231c8-fc83-5a27-aa2c-e094203f3084",
@@ -323,7 +467,19 @@
       "llm": false,
       "toxicity": "no",
       "daily_activity_level": 3,
-      "recsys_type": "random"
+      "recsys_type": "random",
+      "interests": [
+        [
+          "Design",
+          "Art",
+          "Creativity"
+        ],
+        [
+          9,
+          4,
+          2
+        ]
+      ]
     },
     {
       "id": "6771665a-d1f9-5809-880c-9b87f528404e",
@@ -348,7 +504,19 @@
       "llm": true,
       "toxicity": "no",
       "daily_activity_level": 4,
-      "recsys_type": "rchrono"
+      "recsys_type": "rchrono",
+      "interests": [
+        [
+          "Design",
+          "Art",
+          "Creativity"
+        ],
+        [
+          8,
+          6,
+          2
+        ]
+      ]
     },
     {
       "id": "58ba4659-9583-5018-8398-29f5365c9d7e",
@@ -373,7 +541,19 @@
       "llm": false,
       "toxicity": "no",
       "daily_activity_level": 2,
-      "recsys_type": "random"
+      "recsys_type": "random",
+      "interests": [
+        [
+          "Science",
+          "Education",
+          "Culture"
+        ],
+        [
+          3,
+          5,
+          3
+        ]
+      ]
     },
     {
       "id": "d4497669-984e-52e0-991b-dcca691aee36",
@@ -398,7 +578,19 @@
       "llm": false,
       "toxicity": "no",
       "daily_activity_level": 1,
-      "recsys_type": "rchrono"
+      "recsys_type": "rchrono",
+      "interests": [
+        [
+          "News",
+          "Writing",
+          "Current Events"
+        ],
+        [
+          10,
+          6,
+          6
+        ]
+      ]
     },
     {
       "id": "c9e9bfde-c668-507f-b844-14eb3e129267",
@@ -423,7 +615,19 @@
       "llm": false,
       "toxicity": "no",
       "daily_activity_level": 3,
-      "recsys_type": "random"
+      "recsys_type": "random",
+      "interests": [
+        [
+          "Writing",
+          "Literature",
+          "Storytelling"
+        ],
+        [
+          9,
+          7,
+          4
+        ]
+      ]
     },
     {
       "id": "a4154638-5b44-5e55-b41f-3054ade7b9ae",
@@ -448,7 +652,19 @@
       "llm": false,
       "toxicity": "no",
       "daily_activity_level": 3,
-      "recsys_type": "rchrono"
+      "recsys_type": "rchrono",
+      "interests": [
+        [
+          "Data Science",
+          "Analytics",
+          "Statistics"
+        ],
+        [
+          7,
+          4,
+          2
+        ]
+      ]
     },
     {
       "id": "386256ba-0366-5611-9436-8431cef3ce6c",
@@ -473,7 +689,19 @@
       "llm": false,
       "toxicity": "no",
       "daily_activity_level": 4,
-      "recsys_type": "random"
+      "recsys_type": "random",
+      "interests": [
+        [
+          "Data Science",
+          "Analytics",
+          "Statistics"
+        ],
+        [
+          8,
+          6,
+          2
+        ]
+      ]
     },
     {
       "id": "e99f7ab7-3188-5a0b-9e20-aa56fb31c4f3",
@@ -498,7 +726,19 @@
       "llm": false,
       "toxicity": "no",
       "daily_activity_level": 2,
-      "recsys_type": "rchrono"
+      "recsys_type": "rchrono",
+      "interests": [
+        [
+          "Science",
+          "Health",
+          "Business"
+        ],
+        [
+          3,
+          2,
+          1
+        ]
+      ]
     },
     {
       "id": "350fbfaf-e1c8-5311-a9d3-081fd1be6b3d",
@@ -523,7 +763,19 @@
       "llm": false,
       "toxicity": "no",
       "daily_activity_level": 1,
-      "recsys_type": "random"
+      "recsys_type": "random",
+      "interests": [
+        [
+          "Health",
+          "Culture",
+          "News"
+        ],
+        [
+          6,
+          5,
+          2
+        ]
+      ]
     },
     {
       "id": "faf36add-a8a6-5e62-afdc-39e238ff2c97",
@@ -548,7 +800,19 @@
       "llm": false,
       "toxicity": "no",
       "daily_activity_level": 3,
-      "recsys_type": "rchrono"
+      "recsys_type": "rchrono",
+      "interests": [
+        [
+          "Writing",
+          "Literature",
+          "Storytelling"
+        ],
+        [
+          10,
+          5,
+          4
+        ]
+      ]
     },
     {
       "id": "9d10155f-6dc8-5353-8a51-b589dfa6eb88",
@@ -573,7 +837,19 @@
       "llm": false,
       "toxicity": "no",
       "daily_activity_level": 2,
-      "recsys_type": "random"
+      "recsys_type": "random",
+      "interests": [
+        [
+          "Health",
+          "Culture",
+          "Technology"
+        ],
+        [
+          7,
+          4,
+          3
+        ]
+      ]
     },
     {
       "id": "889af60a-4165-5c76-93a5-1d629c25ce28",
@@ -598,7 +874,19 @@
       "llm": false,
       "toxicity": "no",
       "daily_activity_level": 3,
-      "recsys_type": "rchrono"
+      "recsys_type": "rchrono",
+      "interests": [
+        [
+          "Education",
+          "Learning",
+          "Teaching"
+        ],
+        [
+          7,
+          7,
+          4
+        ]
+      ]
     },
     {
       "id": "2add9c38-0934-5e80-98db-caa4236e4add",
@@ -623,7 +911,19 @@
       "llm": true,
       "toxicity": "no",
       "daily_activity_level": 2,
-      "recsys_type": "random"
+      "recsys_type": "random",
+      "interests": [
+        [
+          "Science",
+          "Research",
+          "Innovation"
+        ],
+        [
+          10,
+          9,
+          5
+        ]
+      ]
     },
     {
       "id": "51fd6f44-2315-50a6-8e9b-e3d636d89e5f",
@@ -648,7 +948,19 @@
       "llm": false,
       "toxicity": "no",
       "daily_activity_level": 1,
-      "recsys_type": "rchrono"
+      "recsys_type": "rchrono",
+      "interests": [
+        [
+          "Education",
+          "Learning",
+          "Teaching"
+        ],
+        [
+          8,
+          7,
+          3
+        ]
+      ]
     },
     {
       "id": "98293935-7f6f-5a82-a146-921925268fa2",
@@ -673,7 +985,19 @@
       "llm": false,
       "toxicity": "no",
       "daily_activity_level": 3,
-      "recsys_type": "random"
+      "recsys_type": "random",
+      "interests": [
+        [
+          "Data Science",
+          "Analytics",
+          "Statistics"
+        ],
+        [
+          8,
+          4,
+          2
+        ]
+      ]
     },
     {
       "id": "94948ef2-371c-5eb2-8274-bdaf20c039f5",
@@ -698,7 +1022,19 @@
       "llm": false,
       "toxicity": "no",
       "daily_activity_level": 3,
-      "recsys_type": "rchrono"
+      "recsys_type": "rchrono",
+      "interests": [
+        [
+          "News",
+          "Writing",
+          "Current Events"
+        ],
+        [
+          9,
+          6,
+          4
+        ]
+      ]
     },
     {
       "id": "5f10b02c-8476-57ae-acd5-87d4b02aff6f",
@@ -723,7 +1059,19 @@
       "llm": false,
       "toxicity": "no",
       "daily_activity_level": 2,
-      "recsys_type": "random"
+      "recsys_type": "random",
+      "interests": [
+        [
+          "Entertainment",
+          "Science",
+          "News"
+        ],
+        [
+          4,
+          2,
+          3
+        ]
+      ]
     },
     {
       "id": "964b25d1-e5b0-5278-b885-1ac850ce0c9d",
@@ -748,7 +1096,19 @@
       "llm": false,
       "toxicity": "no",
       "daily_activity_level": 2,
-      "recsys_type": "rchrono"
+      "recsys_type": "rchrono",
+      "interests": [
+        [
+          "News",
+          "Business",
+          "Sports"
+        ],
+        [
+          5,
+          4,
+          3
+        ]
+      ]
     },
     {
       "id": "49cdb5e4-717b-5e2c-b881-d8838167a7d5",
@@ -773,7 +1133,19 @@
       "llm": true,
       "toxicity": "no",
       "daily_activity_level": 3,
-      "recsys_type": "random"
+      "recsys_type": "random",
+      "interests": [
+        [
+          "Research",
+          "Science",
+          "Innovation"
+        ],
+        [
+          9,
+          6,
+          3
+        ]
+      ]
     },
     {
       "id": "696ebe4e-3716-5863-a360-45a953ccfb80",
@@ -798,7 +1170,19 @@
       "llm": false,
       "toxicity": "no",
       "daily_activity_level": 2,
-      "recsys_type": "rchrono"
+      "recsys_type": "rchrono",
+      "interests": [
+        [
+          "Education",
+          "Entertainment",
+          "Health"
+        ],
+        [
+          3,
+          5,
+          1
+        ]
+      ]
     },
     {
       "id": "6a1ed071-9d63-5ef2-bbd7-8dee88f30fe8",
@@ -823,7 +1207,19 @@
       "llm": false,
       "toxicity": "no",
       "daily_activity_level": 5,
-      "recsys_type": "random"
+      "recsys_type": "random",
+      "interests": [
+        [
+          "Business",
+          "Sports",
+          "Culture"
+        ],
+        [
+          5,
+          4,
+          2
+        ]
+      ]
     },
     {
       "id": "49dea28f-9006-538b-b311-577d4faa6244",
@@ -848,7 +1244,19 @@
       "llm": false,
       "toxicity": "no",
       "daily_activity_level": 4,
-      "recsys_type": "rchrono"
+      "recsys_type": "rchrono",
+      "interests": [
+        [
+          "Science",
+          "Politics",
+          "Health"
+        ],
+        [
+          3,
+          4,
+          2
+        ]
+      ]
     },
     {
       "id": "8ebb0a5d-ced1-5dfa-8b43-d0416108f66f",
@@ -873,7 +1281,19 @@
       "llm": true,
       "toxicity": "no",
       "daily_activity_level": 2,
-      "recsys_type": "random"
+      "recsys_type": "random",
+      "interests": [
+        [
+          "Education",
+          "Learning",
+          "Teaching"
+        ],
+        [
+          9,
+          5,
+          4
+        ]
+      ]
     },
     {
       "id": "d972af50-b3dd-516c-afa7-020fff8d15bd",
@@ -898,7 +1318,19 @@
       "llm": false,
       "toxicity": "no",
       "daily_activity_level": 2,
-      "recsys_type": "rchrono"
+      "recsys_type": "rchrono",
+      "interests": [
+        [
+          "Business",
+          "Health",
+          "Sports"
+        ],
+        [
+          4,
+          5,
+          2
+        ]
+      ]
     },
     {
       "id": "f10c09c5-e0d7-5d94-91d6-e315fb488294",
@@ -923,7 +1355,19 @@
       "llm": false,
       "toxicity": "no",
       "daily_activity_level": 3,
-      "recsys_type": "random"
+      "recsys_type": "random",
+      "interests": [
+        [
+          "Data Science",
+          "Analytics",
+          "Statistics"
+        ],
+        [
+          8,
+          4,
+          3
+        ]
+      ]
     },
     {
       "id": "0feca30d-7985-5a9f-92b2-03a73a779359",
@@ -948,7 +1392,19 @@
       "llm": true,
       "toxicity": "no",
       "daily_activity_level": 3,
-      "recsys_type": "rchrono"
+      "recsys_type": "rchrono",
+      "interests": [
+        [
+          "Writing",
+          "Literature",
+          "Storytelling"
+        ],
+        [
+          9,
+          6,
+          5
+        ]
+      ]
     },
     {
       "id": "1cba4594-0c15-5c16-ad96-d157a8c8c35d",
@@ -973,7 +1429,19 @@
       "llm": true,
       "toxicity": "no",
       "daily_activity_level": 3,
-      "recsys_type": "random"
+      "recsys_type": "random",
+      "interests": [
+        [
+          "Social Media",
+          "Content",
+          "Creativity"
+        ],
+        [
+          8,
+          5,
+          3
+        ]
+      ]
     },
     {
       "id": "d7e1f319-e271-53c9-8857-deb45e519edb",
@@ -998,7 +1466,19 @@
       "llm": false,
       "toxicity": "no",
       "daily_activity_level": 1,
-      "recsys_type": "rchrono"
+      "recsys_type": "rchrono",
+      "interests": [
+        [
+          "Data Science",
+          "Analytics",
+          "Statistics"
+        ],
+        [
+          8,
+          5,
+          3
+        ]
+      ]
     },
     {
       "id": "7ad7ec09-08de-5d6e-ba34-8139b50229d4",
@@ -1023,7 +1503,19 @@
       "llm": true,
       "toxicity": "no",
       "daily_activity_level": 4,
-      "recsys_type": "random"
+      "recsys_type": "random",
+      "interests": [
+        [
+          "Data Science",
+          "Analytics",
+          "Statistics"
+        ],
+        [
+          8,
+          4,
+          3
+        ]
+      ]
     },
     {
       "id": "b5db65ce-719d-5b6d-ae4a-4815661c1ec1",
@@ -1048,7 +1540,19 @@
       "llm": true,
       "toxicity": "no",
       "daily_activity_level": 2,
-      "recsys_type": "rchrono"
+      "recsys_type": "rchrono",
+      "interests": [
+        [
+          "Programming",
+          "Technology",
+          "Software"
+        ],
+        [
+          11,
+          7,
+          4
+        ]
+      ]
     },
     {
       "id": "0f861c54-76a7-5367-94f2-d93e31bed4f7",
@@ -1073,7 +1577,19 @@
       "llm": true,
       "toxicity": "no",
       "daily_activity_level": 1,
-      "recsys_type": "random"
+      "recsys_type": "random",
+      "interests": [
+        [
+          "Writing",
+          "Literature",
+          "Storytelling"
+        ],
+        [
+          8,
+          5,
+          5
+        ]
+      ]
     },
     {
       "id": "df99ef50-f387-567b-bc40-9f1ab1d71238",
@@ -1098,7 +1614,19 @@
       "llm": true,
       "toxicity": "no",
       "daily_activity_level": 3,
-      "recsys_type": "rchrono"
+      "recsys_type": "rchrono",
+      "interests": [
+        [
+          "Technology",
+          "Sports",
+          "News"
+        ],
+        [
+          5,
+          2,
+          2
+        ]
+      ]
     },
     {
       "id": "a655f919-8908-5559-b046-9bd6122618a1",
@@ -1123,7 +1651,19 @@
       "llm": true,
       "toxicity": "no",
       "daily_activity_level": 2,
-      "recsys_type": "random"
+      "recsys_type": "random",
+      "interests": [
+        [
+          "Research",
+          "Science",
+          "Innovation"
+        ],
+        [
+          8,
+          5,
+          4
+        ]
+      ]
     },
     {
       "id": "2e30ef7a-fc05-5227-966f-7223c07d3b96",
@@ -1148,7 +1688,19 @@
       "llm": false,
       "toxicity": "no",
       "daily_activity_level": 5,
-      "recsys_type": "rchrono"
+      "recsys_type": "rchrono",
+      "interests": [
+        [
+          "Research",
+          "Science",
+          "Innovation"
+        ],
+        [
+          10,
+          7,
+          4
+        ]
+      ]
     },
     {
       "id": "b2f3e827-50be-5667-a8e1-1427ac8a725e",
@@ -1173,7 +1725,19 @@
       "llm": false,
       "toxicity": "no",
       "daily_activity_level": 2,
-      "recsys_type": "random"
+      "recsys_type": "random",
+      "interests": [
+        [
+          "Culture",
+          "Technology",
+          "Education"
+        ],
+        [
+          5,
+          3,
+          3
+        ]
+      ]
     },
     {
       "id": "1b095b7d-0879-55f6-9694-5feb3df8b5ce",
@@ -1198,7 +1762,19 @@
       "llm": true,
       "toxicity": "no",
       "daily_activity_level": 2,
-      "recsys_type": "rchrono"
+      "recsys_type": "rchrono",
+      "interests": [
+        [
+          "Health",
+          "Business",
+          "Sports"
+        ],
+        [
+          3,
+          4,
+          2
+        ]
+      ]
     },
     {
       "id": "4699fd9e-fa76-541a-a7ed-f67807d02653",
@@ -1223,7 +1799,19 @@
       "llm": false,
       "toxicity": "no",
       "daily_activity_level": 2,
-      "recsys_type": "random"
+      "recsys_type": "random",
+      "interests": [
+        [
+          "Data Science",
+          "Analytics",
+          "Statistics"
+        ],
+        [
+          8,
+          4,
+          4
+        ]
+      ]
     },
     {
       "id": "21e2baab-ea5f-5a1c-9de7-3a5ef8245a76",
@@ -1248,7 +1836,19 @@
       "llm": false,
       "toxicity": "no",
       "daily_activity_level": 2,
-      "recsys_type": "rchrono"
+      "recsys_type": "rchrono",
+      "interests": [
+        [
+          "Culture",
+          "Science",
+          "News"
+        ],
+        [
+          5,
+          4,
+          1
+        ]
+      ]
     },
     {
       "id": "e53ab0e7-1aa5-5506-898d-beabf9156424",
@@ -1273,7 +1873,19 @@
       "llm": false,
       "toxicity": "no",
       "daily_activity_level": 4,
-      "recsys_type": "random"
+      "recsys_type": "random",
+      "interests": [
+        [
+          "Programming",
+          "Technology",
+          "Software"
+        ],
+        [
+          9,
+          6,
+          5
+        ]
+      ]
     },
     {
       "id": "652c5d0e-9930-51bd-a1a1-f5f0fb7dfd41",
@@ -1298,7 +1910,19 @@
       "llm": false,
       "toxicity": "no",
       "daily_activity_level": 4,
-      "recsys_type": "rchrono"
+      "recsys_type": "rchrono",
+      "interests": [
+        [
+          "Social Media",
+          "Content",
+          "Creativity"
+        ],
+        [
+          8,
+          6,
+          3
+        ]
+      ]
     },
     {
       "id": "368405b7-24d2-5f30-9e4c-2ebde8241cd6",
@@ -1323,7 +1947,19 @@
       "llm": false,
       "toxicity": "no",
       "daily_activity_level": 5,
-      "recsys_type": "random"
+      "recsys_type": "random",
+      "interests": [
+        [
+          "Business",
+          "Culture",
+          "Science"
+        ],
+        [
+          4,
+          2,
+          2
+        ]
+      ]
     },
     {
       "id": "18c20ac5-21be-5b66-b224-ef707c9a48ff",
@@ -1348,7 +1984,19 @@
       "llm": false,
       "toxicity": "no",
       "daily_activity_level": 1,
-      "recsys_type": "rchrono"
+      "recsys_type": "rchrono",
+      "interests": [
+        [
+          "Programming",
+          "Technology",
+          "Software"
+        ],
+        [
+          10,
+          6,
+          4
+        ]
+      ]
     },
     {
       "id": "5cc439db-997b-5794-94e5-3f23eb6a6311",
@@ -1373,7 +2021,19 @@
       "llm": false,
       "toxicity": "no",
       "daily_activity_level": 3,
-      "recsys_type": "random"
+      "recsys_type": "random",
+      "interests": [
+        [
+          "Design",
+          "Art",
+          "Creativity"
+        ],
+        [
+          8,
+          4,
+          3
+        ]
+      ]
     },
     {
       "id": "196bc43b-df58-5249-bc8e-20ee09b69da1",
@@ -1398,7 +2058,19 @@
       "llm": true,
       "toxicity": "no",
       "daily_activity_level": 3,
-      "recsys_type": "rchrono"
+      "recsys_type": "rchrono",
+      "interests": [
+        [
+          "Politics",
+          "Health",
+          "Entertainment"
+        ],
+        [
+          6,
+          5,
+          1
+        ]
+      ]
     },
     {
       "id": "5714b93f-57f3-54b3-8267-af7c2464e7c6",
@@ -1423,7 +2095,19 @@
       "llm": false,
       "toxicity": "no",
       "daily_activity_level": 3,
-      "recsys_type": "random"
+      "recsys_type": "random",
+      "interests": [
+        [
+          "Programming",
+          "Technology",
+          "Software"
+        ],
+        [
+          9,
+          6,
+          6
+        ]
+      ]
     },
     {
       "id": "630bbfef-c540-5e56-839d-a79b62d0228d",
@@ -1448,7 +2132,19 @@
       "llm": true,
       "toxicity": "no",
       "daily_activity_level": 2,
-      "recsys_type": "rchrono"
+      "recsys_type": "rchrono",
+      "interests": [
+        [
+          "News",
+          "Writing",
+          "Current Events"
+        ],
+        [
+          10,
+          7,
+          5
+        ]
+      ]
     },
     {
       "id": "ca3eee8b-fb9e-5bc2-870b-65c4c956ac29",
@@ -1473,7 +2169,19 @@
       "llm": false,
       "toxicity": "no",
       "daily_activity_level": 4,
-      "recsys_type": "random"
+      "recsys_type": "random",
+      "interests": [
+        [
+          "Sports",
+          "Culture",
+          "Health"
+        ],
+        [
+          4,
+          5,
+          3
+        ]
+      ]
     },
     {
       "id": "d718f12e-1d88-5429-97fd-989f00c4d101",
@@ -1498,7 +2206,19 @@
       "llm": false,
       "toxicity": "no",
       "daily_activity_level": 3,
-      "recsys_type": "rchrono"
+      "recsys_type": "rchrono",
+      "interests": [
+        [
+          "Programming",
+          "Technology",
+          "Software"
+        ],
+        [
+          10,
+          7,
+          6
+        ]
+      ]
     },
     {
       "id": "9fba33ca-5844-5d6b-a543-ed4e2490cad9",
@@ -1523,7 +2243,19 @@
       "llm": true,
       "toxicity": "no",
       "daily_activity_level": 2,
-      "recsys_type": "random"
+      "recsys_type": "random",
+      "interests": [
+        [
+          "Education",
+          "Learning",
+          "Teaching"
+        ],
+        [
+          7,
+          7,
+          3
+        ]
+      ]
     },
     {
       "id": "f677b006-8306-55df-9524-ff66e2814de6",
@@ -1548,7 +2280,19 @@
       "llm": true,
       "toxicity": "no",
       "daily_activity_level": 4,
-      "recsys_type": "rchrono"
+      "recsys_type": "rchrono",
+      "interests": [
+        [
+          "Science",
+          "Technology",
+          "Entertainment"
+        ],
+        [
+          5,
+          3,
+          2
+        ]
+      ]
     },
     {
       "id": "916d2096-bec4-5448-b66c-7249c596eabd",
@@ -1573,7 +2317,19 @@
       "llm": false,
       "toxicity": "no",
       "daily_activity_level": 4,
-      "recsys_type": "random"
+      "recsys_type": "random",
+      "interests": [
+        [
+          "Writing",
+          "Literature",
+          "Storytelling"
+        ],
+        [
+          9,
+          6,
+          4
+        ]
+      ]
     },
     {
       "id": "a3c2cdd9-0d68-5267-af5e-0e56b4902c31",
@@ -1598,7 +2354,19 @@
       "llm": false,
       "toxicity": "no",
       "daily_activity_level": 4,
-      "recsys_type": "rchrono"
+      "recsys_type": "rchrono",
+      "interests": [
+        [
+          "Education",
+          "Sports",
+          "Culture"
+        ],
+        [
+          6,
+          4,
+          3
+        ]
+      ]
     },
     {
       "id": "30de63f6-d77d-504d-a086-ceb84a30044e",
@@ -1623,7 +2391,19 @@
       "llm": false,
       "toxicity": "no",
       "daily_activity_level": 2,
-      "recsys_type": "random"
+      "recsys_type": "random",
+      "interests": [
+        [
+          "News",
+          "Writing",
+          "Current Events"
+        ],
+        [
+          10,
+          7,
+          6
+        ]
+      ]
     },
     {
       "id": "912d7b35-7279-58a9-b865-99e1d16f2a60",
@@ -1648,7 +2428,19 @@
       "llm": false,
       "toxicity": "no",
       "daily_activity_level": 1,
-      "recsys_type": "rchrono"
+      "recsys_type": "rchrono",
+      "interests": [
+        [
+          "Business",
+          "Culture",
+          "Entertainment"
+        ],
+        [
+          7,
+          3,
+          4
+        ]
+      ]
     },
     {
       "id": "758d0320-7c36-5bb7-9fef-ae8054782488",
@@ -1673,7 +2465,19 @@
       "llm": true,
       "toxicity": "no",
       "daily_activity_level": 4,
-      "recsys_type": "random"
+      "recsys_type": "random",
+      "interests": [
+        [
+          "Social Media",
+          "Content",
+          "Creativity"
+        ],
+        [
+          8,
+          5,
+          3
+        ]
+      ]
     },
     {
       "id": "2787856c-2009-5f24-bf94-c6fe4e599328",
@@ -1698,7 +2502,19 @@
       "llm": false,
       "toxicity": "no",
       "daily_activity_level": 1,
-      "recsys_type": "rchrono"
+      "recsys_type": "rchrono",
+      "interests": [
+        [
+          "Research",
+          "Science",
+          "Innovation"
+        ],
+        [
+          10,
+          5,
+          3
+        ]
+      ]
     },
     {
       "id": "887c4027-372e-58bf-a0fe-bd207c1abcd0",
@@ -1723,7 +2539,19 @@
       "llm": true,
       "toxicity": "no",
       "daily_activity_level": 2,
-      "recsys_type": "random"
+      "recsys_type": "random",
+      "interests": [
+        [
+          "Science",
+          "Health",
+          "Entertainment"
+        ],
+        [
+          6,
+          2,
+          4
+        ]
+      ]
     },
     {
       "id": "18786d98-5a4e-5ab5-ac2a-fcdc6600879c",
@@ -1748,7 +2576,19 @@
       "llm": false,
       "toxicity": "no",
       "daily_activity_level": 5,
-      "recsys_type": "rchrono"
+      "recsys_type": "rchrono",
+      "interests": [
+        [
+          "News",
+          "Technology",
+          "Education"
+        ],
+        [
+          7,
+          5,
+          3
+        ]
+      ]
     },
     {
       "id": "fe1ed237-0980-51bc-86ff-a1adde35db79",
@@ -1773,7 +2613,19 @@
       "llm": false,
       "toxicity": "no",
       "daily_activity_level": 2,
-      "recsys_type": "random"
+      "recsys_type": "random",
+      "interests": [
+        [
+          "Technology",
+          "News",
+          "Science"
+        ],
+        [
+          7,
+          2,
+          2
+        ]
+      ]
     },
     {
       "id": "ec1efe8f-ceaf-5606-991c-47c90a6c92c2",
@@ -1798,7 +2650,19 @@
       "llm": false,
       "toxicity": "no",
       "daily_activity_level": 3,
-      "recsys_type": "rchrono"
+      "recsys_type": "rchrono",
+      "interests": [
+        [
+          "Social Media",
+          "Content",
+          "Creativity"
+        ],
+        [
+          9,
+          7,
+          4
+        ]
+      ]
     },
     {
       "id": "35eb6609-d129-5926-b931-6b6dc094d6a4",
@@ -1823,7 +2687,19 @@
       "llm": true,
       "toxicity": "no",
       "daily_activity_level": 3,
-      "recsys_type": "random"
+      "recsys_type": "random",
+      "interests": [
+        [
+          "Politics",
+          "Technology",
+          "Health"
+        ],
+        [
+          6,
+          4,
+          4
+        ]
+      ]
     },
     {
       "id": "40f633c7-31db-517a-925b-d67349fe0af5",
@@ -1848,7 +2724,19 @@
       "llm": false,
       "toxicity": "no",
       "daily_activity_level": 1,
-      "recsys_type": "rchrono"
+      "recsys_type": "rchrono",
+      "interests": [
+        [
+          "Education",
+          "Learning",
+          "Teaching"
+        ],
+        [
+          7,
+          7,
+          4
+        ]
+      ]
     },
     {
       "id": "25161603-a705-5b18-b02a-4620658f6b96",
@@ -1873,7 +2761,19 @@
       "llm": true,
       "toxicity": "no",
       "daily_activity_level": 3,
-      "recsys_type": "random"
+      "recsys_type": "random",
+      "interests": [
+        [
+          "Writing",
+          "Literature",
+          "Storytelling"
+        ],
+        [
+          10,
+          6,
+          5
+        ]
+      ]
     },
     {
       "id": "96eb31e4-bd2b-52af-8c23-27821e0e5f41",
@@ -1898,7 +2798,19 @@
       "llm": false,
       "toxicity": "no",
       "daily_activity_level": 4,
-      "recsys_type": "rchrono"
+      "recsys_type": "rchrono",
+      "interests": [
+        [
+          "Research",
+          "Science",
+          "Innovation"
+        ],
+        [
+          8,
+          6,
+          5
+        ]
+      ]
     },
     {
       "id": "5d697058-c857-5023-b0bd-094ed65f7927",
@@ -1923,7 +2835,19 @@
       "llm": false,
       "toxicity": "no",
       "daily_activity_level": 5,
-      "recsys_type": "random"
+      "recsys_type": "random",
+      "interests": [
+        [
+          "Education",
+          "Learning",
+          "Teaching"
+        ],
+        [
+          8,
+          5,
+          4
+        ]
+      ]
     },
     {
       "id": "33997a76-389c-5d3c-9b74-859ed1f1d390",
@@ -1948,7 +2872,19 @@
       "llm": false,
       "toxicity": "no",
       "daily_activity_level": 1,
-      "recsys_type": "rchrono"
+      "recsys_type": "rchrono",
+      "interests": [
+        [
+          "Science",
+          "Research",
+          "Innovation"
+        ],
+        [
+          10,
+          9,
+          5
+        ]
+      ]
     },
     {
       "id": "81227618-d89c-596f-a0f0-6594e01c4be5",
@@ -1973,7 +2909,19 @@
       "llm": true,
       "toxicity": "no",
       "daily_activity_level": 2,
-      "recsys_type": "random"
+      "recsys_type": "random",
+      "interests": [
+        [
+          "Sports",
+          "Politics",
+          "Business"
+        ],
+        [
+          6,
+          5,
+          1
+        ]
+      ]
     },
     {
       "id": "3da45904-2519-5fb1-b95e-117835e1cd57",
@@ -1998,7 +2946,19 @@
       "llm": false,
       "toxicity": "no",
       "daily_activity_level": 2,
-      "recsys_type": "rchrono"
+      "recsys_type": "rchrono",
+      "interests": [
+        [
+          "Science",
+          "Health",
+          "Culture"
+        ],
+        [
+          4,
+          4,
+          4
+        ]
+      ]
     },
     {
       "id": "1b56ba66-a7c3-57fd-a53b-945445bd83d1",
@@ -2023,7 +2983,19 @@
       "llm": true,
       "toxicity": "no",
       "daily_activity_level": 5,
-      "recsys_type": "random"
+      "recsys_type": "random",
+      "interests": [
+        [
+          "Design",
+          "Art",
+          "Creativity"
+        ],
+        [
+          7,
+          4,
+          3
+        ]
+      ]
     },
     {
       "id": "a88457d9-82cc-587e-91da-6c6b54a0216e",
@@ -2048,7 +3020,19 @@
       "llm": false,
       "toxicity": "no",
       "daily_activity_level": 1,
-      "recsys_type": "rchrono"
+      "recsys_type": "rchrono",
+      "interests": [
+        [
+          "Writing",
+          "Literature",
+          "Storytelling"
+        ],
+        [
+          8,
+          5,
+          5
+        ]
+      ]
     },
     {
       "id": "f2058ca5-91e7-5c59-bfc7-ce951f87edaf",
@@ -2073,7 +3057,19 @@
       "llm": true,
       "toxicity": "no",
       "daily_activity_level": 3,
-      "recsys_type": "random"
+      "recsys_type": "random",
+      "interests": [
+        [
+          "Science",
+          "Culture",
+          "Entertainment"
+        ],
+        [
+          4,
+          5,
+          1
+        ]
+      ]
     },
     {
       "id": "5276b8eb-91ba-5e40-b7c1-1fe1c5c65839",
@@ -2098,7 +3094,19 @@
       "llm": false,
       "toxicity": "no",
       "daily_activity_level": 3,
-      "recsys_type": "rchrono"
+      "recsys_type": "rchrono",
+      "interests": [
+        [
+          "Health",
+          "Entertainment",
+          "Science"
+        ],
+        [
+          3,
+          2,
+          4
+        ]
+      ]
     },
     {
       "id": "440ee3b1-9471-5bf7-8463-be2e1d39cc2d",
@@ -2123,7 +3131,19 @@
       "llm": true,
       "toxicity": "no",
       "daily_activity_level": 4,
-      "recsys_type": "random"
+      "recsys_type": "random",
+      "interests": [
+        [
+          "Programming",
+          "Technology",
+          "Software"
+        ],
+        [
+          11,
+          6,
+          4
+        ]
+      ]
     },
     {
       "id": "430f2013-8184-5299-9dc5-6e7cf851c7fd",
@@ -2148,7 +3168,19 @@
       "llm": true,
       "toxicity": "no",
       "daily_activity_level": 2,
-      "recsys_type": "rchrono"
+      "recsys_type": "rchrono",
+      "interests": [
+        [
+          "Design",
+          "Art",
+          "Creativity"
+        ],
+        [
+          8,
+          5,
+          2
+        ]
+      ]
     },
     {
       "id": "f7c5f089-c97f-54bf-91de-dd7a6f11756c",
@@ -2173,7 +3205,19 @@
       "llm": true,
       "toxicity": "no",
       "daily_activity_level": 1,
-      "recsys_type": "random"
+      "recsys_type": "random",
+      "interests": [
+        [
+          "News",
+          "Writing",
+          "Current Events"
+        ],
+        [
+          10,
+          6,
+          5
+        ]
+      ]
     },
     {
       "id": "c5f1bc4e-5ad7-5d70-86e5-002fcc5d12a9",
@@ -2198,7 +3242,19 @@
       "llm": false,
       "toxicity": "no",
       "daily_activity_level": 5,
-      "recsys_type": "rchrono"
+      "recsys_type": "rchrono",
+      "interests": [
+        [
+          "Programming",
+          "Technology",
+          "Software"
+        ],
+        [
+          11,
+          8,
+          4
+        ]
+      ]
     },
     {
       "id": "be23ec8c-1680-5443-976a-7a9e72b0aba1",
@@ -2223,7 +3279,19 @@
       "llm": true,
       "toxicity": "no",
       "daily_activity_level": 2,
-      "recsys_type": "random"
+      "recsys_type": "random",
+      "interests": [
+        [
+          "Education",
+          "Learning",
+          "Teaching"
+        ],
+        [
+          8,
+          7,
+          3
+        ]
+      ]
     },
     {
       "id": "c2428883-d8dc-5d03-a61a-e80823a65392",
@@ -2248,7 +3316,19 @@
       "llm": false,
       "toxicity": "no",
       "daily_activity_level": 5,
-      "recsys_type": "rchrono"
+      "recsys_type": "rchrono",
+      "interests": [
+        [
+          "Culture",
+          "Sports",
+          "Education"
+        ],
+        [
+          4,
+          5,
+          1
+        ]
+      ]
     },
     {
       "id": "8a3e9e03-ed4b-5382-8b66-15fd894bc631",
@@ -2273,7 +3353,19 @@
       "llm": false,
       "toxicity": "no",
       "daily_activity_level": 2,
-      "recsys_type": "random"
+      "recsys_type": "random",
+      "interests": [
+        [
+          "News",
+          "Politics",
+          "Entertainment"
+        ],
+        [
+          4,
+          4,
+          4
+        ]
+      ]
     },
     {
       "id": "a579a2d0-10fd-57fc-aa37-7b35766a1897",
@@ -2298,7 +3390,19 @@
       "llm": false,
       "toxicity": "no",
       "daily_activity_level": 3,
-      "recsys_type": "rchrono"
+      "recsys_type": "rchrono",
+      "interests": [
+        [
+          "Culture",
+          "News",
+          "Sports"
+        ],
+        [
+          6,
+          4,
+          4
+        ]
+      ]
     },
     {
       "id": "5c1dbdb5-e062-5c0a-918b-50a3d10fcdc5",
@@ -2323,7 +3427,19 @@
       "llm": true,
       "toxicity": "no",
       "daily_activity_level": 1,
-      "recsys_type": "random"
+      "recsys_type": "random",
+      "interests": [
+        [
+          "Health",
+          "Business",
+          "News"
+        ],
+        [
+          4,
+          2,
+          3
+        ]
+      ]
     },
     {
       "id": "d44eca8d-21fc-57b5-bfa1-31b01c03b0d0",
@@ -2348,7 +3464,19 @@
       "llm": true,
       "toxicity": "no",
       "daily_activity_level": 1,
-      "recsys_type": "rchrono"
+      "recsys_type": "rchrono",
+      "interests": [
+        [
+          "Science",
+          "Research",
+          "Innovation"
+        ],
+        [
+          11,
+          8,
+          5
+        ]
+      ]
     },
     {
       "id": "c67dc4b7-9834-59b1-9446-fb8df92d2049",
@@ -2373,7 +3501,19 @@
       "llm": true,
       "toxicity": "no",
       "daily_activity_level": 3,
-      "recsys_type": "random"
+      "recsys_type": "random",
+      "interests": [
+        [
+          "Data Science",
+          "Analytics",
+          "Statistics"
+        ],
+        [
+          6,
+          4,
+          4
+        ]
+      ]
     },
     {
       "id": "de66c1ff-820f-5d2d-8fc8-2b57d7221a61",
@@ -2398,7 +3538,19 @@
       "llm": false,
       "toxicity": "no",
       "daily_activity_level": 3,
-      "recsys_type": "rchrono"
+      "recsys_type": "rchrono",
+      "interests": [
+        [
+          "Technology",
+          "Education",
+          "Entertainment"
+        ],
+        [
+          6,
+          5,
+          3
+        ]
+      ]
     },
     {
       "id": "9af1896a-20e0-53fb-b525-0aef98766be6",
@@ -2423,7 +3575,19 @@
       "llm": true,
       "toxicity": "no",
       "daily_activity_level": 1,
-      "recsys_type": "random"
+      "recsys_type": "random",
+      "interests": [
+        [
+          "Social Media",
+          "Content",
+          "Creativity"
+        ],
+        [
+          9,
+          5,
+          3
+        ]
+      ]
     },
     {
       "id": "4ab6f137-f250-511e-84af-6b1006eb123f",
@@ -2448,7 +3612,19 @@
       "llm": false,
       "toxicity": "no",
       "daily_activity_level": 2,
-      "recsys_type": "rchrono"
+      "recsys_type": "rchrono",
+      "interests": [
+        [
+          "Education",
+          "Technology",
+          "Health"
+        ],
+        [
+          5,
+          5,
+          1
+        ]
+      ]
     },
     {
       "id": "ec06b02b-af57-52e1-b099-349074df0b9e",
@@ -2473,7 +3649,19 @@
       "llm": false,
       "toxicity": "no",
       "daily_activity_level": 2,
-      "recsys_type": "random"
+      "recsys_type": "random",
+      "interests": [
+        [
+          "Research",
+          "Science",
+          "Innovation"
+        ],
+        [
+          10,
+          5,
+          4
+        ]
+      ]
     },
     {
       "id": "dde776eb-4a20-52e0-851b-308ecf8244eb",
@@ -2498,7 +3686,19 @@
       "llm": false,
       "toxicity": "no",
       "daily_activity_level": 3,
-      "recsys_type": "rchrono"
+      "recsys_type": "rchrono",
+      "interests": [
+        [
+          "Science",
+          "Business",
+          "Health"
+        ],
+        [
+          5,
+          3,
+          3
+        ]
+      ]
     },
     {
       "id": "b280899e-17b1-52a4-aed6-0c690ba6daf2",
@@ -2523,7 +3723,19 @@
       "llm": true,
       "toxicity": "no",
       "daily_activity_level": 3,
-      "recsys_type": "random"
+      "recsys_type": "random",
+      "interests": [
+        [
+          "Data Science",
+          "Analytics",
+          "Statistics"
+        ],
+        [
+          8,
+          5,
+          2
+        ]
+      ]
     },
     {
       "id": "d38c79ca-6228-5bb8-b6d7-3cd02c97dab4",
@@ -2548,7 +3760,19 @@
       "llm": false,
       "toxicity": "no",
       "daily_activity_level": 4,
-      "recsys_type": "rchrono"
+      "recsys_type": "rchrono",
+      "interests": [
+        [
+          "News",
+          "Writing",
+          "Current Events"
+        ],
+        [
+          10,
+          8,
+          6
+        ]
+      ]
     },
     {
       "id": "25a7fde6-5519-52cd-8345-dce66443c049",
@@ -2573,7 +3797,19 @@
       "llm": false,
       "toxicity": "no",
       "daily_activity_level": 2,
-      "recsys_type": "random"
+      "recsys_type": "random",
+      "interests": [
+        [
+          "Writing",
+          "Literature",
+          "Storytelling"
+        ],
+        [
+          8,
+          6,
+          3
+        ]
+      ]
     },
     {
       "id": "cf9b0e79-9fcf-535f-a17a-68ef8ab730d3",
@@ -2598,7 +3834,19 @@
       "llm": false,
       "toxicity": "no",
       "daily_activity_level": 3,
-      "recsys_type": "rchrono"
+      "recsys_type": "rchrono",
+      "interests": [
+        [
+          "Science",
+          "Research",
+          "Innovation"
+        ],
+        [
+          11,
+          9,
+          6
+        ]
+      ]
     },
     {
       "id": "e1a2c878-3544-563d-b775-27226696a42b",
@@ -2623,7 +3871,19 @@
       "llm": true,
       "toxicity": "no",
       "daily_activity_level": 3,
-      "recsys_type": "random"
+      "recsys_type": "random",
+      "interests": [
+        [
+          "Health",
+          "Sports",
+          "Education"
+        ],
+        [
+          5,
+          2,
+          4
+        ]
+      ]
     },
     {
       "id": "5e851aa1-c8e2-5bad-b412-9b7ebf69a979",
@@ -2648,7 +3908,19 @@
       "llm": false,
       "toxicity": "no",
       "daily_activity_level": 1,
-      "recsys_type": "rchrono"
+      "recsys_type": "rchrono",
+      "interests": [
+        [
+          "Politics",
+          "Science",
+          "Entertainment"
+        ],
+        [
+          3,
+          3,
+          2
+        ]
+      ]
     },
     {
       "id": "eb8b4ab6-7c72-52e5-ae2c-b384b10adaea",
@@ -2673,7 +3945,19 @@
       "llm": false,
       "toxicity": "no",
       "daily_activity_level": 3,
-      "recsys_type": "random"
+      "recsys_type": "random",
+      "interests": [
+        [
+          "Programming",
+          "Technology",
+          "Software"
+        ],
+        [
+          11,
+          6,
+          4
+        ]
+      ]
     },
     {
       "id": "f65b4c9d-bb3b-5464-b7f2-324ab0836c91",
@@ -2698,7 +3982,19 @@
       "llm": true,
       "toxicity": "no",
       "daily_activity_level": 3,
-      "recsys_type": "rchrono"
+      "recsys_type": "rchrono",
+      "interests": [
+        [
+          "Business",
+          "Entertainment",
+          "Technology"
+        ],
+        [
+          7,
+          2,
+          4
+        ]
+      ]
     },
     {
       "id": "5d94994f-6bdd-5688-abb9-1bf40272b7e7",
@@ -2723,7 +4019,19 @@
       "llm": true,
       "toxicity": "no",
       "daily_activity_level": 1,
-      "recsys_type": "random"
+      "recsys_type": "random",
+      "interests": [
+        [
+          "Research",
+          "Science",
+          "Innovation"
+        ],
+        [
+          8,
+          6,
+          3
+        ]
+      ]
     },
     {
       "id": "4fa2c4f9-a2b9-5fdf-9d98-3531d03a7d38",
@@ -2748,7 +4056,19 @@
       "llm": false,
       "toxicity": "no",
       "daily_activity_level": 4,
-      "recsys_type": "rchrono"
+      "recsys_type": "rchrono",
+      "interests": [
+        [
+          "Research",
+          "Science",
+          "Innovation"
+        ],
+        [
+          9,
+          6,
+          3
+        ]
+      ]
     },
     {
       "id": "14e18c64-6aca-521c-a505-3b4725bacbac",
@@ -2773,7 +4093,19 @@
       "llm": true,
       "toxicity": "no",
       "daily_activity_level": 4,
-      "recsys_type": "random"
+      "recsys_type": "random",
+      "interests": [
+        [
+          "Social Media",
+          "Content",
+          "Creativity"
+        ],
+        [
+          7,
+          5,
+          4
+        ]
+      ]
     },
     {
       "id": "46f41aca-57fe-5b55-86f9-fde57a824834",
@@ -2798,7 +4130,19 @@
       "llm": false,
       "toxicity": "no",
       "daily_activity_level": 2,
-      "recsys_type": "rchrono"
+      "recsys_type": "rchrono",
+      "interests": [
+        [
+          "Social Media",
+          "Content",
+          "Creativity"
+        ],
+        [
+          7,
+          5,
+          4
+        ]
+      ]
     },
     {
       "id": "a45b1c52-d76b-54ab-ac45-8db54880f28e",
@@ -2823,7 +4167,19 @@
       "llm": false,
       "toxicity": "no",
       "daily_activity_level": 4,
-      "recsys_type": "random"
+      "recsys_type": "random",
+      "interests": [
+        [
+          "Science",
+          "Health",
+          "Politics"
+        ],
+        [
+          5,
+          2,
+          4
+        ]
+      ]
     },
     {
       "id": "d6b94b21-3c64-5994-8c4e-033f2eb848b9",
@@ -2848,7 +4204,19 @@
       "llm": true,
       "toxicity": "no",
       "daily_activity_level": 2,
-      "recsys_type": "rchrono"
+      "recsys_type": "rchrono",
+      "interests": [
+        [
+          "Business",
+          "Science",
+          "Health"
+        ],
+        [
+          7,
+          3,
+          2
+        ]
+      ]
     },
     {
       "id": "596cb1f4-2ed9-5322-914a-2ce435db85ad",
@@ -2873,7 +4241,19 @@
       "llm": false,
       "toxicity": "no",
       "daily_activity_level": 5,
-      "recsys_type": "random"
+      "recsys_type": "random",
+      "interests": [
+        [
+          "Research",
+          "Science",
+          "Innovation"
+        ],
+        [
+          10,
+          5,
+          5
+        ]
+      ]
     },
     {
       "id": "c98a98f1-c30d-5a49-bc8b-0c422c2dc984",
@@ -2898,7 +4278,19 @@
       "llm": false,
       "toxicity": "no",
       "daily_activity_level": 3,
-      "recsys_type": "rchrono"
+      "recsys_type": "rchrono",
+      "interests": [
+        [
+          "Writing",
+          "Literature",
+          "Storytelling"
+        ],
+        [
+          10,
+          6,
+          3
+        ]
+      ]
     },
     {
       "id": "062ec525-cb33-512d-8f94-d89323f3b470",
@@ -2923,7 +4315,19 @@
       "llm": false,
       "toxicity": "no",
       "daily_activity_level": 3,
-      "recsys_type": "random"
+      "recsys_type": "random",
+      "interests": [
+        [
+          "Data Science",
+          "Analytics",
+          "Statistics"
+        ],
+        [
+          7,
+          4,
+          3
+        ]
+      ]
     },
     {
       "id": "d9087ef2-bbb0-529b-b50b-b8a35024261e",
@@ -2948,7 +4352,19 @@
       "llm": true,
       "toxicity": "no",
       "daily_activity_level": 1,
-      "recsys_type": "rchrono"
+      "recsys_type": "rchrono",
+      "interests": [
+        [
+          "Social Media",
+          "Content",
+          "Creativity"
+        ],
+        [
+          9,
+          5,
+          4
+        ]
+      ]
     },
     {
       "id": "a1a6544d-c84b-557b-901d-b56290abbbab",
@@ -2973,7 +4389,19 @@
       "llm": false,
       "toxicity": "no",
       "daily_activity_level": 4,
-      "recsys_type": "random"
+      "recsys_type": "random",
+      "interests": [
+        [
+          "Politics",
+          "Health",
+          "Business"
+        ],
+        [
+          4,
+          5,
+          2
+        ]
+      ]
     },
     {
       "id": "5f7c4fff-51e9-5b51-b6e6-6f6891f84f02",
@@ -2998,7 +4426,19 @@
       "llm": false,
       "toxicity": "no",
       "daily_activity_level": 3,
-      "recsys_type": "rchrono"
+      "recsys_type": "rchrono",
+      "interests": [
+        [
+          "Science",
+          "Business",
+          "Education"
+        ],
+        [
+          6,
+          5,
+          4
+        ]
+      ]
     },
     {
       "id": "95f0e48c-fdbf-546a-9ce7-57f67c1ef5e3",
@@ -3023,7 +4463,19 @@
       "llm": true,
       "toxicity": "no",
       "daily_activity_level": 2,
-      "recsys_type": "random"
+      "recsys_type": "random",
+      "interests": [
+        [
+          "Education",
+          "Learning",
+          "Teaching"
+        ],
+        [
+          8,
+          5,
+          3
+        ]
+      ]
     },
     {
       "id": "bc0ad089-ca19-5fda-9b45-b8da98b825c6",
@@ -3048,7 +4500,19 @@
       "llm": false,
       "toxicity": "no",
       "daily_activity_level": 3,
-      "recsys_type": "rchrono"
+      "recsys_type": "rchrono",
+      "interests": [
+        [
+          "Sports",
+          "Health",
+          "Culture"
+        ],
+        [
+          5,
+          3,
+          1
+        ]
+      ]
     },
     {
       "id": "077cfeb5-0760-566e-8ccf-282517154fa0",
@@ -3073,7 +4537,19 @@
       "llm": false,
       "toxicity": "no",
       "daily_activity_level": 2,
-      "recsys_type": "random"
+      "recsys_type": "random",
+      "interests": [
+        [
+          "Social Media",
+          "Content",
+          "Creativity"
+        ],
+        [
+          7,
+          7,
+          5
+        ]
+      ]
     },
     {
       "id": "342e832b-1c48-5738-8411-c8e6303ba11b",
@@ -3098,7 +4574,19 @@
       "llm": false,
       "toxicity": "no",
       "daily_activity_level": 3,
-      "recsys_type": "rchrono"
+      "recsys_type": "rchrono",
+      "interests": [
+        [
+          "Sports",
+          "Science",
+          "Politics"
+        ],
+        [
+          7,
+          2,
+          3
+        ]
+      ]
     },
     {
       "id": "9c43295d-9d80-5f93-9e37-c77b254f62c1",
@@ -3123,7 +4611,19 @@
       "llm": false,
       "toxicity": "no",
       "daily_activity_level": 3,
-      "recsys_type": "random"
+      "recsys_type": "random",
+      "interests": [
+        [
+          "News",
+          "Writing",
+          "Current Events"
+        ],
+        [
+          8,
+          6,
+          4
+        ]
+      ]
     },
     {
       "id": "775c1505-b7e1-5cd8-8852-5a931120176d",
@@ -3148,7 +4648,19 @@
       "llm": false,
       "toxicity": "no",
       "daily_activity_level": 2,
-      "recsys_type": "rchrono"
+      "recsys_type": "rchrono",
+      "interests": [
+        [
+          "Entertainment",
+          "Science",
+          "News"
+        ],
+        [
+          4,
+          3,
+          2
+        ]
+      ]
     },
     {
       "id": "a37e3326-9a23-5d81-963d-ef8c6890a647",
@@ -3173,7 +4685,19 @@
       "llm": true,
       "toxicity": "no",
       "daily_activity_level": 4,
-      "recsys_type": "random"
+      "recsys_type": "random",
+      "interests": [
+        [
+          "News",
+          "Education",
+          "Politics"
+        ],
+        [
+          3,
+          5,
+          4
+        ]
+      ]
     },
     {
       "id": "ddf2057e-2124-52c8-90af-b71c760c3890",
@@ -3198,7 +4722,19 @@
       "llm": false,
       "toxicity": "no",
       "daily_activity_level": 3,
-      "recsys_type": "rchrono"
+      "recsys_type": "rchrono",
+      "interests": [
+        [
+          "Science",
+          "Research",
+          "Innovation"
+        ],
+        [
+          9,
+          9,
+          7
+        ]
+      ]
     },
     {
       "id": "79cae659-e3ec-5c4e-859f-e5990eefabf0",
@@ -3223,7 +4759,19 @@
       "llm": true,
       "toxicity": "no",
       "daily_activity_level": 1,
-      "recsys_type": "random"
+      "recsys_type": "random",
+      "interests": [
+        [
+          "Health",
+          "Technology",
+          "Science"
+        ],
+        [
+          3,
+          2,
+          2
+        ]
+      ]
     },
     {
       "id": "eb7b7962-62fa-5e29-a48d-ed5a050d9880",
@@ -3248,7 +4796,19 @@
       "llm": false,
       "toxicity": "no",
       "daily_activity_level": 3,
-      "recsys_type": "rchrono"
+      "recsys_type": "rchrono",
+      "interests": [
+        [
+          "Data Science",
+          "Analytics",
+          "Statistics"
+        ],
+        [
+          8,
+          6,
+          4
+        ]
+      ]
     },
     {
       "id": "ce691f31-f744-5482-9f80-ca3427d9d58a",
@@ -3273,7 +4833,19 @@
       "llm": false,
       "toxicity": "no",
       "daily_activity_level": 3,
-      "recsys_type": "random"
+      "recsys_type": "random",
+      "interests": [
+        [
+          "Science",
+          "Research",
+          "Innovation"
+        ],
+        [
+          9,
+          9,
+          5
+        ]
+      ]
     },
     {
       "id": "7d5bf270-d235-5e6f-bda3-d214a18da1ce",
@@ -3298,7 +4870,19 @@
       "llm": false,
       "toxicity": "no",
       "daily_activity_level": 4,
-      "recsys_type": "rchrono"
+      "recsys_type": "rchrono",
+      "interests": [
+        [
+          "News",
+          "Writing",
+          "Current Events"
+        ],
+        [
+          8,
+          6,
+          4
+        ]
+      ]
     },
     {
       "id": "45be3459-d37f-57d2-9bec-0100f84153ec",
@@ -3323,7 +4907,19 @@
       "llm": false,
       "toxicity": "no",
       "daily_activity_level": 2,
-      "recsys_type": "random"
+      "recsys_type": "random",
+      "interests": [
+        [
+          "Writing",
+          "Literature",
+          "Storytelling"
+        ],
+        [
+          10,
+          5,
+          4
+        ]
+      ]
     },
     {
       "id": "6878acf2-1158-5025-baac-6366b03042c7",
@@ -3348,7 +4944,19 @@
       "llm": false,
       "toxicity": "no",
       "daily_activity_level": 2,
-      "recsys_type": "rchrono"
+      "recsys_type": "rchrono",
+      "interests": [
+        [
+          "Writing",
+          "Literature",
+          "Storytelling"
+        ],
+        [
+          8,
+          7,
+          4
+        ]
+      ]
     },
     {
       "id": "3ab2a8da-dce4-5183-ad80-825c271eab1e",
@@ -3373,7 +4981,19 @@
       "llm": false,
       "toxicity": "no",
       "daily_activity_level": 2,
-      "recsys_type": "random"
+      "recsys_type": "random",
+      "interests": [
+        [
+          "Education",
+          "Learning",
+          "Teaching"
+        ],
+        [
+          8,
+          6,
+          2
+        ]
+      ]
     },
     {
       "id": "583932bc-17f6-5482-a62b-08d9c7c877b0",
@@ -3398,7 +5018,19 @@
       "llm": false,
       "toxicity": "no",
       "daily_activity_level": 2,
-      "recsys_type": "rchrono"
+      "recsys_type": "rchrono",
+      "interests": [
+        [
+          "Entertainment",
+          "Science",
+          "Business"
+        ],
+        [
+          3,
+          5,
+          4
+        ]
+      ]
     },
     {
       "id": "aba18bf8-5297-552c-a3d6-02ff5cd5dca6",
@@ -3423,7 +5055,19 @@
       "llm": false,
       "toxicity": "no",
       "daily_activity_level": 1,
-      "recsys_type": "random"
+      "recsys_type": "random",
+      "interests": [
+        [
+          "Science",
+          "Research",
+          "Innovation"
+        ],
+        [
+          10,
+          9,
+          5
+        ]
+      ]
     },
     {
       "id": "25926bce-114a-5999-8fc2-7479eaa1b78b",
@@ -3448,7 +5092,19 @@
       "llm": false,
       "toxicity": "no",
       "daily_activity_level": 3,
-      "recsys_type": "rchrono"
+      "recsys_type": "rchrono",
+      "interests": [
+        [
+          "Entertainment",
+          "Education",
+          "News"
+        ],
+        [
+          5,
+          3,
+          4
+        ]
+      ]
     },
     {
       "id": "073358ea-5d53-5a36-9155-4d1ad1f3ba78",
@@ -3473,7 +5129,19 @@
       "llm": true,
       "toxicity": "no",
       "daily_activity_level": 4,
-      "recsys_type": "random"
+      "recsys_type": "random",
+      "interests": [
+        [
+          "Social Media",
+          "Content",
+          "Creativity"
+        ],
+        [
+          9,
+          5,
+          5
+        ]
+      ]
     },
     {
       "id": "634abaf2-b4a1-503c-92ff-46e6e2844e01",
@@ -3498,7 +5166,19 @@
       "llm": false,
       "toxicity": "no",
       "daily_activity_level": 3,
-      "recsys_type": "rchrono"
+      "recsys_type": "rchrono",
+      "interests": [
+        [
+          "Sports",
+          "Business",
+          "Culture"
+        ],
+        [
+          4,
+          2,
+          3
+        ]
+      ]
     },
     {
       "id": "64377ef3-0caa-536b-bc65-3cb90a5ed06d",
@@ -3523,7 +5203,19 @@
       "llm": true,
       "toxicity": "no",
       "daily_activity_level": 3,
-      "recsys_type": "random"
+      "recsys_type": "random",
+      "interests": [
+        [
+          "Technology",
+          "Business",
+          "Science"
+        ],
+        [
+          7,
+          3,
+          4
+        ]
+      ]
     },
     {
       "id": "bc44a607-ae4f-5290-84cf-b6f8d59032bb",
@@ -3548,7 +5240,19 @@
       "llm": false,
       "toxicity": "no",
       "daily_activity_level": 3,
-      "recsys_type": "rchrono"
+      "recsys_type": "rchrono",
+      "interests": [
+        [
+          "Education",
+          "Learning",
+          "Teaching"
+        ],
+        [
+          9,
+          7,
+          3
+        ]
+      ]
     },
     {
       "id": "cd7054df-8313-5331-84cb-7a76bc55cf1d",
@@ -3573,7 +5277,19 @@
       "llm": false,
       "toxicity": "no",
       "daily_activity_level": 3,
-      "recsys_type": "random"
+      "recsys_type": "random",
+      "interests": [
+        [
+          "Education",
+          "Learning",
+          "Teaching"
+        ],
+        [
+          7,
+          7,
+          3
+        ]
+      ]
     },
     {
       "id": "0044e079-efbe-5733-ac94-a8257a7e5e21",
@@ -3598,7 +5314,19 @@
       "llm": true,
       "toxicity": "no",
       "daily_activity_level": 2,
-      "recsys_type": "rchrono"
+      "recsys_type": "rchrono",
+      "interests": [
+        [
+          "Business",
+          "Science",
+          "Health"
+        ],
+        [
+          3,
+          3,
+          3
+        ]
+      ]
     },
     {
       "id": "36ae7b1d-647c-5bee-b946-cc449e7677b0",
@@ -3623,7 +5351,19 @@
       "llm": false,
       "toxicity": "no",
       "daily_activity_level": 3,
-      "recsys_type": "random"
+      "recsys_type": "random",
+      "interests": [
+        [
+          "Design",
+          "Art",
+          "Creativity"
+        ],
+        [
+          7,
+          6,
+          4
+        ]
+      ]
     },
     {
       "id": "8db8367a-96ca-5f58-8d54-6d726b5733d0",
@@ -3648,7 +5388,19 @@
       "llm": false,
       "toxicity": "no",
       "daily_activity_level": 2,
-      "recsys_type": "rchrono"
+      "recsys_type": "rchrono",
+      "interests": [
+        [
+          "Technology",
+          "Education",
+          "Business"
+        ],
+        [
+          5,
+          2,
+          2
+        ]
+      ]
     },
     {
       "id": "cbd4bacd-5a11-5c0a-a4b5-2e03adef3146",
@@ -3673,7 +5425,19 @@
       "llm": false,
       "toxicity": "no",
       "daily_activity_level": 3,
-      "recsys_type": "random"
+      "recsys_type": "random",
+      "interests": [
+        [
+          "Science",
+          "Research",
+          "Innovation"
+        ],
+        [
+          9,
+          7,
+          7
+        ]
+      ]
     },
     {
       "id": "a976745c-ec96-5600-9c5e-d06d21c5d852",
@@ -3698,7 +5462,19 @@
       "llm": false,
       "toxicity": "no",
       "daily_activity_level": 4,
-      "recsys_type": "rchrono"
+      "recsys_type": "rchrono",
+      "interests": [
+        [
+          "Design",
+          "Art",
+          "Creativity"
+        ],
+        [
+          7,
+          4,
+          2
+        ]
+      ]
     },
     {
       "id": "92214efc-6618-5656-b550-cba685c2c929",
@@ -3723,7 +5499,19 @@
       "llm": false,
       "toxicity": "no",
       "daily_activity_level": 2,
-      "recsys_type": "random"
+      "recsys_type": "random",
+      "interests": [
+        [
+          "Social Media",
+          "Content",
+          "Creativity"
+        ],
+        [
+          8,
+          6,
+          3
+        ]
+      ]
     },
     {
       "id": "77265c4f-7509-5768-8955-2a18544e1d68",
@@ -3748,7 +5536,19 @@
       "llm": true,
       "toxicity": "no",
       "daily_activity_level": 3,
-      "recsys_type": "rchrono"
+      "recsys_type": "rchrono",
+      "interests": [
+        [
+          "Sports",
+          "Science",
+          "Health"
+        ],
+        [
+          3,
+          2,
+          2
+        ]
+      ]
     },
     {
       "id": "3d68ae81-eae3-57f4-86cc-27aa1f9a0586",
@@ -3773,7 +5573,19 @@
       "llm": false,
       "toxicity": "no",
       "daily_activity_level": 3,
-      "recsys_type": "random"
+      "recsys_type": "random",
+      "interests": [
+        [
+          "Programming",
+          "Technology",
+          "Software"
+        ],
+        [
+          10,
+          8,
+          5
+        ]
+      ]
     },
     {
       "id": "e4eb5bb8-6df2-5e3c-be04-e9f9b52c6bf8",
@@ -3798,7 +5610,19 @@
       "llm": false,
       "toxicity": "no",
       "daily_activity_level": 3,
-      "recsys_type": "rchrono"
+      "recsys_type": "rchrono",
+      "interests": [
+        [
+          "Social Media",
+          "Content",
+          "Creativity"
+        ],
+        [
+          8,
+          7,
+          4
+        ]
+      ]
     },
     {
       "id": "7de84bdb-db21-54d8-a281-7bbfe1eafd71",
@@ -3823,7 +5647,19 @@
       "llm": true,
       "toxicity": "no",
       "daily_activity_level": 4,
-      "recsys_type": "random"
+      "recsys_type": "random",
+      "interests": [
+        [
+          "Health",
+          "Science",
+          "News"
+        ],
+        [
+          6,
+          3,
+          4
+        ]
+      ]
     },
     {
       "id": "32d17b40-ee21-5cf6-a3b8-d4cf18a5e57f",
@@ -3848,7 +5684,19 @@
       "llm": true,
       "toxicity": "no",
       "daily_activity_level": 5,
-      "recsys_type": "rchrono"
+      "recsys_type": "rchrono",
+      "interests": [
+        [
+          "Programming",
+          "Technology",
+          "Software"
+        ],
+        [
+          10,
+          7,
+          5
+        ]
+      ]
     },
     {
       "id": "58eaedf5-7f73-5c5b-9abc-891ca675529f",
@@ -3873,7 +5721,19 @@
       "llm": false,
       "toxicity": "no",
       "daily_activity_level": 2,
-      "recsys_type": "random"
+      "recsys_type": "random",
+      "interests": [
+        [
+          "Technology",
+          "Business",
+          "Culture"
+        ],
+        [
+          3,
+          2,
+          1
+        ]
+      ]
     },
     {
       "id": "be51dc98-cac2-544a-8684-4700ed7b5343",
@@ -3898,7 +5758,19 @@
       "llm": false,
       "toxicity": "no",
       "daily_activity_level": 2,
-      "recsys_type": "rchrono"
+      "recsys_type": "rchrono",
+      "interests": [
+        [
+          "Programming",
+          "Technology",
+          "Software"
+        ],
+        [
+          11,
+          8,
+          4
+        ]
+      ]
     },
     {
       "id": "7837f8fd-7070-539c-9d15-d533fd950903",
@@ -3923,7 +5795,19 @@
       "llm": false,
       "toxicity": "no",
       "daily_activity_level": 2,
-      "recsys_type": "random"
+      "recsys_type": "random",
+      "interests": [
+        [
+          "Science",
+          "Research",
+          "Innovation"
+        ],
+        [
+          9,
+          7,
+          5
+        ]
+      ]
     },
     {
       "id": "6fa79707-bf9e-565d-a266-b956e4225c3a",
@@ -3948,7 +5832,19 @@
       "llm": true,
       "toxicity": "no",
       "daily_activity_level": 3,
-      "recsys_type": "rchrono"
+      "recsys_type": "rchrono",
+      "interests": [
+        [
+          "Education",
+          "Learning",
+          "Teaching"
+        ],
+        [
+          7,
+          7,
+          3
+        ]
+      ]
     },
     {
       "id": "f68fd624-e877-51fc-a5fc-082b3a2a0138",
@@ -3973,7 +5869,19 @@
       "llm": true,
       "toxicity": "no",
       "daily_activity_level": 3,
-      "recsys_type": "random"
+      "recsys_type": "random",
+      "interests": [
+        [
+          "Education",
+          "Learning",
+          "Teaching"
+        ],
+        [
+          9,
+          5,
+          3
+        ]
+      ]
     },
     {
       "id": "d9016144-12ce-5cab-b69b-c4f15046c558",
@@ -3998,7 +5906,19 @@
       "llm": true,
       "toxicity": "no",
       "daily_activity_level": 3,
-      "recsys_type": "rchrono"
+      "recsys_type": "rchrono",
+      "interests": [
+        [
+          "Science",
+          "Education",
+          "Technology"
+        ],
+        [
+          3,
+          3,
+          1
+        ]
+      ]
     },
     {
       "id": "5ec2db3d-323e-5c3a-8975-800e9b3731a9",
@@ -4023,7 +5943,19 @@
       "llm": false,
       "toxicity": "no",
       "daily_activity_level": 3,
-      "recsys_type": "random"
+      "recsys_type": "random",
+      "interests": [
+        [
+          "Sports",
+          "Culture",
+          "News"
+        ],
+        [
+          3,
+          4,
+          4
+        ]
+      ]
     },
     {
       "id": "35628111-f348-5904-a3e2-70e62adce88e",
@@ -4048,7 +5980,19 @@
       "llm": false,
       "toxicity": "no",
       "daily_activity_level": 1,
-      "recsys_type": "rchrono"
+      "recsys_type": "rchrono",
+      "interests": [
+        [
+          "Design",
+          "Art",
+          "Creativity"
+        ],
+        [
+          9,
+          4,
+          2
+        ]
+      ]
     },
     {
       "id": "c15c7566-7650-5ebc-807c-8d51ce439159",
@@ -4073,7 +6017,19 @@
       "llm": false,
       "toxicity": "no",
       "daily_activity_level": 1,
-      "recsys_type": "random"
+      "recsys_type": "random",
+      "interests": [
+        [
+          "Politics",
+          "Education",
+          "Science"
+        ],
+        [
+          3,
+          4,
+          3
+        ]
+      ]
     },
     {
       "id": "68defa86-20f0-5e08-b7a6-ae7983d3682d",
@@ -4098,7 +6054,19 @@
       "llm": false,
       "toxicity": "no",
       "daily_activity_level": 4,
-      "recsys_type": "rchrono"
+      "recsys_type": "rchrono",
+      "interests": [
+        [
+          "Culture",
+          "Politics",
+          "Science"
+        ],
+        [
+          3,
+          3,
+          4
+        ]
+      ]
     },
     {
       "id": "d9a33a38-b272-5b4b-ae5b-63299818bea2",
@@ -4123,7 +6091,19 @@
       "llm": true,
       "toxicity": "no",
       "daily_activity_level": 2,
-      "recsys_type": "random"
+      "recsys_type": "random",
+      "interests": [
+        [
+          "Sports",
+          "Entertainment",
+          "Education"
+        ],
+        [
+          5,
+          4,
+          3
+        ]
+      ]
     },
     {
       "id": "d7965a04-db14-519d-8a85-2972bd7bc15b",
@@ -4148,7 +6128,19 @@
       "llm": true,
       "toxicity": "no",
       "daily_activity_level": 5,
-      "recsys_type": "rchrono"
+      "recsys_type": "rchrono",
+      "interests": [
+        [
+          "Business",
+          "News",
+          "Politics"
+        ],
+        [
+          6,
+          5,
+          4
+        ]
+      ]
     },
     {
       "id": "b2167a46-6113-5e50-b021-d550159d4c04",
@@ -4173,7 +6165,19 @@
       "llm": false,
       "toxicity": "no",
       "daily_activity_level": 2,
-      "recsys_type": "random"
+      "recsys_type": "random",
+      "interests": [
+        [
+          "Education",
+          "Health",
+          "Business"
+        ],
+        [
+          4,
+          2,
+          3
+        ]
+      ]
     },
     {
       "id": "68795c35-41a9-52f4-aebe-d7c5bdb4c6c0",
@@ -4198,7 +6202,19 @@
       "llm": true,
       "toxicity": "no",
       "daily_activity_level": 3,
-      "recsys_type": "rchrono"
+      "recsys_type": "rchrono",
+      "interests": [
+        [
+          "Sports",
+          "Technology",
+          "Culture"
+        ],
+        [
+          4,
+          4,
+          1
+        ]
+      ]
     },
     {
       "id": "1f67361c-d6c1-5105-abdb-0ca79fc0497a",
@@ -4223,7 +6239,19 @@
       "llm": false,
       "toxicity": "no",
       "daily_activity_level": 2,
-      "recsys_type": "random"
+      "recsys_type": "random",
+      "interests": [
+        [
+          "Data Science",
+          "Analytics",
+          "Statistics"
+        ],
+        [
+          8,
+          6,
+          2
+        ]
+      ]
     },
     {
       "id": "45e59d22-3401-5f51-a00e-cf72392c05fb",
@@ -4248,7 +6276,19 @@
       "llm": false,
       "toxicity": "no",
       "daily_activity_level": 4,
-      "recsys_type": "rchrono"
+      "recsys_type": "rchrono",
+      "interests": [
+        [
+          "Programming",
+          "Technology",
+          "Software"
+        ],
+        [
+          11,
+          8,
+          5
+        ]
+      ]
     },
     {
       "id": "e0201efb-028d-5623-9184-16bd3e06c3fb",
@@ -4273,7 +6313,19 @@
       "llm": false,
       "toxicity": "no",
       "daily_activity_level": 3,
-      "recsys_type": "random"
+      "recsys_type": "random",
+      "interests": [
+        [
+          "Design",
+          "Art",
+          "Creativity"
+        ],
+        [
+          9,
+          4,
+          2
+        ]
+      ]
     },
     {
       "id": "d56c7738-323f-5224-8f5a-93f1a9205311",
@@ -4298,7 +6350,19 @@
       "llm": false,
       "toxicity": "no",
       "daily_activity_level": 4,
-      "recsys_type": "rchrono"
+      "recsys_type": "rchrono",
+      "interests": [
+        [
+          "Science",
+          "News",
+          "Education"
+        ],
+        [
+          4,
+          5,
+          2
+        ]
+      ]
     },
     {
       "id": "78ddd553-f1fd-5c9b-9137-333fde4cf760",
@@ -4323,7 +6387,19 @@
       "llm": false,
       "toxicity": "no",
       "daily_activity_level": 3,
-      "recsys_type": "random"
+      "recsys_type": "random",
+      "interests": [
+        [
+          "Culture",
+          "News",
+          "Entertainment"
+        ],
+        [
+          7,
+          2,
+          3
+        ]
+      ]
     },
     {
       "id": "7989f2ca-80a7-5004-8cf9-6599112158c4",
@@ -4348,7 +6424,19 @@
       "llm": false,
       "toxicity": "no",
       "daily_activity_level": 2,
-      "recsys_type": "rchrono"
+      "recsys_type": "rchrono",
+      "interests": [
+        [
+          "Education",
+          "Learning",
+          "Teaching"
+        ],
+        [
+          9,
+          6,
+          3
+        ]
+      ]
     },
     {
       "id": "8be2549c-87e1-5038-bc68-ecc433d6673f",
@@ -4373,7 +6461,19 @@
       "llm": false,
       "toxicity": "no",
       "daily_activity_level": 2,
-      "recsys_type": "random"
+      "recsys_type": "random",
+      "interests": [
+        [
+          "Health",
+          "News",
+          "Education"
+        ],
+        [
+          4,
+          4,
+          2
+        ]
+      ]
     },
     {
       "id": "dd049c9a-b6a7-5dc3-8428-bd5d83ee67af",
@@ -4398,7 +6498,19 @@
       "llm": false,
       "toxicity": "no",
       "daily_activity_level": 2,
-      "recsys_type": "rchrono"
+      "recsys_type": "rchrono",
+      "interests": [
+        [
+          "Social Media",
+          "Content",
+          "Creativity"
+        ],
+        [
+          7,
+          6,
+          5
+        ]
+      ]
     },
     {
       "id": "3cbe01c2-edec-5c15-ae9d-205c9a3b13bb",
@@ -4423,7 +6535,19 @@
       "llm": false,
       "toxicity": "no",
       "daily_activity_level": 2,
-      "recsys_type": "random"
+      "recsys_type": "random",
+      "interests": [
+        [
+          "Science",
+          "Research",
+          "Innovation"
+        ],
+        [
+          10,
+          8,
+          6
+        ]
+      ]
     },
     {
       "id": "59eeb89a-72ee-558a-8037-b82a940637f7",
@@ -4448,7 +6572,19 @@
       "llm": true,
       "toxicity": "no",
       "daily_activity_level": 5,
-      "recsys_type": "rchrono"
+      "recsys_type": "rchrono",
+      "interests": [
+        [
+          "Data Science",
+          "Analytics",
+          "Statistics"
+        ],
+        [
+          6,
+          5,
+          4
+        ]
+      ]
     },
     {
       "id": "b25e9ab2-b2bc-5aba-a219-e1f14d104a47",
@@ -4473,7 +6609,19 @@
       "llm": false,
       "toxicity": "no",
       "daily_activity_level": 1,
-      "recsys_type": "random"
+      "recsys_type": "random",
+      "interests": [
+        [
+          "Entertainment",
+          "Business",
+          "Politics"
+        ],
+        [
+          5,
+          4,
+          3
+        ]
+      ]
     },
     {
       "id": "731fd009-467c-5741-a255-bac217c8bb24",
@@ -4498,7 +6646,19 @@
       "llm": false,
       "toxicity": "no",
       "daily_activity_level": 4,
-      "recsys_type": "rchrono"
+      "recsys_type": "rchrono",
+      "interests": [
+        [
+          "Design",
+          "Art",
+          "Creativity"
+        ],
+        [
+          9,
+          5,
+          3
+        ]
+      ]
     },
     {
       "id": "0d709955-fb76-527c-a216-fdb33ef9f99a",
@@ -4523,7 +6683,19 @@
       "llm": false,
       "toxicity": "no",
       "daily_activity_level": 2,
-      "recsys_type": "random"
+      "recsys_type": "random",
+      "interests": [
+        [
+          "Research",
+          "Science",
+          "Innovation"
+        ],
+        [
+          9,
+          6,
+          5
+        ]
+      ]
     },
     {
       "id": "31ffca9e-fc6c-5558-a49a-c18405a829f9",
@@ -4548,7 +6720,19 @@
       "llm": false,
       "toxicity": "no",
       "daily_activity_level": 3,
-      "recsys_type": "rchrono"
+      "recsys_type": "rchrono",
+      "interests": [
+        [
+          "Programming",
+          "Technology",
+          "Software"
+        ],
+        [
+          10,
+          6,
+          5
+        ]
+      ]
     },
     {
       "id": "4a35835a-6aa9-540d-a50a-663de452c384",
@@ -4573,7 +6757,19 @@
       "llm": false,
       "toxicity": "no",
       "daily_activity_level": 2,
-      "recsys_type": "random"
+      "recsys_type": "random",
+      "interests": [
+        [
+          "Health",
+          "Science",
+          "Education"
+        ],
+        [
+          4,
+          2,
+          4
+        ]
+      ]
     },
     {
       "id": "d38c29b8-7815-5076-8621-d49689b9370c",
@@ -4598,7 +6794,19 @@
       "llm": false,
       "toxicity": "no",
       "daily_activity_level": 2,
-      "recsys_type": "rchrono"
+      "recsys_type": "rchrono",
+      "interests": [
+        [
+          "Science",
+          "Research",
+          "Innovation"
+        ],
+        [
+          10,
+          8,
+          7
+        ]
+      ]
     },
     {
       "id": "4a642500-d5a1-525d-961a-2a06b2fa735d",
@@ -4623,7 +6831,19 @@
       "llm": false,
       "toxicity": "no",
       "daily_activity_level": 3,
-      "recsys_type": "random"
+      "recsys_type": "random",
+      "interests": [
+        [
+          "Writing",
+          "Literature",
+          "Storytelling"
+        ],
+        [
+          8,
+          6,
+          5
+        ]
+      ]
     },
     {
       "id": "50a9975f-8b44-5e10-9dcd-a8c6636eb260",
@@ -4648,7 +6868,19 @@
       "llm": false,
       "toxicity": "no",
       "daily_activity_level": 3,
-      "recsys_type": "rchrono"
+      "recsys_type": "rchrono",
+      "interests": [
+        [
+          "News",
+          "Writing",
+          "Current Events"
+        ],
+        [
+          8,
+          6,
+          5
+        ]
+      ]
     },
     {
       "id": "56df9346-1072-5189-9c43-af8c4e1c2eb4",
@@ -4673,7 +6905,19 @@
       "llm": false,
       "toxicity": "no",
       "daily_activity_level": 3,
-      "recsys_type": "random"
+      "recsys_type": "random",
+      "interests": [
+        [
+          "Social Media",
+          "Content",
+          "Creativity"
+        ],
+        [
+          7,
+          7,
+          3
+        ]
+      ]
     },
     {
       "id": "70de6b95-62f3-5c6a-a6bc-934c1d0fa713",
@@ -4698,7 +6942,19 @@
       "llm": false,
       "toxicity": "no",
       "daily_activity_level": 4,
-      "recsys_type": "rchrono"
+      "recsys_type": "rchrono",
+      "interests": [
+        [
+          "News",
+          "Writing",
+          "Current Events"
+        ],
+        [
+          10,
+          6,
+          4
+        ]
+      ]
     },
     {
       "id": "ea05ea26-6562-59a3-93d0-cf3f675f4fab",
@@ -4723,7 +6979,19 @@
       "llm": false,
       "toxicity": "no",
       "daily_activity_level": 2,
-      "recsys_type": "random"
+      "recsys_type": "random",
+      "interests": [
+        [
+          "Social Media",
+          "Content",
+          "Creativity"
+        ],
+        [
+          7,
+          7,
+          5
+        ]
+      ]
     },
     {
       "id": "6ff7f638-66c0-594b-9d37-804e3a77b434",
@@ -4748,7 +7016,19 @@
       "llm": true,
       "toxicity": "no",
       "daily_activity_level": 1,
-      "recsys_type": "rchrono"
+      "recsys_type": "rchrono",
+      "interests": [
+        [
+          "Health",
+          "Business",
+          "Technology"
+        ],
+        [
+          3,
+          3,
+          3
+        ]
+      ]
     },
     {
       "id": "e5000a86-16c4-56c5-9ab1-79c860b4028d",
@@ -4773,7 +7053,19 @@
       "llm": true,
       "toxicity": "no",
       "daily_activity_level": 1,
-      "recsys_type": "random"
+      "recsys_type": "random",
+      "interests": [
+        [
+          "News",
+          "Sports",
+          "Health"
+        ],
+        [
+          5,
+          2,
+          1
+        ]
+      ]
     },
     {
       "id": "44993438-6bbd-5e9c-b3e8-84b8e0b9ea4d",
@@ -4798,7 +7090,19 @@
       "llm": true,
       "toxicity": "no",
       "daily_activity_level": 2,
-      "recsys_type": "rchrono"
+      "recsys_type": "rchrono",
+      "interests": [
+        [
+          "Data Science",
+          "Analytics",
+          "Statistics"
+        ],
+        [
+          7,
+          6,
+          3
+        ]
+      ]
     },
     {
       "id": "dc019721-eb80-5c1a-9928-e8288539133b",
@@ -4823,7 +7127,19 @@
       "llm": false,
       "toxicity": "no",
       "daily_activity_level": 2,
-      "recsys_type": "random"
+      "recsys_type": "random",
+      "interests": [
+        [
+          "Health",
+          "Science",
+          "Culture"
+        ],
+        [
+          6,
+          2,
+          2
+        ]
+      ]
     },
     {
       "id": "0bd44c17-ce03-5b81-80f4-ff69c38bfe0e",
@@ -4848,7 +7164,19 @@
       "llm": false,
       "toxicity": "no",
       "daily_activity_level": 3,
-      "recsys_type": "rchrono"
+      "recsys_type": "rchrono",
+      "interests": [
+        [
+          "Programming",
+          "Technology",
+          "Software"
+        ],
+        [
+          10,
+          6,
+          4
+        ]
+      ]
     },
     {
       "id": "034c1890-3456-59ae-a234-0b90c1f194ef",
@@ -4873,7 +7201,19 @@
       "llm": true,
       "toxicity": "no",
       "daily_activity_level": 3,
-      "recsys_type": "random"
+      "recsys_type": "random",
+      "interests": [
+        [
+          "Education",
+          "Politics",
+          "Technology"
+        ],
+        [
+          4,
+          2,
+          4
+        ]
+      ]
     },
     {
       "id": "e84b5636-4163-5cf3-b620-ecb87d08181b",
@@ -4898,7 +7238,19 @@
       "llm": false,
       "toxicity": "no",
       "daily_activity_level": 1,
-      "recsys_type": "rchrono"
+      "recsys_type": "rchrono",
+      "interests": [
+        [
+          "Entertainment",
+          "Science",
+          "Technology"
+        ],
+        [
+          3,
+          2,
+          2
+        ]
+      ]
     },
     {
       "id": "7afbbc08-9f12-54d5-84d0-a8972b01c0f3",
@@ -4923,7 +7275,19 @@
       "llm": false,
       "toxicity": "no",
       "daily_activity_level": 3,
-      "recsys_type": "random"
+      "recsys_type": "random",
+      "interests": [
+        [
+          "News",
+          "Writing",
+          "Current Events"
+        ],
+        [
+          8,
+          8,
+          4
+        ]
+      ]
     },
     {
       "id": "0d7c7008-9d1f-5a02-9483-8e054f6be401",
@@ -4948,7 +7312,19 @@
       "llm": false,
       "toxicity": "no",
       "daily_activity_level": 1,
-      "recsys_type": "rchrono"
+      "recsys_type": "rchrono",
+      "interests": [
+        [
+          "Data Science",
+          "Analytics",
+          "Statistics"
+        ],
+        [
+          7,
+          5,
+          3
+        ]
+      ]
     },
     {
       "id": "911a4390-6469-5194-88ee-5411fef6e9db",
@@ -4973,7 +7349,19 @@
       "llm": false,
       "toxicity": "no",
       "daily_activity_level": 3,
-      "recsys_type": "random"
+      "recsys_type": "random",
+      "interests": [
+        [
+          "News",
+          "Writing",
+          "Current Events"
+        ],
+        [
+          9,
+          6,
+          5
+        ]
+      ]
     },
     {
       "id": "7cf07a27-87bc-58b5-99ed-9a45cf958a7b",
@@ -4998,7 +7386,19 @@
       "llm": false,
       "toxicity": "no",
       "daily_activity_level": 1,
-      "recsys_type": "rchrono"
+      "recsys_type": "rchrono",
+      "interests": [
+        [
+          "Design",
+          "Art",
+          "Creativity"
+        ],
+        [
+          7,
+          5,
+          2
+        ]
+      ]
     },
     {
       "id": "4a7c7fb9-33f7-51e5-b344-1a8542b7b3f6",
@@ -5021,7 +7421,19 @@
       "round_actions": 5,
       "is_page": 1,
       "feed_url": "https://techcrunch.com/feed/",
-      "recsys_type": "random"
+      "recsys_type": "random",
+      "interests": [
+        [
+          "News",
+          "Current Events",
+          "Information"
+        ],
+        [
+          12,
+          10,
+          7
+        ]
+      ]
     },
     {
       "id": "5342c737-7c60-5d9b-aa9f-14bda3d36f97",
@@ -5044,7 +7456,19 @@
       "round_actions": 6,
       "is_page": 1,
       "feed_url": "http://feeds.bbci.co.uk/news/rss.xml",
-      "recsys_type": "rchrono"
+      "recsys_type": "rchrono",
+      "interests": [
+        [
+          "News",
+          "Current Events",
+          "Information"
+        ],
+        [
+          8,
+          6,
+          7
+        ]
+      ]
     },
     {
       "id": "981e9434-7dfc-5bf1-8bd8-9c6f97c27c57",
@@ -5067,7 +7491,19 @@
       "round_actions": 8,
       "is_page": 1,
       "feed_url": "https://www.reutersagency.com/feed/",
-      "recsys_type": "random"
+      "recsys_type": "random",
+      "interests": [
+        [
+          "News",
+          "Current Events",
+          "Information"
+        ],
+        [
+          11,
+          8,
+          6
+        ]
+      ]
     }
   ],
   "generation_config": {

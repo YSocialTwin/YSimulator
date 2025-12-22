@@ -96,13 +96,21 @@ class LLMService:
         # Get toxicity level (default to "no" if not provided)
         toxicity = agent_attrs.get("toxicity", "no") if agent_attrs else "no"
         
+        # Get topic if available
+        topic = agent_attrs.get("topic") if agent_attrs else None
+        
         # Get prompt templates from configuration
         system_template = self.prompts_config["generate_post"]["system_template"]
         user_template = self.prompts_config["generate_post"]["user_template"]
         
         # Format templates
         system_msg = system_template.format(persona=persona, toxicity=toxicity)
-        user_msg = user_template.format(day=day, slot=slot)
+        
+        # Build topic instruction
+        topic_instruction = f" Topic: {topic}." if topic else ""
+        
+        # Format user message with topic instruction
+        user_msg = user_template.format(day=day, slot=slot, topic_instruction=topic_instruction)
 
         prompt = ChatPromptTemplate.from_messages([
             ("system", system_msg),
@@ -156,15 +164,8 @@ class LLMService:
             website_name = "this website"
         
         # Get prompt templates from configuration
-        prompts = self.prompts_config.get("generate_news_commentary", {})
-        system_template = prompts.get(
-            "system_template",
-            "You are the social media manager for {website_name}. Your job is to present news articles to your audience in an engaging way."
-        )
-        user_template = prompts.get(
-            "user_template",
-            "Here's a news article to share:\n\nTitle: {article_title}\n\nContent: {article_text}\n\nWrite a brief, engaging tweet (max 280 characters) to present this article to your followers. Be professional but engaging. Do NOT include hashtags or links - just your commentary."
-        )
+        system_template = self.prompts_config["generate_news_commentary"]["system_template"]
+        user_template = self.prompts_config["generate_news_commentary"]["user_template"]
         
         # Format templates
         system_msg = system_template.format(website_name=website_name)
@@ -212,15 +213,8 @@ class LLMService:
         toxicity = agent_attrs.get("toxicity", "no") if agent_attrs else "no"
         
         # Get prompt templates from configuration
-        prompts = self.prompts_config.get("generate_comment", {})
-        system_template = prompts.get(
-            "system_template",
-            "{persona} You engage in discussions by commenting on posts. Generate {toxicity} confrontational language contents."
-        )
-        user_template = prompts.get(
-            "user_template",
-            "{author_name} posted this:\n\n\"{post_content}\"\n\nWrite a brief, thoughtful comment to continue the discussion. Max 100 characters. Be authentic to your persona."
-        )
+        system_template = self.prompts_config["generate_comment"]["system_template"]
+        user_template = self.prompts_config["generate_comment"]["user_template"]
         
         # Format templates
         system_msg = system_template.format(persona=persona, toxicity=toxicity)
@@ -262,15 +256,8 @@ class LLMService:
         persona = self._build_persona(cluster_id, agent_attrs)
         
         # Get prompt templates from configuration
-        prompts = self.prompts_config.get("generate_read_reaction", {})
-        system_template = prompts.get(
-            "system_template",
-            "{persona} You're deciding how to react to content you discovered."
-        )
-        user_template = prompts.get(
-            "user_template",
-            "You found this post:\n\n\"{post_content}\"\n\nHow do you react? Reply with ONLY ONE WORD from these options:\n- LIKE (positive, agree)\n- LOVE (strongly positive)\n- LAUGH (funny, humorous)\n- ANGRY (negative, disagree, dislike)\n- SAD (disappointing, concerning)\n- IGNORE (not interested, skip)\n\nYour reaction:"
-        )
+        system_template = self.prompts_config["generate_read_reaction"]["system_template"]
+        user_template = self.prompts_config["generate_read_reaction"]["user_template"]
         
         # Format templates
         system_msg = system_template.format(persona=persona)
@@ -360,3 +347,38 @@ class LLMService:
                 return "unfollow"
         
         return "no_change"
+    
+    def extract_topics_from_article(self, article_title: str, article_summary: str) -> list:
+        """
+        Extract up to 2 topics from an article using LLM.
+        
+        Args:
+            article_title: Title of the article
+            article_summary: Summary/content of the article
+            
+        Returns:
+            list: List of up to 2 topic strings
+        """
+        # Combine title and summary for analysis
+        article_text = f"Title: {article_title}\n\nSummary: {article_summary}" if article_summary else f"Title: {article_title}"
+        
+        # Get prompts from configuration
+        system_template = self.prompts_config["extract_article_topics"]["system_template"]
+        user_template = self.prompts_config["extract_article_topics"]["user_template"]
+        
+        # Build prompts with article text
+        prompt = ChatPromptTemplate.from_messages([
+            ("system", system_template),
+            ("user", user_template)
+        ])
+        chain = prompt | self.llm | StrOutputParser()
+        
+        try:
+            response = chain.invoke({"article_text": article_text})
+            # Parse response - split by comma and clean up
+            topics = [t.strip() for t in response.split(',') if t.strip()]
+            # Return up to 2 topics
+            return topics[:2]
+        except Exception as e:
+            # If extraction fails, return empty list
+            return []

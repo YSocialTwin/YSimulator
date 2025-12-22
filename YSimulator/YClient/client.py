@@ -395,6 +395,7 @@ class SimulationClient:
                     round_actions=agent_data.get("round_actions", 3),
                     is_page=agent_data.get("is_page", 0),
                     feed_url=agent_data.get("feed_url"),  # RSS feed for page agents
+                    interests=agent_data.get("interests"),  # Interest topics and counts
                 )
                 agents.append(profile)
 
@@ -781,6 +782,19 @@ class SimulationClient:
                     # Reset for next day
                     active_agents_today = set()
                     current_day = instruction.day
+                
+                # At end of day, save updated agent interests from server
+                if is_last_slot or day_changed:
+                    try:
+                        # Get updated interests from server
+                        updated_interests = ray.get(self.server.get_updated_agent_interests.remote())
+                        if updated_interests:
+                            self._save_updated_agent_population(updated_interests)
+                    except Exception as e:
+                        self.logger.error(
+                            f"Error saving updated agent interests: {e}",
+                            extra={"extra_data": {"error": str(e)}}
+                        )
 
                 # Submit
                 submit_start = time.time()
@@ -919,6 +933,14 @@ class SimulationClient:
         Returns:
             dict: Agent attributes for persona template
         """
+        # Sample a topic from agent's interests if available
+        selected_topic = None
+        topics, counts = self._validate_and_extract_interests(agent.interests)
+        if topics and counts:
+            # Weight topics by their interaction counts
+            import random
+            selected_topic = random.choices(topics, weights=counts, k=1)[0]
+        
         return {
             "name": agent.username,
             "age": agent.age if agent.age else "unknown",
@@ -931,16 +953,97 @@ class SimulationClient:
             "ex": agent.ex if agent.ex else "average in extraversion",
             "ag": agent.ag if agent.ag else "average in agreeableness",
             "ne": agent.ne if agent.ne else "average in neuroticism",
-            "toxicity": agent.toxicity if agent.toxicity and agent.toxicity != "" else "no"
+            "toxicity": agent.toxicity if agent.toxicity and agent.toxicity != "" else "no",
+            "topic": selected_topic  # Include the sampled topic
         }
+    
+    def _save_updated_agent_population(self, updated_interests: dict):
+        """
+        Save updated agent interests to agent_population.json at end of day.
+        Respects client-specific naming convention (e.g., client_1_agent_population.json).
+        
+        Args:
+            updated_interests: Dict of {agent_id: {"topics": [...], "counts": [...]}}
+        """
+        # Find agent_population.json file using client-specific naming convention
+        # Try client-specific file first, then fall back to generic
+        client_specific_file = self.config_path / f"{self.client_id}_agent_population.json"
+        generic_file = self.config_path / "agent_population.json"
+        
+        if client_specific_file.exists():
+            agent_config_file = client_specific_file
+        else:
+            agent_config_file = generic_file
+        
+        if not agent_config_file.exists():
+            self.logger.warning(
+                f"Agent config file not found at {agent_config_file}, skipping interests update"
+            )
+            return
+        
+        try:
+            # Load current agent_population.json
+            with open(agent_config_file, 'r') as f:
+                agent_data = json.load(f)
+            
+            # Update interests for each agent
+            if "agents" in agent_data:
+                for agent in agent_data["agents"]:
+                    agent_id = agent.get("id")
+                    if agent_id and str(agent_id) in updated_interests:
+                        interests_data = updated_interests[str(agent_id)]
+                        # Update the interests field with current topics and counts
+                        agent["interests"] = [
+                            interests_data["topics"],
+                            interests_data["counts"]
+                        ]
+            
+            # Write updated data back to file
+            with open(agent_config_file, 'w') as f:
+                json.dump(agent_data, f, indent=2)
+            
+            self.logger.info(
+                f"Updated {agent_config_file.name} with current interests for {len(updated_interests)} agents"
+            )
+            
+        except Exception as e:
+            self.logger.error(
+                f"Error updating agent population file: {e}",
+                extra={"extra_data": {"error": str(e), "file": str(agent_config_file)}}
+            )
+    
+    def _validate_and_extract_interests(self, interests):
+        """
+        Validate interests structure and extract topics and counts.
+        
+        Args:
+            interests: Interest data in format [["Topic1", "Topic2"], [1, 2]]
+            
+        Returns:
+            tuple: (topics, counts) or (None, None) if invalid
+        """
+        if not interests or not isinstance(interests, (list, tuple)) or len(interests) != 2:
+            return None, None
+        
+        topics = interests[0]
+        counts = interests[1]
+        
+        if not topics or not counts or not isinstance(topics, list) or not isinstance(counts, list):
+            return None, None
+        
+        if len(topics) == 0:
+            return None, None
+        
+        return topics, counts
 
     def _handle_post_action(self, agent, agent_type, day, slot, pending_llm_posts, actions):
         """Handle post action for an agent."""
         if agent_type == "llm":
             # LLM: Fire off async call (don't wait for result yet)
             agent_attrs = self._extract_agent_attrs(agent)
+            selected_topic = agent_attrs.get("topic")  # Get the sampled topic
             future = generate_llm_post_async(self.llm, agent.cluster, day, slot, agent_attrs)
-            pending_llm_posts.append((agent.id, agent.cluster, future, None))
+            pending_llm_posts.append((agent.id, agent.cluster, future, selected_topic))
         else:
             # Rule-based: Execute immediately
             action = generate_rule_based_post(agent.id, agent.cluster)
@@ -1093,6 +1196,40 @@ class SimulationClient:
                         self.news_service, self.llm, agent.cluster, article, agent.username
                     )
                     self.logger.info(f"LLM Page {agent.username} got article_id: {article_id}")
+                    
+                    # Extract and store article topics after article is saved
+                    if article_id:
+                        try:
+                            # Check if article already has topics (avoid duplicate extraction)
+                            existing_topics = ray.get(self.server.get_article_topics.remote(article_id))
+                            
+                            if not existing_topics:
+                                # Extract topics using LLM (client-side)
+                                self.logger.info(f"Extracting topics for article {article_id}: {article.get('title', '')[:50]}...")
+                                topics_future = self.llm.extract_topics_from_article.remote(
+                                    article.get("title", ""),
+                                    article.get("summary", "")
+                                )
+                                topic_names = ray.get(topics_future)
+                                self.logger.info(f"LLM extracted topics: {topic_names}")
+                                
+                                if topic_names:
+                                    # Store topics in database (server-side)
+                                    topic_ids = ray.get(
+                                        self.server.store_article_topics.remote(
+                                            article_id,
+                                            topic_names[:2]  # Up to 2 topics
+                                        )
+                                    )
+                                    if topic_ids:
+                                        self.logger.info(f"Stored {len(topic_ids)} topics for article {article_id}")
+                            else:
+                                self.logger.info(f"Article {article_id} already has {len(existing_topics)} topics")
+                        except Exception as e:
+                            self.logger.warning(f"Failed to extract/store topics for article {article_id}: {e}")
+                            import traceback
+                            self.logger.warning(f"Traceback: {traceback.format_exc()}")
+                    
                     pending_llm_posts.append((agent.id, agent.cluster, future, article_id))
                 else:
                     # Rule-based page posts news directly
@@ -1101,6 +1238,40 @@ class SimulationClient:
                         agent.id, agent.cluster, article, self.news_service
                     )
                     self.logger.info(f"Rule-based Page {agent.username} got article_id: {article_id}")
+                    
+                    # Extract and store article topics after article is saved
+                    if article_id:
+                        try:
+                            # Check if article already has topics (avoid duplicate extraction)
+                            existing_topics = ray.get(self.server.get_article_topics.remote(article_id))
+                            
+                            if not existing_topics:
+                                # Extract topics using LLM (client-side)
+                                self.logger.info(f"Extracting topics for article {article_id}: {article.get('title', '')[:50]}...")
+                                topics_future = self.llm.extract_topics_from_article.remote(
+                                    article.get("title", ""),
+                                    article.get("summary", "")
+                                )
+                                topic_names = ray.get(topics_future)
+                                self.logger.info(f"LLM extracted topics: {topic_names}")
+                                
+                                if topic_names:
+                                    # Store topics in database (server-side)
+                                    topic_ids = ray.get(
+                                        self.server.store_article_topics.remote(
+                                            article_id,
+                                            topic_names[:2]  # Up to 2 topics
+                                        )
+                                    )
+                                    if topic_ids:
+                                        self.logger.info(f"Stored {len(topic_ids)} topics for article {article_id}")
+                            else:
+                                self.logger.info(f"Article {article_id} already has {len(existing_topics)} topics")
+                        except Exception as e:
+                            self.logger.warning(f"Failed to extract/store topics for article {article_id}: {e}")
+                            import traceback
+                            self.logger.warning(f"Traceback: {traceback.format_exc()}")
+                    
                     action.article_id = article_id
                     actions.append(action)
             else:
@@ -1287,7 +1458,7 @@ class SimulationClient:
         Gather and resolve all pending LLM post generation calls.
         
         Args:
-            pending_llm_posts: List of (agent_id, cluster_id, future, article_id) tuples
+            pending_llm_posts: List of (agent_id, cluster_id, future, topic_or_article_id) tuples
             actions: List to append resolved post actions to
         """
         if not pending_llm_posts:
@@ -1298,14 +1469,23 @@ class SimulationClient:
         results = ray.get(futures)  # Blocks once for ALL posts
         
         for i, res_txt in enumerate(results):
-            a_id, cid, _, article_id = pending_llm_posts[i]
+            a_id, cid, _, topic_or_article = pending_llm_posts[i]
             action = ActionDTO(a_id, cid, "POST", content=res_txt)
-            # Add article_id as attribute if present (for news posts)
-            if article_id:
-                action.article_id = article_id
-                self.logger.info(f"LLM post for agent {a_id}: article_id={article_id}, content_len={len(res_txt)}")
+            
+            # Check if the fourth element is an article_id (UUID format) or a topic (string)
+            if topic_or_article:
+                # Try to parse as UUID - if successful, it's an article_id
+                try:
+                    import uuid
+                    uuid.UUID(topic_or_article)
+                    action.article_id = topic_or_article
+                    self.logger.info(f"LLM post for agent {a_id}: article_id={topic_or_article}, content_len={len(res_txt)}")
+                except (ValueError, AttributeError):
+                    # Not a valid UUID, treat as topic string
+                    action.topic = topic_or_article
+                    self.logger.info(f"LLM post for agent {a_id}: topic={topic_or_article}, content_len={len(res_txt)}")
             else:
-                self.logger.info(f"LLM post for agent {a_id}: NO article_id, content_len={len(res_txt)}")
+                self.logger.info(f"LLM post for agent {a_id}: NO article_id/topic, content_len={len(res_txt)}")
             actions.append(action)
     
     def _gather_pending_llm_reactions(self, pending_llm_reactions: list, actions: list) -> list:

@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Literal, Optional, List
+from typing import Literal, Optional, List, Tuple
 
 
 @dataclass
@@ -42,6 +42,9 @@ class AgentProfile:
     # Simulation-specific fields
     cluster: int = 0
     llm: bool = False
+    # Interests field: [["Topic1", "Topic2"], [count1, count2]]
+    # First list contains topic names, second list contains interaction counts
+    interests: Optional[Tuple[List[str], List[int]]] = None
 
 
 @dataclass
@@ -54,6 +57,7 @@ class ActionDTO:
     target_post_id: Optional[str] = None  # UUID string - for comments, reactions, and shares
     article_id: Optional[str] = None  # UUID string for news posts
     target_user_id: Optional[str] = None  # UUID string for follow/unfollow actions
+    topic: Optional[str] = None  # Topic name for posts
 
 
 @dataclass
