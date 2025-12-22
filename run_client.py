@@ -227,8 +227,7 @@ if __name__ == "__main__":
     # Create client with all configurations
     client_start = time.time()
     client = SimulationClient.remote(
-        client_name, llm_service, agent_config, sim_config, str(config_dir), logger, news_service, 
-        str(agent_config_file)  # Pass the agent_population file path
+        client_name, llm_service, agent_config, sim_config, str(config_dir), logger, news_service
     )
     client_time = (time.time() - client_start) * 1000
 

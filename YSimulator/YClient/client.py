@@ -100,7 +100,6 @@ class SimulationClient:
         config_path: str = ".",
         parent_logger=None,
         news_service_handle=None,
-        agent_config_file: str = None,
     ):
         """
         Initialize the simulation client.
@@ -113,13 +112,11 @@ class SimulationClient:
             config_path: Path to configuration directory for logs
             parent_logger: Parent logger (not used in Ray actor, we create our own)
             news_service_handle: Ray actor handle for NewsFeedService (optional)
-            agent_config_file: Path to agent_population.json file (for saving updates)
         """
         self.client_id = client_id
         self.llm = llm_handle
         self.news_service = news_service_handle
         self.config_path = Path(config_path)
-        self.agent_config_file = Path(agent_config_file) if agent_config_file else None
 
         # Load simulation configuration with defaults
         if simulation_config is None:
@@ -968,15 +965,25 @@ class SimulationClient:
         Args:
             updated_interests: Dict of {agent_id: {"topics": [...], "counts": [...]}}
         """
-        if not self.agent_config_file or not self.agent_config_file.exists():
+        # Find agent_population.json file using client-specific naming convention
+        # Try client-specific file first, then fall back to generic
+        client_specific_file = self.config_path / f"{self.client_id}_agent_population.json"
+        generic_file = self.config_path / "agent_population.json"
+        
+        if client_specific_file.exists():
+            agent_config_file = client_specific_file
+        else:
+            agent_config_file = generic_file
+        
+        if not agent_config_file.exists():
             self.logger.warning(
-                f"Agent config file not found, skipping interests update"
+                f"Agent config file not found at {agent_config_file}, skipping interests update"
             )
             return
         
         try:
             # Load current agent_population.json
-            with open(self.agent_config_file, 'r') as f:
+            with open(agent_config_file, 'r') as f:
                 agent_data = json.load(f)
             
             # Update interests for each agent
@@ -992,17 +999,17 @@ class SimulationClient:
                         ]
             
             # Write updated data back to file
-            with open(self.agent_config_file, 'w') as f:
+            with open(agent_config_file, 'w') as f:
                 json.dump(agent_data, f, indent=2)
             
             self.logger.info(
-                f"Updated {self.agent_config_file.name} with current interests for {len(updated_interests)} agents"
+                f"Updated {agent_config_file.name} with current interests for {len(updated_interests)} agents"
             )
             
         except Exception as e:
             self.logger.error(
                 f"Error updating agent population file: {e}",
-                extra={"extra_data": {"error": str(e), "file": str(self.agent_config_file)}}
+                extra={"extra_data": {"error": str(e), "file": str(agent_config_file)}}
             )
     
     def _validate_and_extract_interests(self, interests):
