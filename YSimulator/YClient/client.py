@@ -931,7 +931,7 @@ class SimulationClient:
             "ex": agent.ex if agent.ex else "average in extraversion",
             "ag": agent.ag if agent.ag else "average in agreeableness",
             "ne": agent.ne if agent.ne else "average in neuroticism",
-            "toxicity": agent.toxicity if agent.toxicity else "no"
+            "toxicity": agent.toxicity if agent.toxicity and agent.toxicity != "" else "no"
         }
 
     def _handle_post_action(self, agent, agent_type, day, slot, pending_llm_posts, actions):
@@ -969,9 +969,16 @@ class SimulationClient:
             post_data = ray.get(self.server.get_post.remote(target_post))
             if post_data:
                 post_content = post_data.get("tweet", "")
-                # Fire off async LLM call to generate comment with agent attributes
+                author_id = post_data.get("user_id")
+                # Get author username
+                author_name = "Someone"
+                if author_id:
+                    author_user = ray.get(self.server.get_user.remote(author_id))
+                    if author_user:
+                        author_name = author_user.get("username", "Someone")
+                # Fire off async LLM call to generate comment with agent attributes and author name
                 agent_attrs = self._extract_agent_attrs(agent)
-                future = self.llm.generate_comment.remote(agent.cluster, post_content, agent_attrs)
+                future = self.llm.generate_comment.remote(agent.cluster, post_content, agent_attrs, author_name)
                 pending_llm_reactions.append((agent.id, agent.cluster, target_post, future))
         else:
             # Rule-based: Just comment "COMMENT"

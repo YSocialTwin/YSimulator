@@ -16,7 +16,7 @@
   },
   "generate_comment": {
     "system_template": "{persona} You engage in discussions by commenting on posts. Generate {toxicity} confrontational language contents.",
-    "user_template": "Someone posted this:\n\n\"{post_content}\"\n\nWrite a brief, thoughtful comment to continue the discussion. Max 100 characters. Be authentic to your persona."
+    "user_template": "{author_name} posted this:\n\n\"{post_content}\"\n\nWrite a brief, thoughtful comment to continue the discussion. Max 100 characters. Be authentic to your persona."
   },
   "generate_read_reaction": {
     "system_template": "{persona} You're deciding how to react to content you discovered.",

@@ -190,7 +190,7 @@ class LLMService:
             title = article_title if len(article_title) <= 97 else article_title[:97] + "..."
             return f"Check out this article: {title}"
     
-    def generate_comment(self, cluster_id: int, post_content: str, agent_attrs: dict = None) -> str:
+    def generate_comment(self, cluster_id: int, post_content: str, agent_attrs: dict = None, author_name: str = "Someone") -> str:
         """
         Generate a comment on a post to continue the discussion.
         
@@ -200,6 +200,7 @@ class LLMService:
             cluster_id: Cluster/persona ID of the agent
             post_content: Content of the post to comment on
             agent_attrs: Dict with agent attributes for dynamic persona building
+            author_name: Username of the post author
             
         Returns:
             str: Generated comment text
@@ -218,12 +219,12 @@ class LLMService:
         )
         user_template = prompts.get(
             "user_template",
-            "Someone posted this:\n\n\"{post_content}\"\n\nWrite a brief, thoughtful comment to continue the discussion. Max 100 characters. Be authentic to your persona."
+            "{author_name} posted this:\n\n\"{post_content}\"\n\nWrite a brief, thoughtful comment to continue the discussion. Max 100 characters. Be authentic to your persona."
         )
         
         # Format templates
         system_msg = system_template.format(persona=persona, toxicity=toxicity)
-        user_msg = user_template.format(post_content=post_content)
+        user_msg = user_template.format(author_name=author_name, post_content=post_content)
         
         prompt = ChatPromptTemplate.from_messages([
             ("system", system_msg),
