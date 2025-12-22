@@ -922,13 +922,11 @@ class SimulationClient:
         """
         # Sample a topic from agent's interests if available
         selected_topic = None
-        if agent.interests and len(agent.interests) == 2:
-            topics = agent.interests[0]
-            counts = agent.interests[1]
-            if topics and counts and len(topics) > 0:
-                # Weight topics by their interaction counts
-                import random
-                selected_topic = random.choices(topics, weights=counts, k=1)[0]
+        topics, counts = self._validate_and_extract_interests(agent.interests)
+        if topics and counts:
+            # Weight topics by their interaction counts
+            import random
+            selected_topic = random.choices(topics, weights=counts, k=1)[0]
         
         return {
             "name": agent.username,
@@ -945,6 +943,30 @@ class SimulationClient:
             "toxicity": agent.toxicity if agent.toxicity and agent.toxicity != "" else "no",
             "topic": selected_topic  # Include the sampled topic
         }
+    
+    def _validate_and_extract_interests(self, interests):
+        """
+        Validate interests structure and extract topics and counts.
+        
+        Args:
+            interests: Interest data in format [["Topic1", "Topic2"], [1, 2]]
+            
+        Returns:
+            tuple: (topics, counts) or (None, None) if invalid
+        """
+        if not interests or not isinstance(interests, (list, tuple)) or len(interests) != 2:
+            return None, None
+        
+        topics = interests[0]
+        counts = interests[1]
+        
+        if not topics or not counts or not isinstance(topics, list) or not isinstance(counts, list):
+            return None, None
+        
+        if len(topics) == 0:
+            return None, None
+        
+        return topics, counts
 
     def _handle_post_action(self, agent, agent_type, day, slot, pending_llm_posts, actions):
         """Handle post action for an agent."""
@@ -1316,12 +1338,14 @@ class SimulationClient:
             
             # Check if the fourth element is an article_id (UUID format) or a topic (string)
             if topic_or_article:
-                # Simple heuristic: if it contains hyphens and looks like UUID, it's article_id
-                # Otherwise it's a topic string
-                if isinstance(topic_or_article, str) and len(topic_or_article) == 36 and topic_or_article.count('-') == 4:
+                # Try to parse as UUID - if successful, it's an article_id
+                try:
+                    import uuid
+                    uuid.UUID(topic_or_article)
                     action.article_id = topic_or_article
                     self.logger.info(f"LLM post for agent {a_id}: article_id={topic_or_article}, content_len={len(res_txt)}")
-                else:
+                except (ValueError, AttributeError):
+                    # Not a valid UUID, treat as topic string
                     action.topic = topic_or_article
                     self.logger.info(f"LLM post for agent {a_id}: topic={topic_or_article}, content_len={len(res_txt)}")
             else:

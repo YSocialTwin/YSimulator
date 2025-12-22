@@ -164,6 +164,30 @@ class OrchestratorServer:
 
         handler.setFormatter(JsonFormatter())
         self.logger.addHandler(handler)
+    
+    def _validate_and_extract_interests(self, interests):
+        """
+        Validate interests structure and extract topics and counts.
+        
+        Args:
+            interests: Interest data in format [["Topic1", "Topic2"], [1, 2]]
+            
+        Returns:
+            tuple: (topics, counts) or (None, None) if invalid
+        """
+        if not interests or not isinstance(interests, (list, tuple)) or len(interests) != 2:
+            return None, None
+        
+        topics = interests[0]
+        counts = interests[1]
+        
+        if not topics or not counts or not isinstance(topics, list) or not isinstance(counts, list):
+            return None, None
+        
+        if len(topics) == 0:
+            return None, None
+        
+        return topics, counts
 
     def register_agents(self, agents: list) -> dict:
         """
@@ -222,11 +246,12 @@ class OrchestratorServer:
                     self.registered_agents[agent_profile.id] = agent_profile.username
                     
                     # Save agent interests if provided
-                    if agent_profile.interests and len(agent_profile.interests) == 2:
-                        topics = agent_profile.interests[0]  # List of topic names
-                        counts = agent_profile.interests[1]  # List of interaction counts
-                        
+                    topics, counts = self._validate_and_extract_interests(agent_profile.interests)
+                    if topics and counts:
                         # Save each interest for the agent
+                        # Note: We create multiple user_interest entries (one per interaction count)
+                        # to represent historical interactions. This follows the schema design where
+                        # user_interest tracks interests per round, allowing temporal analysis.
                         for i, topic in enumerate(topics):
                             # Get or create the interest in the interests table
                             interest_id = self.db.add_or_get_interest(topic)

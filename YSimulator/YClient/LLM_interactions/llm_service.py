@@ -105,11 +105,12 @@ class LLMService:
         
         # Format templates
         system_msg = system_template.format(persona=persona, toxicity=toxicity)
-        # Include topic in user message if available
-        if topic:
-            user_msg = user_template.format(day=day, slot=slot, topic=topic)
-        else:
-            user_msg = user_template.format(day=day, slot=slot)
+        
+        # Build topic instruction
+        topic_instruction = f" Topic: {topic}." if topic else ""
+        
+        # Format user message with topic instruction
+        user_msg = user_template.format(day=day, slot=slot, topic_instruction=topic_instruction)
 
         prompt = ChatPromptTemplate.from_messages([
             ("system", system_msg),
