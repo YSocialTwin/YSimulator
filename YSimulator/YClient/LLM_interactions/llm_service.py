@@ -383,18 +383,26 @@ class LLMService:
         # Combine title and summary for analysis
         article_text = f"Title: {article_title}\n\nSummary: {article_summary}" if article_summary else f"Title: {article_title}"
         
-        # Create prompt for topic extraction
-        system_msg = "You are a topic extraction assistant. Extract exactly 1 or 2 main topics from the article. Return ONLY the topics, separated by commas, no other text."
-        user_msg = f"Extract 1-2 main topics from this article:\n\n{article_text}\n\nTopics (comma-separated):"
+        # Get prompts from configuration with fallback defaults
+        extract_config = self.prompts_config.get("extract_article_topics", {})
+        system_template = extract_config.get(
+            "system_template",
+            "You are a topic extraction assistant. Extract exactly 1 or 2 main topics from the article. Return ONLY the topics, separated by commas, no other text."
+        )
+        user_template = extract_config.get(
+            "user_template",
+            "Extract 1-2 main topics from this article:\n\n{article_text}\n\nTopics (comma-separated):"
+        )
         
+        # Build prompts with article text
         prompt = ChatPromptTemplate.from_messages([
-            ("system", system_msg),
-            ("user", user_msg)
+            ("system", system_template),
+            ("user", user_template)
         ])
         chain = prompt | self.llm | StrOutputParser()
         
         try:
-            response = chain.invoke({})
+            response = chain.invoke({"article_text": article_text})
             # Parse response - split by comma and clean up
             topics = [t.strip() for t in response.split(',') if t.strip()]
             # Return up to 2 topics
