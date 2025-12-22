@@ -66,10 +66,11 @@
             "news": 0.0,
             "comment": 5.0,
             "read": 2.0,
-            "share": 2.0,
-            "search": 0.0,
+            "share": 1.0,
+            "search": 5.0,
             "cast": 0.0,
-            "share_link": 2.0
+            "share_link": 0,
+            "follow": 0.1
         },
     "agent_archetypes": {
         "enabled": true,
@@ -118,7 +119,7 @@
         "reading_from_follower_ratio": 0.6,
         "max_length_thread_reading": 5,
         "attention_window": 336,
-        "probability_of_daily_follow": 0.0,
-        "probability_of_secondary_follow": 0.0
+        "probability_of_daily_follow": 0.1,
+        "probability_of_secondary_follow": 0.1
     }
 }
