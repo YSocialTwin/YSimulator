@@ -534,17 +534,38 @@ class DatabaseMiddleware:
                                 if username_bytes:
                                     username = username_bytes.decode('utf-8') if isinstance(username_bytes, bytes) else username_bytes
                         
-                        thread_posts.append({
-                            "id": pid_str,
-                            "user_id": post_dict.get("user_id"),
-                            "username": username,
-                            "tweet": post_dict.get("tweet", ""),
-                            "round": post_dict.get("round")
-                        })
+                        # Get round info for sorting - need to query database for day/hour
+                        round_id = post_dict.get("round")
+                        round_data = None
+                        if round_id:
+                            # Try to get from Redis first
+                            round_key = self._redis_key("rounds", round_id)
+                            round_redis_data = self.redis_client.hgetall(round_key)
+                            if round_redis_data:
+                                day = round_redis_data.get(b"day") or round_redis_data.get("day")
+                                hour = round_redis_data.get(b"hour") or round_redis_data.get("hour")
+                                if day and hour:
+                                    day_int = int(day.decode('utf-8') if isinstance(day, bytes) else day)
+                                    hour_int = int(hour.decode('utf-8') if isinstance(hour, bytes) else hour)
+                                    round_data = (day_int, hour_int)
+                        
+                        # If no round data, skip this post
+                        if round_data:
+                            thread_posts.append({
+                                "id": pid_str,
+                                "user_id": post_dict.get("user_id"),
+                                "username": username,
+                                "tweet": post_dict.get("tweet", ""),
+                                "round": post_dict.get("round"),
+                                "sort_key": round_data  # Tuple of (day, hour) for sorting
+                            })
                 
-                # Sort by round chronologically (oldest first)
-                # Note: round is stored as string in Redis
-                thread_posts.sort(key=lambda x: x.get("round", ""))
+                # Sort by day and hour chronologically (oldest first)
+                thread_posts.sort(key=lambda x: x.get("sort_key", (0, 0)))
+                
+                # Remove sort_key before returning
+                for post in thread_posts:
+                    post.pop("sort_key", None)
                 
                 # Return up to max_length posts, ending just before target post
                 return thread_posts[-max_length:] if len(thread_posts) > max_length else thread_posts

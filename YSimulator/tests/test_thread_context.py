@@ -211,18 +211,23 @@ class TestThreadContext(unittest.TestCase):
         comment_ids = []
         import random
         base_day = random.randint(1000, 10000)  # Use high number to avoid conflicts
-        for i in range(10):
-            # Create a new round for each comment with unique day to avoid conflicts
-            with Session(self.db.engine) as session:
+        
+        # Create all rounds first
+        round_ids = []
+        with Session(self.db.engine) as session:
+            for i in range(10):
                 round_id = str(uuid.uuid4())
                 round_obj = Round(id=round_id, day=base_day + i, hour=0)
                 session.add(round_obj)
-                session.commit()
-            
+                round_ids.append(round_id)
+            session.commit()
+        
+        # Create comments using the rounds
+        for i in range(10):
             comment_data = {
                 "user_id": self.user2_id,
                 "tweet": f"Comment {i+1}",
-                "round": round_id,
+                "round": round_ids[i],
                 "comment_to": root_post_id,
                 "thread_id": root_post["thread_id"],
             }
