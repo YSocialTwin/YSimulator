@@ -1869,7 +1869,9 @@ class DatabaseMiddleware:
                 # Filter to only unreplied mentions
                 unreplied_mentions = []
                 for mention_id in mention_ids:
-                    mention_key = self._redis_key("mentions", mention_id)
+                    # Decode mention_id if it's bytes (Redis returns bytes)
+                    mention_id_str = mention_id.decode() if isinstance(mention_id, bytes) else mention_id
+                    mention_key = self._redis_key("mentions", mention_id_str)
                     mention_data = self.redis_client.hgetall(mention_key)
                     
                     if mention_data:
