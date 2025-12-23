@@ -1075,8 +1075,14 @@ class SimulationClient:
             future = generate_llm_post_async(self.llm, agent.cluster, day, slot, agent_attrs)
             pending_llm_posts.append((agent.id, agent.cluster, future, selected_topic))
         else:
-            # Rule-based: Execute immediately
+            # Rule-based: Execute immediately with sampled topic
+            # Sample a topic from agent's interests (same as LLM agents)
+            agent_attrs = self._extract_agent_attrs(agent)
+            selected_topic = agent_attrs.get("topic")
             action = generate_rule_based_post(agent.id, agent.cluster)
+            # Attach the sampled topic to the action
+            if selected_topic:
+                action.topic = selected_topic
             # Annotate rule-based post
             self._annotate_action_content(action)
             actions.append(action)
@@ -1334,7 +1340,14 @@ class SimulationClient:
             future = generate_llm_post_async(self.llm, agent.cluster, day, slot)
             pending_llm_posts.append((agent.id, agent.cluster, future, None))
         else:
+            # Rule-based: Execute immediately with sampled topic
+            # Sample a topic from agent's interests (same as LLM agents)
+            agent_attrs = self._extract_agent_attrs(agent)
+            selected_topic = agent_attrs.get("topic")
             action = generate_rule_based_post(agent.id, agent.cluster)
+            # Attach the sampled topic to the action
+            if selected_topic:
+                action.topic = selected_topic
             # Annotate rule-based post
             self._annotate_action_content(action)
             actions.append(action)
@@ -1345,7 +1358,14 @@ class SimulationClient:
             future = generate_llm_post_async(self.llm, agent.cluster, day, slot)
             pending_llm_posts.append((agent.id, agent.cluster, future, None))
         else:
+            # Rule-based: Execute immediately with sampled topic
+            # Sample a topic from agent's interests (same as LLM agents)
+            agent_attrs = self._extract_agent_attrs(agent)
+            selected_topic = agent_attrs.get("topic")
             action = generate_rule_based_post(agent.id, agent.cluster)
+            # Attach the sampled topic to the action
+            if selected_topic:
+                action.topic = selected_topic
             # Annotate rule-based post
             self._annotate_action_content(action)
             actions.append(action)
