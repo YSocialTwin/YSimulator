@@ -198,6 +198,46 @@ def generate_llm_follow_async(llm_handle, cluster_id: int, candidate_users: list
     return llm_handle.generate_follow_decision.remote(cluster_id, candidate_users)
 
 
+def generate_llm_reply_to_mention_async(llm_handle, cluster_id: int, post_content: str, 
+                                         agent_attrs: dict, author_name: str, thread_context: list):
+    """
+    Initiate async LLM reply to mention generation.
+    
+    This function generates a comment reply when an agent is mentioned in a post.
+    It's similar to generate_comment but specifically for replying to mentions.
+    
+    The LLM service will generate a contextual reply based on:
+    - Cluster ID (determines persona/behavior)
+    - Post content (the post that mentioned the agent)
+    - Agent attributes for dynamic persona building
+    - Author name (who mentioned the agent)
+    - Thread context (preceding posts/comments)
+    
+    Args:
+        llm_handle: Ray actor handle for the LLM service
+        cluster_id: Cluster/group the agent belongs to (determines persona)
+        post_content: Content of the post that mentioned the agent
+        agent_attrs: Dict with agent attributes (name, age, gender, etc.)
+        author_name: Username of the person who mentioned the agent
+        thread_context: List of previous posts/comments in chronological order
+        
+    Returns:
+        Ray ObjectRef: Future that will resolve to generated comment content (str)
+        
+    Usage:
+        # Scatter phase - fire off LLM call for reply
+        future = generate_llm_reply_to_mention_async(
+            llm, agent.cluster, post_content, agent_attrs, author_name, thread_context
+        )
+        pending_llm_reactions.append((agent.id, agent.cluster, post_id, future, mention_id))
+        
+        # Gather phase - wait for result
+        comment_text = ray.get(future)
+        action = ActionDTO(agent_id, cluster_id, "COMMENT", content=comment_text, target_post_id=post_id)
+    """
+    return llm_handle.generate_comment.remote(cluster_id, post_content, agent_attrs, author_name, thread_context)
+
+
 @ray.remote
 def generate_llm_news_commentary(llm_service, cluster_id: int, article: dict, website_name: str = None) -> str:
     """

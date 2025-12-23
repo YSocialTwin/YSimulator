@@ -20,9 +20,11 @@ from YSimulator.YClient.actions import (
     generate_llm_reaction_async,
     generate_llm_read_async,
     generate_llm_follow_async,
+    generate_llm_reply_to_mention_async,
     generate_rule_based_post,
     generate_rule_based_reaction,
     generate_rule_based_comment,
+    generate_rule_based_reply_to_mention,
     generate_rule_based_share,
     generate_rule_based_read,
     generate_rule_based_follow,
@@ -1375,7 +1377,7 @@ class SimulationClient:
         Handle reply to mention for an agent.
         
         This method checks if the agent has unreplied mentions, randomly selects one,
-        and creates a comment action (reply) using the existing comment pipeline.
+        and creates a comment action (reply) using the reply-specific action functions.
         After creating the reply action, marks the mention as replied.
         
         Args:
@@ -1414,26 +1416,28 @@ class SimulationClient:
             post_content = post_data.get("tweet", "")
             author_id = post_data.get("user_id")
             
-            # Generate reply using the existing comment pipeline
+            # Get author username
+            author_username = "Someone"
+            if author_id:
+                author_user = ray.get(self.server.get_user.remote(author_id))
+                if author_user:
+                    author_username = author_user.get("username", "Someone")
+            
+            # Generate reply using the reply-specific action functions
             if agent_type == "llm":
-                # Get author username
-                author_name = "Someone"
-                if author_id:
-                    author_user = ray.get(self.server.get_user.remote(author_id))
-                    if author_user:
-                        author_name = author_user.get("username", "Someone")
-                
                 # Get thread context (preceding posts/comments in chronological order)
                 thread_context = ray.get(self.server.get_thread_context.remote(post_id, self.max_length_thread_reading))
                 
-                # Fire off async LLM call to generate comment with agent attributes, author name, and thread context
+                # Fire off async LLM call to generate reply
                 agent_attrs = self._extract_agent_attrs(agent)
-                future = self.llm.generate_comment.remote(agent.cluster, post_content, agent_attrs, author_name, thread_context)
+                future = generate_llm_reply_to_mention_async(
+                    self.llm, agent.cluster, post_content, agent_attrs, author_username, thread_context
+                )
                 # Store the mention_id with the pending reaction so we can mark it as replied later
                 pending_llm_reactions.append((agent.id, agent.cluster, post_id, future, mention_id))
             else:
-                # Rule-based: Just comment "COMMENT"
-                action = generate_rule_based_comment(agent.id, agent.cluster, post_id)
+                # Rule-based: Generate reply with @username mention
+                action = generate_rule_based_reply_to_mention(agent.id, agent.cluster, post_id, author_username)
                 # Annotate rule-based comment
                 self._annotate_action_content(action)
                 actions.append(action)
