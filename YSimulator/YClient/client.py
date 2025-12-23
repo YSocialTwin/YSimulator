@@ -1054,6 +1054,15 @@ class SimulationClient:
         else:
             # Rule-based: Execute immediately
             action = generate_rule_based_post(agent.id, agent.cluster)
+            # Annotate rule-based post
+            if action.content:
+                annotations = annotate_text(
+                    action.content,
+                    enable_sentiment=self.enable_sentiment,
+                    enable_toxicity=self.enable_toxicity,
+                    perspective_api_key=self.perspective_api_key
+                )
+                action.annotations = annotations
             actions.append(action)
     
     def _handle_comment_action(self, agent, agent_type, pending_llm_reactions, actions, rule_based_interactions):
@@ -1097,6 +1106,15 @@ class SimulationClient:
         else:
             # Rule-based: Just comment "COMMENT"
             action = generate_rule_based_comment(agent.id, agent.cluster, target_post)
+            # Annotate rule-based comment
+            if action.content:
+                annotations = annotate_text(
+                    action.content,
+                    enable_sentiment=self.enable_sentiment,
+                    enable_toxicity=self.enable_toxicity,
+                    perspective_api_key=self.perspective_api_key
+                )
+                action.annotations = annotations
             actions.append(action)
             # Track for secondary follow (rule-based comment)
             post_data = ray.get(self.server.get_post.remote(target_post))
@@ -1284,6 +1302,15 @@ class SimulationClient:
                             self.logger.warning(f"Traceback: {traceback.format_exc()}")
                     
                     action.article_id = article_id
+                    # Annotate rule-based news post
+                    if action.content:
+                        annotations = annotate_text(
+                            action.content,
+                            enable_sentiment=self.enable_sentiment,
+                            enable_toxicity=self.enable_toxicity,
+                            perspective_api_key=self.perspective_api_key
+                        )
+                        action.annotations = annotations
                     actions.append(action)
             else:
                 self.logger.warning(f"Page {agent.username} got no article from feed")
@@ -1306,6 +1333,15 @@ class SimulationClient:
             pending_llm_posts.append((agent.id, agent.cluster, future, None))
         else:
             action = generate_rule_based_post(agent.id, agent.cluster)
+            # Annotate rule-based post
+            if action.content:
+                annotations = annotate_text(
+                    action.content,
+                    enable_sentiment=self.enable_sentiment,
+                    enable_toxicity=self.enable_toxicity,
+                    perspective_api_key=self.perspective_api_key
+                )
+                action.annotations = annotations
             actions.append(action)
     
     def _handle_cast_action(self, agent, agent_type, day, slot, pending_llm_posts, actions):
@@ -1315,6 +1351,15 @@ class SimulationClient:
             pending_llm_posts.append((agent.id, agent.cluster, future, None))
         else:
             action = generate_rule_based_post(agent.id, agent.cluster)
+            # Annotate rule-based post
+            if action.content:
+                annotations = annotate_text(
+                    action.content,
+                    enable_sentiment=self.enable_sentiment,
+                    enable_toxicity=self.enable_toxicity,
+                    perspective_api_key=self.perspective_api_key
+                )
+                action.annotations = annotations
             actions.append(action)
     
     def _simulate(self, day: int, slot: int, recent_posts: list) -> list:
