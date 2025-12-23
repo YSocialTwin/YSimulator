@@ -395,8 +395,63 @@ class LLMService:
             response = chain.invoke({"article_text": article_text})
             # Parse response - split by comma and clean up
             topics = [t.strip() for t in response.split(',') if t.strip()]
-            # Return up to 2 topics
-            return topics[:2]
+            
+            # Enforce single-word topics - take only the first word if multiple words present
+            single_word_topics = []
+            for topic in topics:
+                # Split on whitespace and take the first word
+                words = topic.split()
+                if words:
+                    # Take first word and convert to lowercase for consistency
+                    single_word = words[0].lower()
+                    # Remove any punctuation from the word
+                    single_word = ''.join(char for char in single_word if char.isalnum() or char == '-' or char == '_')
+                    if single_word:  # Only add if not empty after cleaning
+                        single_word_topics.append(single_word)
+            
+            # Return up to 2 single-word topics
+            return single_word_topics[:2]
+        except Exception as e:
+            # If extraction fails, return empty list
+            return []
+
+    def extract_emotions(self, text: str) -> list:
+        """
+        Extract emotions from text using LLM based on GoEmotions taxonomy.
+        
+        The model identifies which emotions from the GoEmotions taxonomy the text elicits.
+        Returns a list of emotion names that apply to the given text.
+        
+        Args:
+            text: Text content to analyze for emotions
+            
+        Returns:
+            list: List of emotion names from GoEmotions taxonomy (e.g., ["joy", "excitement"])
+        """
+        # Get prompts from configuration
+        system_template = self.prompts_config.get("extract_emotions", {}).get("system_template", 
+            "You are an emotion classification assistant. Identify which emotions from the GoEmotions taxonomy the given text elicits.")
+        user_template = self.prompts_config.get("extract_emotions", {}).get("user_template",
+            "Identify emotions from this text. Choose ONLY from: {emotion_list}\n\nText: \"{text}\"\n\nReturn emotions as comma-separated list:")
+        
+        # Build emotion list for the prompt
+        emotion_list = "admiration, amusement, anger, annoyance, approval, caring, confusion, curiosity, desire, disappointment, disapproval, disgust, embarrassment, excitement, fear, gratitude, grief, joy, love, nervousness, optimism, pride, realization, relief, remorse, sadness, surprise, trust"
+        
+        # Build prompts
+        prompt = ChatPromptTemplate.from_messages([
+            ("system", system_template),
+            ("user", user_template)
+        ])
+        chain = prompt | self.llm | StrOutputParser()
+        
+        try:
+            response = chain.invoke({"text": text, "emotion_list": emotion_list})
+            # Parse response - split by comma and clean up
+            emotions = [e.strip().lower() for e in response.split(',') if e.strip()]
+            # Filter to only valid emotions from the taxonomy
+            valid_emotions = emotion_list.split(', ')
+            emotions = [e for e in emotions if e in valid_emotions]
+            return emotions
         except Exception as e:
             # If extraction fails, return empty list
             return []

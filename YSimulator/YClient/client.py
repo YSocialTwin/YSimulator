@@ -30,6 +30,7 @@ from YSimulator.YClient.actions import (
     generate_rule_based_news_post,
 )
 from YSimulator.YClient.classes.ray_models import ActionDTO, AgentProfile
+from YSimulator.YClient.text_support.text_annotator import annotate_text
 from YSimulator.YClient.recsys import (
     ContentRecSys,
     ReverseChrono,
@@ -155,6 +156,12 @@ class SimulationClient:
         self.probability_of_secondary_follow = agents_config.get("probability_of_secondary_follow", 0.0)
         self.probability_of_daily_follow = agents_config.get("probability_of_daily_follow", 0.0)
         self.max_length_thread_reading = agents_config.get("max_length_thread_reading", 5)
+
+        # Load text annotation configuration
+        self.enable_sentiment = simulation_config["simulation"].get("enable_sentiment", False)
+        self.enable_toxicity = simulation_config["simulation"].get("enable_toxicity", False)
+        self.perspective_api_key = simulation_config["simulation"].get("perspective_api_key", None)
+        self.enable_emotions = simulation_config["simulation"].get("emotion_annotation", False)
 
         # Create agents from configuration
         self.agent_profiles = []
@@ -1037,6 +1044,28 @@ class SimulationClient:
         
         return topics, counts
 
+    def _annotate_action_content(self, action: ActionDTO) -> None:
+        """
+        Annotate the content of an action with hashtags, mentions, sentiment, toxicity, and emotions.
+        
+        This helper method avoids code duplication when annotating rule-based posts and comments.
+        Modifies the action in-place by setting its annotations field.
+        
+        Args:
+            action: ActionDTO instance with content to annotate
+        """
+        if action.content:
+            annotations = annotate_text(
+                action.content,
+                enable_sentiment=self.enable_sentiment,
+                enable_toxicity=self.enable_toxicity,
+                perspective_api_key=self.perspective_api_key,
+                enable_emotions=self.enable_emotions,
+                llm_handle=self.llm
+            )
+            action.annotations = annotations
+            self.logger.info(f"Annotated action content: has_sentiment={bool(annotations.get('sentiment'))}, has_toxicity={bool(annotations.get('toxicity'))}, has_emotions={bool(annotations.get('emotions'))}, hashtags={len(annotations.get('hashtags', []))}, mentions={len(annotations.get('mentions', []))}")
+
     def _handle_post_action(self, agent, agent_type, day, slot, pending_llm_posts, actions):
         """Handle post action for an agent."""
         if agent_type == "llm":
@@ -1046,8 +1075,16 @@ class SimulationClient:
             future = generate_llm_post_async(self.llm, agent.cluster, day, slot, agent_attrs)
             pending_llm_posts.append((agent.id, agent.cluster, future, selected_topic))
         else:
-            # Rule-based: Execute immediately
+            # Rule-based: Execute immediately with sampled topic
+            # Sample a topic from agent's interests (same as LLM agents)
+            agent_attrs = self._extract_agent_attrs(agent)
+            selected_topic = agent_attrs.get("topic")
             action = generate_rule_based_post(agent.id, agent.cluster)
+            # Attach the sampled topic to the action
+            if selected_topic:
+                action.topic = selected_topic
+            # Annotate rule-based post
+            self._annotate_action_content(action)
             actions.append(action)
     
     def _handle_comment_action(self, agent, agent_type, pending_llm_reactions, actions, rule_based_interactions):
@@ -1091,6 +1128,8 @@ class SimulationClient:
         else:
             # Rule-based: Just comment "COMMENT"
             action = generate_rule_based_comment(agent.id, agent.cluster, target_post)
+            # Annotate rule-based comment
+            self._annotate_action_content(action)
             actions.append(action)
             # Track for secondary follow (rule-based comment)
             post_data = ray.get(self.server.get_post.remote(target_post))
@@ -1278,6 +1317,8 @@ class SimulationClient:
                             self.logger.warning(f"Traceback: {traceback.format_exc()}")
                     
                     action.article_id = article_id
+                    # Annotate rule-based news post
+                    self._annotate_action_content(action)
                     actions.append(action)
             else:
                 self.logger.warning(f"Page {agent.username} got no article from feed")
@@ -1299,7 +1340,16 @@ class SimulationClient:
             future = generate_llm_post_async(self.llm, agent.cluster, day, slot)
             pending_llm_posts.append((agent.id, agent.cluster, future, None))
         else:
+            # Rule-based: Execute immediately with sampled topic
+            # Sample a topic from agent's interests (same as LLM agents)
+            agent_attrs = self._extract_agent_attrs(agent)
+            selected_topic = agent_attrs.get("topic")
             action = generate_rule_based_post(agent.id, agent.cluster)
+            # Attach the sampled topic to the action
+            if selected_topic:
+                action.topic = selected_topic
+            # Annotate rule-based post
+            self._annotate_action_content(action)
             actions.append(action)
     
     def _handle_cast_action(self, agent, agent_type, day, slot, pending_llm_posts, actions):
@@ -1308,7 +1358,16 @@ class SimulationClient:
             future = generate_llm_post_async(self.llm, agent.cluster, day, slot)
             pending_llm_posts.append((agent.id, agent.cluster, future, None))
         else:
+            # Rule-based: Execute immediately with sampled topic
+            # Sample a topic from agent's interests (same as LLM agents)
+            agent_attrs = self._extract_agent_attrs(agent)
+            selected_topic = agent_attrs.get("topic")
             action = generate_rule_based_post(agent.id, agent.cluster)
+            # Attach the sampled topic to the action
+            if selected_topic:
+                action.topic = selected_topic
+            # Annotate rule-based post
+            self._annotate_action_content(action)
             actions.append(action)
     
     def _simulate(self, day: int, slot: int, recent_posts: list) -> list:
@@ -1477,6 +1536,18 @@ class SimulationClient:
             a_id, cid, _, topic_or_article = pending_llm_posts[i]
             action = ActionDTO(a_id, cid, "POST", content=res_txt)
             
+            # Annotate the post text
+            annotations = annotate_text(
+                res_txt,
+                enable_sentiment=self.enable_sentiment,
+                enable_toxicity=self.enable_toxicity,
+                perspective_api_key=self.perspective_api_key,
+                enable_emotions=self.enable_emotions,
+                llm_handle=self.llm
+            )
+            action.annotations = annotations
+            self.logger.info(f"LLM post annotated for agent {a_id}: has_sentiment={bool(annotations.get('sentiment'))}, has_toxicity={bool(annotations.get('toxicity'))}, has_emotions={bool(annotations.get('emotions'))}, hashtags={len(annotations.get('hashtags', []))}, mentions={len(annotations.get('mentions', []))}")
+            
             # Check if the fourth element is an article_id (UUID format) or a topic (string)
             if topic_or_article:
                 # Try to parse as UUID - if successful, it's an article_id
@@ -1518,7 +1589,18 @@ class SimulationClient:
             # Check if result is a comment (text) or a reaction type
             if res_act and res_act.upper() not in REACTION_TYPES:
                 # This is a comment text from LLM
-                actions.append(ActionDTO(a_id, cid, "COMMENT", content=res_act, target_post_id=target))
+                # Annotate the comment text
+                annotations = annotate_text(
+                    res_act,
+                    enable_sentiment=self.enable_sentiment,
+                    enable_toxicity=self.enable_toxicity,
+                    perspective_api_key=self.perspective_api_key,
+                    enable_emotions=self.enable_emotions,
+                    llm_handle=self.llm
+                )
+                self.logger.info(f"LLM comment annotated for agent {a_id}: has_sentiment={bool(annotations.get('sentiment'))}, has_toxicity={bool(annotations.get('toxicity'))}, has_emotions={bool(annotations.get('emotions'))}, hashtags={len(annotations.get('hashtags', []))}, mentions={len(annotations.get('mentions', []))}")
+                action = ActionDTO(a_id, cid, "COMMENT", content=res_act, target_post_id=target, annotations=annotations)
+                actions.append(action)
                 # Track for secondary follow (comment action)
                 post_data = ray.get(self.server.get_post.remote(target))
                 if post_data:

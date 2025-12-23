@@ -1623,3 +1623,604 @@ class DatabaseMiddleware:
             return False
         finally:
             session.close()
+
+    def add_or_get_hashtag(self, hashtag_text: str) -> Optional[str]:
+        """
+        Add a hashtag to the database or get its UUID if it already exists.
+        
+        Args:
+            hashtag_text: Hashtag text (without # prefix)
+            
+        Returns:
+            str: Hashtag UUID, or None if error
+        """
+        import uuid
+        
+        try:
+            if self.use_redis:
+                # Check if hashtag exists in Redis
+                hashtag_lookup_key = self._redis_key("hashtags", f"lookup:{hashtag_text}")
+                existing_id = self.redis_client.get(hashtag_lookup_key)
+                
+                if existing_id:
+                    return existing_id
+                
+                # Create new hashtag
+                hashtag_id = str(uuid.uuid4())
+                hashtag_data = {
+                    "id": hashtag_id,
+                    "hashtag": hashtag_text
+                }
+                
+                # Store hashtag
+                key = self._redis_key("hashtags", hashtag_id)
+                self.redis_client.hset(key, mapping=hashtag_data)
+                
+                # Store lookup index
+                self.redis_client.set(hashtag_lookup_key, hashtag_id)
+                
+                self.logger.info(f"Created new hashtag: id={hashtag_id}, hashtag={hashtag_text}")
+                return hashtag_id
+            else:
+                from YSimulator.YServer.classes.models import Hashtag
+                session = Session(self.engine)
+                try:
+                    # Check if hashtag already exists
+                    existing = session.query(Hashtag).filter(Hashtag.hashtag == hashtag_text).first()
+                    
+                    if existing:
+                        return existing.id
+                    
+                    # Create new hashtag
+                    hashtag_id = str(uuid.uuid4())
+                    hashtag = Hashtag(
+                        id=hashtag_id,
+                        hashtag=hashtag_text
+                    )
+                    session.add(hashtag)
+                    session.commit()
+                    self.logger.info(f"Created new hashtag: id={hashtag_id}, hashtag={hashtag_text}")
+                    return hashtag_id
+                finally:
+                    session.close()
+            
+        except Exception as e:
+            self.logger.error(
+                f"Error adding/getting hashtag: {e}",
+                extra={"extra_data": {"error": str(e), "hashtag": hashtag_text}}
+            )
+            return None
+
+    def add_post_hashtag(self, post_id: str, hashtag_id: str) -> bool:
+        """
+        Add a post-hashtag association to the database.
+        
+        Args:
+            post_id: Post UUID
+            hashtag_id: Hashtag UUID
+            
+        Returns:
+            bool: True if successful, False otherwise
+        """
+        import uuid
+        
+        try:
+            post_hashtag_id = str(uuid.uuid4())
+            post_hashtag_data = {
+                "id": post_hashtag_id,
+                "post_id": post_id,
+                "hashtag_id": hashtag_id
+            }
+            
+            if self.use_redis:
+                # Store post hashtag in Redis
+                key = self._redis_key("post_hashtags", post_hashtag_id)
+                redis_data = {k: str(v) for k, v in post_hashtag_data.items()}
+                self.redis_client.hset(key, mapping=redis_data)
+                
+                # Index by post_id for retrieval
+                post_hashtags_key = self._redis_key("post_hashtags", f"by_post:{post_id}")
+                self.redis_client.sadd(post_hashtags_key, post_hashtag_id)
+                
+                # Check for duplicates
+                hashtag_post_key = self._redis_key("post_hashtags", f"check:{post_id}:{hashtag_id}")
+                if self.redis_client.exists(hashtag_post_key):
+                    return True  # Already exists
+                self.redis_client.set(hashtag_post_key, "1")
+                
+                return True
+            else:
+                from YSimulator.YServer.classes.models import PostHashtag
+                session = Session(self.engine)
+                try:
+                    # Check if already exists
+                    existing = session.query(PostHashtag).filter(
+                        PostHashtag.post_id == post_id,
+                        PostHashtag.hashtag_id == hashtag_id
+                    ).first()
+                    
+                    if existing:
+                        return True  # Already exists
+                    
+                    # Create post hashtag record
+                    post_hashtag = PostHashtag(**post_hashtag_data)
+                    session.add(post_hashtag)
+                    session.commit()
+                    return True
+                finally:
+                    session.close()
+            
+        except Exception as e:
+            self.logger.error(
+                f"Error adding post hashtag: {e}",
+                extra={"extra_data": {"error": str(e), "post_id": post_id, "hashtag_id": hashtag_id}}
+            )
+            return False
+
+    def get_user_by_username(self, username: str) -> Optional[Dict[str, Any]]:
+        """
+        Get a user by their username.
+        
+        Args:
+            username: Username to search for
+            
+        Returns:
+            dict: User data dict with 'id' and other fields, or None if not found
+        """
+        from YSimulator.YServer.classes.models import User_mgmt
+        
+        session = Session(self.engine)
+        try:
+            user = session.query(User_mgmt).filter(User_mgmt.username == username).first()
+            
+            if user:
+                return {
+                    "id": user.id,
+                    "username": user.username,
+                    "email": user.email
+                }
+            return None
+            
+        except Exception as e:
+            self.logger.error(
+                f"Error getting user by username: {e}",
+                extra={"extra_data": {"error": str(e), "username": username}}
+            )
+            return None
+        finally:
+            session.close()
+
+    def add_mention(self, mention_data: Dict[str, Any]) -> bool:
+        """
+        Add a mention to the database.
+        
+        Args:
+            mention_data: Dict with keys: user_id, post_id, round, answered (default 0)
+            
+        Returns:
+            bool: True if successful, False otherwise
+        """
+        import uuid
+        
+        try:
+            mention_id = str(uuid.uuid4())
+            mention_data_with_id = {
+                "id": mention_id,
+                "user_id": mention_data["user_id"],
+                "post_id": mention_data["post_id"],
+                "round": mention_data["round"],
+                "answered": mention_data.get("answered", 0)
+            }
+            
+            if self.use_redis:
+                # Store mention in Redis
+                key = self._redis_key("mentions", mention_id)
+                redis_data = {k: str(v) for k, v in mention_data_with_id.items()}
+                self.redis_client.hset(key, mapping=redis_data)
+                
+                # Index by user_id for retrieval
+                user_mentions_key = self._redis_key("mentions", f"by_user:{mention_data['user_id']}")
+                self.redis_client.sadd(user_mentions_key, mention_id)
+                
+                # Index by post_id for retrieval
+                post_mentions_key = self._redis_key("mentions", f"by_post:{mention_data['post_id']}")
+                self.redis_client.sadd(post_mentions_key, mention_id)
+                
+                self.logger.info(f"Created mention: id={mention_id}, user_id={mention_data['user_id']}, post_id={mention_data['post_id']}")
+                return True
+            else:
+                from YSimulator.YServer.classes.models import Mention
+                session = Session(self.engine)
+                try:
+                    mention = Mention(**mention_data_with_id)
+                    session.add(mention)
+                    session.commit()
+                    self.logger.info(f"Created mention: id={mention_id}, user_id={mention_data['user_id']}, post_id={mention_data['post_id']}")
+                    return True
+                finally:
+                    session.close()
+            
+        except Exception as e:
+            self.logger.error(
+                f"Error adding mention: {e}",
+                extra={"extra_data": {"error": str(e), "mention_data": mention_data}}
+            )
+            return False
+
+    def get_post_sentiment(self, post_id: str) -> Optional[Dict[str, Any]]:
+        """
+        Get sentiment data for a post/comment.
+        
+        Returns the first sentiment entry found for the post.
+        Since posts can have multiple sentiment entries (one per topic),
+        this returns the first one found.
+        
+        Args:
+            post_id: UUID of the post/comment
+            
+        Returns:
+            dict: Sentiment data with keys: id, post_id, neg, pos, neu, compound, etc.
+                  or None if no sentiment found
+        """
+        try:
+            if self.use_redis:
+                # Get sentiment IDs for this post
+                post_sentiments_key = self._redis_key("post_sentiment", f"by_post:{post_id}")
+                sentiment_ids = self.redis_client.smembers(post_sentiments_key)
+                
+                if not sentiment_ids:
+                    return None
+                
+                # Get the first sentiment
+                sentiment_id = list(sentiment_ids)[0]
+                key = self._redis_key("post_sentiment", sentiment_id)
+                sentiment_data = self.redis_client.hgetall(key)
+                
+                if sentiment_data:
+                    # Convert string values back to appropriate types
+                    return {
+                        "id": sentiment_data.get("id"),
+                        "post_id": sentiment_data.get("post_id"),
+                        "user_id": sentiment_data.get("user_id"),
+                        "topic_id": sentiment_data.get("topic_id"),
+                        "round": int(sentiment_data.get("round", 0)),
+                        "neg": float(sentiment_data.get("neg", 0.0)) if sentiment_data.get("neg") else None,
+                        "pos": float(sentiment_data.get("pos", 0.0)) if sentiment_data.get("pos") else None,
+                        "neu": float(sentiment_data.get("neu", 0.0)) if sentiment_data.get("neu") else None,
+                        "compound": float(sentiment_data.get("compound", 0.0)) if sentiment_data.get("compound") else None,
+                        "sentiment_parent": sentiment_data.get("sentiment_parent", ""),
+                        "is_post": int(sentiment_data.get("is_post", 0)),
+                        "is_comment": int(sentiment_data.get("is_comment", 0)),
+                        "is_reaction": int(sentiment_data.get("is_reaction", 0))
+                    }
+                return None
+            else:
+                from YSimulator.YServer.classes.models import PostSentiment
+                session = Session(self.engine)
+                try:
+                    sentiment = session.query(PostSentiment).filter(
+                        PostSentiment.post_id == post_id
+                    ).first()
+                    
+                    if sentiment:
+                        return {
+                            "id": sentiment.id,
+                            "post_id": sentiment.post_id,
+                            "user_id": sentiment.user_id,
+                            "topic_id": sentiment.topic_id,
+                            "round": sentiment.round,
+                            "neg": sentiment.neg,
+                            "pos": sentiment.pos,
+                            "neu": sentiment.neu,
+                            "compound": sentiment.compound,
+                            "sentiment_parent": sentiment.sentiment_parent,
+                            "is_post": sentiment.is_post,
+                            "is_comment": sentiment.is_comment,
+                            "is_reaction": sentiment.is_reaction
+                        }
+                    return None
+                finally:
+                    session.close()
+            
+        except Exception as e:
+            self.logger.error(
+                f"Error getting post sentiment: {e}",
+                extra={"extra_data": {"error": str(e), "post_id": post_id}}
+            )
+            return None
+
+    def add_post_sentiment(self, sentiment_data: Dict[str, Any]) -> bool:
+        """
+        Add sentiment analysis data for a post/comment.
+        
+        Args:
+            sentiment_data: Dict with keys: post_id, user_id, topic_id, round,
+                          neg, pos, neu, compound, sentiment_parent,
+                          is_post, is_comment, is_reaction
+            
+        Returns:
+            bool: True if successful, False otherwise
+        """
+        import uuid
+        
+        try:
+            sentiment_id = str(uuid.uuid4())
+            sentiment_data_with_id = {
+                "id": sentiment_id,
+                "post_id": sentiment_data["post_id"],
+                "user_id": sentiment_data["user_id"],
+                "topic_id": sentiment_data["topic_id"],
+                "round": sentiment_data["round"],
+                "neg": sentiment_data.get("neg"),
+                "pos": sentiment_data.get("pos"),
+                "neu": sentiment_data.get("neu"),
+                "compound": sentiment_data.get("compound"),
+                "sentiment_parent": sentiment_data.get("sentiment_parent"),
+                "is_post": sentiment_data.get("is_post", 0),
+                "is_comment": sentiment_data.get("is_comment", 0),
+                "is_reaction": sentiment_data.get("is_reaction", 0)
+            }
+            
+            if self.use_redis:
+                # Store sentiment in Redis
+                key = self._redis_key("post_sentiment", sentiment_id)
+                # Filter out None values for Redis
+                redis_data = {k: str(v) if v is not None else "" for k, v in sentiment_data_with_id.items()}
+                self.redis_client.hset(key, mapping=redis_data)
+                
+                # Index by post_id for retrieval
+                post_sentiments_key = self._redis_key("post_sentiment", f"by_post:{sentiment_data['post_id']}")
+                self.redis_client.sadd(post_sentiments_key, sentiment_id)
+                
+                return True
+            else:
+                from YSimulator.YServer.classes.models import PostSentiment
+                session = Session(self.engine)
+                try:
+                    sentiment = PostSentiment(**sentiment_data_with_id)
+                    session.add(sentiment)
+                    session.commit()
+                    return True
+                finally:
+                    session.close()
+            
+        except Exception as e:
+            self.logger.error(
+                f"Error adding post sentiment: {e}",
+                extra={"extra_data": {"error": str(e), "sentiment_data": sentiment_data}}
+            )
+            return False
+
+    def add_post_toxicity(self, toxicity_data: Dict[str, Any]) -> bool:
+        """
+        Add toxicity analysis data for a post/comment.
+        
+        Args:
+            toxicity_data: Dict with keys: post_id, toxicity, severe_toxicity,
+                          identity_attack, insult, profanity, threat,
+                          sexually_explicit, flirtation
+            
+        Returns:
+            bool: True if successful, False otherwise
+        """
+        import uuid
+        
+        try:
+            toxicity_id = str(uuid.uuid4())
+            toxicity_data_with_id = {
+                "id": toxicity_id,
+                "post_id": toxicity_data["post_id"],
+                "toxicity": toxicity_data.get("toxicity", 0.0),
+                "severe_toxicity": toxicity_data.get("severe_toxicity", 0.0),
+                "identity_attack": toxicity_data.get("identity_attack", 0.0),
+                "insult": toxicity_data.get("insult", 0.0),
+                "profanity": toxicity_data.get("profanity", 0.0),
+                "threat": toxicity_data.get("threat", 0.0),
+                "sexually_explicit": toxicity_data.get("sexually_explicit", 0.0),
+                "flirtation": toxicity_data.get("flirtation", 0.0)
+            }
+            
+            if self.use_redis:
+                # Store toxicity in Redis
+                key = self._redis_key("post_toxicity", toxicity_id)
+                # Convert all values to strings for Redis
+                redis_data = {k: str(v) for k, v in toxicity_data_with_id.items()}
+                self.redis_client.hset(key, mapping=redis_data)
+                
+                # Index by post_id for retrieval
+                post_toxicity_key = self._redis_key("post_toxicity", f"by_post:{toxicity_data['post_id']}")
+                self.redis_client.set(post_toxicity_key, toxicity_id)
+                
+                return True
+            else:
+                from YSimulator.YServer.classes.models import PostToxicity
+                session = Session(self.engine)
+                try:
+                    toxicity = PostToxicity(**toxicity_data_with_id)
+                    session.add(toxicity)
+                    session.commit()
+                    return True
+                finally:
+                    session.close()
+            
+        except Exception as e:
+            self.logger.error(
+                f"Error adding post toxicity: {e}",
+                extra={"extra_data": {"error": str(e), "toxicity_data": toxicity_data}}
+            )
+            return False
+
+    def get_emotion_by_name(self, emotion_name: str) -> Optional[Dict[str, Any]]:
+        """
+        Get an emotion by its name.
+        
+        Args:
+            emotion_name: Name of the emotion (e.g., "joy", "anger")
+            
+        Returns:
+            dict: Emotion data with 'id', 'emotion', 'icon' fields, or None if not found
+        """
+        from YSimulator.YServer.classes.models import Emotion
+        
+        session = Session(self.engine)
+        try:
+            emotion = session.query(Emotion).filter(Emotion.emotion == emotion_name).first()
+            
+            if emotion:
+                return {
+                    "id": emotion.id,
+                    "emotion": emotion.emotion,
+                    "icon": emotion.icon
+                }
+            return None
+            
+        except Exception as e:
+            self.logger.error(
+                f"Error getting emotion by name: {e}",
+                extra={"extra_data": {"error": str(e), "emotion_name": emotion_name}}
+            )
+            return None
+        finally:
+            session.close()
+
+    def add_post_emotion(self, post_id: str, emotion_id: str) -> bool:
+        """
+        Add an emotion association to a post.
+        
+        Args:
+            post_id: UUID of the post/comment
+            emotion_id: UUID of the emotion
+            
+        Returns:
+            bool: True if successful, False otherwise
+        """
+        import uuid
+        
+        try:
+            post_emotion_id = str(uuid.uuid4())
+            post_emotion_data = {
+                "id": post_emotion_id,
+                "post_id": post_id,
+                "emotion_id": emotion_id
+            }
+            
+            if self.use_redis:
+                # Store post emotion in Redis
+                key = self._redis_key("post_emotions", post_emotion_id)
+                redis_data = {k: str(v) for k, v in post_emotion_data.items()}
+                self.redis_client.hset(key, mapping=redis_data)
+                
+                # Index by post_id for retrieval
+                post_emotions_key = self._redis_key("post_emotions", f"by_post:{post_id}")
+                self.redis_client.sadd(post_emotions_key, post_emotion_id)
+                
+                # Index by emotion_id + post_id for duplicate checking (store as set)
+                emotion_post_key = self._redis_key("post_emotions", f"check:{post_id}:{emotion_id}")
+                if self.redis_client.exists(emotion_post_key):
+                    return True  # Already exists
+                self.redis_client.set(emotion_post_key, "1")
+                
+                return True
+            else:
+                from YSimulator.YServer.classes.models import PostEmotion
+                session = Session(self.engine)
+                try:
+                    # Check if already exists
+                    existing = session.query(PostEmotion).filter(
+                        PostEmotion.post_id == post_id,
+                        PostEmotion.emotion_id == emotion_id
+                    ).first()
+                    
+                    if existing:
+                        return True  # Already exists
+                    
+                    # Create post emotion record
+                    post_emotion = PostEmotion(**post_emotion_data)
+                    session.add(post_emotion)
+                    session.commit()
+                    return True
+                finally:
+                    session.close()
+            
+        except Exception as e:
+            self.logger.error(
+                f"Error adding post emotion: {e}",
+                extra={"extra_data": {"error": str(e), "post_id": post_id, "emotion_id": emotion_id}}
+            )
+            return False
+
+    def initialize_emotions_table(self) -> bool:
+        """
+        Initialize the emotions table with the GoEmotions taxonomy.
+        
+        This creates all 28 emotions from the taxonomy if they don't already exist.
+        
+        Returns:
+            bool: True if successful, False otherwise
+        """
+        from YSimulator.YServer.classes.models import Emotion
+        import uuid
+        
+        # GoEmotions taxonomy with icon mappings
+        emotions_data = [
+            ("amusement", "mdi-emoticon-happy"),
+            ("admiration", "mdi-weather-sunny"),
+            ("anger", "mdi-emoticon-devil"),
+            ("annoyance", "mdi-emoticon-tongue"),
+            ("approval", "mdi-thumb-up-outline"),
+            ("caring", "mdi-cake"),
+            ("confusion", "mdi-emoticon-neutral"),
+            ("curiosity", "mdi-beaker-outline"),
+            ("desire", "mdi-cash-multiple"),
+            ("disappointment", "mdi-close-circle"),
+            ("disapproval", "mdi-thumb-down-outline"),
+            ("disgust", "mdi-emoticon-poop"),
+            ("embarrassment", "mdi-minus-circle"),
+            ("excitement", "mdi-rocket"),
+            ("fear", "mdi-weather-lightning"),
+            ("gratitude", "mdi-panda"),
+            ("grief", "mdi-weather-pouring"),
+            ("joy", "mdi-emoticon"),
+            ("love", "mdi-heart"),
+            ("nervousness", "mdi-alert"),
+            ("optimism", "mdi-leaf"),
+            ("pride", "mdi-emoticon-cool"),
+            ("realization", "mdi-lightbulb-outline"),
+            ("relief", "mdi-weather-sunset-up"),
+            ("remorse", "mdi-ambulance"),
+            ("sadness", "mdi-emoticon-sad"),
+            ("surprise", "mdi-wallet-giftcard"),
+            ("trust", "mdi-brightness-5"),
+        ]
+        
+        session = Session(self.engine)
+        try:
+            created_count = 0
+            for emotion_name, icon in emotions_data:
+                # Check if emotion already exists
+                existing = session.query(Emotion).filter(Emotion.emotion == emotion_name).first()
+                
+                if not existing:
+                    # Create new emotion
+                    emotion_id = str(uuid.uuid4())
+                    emotion = Emotion(
+                        id=emotion_id,
+                        emotion=emotion_name,
+                        icon=icon
+                    )
+                    session.add(emotion)
+                    created_count += 1
+            
+            session.commit()
+            self.logger.info(f"Initialized emotions table: {created_count} new emotions added, {len(emotions_data) - created_count} already existed")
+            return True
+            
+        except Exception as e:
+            session.rollback()
+            self.logger.error(
+                f"Error initializing emotions table: {e}",
+                extra={"extra_data": {"error": str(e)}}
+            )
+            return False
+        finally:
+            session.close()

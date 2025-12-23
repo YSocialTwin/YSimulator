@@ -124,6 +124,9 @@ class OrchestratorServer:
         # Initialize the first round entry
         self.current_round_id = self.db.get_or_create_round(self.day, self.slot)
         self.interest_manager.set_current_round(self.current_round_id)
+        
+        # Initialize emotions table with GoEmotions taxonomy
+        self.db.initialize_emotions_table()
 
         self.logger.info(
             "Orchestrator server initialized",
@@ -223,6 +226,188 @@ class OrchestratorServer:
             str: Topic name or None if not found
         """
         return self.interest_manager.get_topic_name_from_id(topic_id)
+    
+    def _reaction_to_sentiment(self, reaction_type: str) -> Optional[Dict[str, float]]:
+        """
+        Map a reaction type to sentiment values.
+        
+        Converts reaction types (LIKE, LOVE, ANGRY, SAD, LAUGH) to sentiment scores
+        that can be stored in the post_sentiment table.
+        
+        Args:
+            reaction_type: Type of reaction (LIKE, LOVE, ANGRY, SAD, LAUGH, etc.)
+            
+        Returns:
+            dict: Sentiment values with keys: neg, pos, neu, compound
+                  Returns None if reaction type doesn't map to sentiment
+        """
+        # Map reaction types to sentiment
+        # pos=1 for positive reactions, neg=1 for negative, neu=1 for neutral
+        # compound: 1 if pos=1, -1 if neg=1, 0 otherwise
+        reaction_map = {
+            "LIKE": {"pos": 1.0, "neg": 0.0, "neu": 0.0, "compound": 1.0},
+            "LOVE": {"pos": 1.0, "neg": 0.0, "neu": 0.0, "compound": 1.0},
+            "LAUGH": {"pos": 1.0, "neg": 0.0, "neu": 0.0, "compound": 1.0},
+            "ANGRY": {"pos": 0.0, "neg": 1.0, "neu": 0.0, "compound": -1.0},
+            "SAD": {"pos": 0.0, "neg": 1.0, "neu": 0.0, "compound": -1.0},
+        }
+        
+        result = reaction_map.get(reaction_type.upper())
+        if result:
+            self.logger.info(f"Mapped reaction {reaction_type} to sentiment: compound={result['compound']}")
+        else:
+            self.logger.debug(f"Reaction type {reaction_type} not mapped to sentiment (e.g., IGNORE)")
+        return result
+    
+    def _process_annotations(
+        self, 
+        post_id: str, 
+        user_id: str, 
+        annotations: dict, 
+        is_post: bool = False, 
+        is_comment: bool = False,
+        parent_post_id: Optional[str] = None,
+        parent_sentiment: Optional[float] = None
+    ):
+        """
+        Process text annotations for a post or comment.
+        
+        Handles:
+        - Hashtags: Add to hashtags table and link to post
+        - Mentions: Validate users and add to mentions table
+        - Sentiment: Compute and store sentiment data per topic
+        - Toxicity: Store toxicity scores
+        
+        Args:
+            post_id: UUID of the post/comment
+            user_id: UUID of the user who created the post/comment
+            annotations: Dict with annotation data:
+                - 'hashtags': List[str] - Hashtag text without # prefix
+                - 'mentions': List[str] - Usernames without @ prefix
+                - 'sentiment': Dict[str, float] or None - VADER sentiment scores 
+                  with keys: 'neg', 'pos', 'neu', 'compound'
+                - 'toxicity': Dict[str, float] or None - Perspective API scores
+                  with keys: 'TOXICITY', 'SEVERE_TOXICITY', 'IDENTITY_ATTACK',
+                  'INSULT', 'PROFANITY', 'THREAT', 'SEXUALLY_EXPLICIT', 'FLIRTATION'
+            is_post: Whether this is a post (not a comment)
+            is_comment: Whether this is a comment
+            parent_post_id: UUID of parent post (for comments)
+            parent_sentiment: Compound sentiment of parent post (for comments)
+        """
+        self.logger.info(f"_process_annotations called for post {post_id}: has_hashtags={bool(annotations.get('hashtags'))}, has_mentions={bool(annotations.get('mentions'))}, has_sentiment={bool(annotations.get('sentiment'))}, has_toxicity={bool(annotations.get('toxicity'))}, has_emotions={bool(annotations.get('emotions'))}")
+        
+        # Process hashtags
+        hashtags = annotations.get("hashtags", [])
+        for hashtag_text in hashtags:
+            # Get or create hashtag
+            hashtag_id = self.db.add_or_get_hashtag(hashtag_text)
+            if hashtag_id:
+                # Link hashtag to post
+                self.db.add_post_hashtag(post_id, hashtag_id)
+                self.logger.info(f"Linked hashtag '{hashtag_text}' to post {post_id}")
+        
+        # Process mentions
+        mentions = annotations.get("mentions", [])
+        for username in mentions:
+            # Check if user exists
+            mentioned_user = self.db.get_user_by_username(username)
+            if mentioned_user:
+                # Add mention entry
+                mention_data = {
+                    "user_id": mentioned_user["id"],
+                    "post_id": post_id,
+                    "round": self.current_round_id,
+                    "answered": 0
+                }
+                self.db.add_mention(mention_data)
+                self.logger.info(f"Added mention of @{username} in post {post_id}")
+            else:
+                self.logger.warning(f"Mentioned user @{username} not found in database")
+        
+        # Process sentiment
+        sentiment_scores = annotations.get("sentiment")
+        if sentiment_scores:
+            self.logger.info(f"Processing sentiment for post {post_id}: compound={sentiment_scores.get('compound', 0):.3f}")
+            # Get topics associated with this post/comment
+            topic_ids = self.db.get_post_topics(post_id)
+            
+            # If comment without topics yet, get parent's topics
+            if not topic_ids and parent_post_id:
+                topic_ids = self.db.get_post_topics(parent_post_id)
+                if topic_ids:
+                    self.logger.info(f"Using {len(topic_ids)} topics from parent post {parent_post_id} for comment {post_id}")
+            
+            if not topic_ids:
+                self.logger.warning(f"No topics found for post {post_id}, skipping sentiment storage. Sentiment data will not be saved.")
+            
+            # Create sentiment entry for each topic
+            for topic_id in topic_ids:
+                sentiment_data = {
+                    "post_id": post_id,
+                    "user_id": user_id,
+                    "topic_id": topic_id,
+                    "round": self.current_round_id,
+                    "neg": sentiment_scores.get("neg"),
+                    "pos": sentiment_scores.get("pos"),
+                    "neu": sentiment_scores.get("neu"),
+                    "compound": sentiment_scores.get("compound"),
+                    "sentiment_parent": parent_sentiment,
+                    "is_post": 1 if is_post else 0,
+                    "is_comment": 1 if is_comment else 0,
+                    "is_reaction": 0
+                }
+                success = self.db.add_post_sentiment(sentiment_data)
+                if success:
+                    self.logger.info(f"Added sentiment entry for post {post_id}, topic {topic_id}")
+                else:
+                    self.logger.error(f"Failed to add sentiment entry for post {post_id}, topic {topic_id}")
+            
+            if topic_ids:
+                self.logger.info(f"Successfully added sentiment for post {post_id} across {len(topic_ids)} topics")
+        else:
+            self.logger.debug(f"No sentiment data in annotations for post {post_id}")
+        
+        # Process toxicity
+        toxicity_scores = annotations.get("toxicity")
+        if toxicity_scores:
+            self.logger.info(f"Processing toxicity for post {post_id}: TOXICITY={toxicity_scores.get('TOXICITY', 0):.3f}")
+            toxicity_data = {
+                "post_id": post_id,
+                "toxicity": toxicity_scores.get("TOXICITY", 0.0),
+                "severe_toxicity": toxicity_scores.get("SEVERE_TOXICITY", 0.0),
+                "identity_attack": toxicity_scores.get("IDENTITY_ATTACK", 0.0),
+                "insult": toxicity_scores.get("INSULT", 0.0),
+                "profanity": toxicity_scores.get("PROFANITY", 0.0),
+                "threat": toxicity_scores.get("THREAT", 0.0),
+                "sexually_explicit": toxicity_scores.get("SEXUALLY_EXPLICIT", 0.0),
+                "flirtation": toxicity_scores.get("FLIRTATION", 0.0)
+            }
+            success = self.db.add_post_toxicity(toxicity_data)
+            if success:
+                self.logger.info(f"Successfully added toxicity data for post {post_id}")
+            else:
+                self.logger.error(f"Failed to add toxicity data for post {post_id}")
+        else:
+            self.logger.debug(f"No toxicity data in annotations for post {post_id}")
+        
+        # Process emotions
+        emotions = annotations.get("emotions")
+        if emotions:
+            self.logger.info(f"Processing emotions for post {post_id}: {emotions}")
+            for emotion_name in emotions:
+                # Get emotion from database
+                emotion = self.db.get_emotion_by_name(emotion_name)
+                if emotion:
+                    # Add post emotion association
+                    success = self.db.add_post_emotion(post_id, emotion["id"])
+                    if success:
+                        self.logger.info(f"Added emotion '{emotion_name}' to post {post_id}")
+                    else:
+                        self.logger.error(f"Failed to add emotion '{emotion_name}' to post {post_id}")
+                else:
+                    self.logger.warning(f"Emotion '{emotion_name}' not found in database for post {post_id}")
+        else:
+            self.logger.debug(f"No emotion data in annotations for post {post_id}")
     
     def _recompute_all_agent_interests(self):
         """
@@ -845,6 +1030,10 @@ class OrchestratorServer:
                                 
                                 # Increment the agent's interest counter for this topic
                                 self._update_agent_interest_counter(act.agent_id, act.topic, increment=1)
+                        
+                        # Process annotations AFTER topics are assigned
+                        if hasattr(act, 'annotations') and act.annotations:
+                            self._process_annotations(post_id, act.agent_id, act.annotations, is_post=True, is_comment=False)
                     else:
                         self.logger.warning(
                             f"Failed to add post for agent {act.agent_id}",
@@ -878,6 +1067,33 @@ class OrchestratorServer:
                         post_id = self.db.add_post(post_data)
                         if post_id:
                             new_ids.append(post_id)
+                            
+                            # Process annotations if provided
+                            if hasattr(act, 'annotations') and act.annotations:
+                                # Get parent post sentiment for sentiment_parent field
+                                parent_sentiment = None
+                                if parent_post:
+                                    # Query database to get sentiment of parent post
+                                    parent_sentiment_data = self.db.get_post_sentiment(act.target_post_id)
+                                    if parent_sentiment_data is not None:
+                                        sentiment_parent_compound = parent_sentiment_data.get("compound")
+                                        if sentiment_parent_compound is not None:
+                                            # Apply thresholding
+                                            if sentiment_parent_compound > 0.05:
+                                                parent_sentiment = "pos"
+                                            elif sentiment_parent_compound < -0.05:
+                                                parent_sentiment = "neg"
+                                            else:
+                                                parent_sentiment = "neu"
+                                            self.logger.info(f"Parent sentiment for comment {post_id}: compound={sentiment_parent_compound:.3f} -> {parent_sentiment}")
+                                        else:
+                                            parent_sentiment = ""
+                                            self.logger.debug(f"Parent sentiment compound is None for post {act.target_post_id}")
+                                    else:
+                                        parent_sentiment = ""
+                                        self.logger.debug(f"No sentiment data found for parent post {act.target_post_id}")
+                                
+                                self._process_annotations(post_id, act.agent_id, act.annotations, is_post=False, is_comment=True, parent_post_id=act.target_post_id, parent_sentiment=parent_sentiment)
                             
                             # When commenting on a post, save the post's topics as user interests
                             parent_post_id = act.target_post_id
@@ -966,7 +1182,7 @@ class OrchestratorServer:
                         )
                 
                 else:
-                    # Other interactions (LIKE, etc.)
+                    # Other interactions (LIKE, LOVE, ANGRY, SAD, LAUGH, etc.)
                     interaction_data = {
                         "user_id": str(act.agent_id),  # FK to user_mgmt.id (UUID string)
                         "post_id": act.target_post_id,  # FK to post.id (UUID string)
@@ -974,6 +1190,64 @@ class OrchestratorServer:
                         "round": self.current_round_id,  # FK to rounds.id
                     }
                     self.db.add_interaction(interaction_data)
+                    
+                    # Save sentiment for reactions
+                    # Get the post being reacted to
+                    reacted_post = self.db.get_post(act.target_post_id)
+                    if reacted_post:
+                        # Get topics from the reacted post
+                        topic_ids = self.db.get_post_topics(act.target_post_id)
+                        
+                        if topic_ids:
+                            # Map reaction type to sentiment values
+                            sentiment_values = self._reaction_to_sentiment(act.action_type)
+                            
+                            if sentiment_values:
+                                # Get parent post sentiment for sentiment_parent field
+                                parent_sentiment = None
+                                parent_sentiment_data = self.db.get_post_sentiment(act.target_post_id)
+                                if parent_sentiment_data is not None:
+                                    sentiment_parent_compound = parent_sentiment_data.get("compound")
+                                    if sentiment_parent_compound is not None:
+                                        # Apply thresholding
+                                        if sentiment_parent_compound > 0.05:
+                                            parent_sentiment = "pos"
+                                        elif sentiment_parent_compound < -0.05:
+                                            parent_sentiment = "neg"
+                                        else:
+                                            parent_sentiment = "neu"
+                                        self.logger.info(f"Parent sentiment for reaction on post {act.target_post_id}: compound={sentiment_parent_compound:.3f} -> {parent_sentiment}")
+                                    else:
+                                        parent_sentiment = ""
+                                else:
+                                    parent_sentiment = ""
+                                
+                                # Create sentiment entries for each topic
+                                for topic_id in topic_ids:
+                                    sentiment_data = {
+                                        "post_id": act.target_post_id,
+                                        "user_id": str(act.agent_id),
+                                        "topic_id": topic_id,
+                                        "round": self.current_round_id,
+                                        "neg": sentiment_values["neg"],
+                                        "pos": sentiment_values["pos"],
+                                        "neu": sentiment_values["neu"],
+                                        "compound": sentiment_values["compound"],
+                                        "sentiment_parent": parent_sentiment,
+                                        "is_post": 0,
+                                        "is_comment": 0,
+                                        "is_reaction": 1
+                                    }
+                                    success = self.db.add_post_sentiment(sentiment_data)
+                                    if success:
+                                        self.logger.info(f"Added reaction sentiment for {act.action_type} on post {act.target_post_id}, topic {topic_id}")
+                                    else:
+                                        self.logger.error(f"Failed to add reaction sentiment for {act.action_type} on post {act.target_post_id}, topic {topic_id}")
+                        else:
+                            self.logger.debug(f"No topics found for reacted post {act.target_post_id}, skipping reaction sentiment")
+                    else:
+                        self.logger.warning(f"Reacted post {act.target_post_id} not found")
+
 
             if new_ids:
                 self.recent_posts_cache.extend(new_ids)

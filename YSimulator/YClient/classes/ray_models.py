@@ -58,6 +58,8 @@ class ActionDTO:
     article_id: Optional[str] = None  # UUID string for news posts
     target_user_id: Optional[str] = None  # UUID string for follow/unfollow actions
     topic: Optional[str] = None  # Topic name for posts
+    # Text annotations (populated by client before submission)
+    annotations: Optional[dict] = None  # Dict with 'hashtags', 'mentions', 'sentiment', 'toxicity'
 
 
 @dataclass
