@@ -1783,6 +1783,56 @@ class DatabaseMiddleware:
         finally:
             session.close()
 
+    def get_post_sentiment(self, post_id: str) -> Optional[Dict[str, Any]]:
+        """
+        Get sentiment data for a post/comment.
+        
+        Returns the first sentiment entry found for the post.
+        Since posts can have multiple sentiment entries (one per topic),
+        this returns the first one found.
+        
+        Args:
+            post_id: UUID of the post/comment
+            
+        Returns:
+            dict: Sentiment data with keys: id, post_id, neg, pos, neu, compound, etc.
+                  or None if no sentiment found
+        """
+        from YSimulator.YServer.classes.models import PostSentiment
+        
+        session = Session(self.engine)
+        try:
+            sentiment = session.query(PostSentiment).filter(
+                PostSentiment.post_id == post_id
+            ).first()
+            
+            if sentiment:
+                return {
+                    "id": sentiment.id,
+                    "post_id": sentiment.post_id,
+                    "user_id": sentiment.user_id,
+                    "topic_id": sentiment.topic_id,
+                    "round": sentiment.round,
+                    "neg": sentiment.neg,
+                    "pos": sentiment.pos,
+                    "neu": sentiment.neu,
+                    "compound": sentiment.compound,
+                    "sentiment_parent": sentiment.sentiment_parent,
+                    "is_post": sentiment.is_post,
+                    "is_comment": sentiment.is_comment,
+                    "is_reaction": sentiment.is_reaction
+                }
+            return None
+            
+        except Exception as e:
+            self.logger.error(
+                f"Error getting post sentiment: {e}",
+                extra={"extra_data": {"error": str(e), "post_id": post_id}}
+            )
+            return None
+        finally:
+            session.close()
+
     def add_post_sentiment(self, sentiment_data: Dict[str, Any]) -> bool:
         """
         Add sentiment analysis data for a post/comment.

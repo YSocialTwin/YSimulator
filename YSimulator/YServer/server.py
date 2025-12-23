@@ -1040,10 +1040,27 @@ class OrchestratorServer:
                             if hasattr(act, 'annotations') and act.annotations:
                                 # Get parent post sentiment for sentiment_parent field
                                 parent_sentiment = None
-                                if parent_post and parent_post.get("tweet"):
-                                    # We could compute parent sentiment here, or retrieve if already stored
-                                    # For now, we'll pass None and compute it if needed
-                                    parent_sentiment = None
+                                if parent_post:
+                                    # Query database to get sentiment of parent post
+                                    parent_sentiment_data = self.db.get_post_sentiment(act.target_post_id)
+                                    if parent_sentiment_data is not None:
+                                        sentiment_parent_compound = parent_sentiment_data.get("compound")
+                                        if sentiment_parent_compound is not None:
+                                            # Apply thresholding
+                                            if sentiment_parent_compound > 0.05:
+                                                parent_sentiment = "pos"
+                                            elif sentiment_parent_compound < -0.05:
+                                                parent_sentiment = "neg"
+                                            else:
+                                                parent_sentiment = "neu"
+                                            self.logger.info(f"Parent sentiment for comment {post_id}: compound={sentiment_parent_compound:.3f} -> {parent_sentiment}")
+                                        else:
+                                            parent_sentiment = ""
+                                            self.logger.debug(f"Parent sentiment compound is None for post {act.target_post_id}")
+                                    else:
+                                        parent_sentiment = ""
+                                        self.logger.debug(f"No sentiment data found for parent post {act.target_post_id}")
+                                
                                 self._process_annotations(post_id, act.agent_id, act.annotations, is_post=False, is_comment=True, parent_post_id=act.target_post_id, parent_sentiment=parent_sentiment)
                             
                             # When commenting on a post, save the post's topics as user interests
