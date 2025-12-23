@@ -124,6 +124,9 @@ class OrchestratorServer:
         # Initialize the first round entry
         self.current_round_id = self.db.get_or_create_round(self.day, self.slot)
         self.interest_manager.set_current_round(self.current_round_id)
+        
+        # Initialize emotions table with GoEmotions taxonomy
+        self.db.initialize_emotions_table()
 
         self.logger.info(
             "Orchestrator server initialized",
@@ -259,7 +262,7 @@ class OrchestratorServer:
             parent_post_id: UUID of parent post (for comments)
             parent_sentiment: Compound sentiment of parent post (for comments)
         """
-        self.logger.info(f"_process_annotations called for post {post_id}: has_hashtags={bool(annotations.get('hashtags'))}, has_mentions={bool(annotations.get('mentions'))}, has_sentiment={bool(annotations.get('sentiment'))}, has_toxicity={bool(annotations.get('toxicity'))}")
+        self.logger.info(f"_process_annotations called for post {post_id}: has_hashtags={bool(annotations.get('hashtags'))}, has_mentions={bool(annotations.get('mentions'))}, has_sentiment={bool(annotations.get('sentiment'))}, has_toxicity={bool(annotations.get('toxicity'))}, has_emotions={bool(annotations.get('emotions'))}")
         
         # Process hashtags
         hashtags = annotations.get("hashtags", [])
@@ -354,6 +357,25 @@ class OrchestratorServer:
                 self.logger.error(f"Failed to add toxicity data for post {post_id}")
         else:
             self.logger.debug(f"No toxicity data in annotations for post {post_id}")
+        
+        # Process emotions
+        emotions = annotations.get("emotions")
+        if emotions:
+            self.logger.info(f"Processing emotions for post {post_id}: {emotions}")
+            for emotion_name in emotions:
+                # Get emotion from database
+                emotion = self.db.get_emotion_by_name(emotion_name)
+                if emotion:
+                    # Add post emotion association
+                    success = self.db.add_post_emotion(post_id, emotion["id"])
+                    if success:
+                        self.logger.info(f"Added emotion '{emotion_name}' to post {post_id}")
+                    else:
+                        self.logger.error(f"Failed to add emotion '{emotion_name}' to post {post_id}")
+                else:
+                    self.logger.warning(f"Emotion '{emotion_name}' not found in database for post {post_id}")
+        else:
+            self.logger.debug(f"No emotion data in annotations for post {post_id}")
     
     def _recompute_all_agent_interests(self):
         """

@@ -161,6 +161,7 @@ class SimulationClient:
         self.enable_sentiment = simulation_config["simulation"].get("enable_sentiment", False)
         self.enable_toxicity = simulation_config["simulation"].get("enable_toxicity", False)
         self.perspective_api_key = simulation_config["simulation"].get("perspective_api_key", None)
+        self.enable_emotions = simulation_config["simulation"].get("emotion_annotation", False)
 
         # Create agents from configuration
         self.agent_profiles = []
@@ -1045,7 +1046,7 @@ class SimulationClient:
 
     def _annotate_action_content(self, action: ActionDTO) -> None:
         """
-        Annotate the content of an action with hashtags, mentions, sentiment, and toxicity.
+        Annotate the content of an action with hashtags, mentions, sentiment, toxicity, and emotions.
         
         This helper method avoids code duplication when annotating rule-based posts and comments.
         Modifies the action in-place by setting its annotations field.
@@ -1058,10 +1059,12 @@ class SimulationClient:
                 action.content,
                 enable_sentiment=self.enable_sentiment,
                 enable_toxicity=self.enable_toxicity,
-                perspective_api_key=self.perspective_api_key
+                perspective_api_key=self.perspective_api_key,
+                enable_emotions=self.enable_emotions,
+                llm_handle=self.llm
             )
             action.annotations = annotations
-            self.logger.info(f"Annotated action content: has_sentiment={bool(annotations.get('sentiment'))}, has_toxicity={bool(annotations.get('toxicity'))}, hashtags={len(annotations.get('hashtags', []))}, mentions={len(annotations.get('mentions', []))}")
+            self.logger.info(f"Annotated action content: has_sentiment={bool(annotations.get('sentiment'))}, has_toxicity={bool(annotations.get('toxicity'))}, has_emotions={bool(annotations.get('emotions'))}, hashtags={len(annotations.get('hashtags', []))}, mentions={len(annotations.get('mentions', []))}")
 
     def _handle_post_action(self, agent, agent_type, day, slot, pending_llm_posts, actions):
         """Handle post action for an agent."""
@@ -1518,10 +1521,12 @@ class SimulationClient:
                 res_txt,
                 enable_sentiment=self.enable_sentiment,
                 enable_toxicity=self.enable_toxicity,
-                perspective_api_key=self.perspective_api_key
+                perspective_api_key=self.perspective_api_key,
+                enable_emotions=self.enable_emotions,
+                llm_handle=self.llm
             )
             action.annotations = annotations
-            self.logger.info(f"LLM post annotated for agent {a_id}: has_sentiment={bool(annotations.get('sentiment'))}, has_toxicity={bool(annotations.get('toxicity'))}, hashtags={len(annotations.get('hashtags', []))}, mentions={len(annotations.get('mentions', []))}")
+            self.logger.info(f"LLM post annotated for agent {a_id}: has_sentiment={bool(annotations.get('sentiment'))}, has_toxicity={bool(annotations.get('toxicity'))}, has_emotions={bool(annotations.get('emotions'))}, hashtags={len(annotations.get('hashtags', []))}, mentions={len(annotations.get('mentions', []))}")
             
             # Check if the fourth element is an article_id (UUID format) or a topic (string)
             if topic_or_article:
@@ -1569,9 +1574,11 @@ class SimulationClient:
                     res_act,
                     enable_sentiment=self.enable_sentiment,
                     enable_toxicity=self.enable_toxicity,
-                    perspective_api_key=self.perspective_api_key
+                    perspective_api_key=self.perspective_api_key,
+                    enable_emotions=self.enable_emotions,
+                    llm_handle=self.llm
                 )
-                self.logger.info(f"LLM comment annotated for agent {a_id}: has_sentiment={bool(annotations.get('sentiment'))}, has_toxicity={bool(annotations.get('toxicity'))}, hashtags={len(annotations.get('hashtags', []))}, mentions={len(annotations.get('mentions', []))}")
+                self.logger.info(f"LLM comment annotated for agent {a_id}: has_sentiment={bool(annotations.get('sentiment'))}, has_toxicity={bool(annotations.get('toxicity'))}, has_emotions={bool(annotations.get('emotions'))}, hashtags={len(annotations.get('hashtags', []))}, mentions={len(annotations.get('mentions', []))}")
                 action = ActionDTO(a_id, cid, "COMMENT", content=res_act, target_post_id=target, annotations=annotations)
                 actions.append(action)
                 # Track for secondary follow (comment action)

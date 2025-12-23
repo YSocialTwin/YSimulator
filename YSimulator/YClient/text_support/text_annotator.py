@@ -6,6 +6,7 @@ This module provides functions to extract and annotate text content with:
 - User mentions
 - Sentiment analysis
 - Toxicity scores
+- Emotions
 """
 
 from typing import Dict, List, Optional
@@ -17,21 +18,26 @@ def annotate_text(
     text: str,
     enable_sentiment: bool = True,
     enable_toxicity: bool = False,
-    perspective_api_key: Optional[str] = None
+    perspective_api_key: Optional[str] = None,
+    enable_emotions: bool = False,
+    llm_handle = None
 ) -> Dict:
     """
-    Annotate text with hashtags, mentions, sentiment, and toxicity.
+    Annotate text with hashtags, mentions, sentiment, toxicity, and emotions.
     
     Uses existing methods from cleaning.py and annotations.py:
     - extract_components() for hashtags and mentions
     - vader_sentiment() for sentiment analysis
     - toxicity() for toxicity scores
+    - LLM for emotion extraction (GoEmotions taxonomy)
     
     Args:
         text: The text to annotate
         enable_sentiment: Whether to compute sentiment (default: True)
         enable_toxicity: Whether to compute toxicity (default: False)
         perspective_api_key: API key for Perspective API toxicity analysis
+        enable_emotions: Whether to extract emotions using LLM (default: False)
+        llm_handle: Ray actor handle for LLM service (required if enable_emotions=True)
         
     Returns:
         dict: Annotations containing:
@@ -39,6 +45,7 @@ def annotate_text(
             - mentions: List of mentioned usernames (without @)
             - sentiment: Dict with neg, pos, neu, compound scores (if enabled)
             - toxicity: Dict with toxicity scores (if enabled)
+            - emotions: List of emotion names from GoEmotions taxonomy (if enabled)
     """
     annotations = {}
     
@@ -65,6 +72,18 @@ def annotate_text(
         annotations["toxicity"] = toxicity(text, perspective_api_key)
     else:
         annotations["toxicity"] = None
+    
+    # Extract emotions if enabled using LLM
+    if enable_emotions and llm_handle:
+        try:
+            import ray
+            emotions = ray.get(llm_handle.extract_emotions.remote(text))
+            annotations["emotions"] = emotions if emotions else []
+        except Exception as e:
+            # If emotion extraction fails, return empty list
+            annotations["emotions"] = []
+    else:
+        annotations["emotions"] = None
     
     return annotations
 

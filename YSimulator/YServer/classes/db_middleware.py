@@ -1873,3 +1873,158 @@ class DatabaseMiddleware:
             return False
         finally:
             session.close()
+
+    def get_emotion_by_name(self, emotion_name: str) -> Optional[Dict[str, Any]]:
+        """
+        Get an emotion by its name.
+        
+        Args:
+            emotion_name: Name of the emotion (e.g., "joy", "anger")
+            
+        Returns:
+            dict: Emotion data with 'id', 'emotion', 'icon' fields, or None if not found
+        """
+        from YSimulator.YServer.classes.models import Emotion
+        
+        session = Session(self.engine)
+        try:
+            emotion = session.query(Emotion).filter(Emotion.emotion == emotion_name).first()
+            
+            if emotion:
+                return {
+                    "id": emotion.id,
+                    "emotion": emotion.emotion,
+                    "icon": emotion.icon
+                }
+            return None
+            
+        except Exception as e:
+            self.logger.error(
+                f"Error getting emotion by name: {e}",
+                extra={"extra_data": {"error": str(e), "emotion_name": emotion_name}}
+            )
+            return None
+        finally:
+            session.close()
+
+    def add_post_emotion(self, post_id: str, emotion_id: str) -> bool:
+        """
+        Add an emotion association to a post.
+        
+        Args:
+            post_id: UUID of the post/comment
+            emotion_id: UUID of the emotion
+            
+        Returns:
+            bool: True if successful, False otherwise
+        """
+        from YSimulator.YServer.classes.models import PostEmotion
+        import uuid
+        
+        session = Session(self.engine)
+        try:
+            # Check if already exists
+            existing = session.query(PostEmotion).filter(
+                PostEmotion.post_id == post_id,
+                PostEmotion.emotion_id == emotion_id
+            ).first()
+            
+            if existing:
+                return True  # Already exists
+            
+            # Create post emotion record
+            post_emotion_id = str(uuid.uuid4())
+            post_emotion = PostEmotion(
+                id=post_emotion_id,
+                post_id=post_id,
+                emotion_id=emotion_id
+            )
+            session.add(post_emotion)
+            session.commit()
+            return True
+            
+        except Exception as e:
+            session.rollback()
+            self.logger.error(
+                f"Error adding post emotion: {e}",
+                extra={"extra_data": {"error": str(e), "post_id": post_id, "emotion_id": emotion_id}}
+            )
+            return False
+        finally:
+            session.close()
+
+    def initialize_emotions_table(self) -> bool:
+        """
+        Initialize the emotions table with the GoEmotions taxonomy.
+        
+        This creates all 28 emotions from the taxonomy if they don't already exist.
+        
+        Returns:
+            bool: True if successful, False otherwise
+        """
+        from YSimulator.YServer.classes.models import Emotion
+        import uuid
+        
+        # GoEmotions taxonomy with icon mappings
+        emotions_data = [
+            ("amusement", "mdi-emoticon-happy"),
+            ("admiration", "mdi-weather-sunny"),
+            ("anger", "mdi-emoticon-devil"),
+            ("annoyance", "mdi-emoticon-tongue"),
+            ("approval", "mdi-thumb-up-outline"),
+            ("caring", "mdi-cake"),
+            ("confusion", "mdi-emoticon-neutral"),
+            ("curiosity", "mdi-beaker-outline"),
+            ("desire", "mdi-cash-multiple"),
+            ("disappointment", "mdi-close-circle"),
+            ("disapproval", "mdi-thumb-down-outline"),
+            ("disgust", "mdi-emoticon-poop"),
+            ("embarrassment", "mdi-minus-circle"),
+            ("excitement", "mdi-rocket"),
+            ("fear", "mdi-weather-lightning"),
+            ("gratitude", "mdi-panda"),
+            ("grief", "mdi-weather-pouring"),
+            ("joy", "mdi-emoticon"),
+            ("love", "mdi-heart"),
+            ("nervousness", "mdi-alert"),
+            ("optimism", "mdi-leaf"),
+            ("pride", "mdi-emoticon-cool"),
+            ("realization", "mdi-lightbulb-outline"),
+            ("relief", "mdi-weather-sunset-up"),
+            ("remorse", "mdi-ambulance"),
+            ("sadness", "mdi-emoticon-sad"),
+            ("surprise", "mdi-wallet-giftcard"),
+            ("trust", "mdi-brightness-5"),
+        ]
+        
+        session = Session(self.engine)
+        try:
+            created_count = 0
+            for emotion_name, icon in emotions_data:
+                # Check if emotion already exists
+                existing = session.query(Emotion).filter(Emotion.emotion == emotion_name).first()
+                
+                if not existing:
+                    # Create new emotion
+                    emotion_id = str(uuid.uuid4())
+                    emotion = Emotion(
+                        id=emotion_id,
+                        emotion=emotion_name,
+                        icon=icon
+                    )
+                    session.add(emotion)
+                    created_count += 1
+            
+            session.commit()
+            self.logger.info(f"Initialized emotions table: {created_count} new emotions added, {len(emotions_data) - created_count} already existed")
+            return True
+            
+        except Exception as e:
+            session.rollback()
+            self.logger.error(
+                f"Error initializing emotions table: {e}",
+                extra={"extra_data": {"error": str(e)}}
+            )
+            return False
+        finally:
+            session.close()
