@@ -227,6 +227,38 @@ class OrchestratorServer:
         """
         return self.interest_manager.get_topic_name_from_id(topic_id)
     
+    def _reaction_to_sentiment(self, reaction_type: str) -> Optional[Dict[str, float]]:
+        """
+        Map a reaction type to sentiment values.
+        
+        Converts reaction types (LIKE, LOVE, ANGRY, SAD, LAUGH) to sentiment scores
+        that can be stored in the post_sentiment table.
+        
+        Args:
+            reaction_type: Type of reaction (LIKE, LOVE, ANGRY, SAD, LAUGH, etc.)
+            
+        Returns:
+            dict: Sentiment values with keys: neg, pos, neu, compound
+                  Returns None if reaction type doesn't map to sentiment
+        """
+        # Map reaction types to sentiment
+        # pos=1 for positive reactions, neg=1 for negative, neu=1 for neutral
+        # compound: 1 if pos=1, -1 if neg=1, 0 otherwise
+        reaction_map = {
+            "LIKE": {"pos": 1.0, "neg": 0.0, "neu": 0.0, "compound": 1.0},
+            "LOVE": {"pos": 1.0, "neg": 0.0, "neu": 0.0, "compound": 1.0},
+            "LAUGH": {"pos": 1.0, "neg": 0.0, "neu": 0.0, "compound": 1.0},
+            "ANGRY": {"pos": 0.0, "neg": 1.0, "neu": 0.0, "compound": -1.0},
+            "SAD": {"pos": 0.0, "neg": 1.0, "neu": 0.0, "compound": -1.0},
+        }
+        
+        result = reaction_map.get(reaction_type.upper())
+        if result:
+            self.logger.info(f"Mapped reaction {reaction_type} to sentiment: compound={result['compound']}")
+        else:
+            self.logger.debug(f"Reaction type {reaction_type} not mapped to sentiment (e.g., IGNORE)")
+        return result
+    
     def _process_annotations(
         self, 
         post_id: str, 
@@ -1150,7 +1182,7 @@ class OrchestratorServer:
                         )
                 
                 else:
-                    # Other interactions (LIKE, etc.)
+                    # Other interactions (LIKE, LOVE, ANGRY, SAD, LAUGH, etc.)
                     interaction_data = {
                         "user_id": str(act.agent_id),  # FK to user_mgmt.id (UUID string)
                         "post_id": act.target_post_id,  # FK to post.id (UUID string)
@@ -1158,6 +1190,64 @@ class OrchestratorServer:
                         "round": self.current_round_id,  # FK to rounds.id
                     }
                     self.db.add_interaction(interaction_data)
+                    
+                    # Save sentiment for reactions
+                    # Get the post being reacted to
+                    reacted_post = self.db.get_post(act.target_post_id)
+                    if reacted_post:
+                        # Get topics from the reacted post
+                        topic_ids = self.db.get_post_topics(act.target_post_id)
+                        
+                        if topic_ids:
+                            # Map reaction type to sentiment values
+                            sentiment_values = self._reaction_to_sentiment(act.action_type)
+                            
+                            if sentiment_values:
+                                # Get parent post sentiment for sentiment_parent field
+                                parent_sentiment = None
+                                parent_sentiment_data = self.db.get_post_sentiment(act.target_post_id)
+                                if parent_sentiment_data is not None:
+                                    sentiment_parent_compound = parent_sentiment_data.get("compound")
+                                    if sentiment_parent_compound is not None:
+                                        # Apply thresholding
+                                        if sentiment_parent_compound > 0.05:
+                                            parent_sentiment = "pos"
+                                        elif sentiment_parent_compound < -0.05:
+                                            parent_sentiment = "neg"
+                                        else:
+                                            parent_sentiment = "neu"
+                                        self.logger.info(f"Parent sentiment for reaction on post {act.target_post_id}: compound={sentiment_parent_compound:.3f} -> {parent_sentiment}")
+                                    else:
+                                        parent_sentiment = ""
+                                else:
+                                    parent_sentiment = ""
+                                
+                                # Create sentiment entries for each topic
+                                for topic_id in topic_ids:
+                                    sentiment_data = {
+                                        "post_id": act.target_post_id,
+                                        "user_id": str(act.agent_id),
+                                        "topic_id": topic_id,
+                                        "round": self.current_round_id,
+                                        "neg": sentiment_values["neg"],
+                                        "pos": sentiment_values["pos"],
+                                        "neu": sentiment_values["neu"],
+                                        "compound": sentiment_values["compound"],
+                                        "sentiment_parent": parent_sentiment,
+                                        "is_post": 0,
+                                        "is_comment": 0,
+                                        "is_reaction": 1
+                                    }
+                                    success = self.db.add_post_sentiment(sentiment_data)
+                                    if success:
+                                        self.logger.info(f"Added reaction sentiment for {act.action_type} on post {act.target_post_id}, topic {topic_id}")
+                                    else:
+                                        self.logger.error(f"Failed to add reaction sentiment for {act.action_type} on post {act.target_post_id}, topic {topic_id}")
+                        else:
+                            self.logger.debug(f"No topics found for reacted post {act.target_post_id}, skipping reaction sentiment")
+                    else:
+                        self.logger.warning(f"Reacted post {act.target_post_id} not found")
+
 
             if new_ids:
                 self.recent_posts_cache.extend(new_ids)
