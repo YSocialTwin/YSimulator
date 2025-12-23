@@ -1531,9 +1531,6 @@ class SimulationClient:
         # Each entry: (agent_id, cluster_id, post_author_id, post_content, is_llm=False)
         rule_based_interactions = []
         
-        # Track mention IDs that need to be marked as replied (for LLM agents after gathering)
-        pending_mention_replies = []  # List of mention_ids
-        
         # --- SCATTER PHASE: Select and dispatch actions ---
         for agent in active_agents:
             # Determine agent type (llm or rule_based)
@@ -1542,11 +1539,7 @@ class SimulationClient:
             # REPLY PIPELINE: Check for unreplied mentions and reply to one if present
             # This happens BEFORE the agent's normal actions
             # Page agents are excluded from reply pipeline
-            mention_id = self._handle_reply_to_mention(agent, agent_type, pending_llm_reactions, actions)
-            if mention_id and agent_type == "llm":
-                # For LLM agents, we need to mark the mention as replied after gathering the results
-                # The mention_id is stored in the pending_llm_reactions tuple (5th element)
-                pass  # Will be handled in gather phase
+            self._handle_reply_to_mention(agent, agent_type, pending_llm_reactions, actions)
             
             # Sample number of actions for this agent based on daily_activity_level
             # Page agents can perform at most 1 action (0 or 1)

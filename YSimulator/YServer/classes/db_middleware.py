@@ -1872,14 +1872,16 @@ class DatabaseMiddleware:
                     mention_key = self._redis_key("mentions", mention_id)
                     mention_data = self.redis_client.hgetall(mention_key)
                     
-                    if mention_data and int(mention_data.get(b"answered", b"0")) == 0:
-                        # Convert bytes to strings
+                    if mention_data:
+                        # Convert bytes to strings and handle answered field properly
                         mention_dict = {
                             k.decode() if isinstance(k, bytes) else k: 
                             v.decode() if isinstance(v, bytes) else v 
                             for k, v in mention_data.items()
                         }
-                        unreplied_mentions.append(mention_dict)
+                        # Check if unreplied (answered is "0")
+                        if mention_dict.get("answered", "0") == "0":
+                            unreplied_mentions.append(mention_dict)
                 
                 return unreplied_mentions
             else:
