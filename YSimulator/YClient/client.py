@@ -1061,6 +1061,7 @@ class SimulationClient:
                 perspective_api_key=self.perspective_api_key
             )
             action.annotations = annotations
+            self.logger.info(f"Annotated action content: has_sentiment={bool(annotations.get('sentiment'))}, has_toxicity={bool(annotations.get('toxicity'))}, hashtags={len(annotations.get('hashtags', []))}, mentions={len(annotations.get('mentions', []))}")
 
     def _handle_post_action(self, agent, agent_type, day, slot, pending_llm_posts, actions):
         """Handle post action for an agent."""
@@ -1520,6 +1521,7 @@ class SimulationClient:
                 perspective_api_key=self.perspective_api_key
             )
             action.annotations = annotations
+            self.logger.info(f"LLM post annotated for agent {a_id}: has_sentiment={bool(annotations.get('sentiment'))}, has_toxicity={bool(annotations.get('toxicity'))}, hashtags={len(annotations.get('hashtags', []))}, mentions={len(annotations.get('mentions', []))}")
             
             # Check if the fourth element is an article_id (UUID format) or a topic (string)
             if topic_or_article:
@@ -1569,6 +1571,7 @@ class SimulationClient:
                     enable_toxicity=self.enable_toxicity,
                     perspective_api_key=self.perspective_api_key
                 )
+                self.logger.info(f"LLM comment annotated for agent {a_id}: has_sentiment={bool(annotations.get('sentiment'))}, has_toxicity={bool(annotations.get('toxicity'))}, hashtags={len(annotations.get('hashtags', []))}, mentions={len(annotations.get('mentions', []))}")
                 action = ActionDTO(a_id, cid, "COMMENT", content=res_act, target_post_id=target, annotations=annotations)
                 actions.append(action)
                 # Track for secondary follow (comment action)

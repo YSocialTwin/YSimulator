@@ -259,6 +259,8 @@ class OrchestratorServer:
             parent_post_id: UUID of parent post (for comments)
             parent_sentiment: Compound sentiment of parent post (for comments)
         """
+        self.logger.info(f"_process_annotations called for post {post_id}: has_hashtags={bool(annotations.get('hashtags'))}, has_mentions={bool(annotations.get('mentions'))}, has_sentiment={bool(annotations.get('sentiment'))}, has_toxicity={bool(annotations.get('toxicity'))}")
+        
         # Process hashtags
         hashtags = annotations.get("hashtags", [])
         for hashtag_text in hashtags:
