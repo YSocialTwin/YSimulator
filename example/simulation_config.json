@@ -80,7 +80,10 @@
             "explorer": 0.34
         }
     },
-    "emotion_annotation": false
+    "emotion_annotation": false,
+    "enable_sentiment": true,
+    "enable_toxicity": false,
+    "perspective_api_key": null
   },
   "agents": {
         "reading_from_follower_ratio": 0.6,

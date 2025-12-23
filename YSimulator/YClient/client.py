@@ -30,6 +30,7 @@ from YSimulator.YClient.actions import (
     generate_rule_based_news_post,
 )
 from YSimulator.YClient.classes.ray_models import ActionDTO, AgentProfile
+from YSimulator.YClient.text_support.text_annotator import annotate_text
 from YSimulator.YClient.recsys import (
     ContentRecSys,
     ReverseChrono,
@@ -155,6 +156,11 @@ class SimulationClient:
         self.probability_of_secondary_follow = agents_config.get("probability_of_secondary_follow", 0.0)
         self.probability_of_daily_follow = agents_config.get("probability_of_daily_follow", 0.0)
         self.max_length_thread_reading = agents_config.get("max_length_thread_reading", 5)
+
+        # Load text annotation configuration
+        self.enable_sentiment = simulation_config["simulation"].get("enable_sentiment", False)
+        self.enable_toxicity = simulation_config["simulation"].get("enable_toxicity", False)
+        self.perspective_api_key = simulation_config["simulation"].get("perspective_api_key", None)
 
         # Create agents from configuration
         self.agent_profiles = []
@@ -1477,6 +1483,15 @@ class SimulationClient:
             a_id, cid, _, topic_or_article = pending_llm_posts[i]
             action = ActionDTO(a_id, cid, "POST", content=res_txt)
             
+            # Annotate the post text
+            annotations = annotate_text(
+                res_txt,
+                enable_sentiment=self.enable_sentiment,
+                enable_toxicity=self.enable_toxicity,
+                perspective_api_key=self.perspective_api_key
+            )
+            action.annotations = annotations
+            
             # Check if the fourth element is an article_id (UUID format) or a topic (string)
             if topic_or_article:
                 # Try to parse as UUID - if successful, it's an article_id
@@ -1518,7 +1533,15 @@ class SimulationClient:
             # Check if result is a comment (text) or a reaction type
             if res_act and res_act.upper() not in REACTION_TYPES:
                 # This is a comment text from LLM
-                actions.append(ActionDTO(a_id, cid, "COMMENT", content=res_act, target_post_id=target))
+                # Annotate the comment text
+                annotations = annotate_text(
+                    res_act,
+                    enable_sentiment=self.enable_sentiment,
+                    enable_toxicity=self.enable_toxicity,
+                    perspective_api_key=self.perspective_api_key
+                )
+                action = ActionDTO(a_id, cid, "COMMENT", content=res_act, target_post_id=target, annotations=annotations)
+                actions.append(action)
                 # Track for secondary follow (comment action)
                 post_data = ray.get(self.server.get_post.remote(target))
                 if post_data:

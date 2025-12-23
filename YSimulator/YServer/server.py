@@ -224,6 +224,110 @@ class OrchestratorServer:
         """
         return self.interest_manager.get_topic_name_from_id(topic_id)
     
+    def _process_annotations(
+        self, 
+        post_id: str, 
+        user_id: str, 
+        annotations: dict, 
+        is_post: bool = False, 
+        is_comment: bool = False,
+        parent_post_id: Optional[str] = None,
+        parent_sentiment: Optional[float] = None
+    ):
+        """
+        Process text annotations for a post or comment.
+        
+        Handles:
+        - Hashtags: Add to hashtags table and link to post
+        - Mentions: Validate users and add to mentions table
+        - Sentiment: Compute and store sentiment data per topic
+        - Toxicity: Store toxicity scores
+        
+        Args:
+            post_id: UUID of the post/comment
+            user_id: UUID of the user who created the post/comment
+            annotations: Dict with 'hashtags', 'mentions', 'sentiment', 'toxicity'
+            is_post: Whether this is a post (not a comment)
+            is_comment: Whether this is a comment
+            parent_post_id: UUID of parent post (for comments)
+            parent_sentiment: Compound sentiment of parent post (for comments)
+        """
+        # Process hashtags
+        hashtags = annotations.get("hashtags", [])
+        for hashtag_text in hashtags:
+            # Get or create hashtag
+            hashtag_id = self.db.add_or_get_hashtag(hashtag_text)
+            if hashtag_id:
+                # Link hashtag to post
+                self.db.add_post_hashtag(post_id, hashtag_id)
+                self.logger.info(f"Linked hashtag '{hashtag_text}' to post {post_id}")
+        
+        # Process mentions
+        mentions = annotations.get("mentions", [])
+        for username in mentions:
+            # Check if user exists
+            mentioned_user = self.db.get_user_by_username(username)
+            if mentioned_user:
+                # Add mention entry
+                mention_data = {
+                    "user_id": mentioned_user["id"],
+                    "post_id": post_id,
+                    "round": self.current_round_id,
+                    "answered": 0
+                }
+                self.db.add_mention(mention_data)
+                self.logger.info(f"Added mention of @{username} in post {post_id}")
+            else:
+                self.logger.warning(f"Mentioned user @{username} not found in database")
+        
+        # Process sentiment
+        sentiment_scores = annotations.get("sentiment")
+        if sentiment_scores:
+            # Get topics associated with this post/comment
+            topic_ids = self.db.get_post_topics(post_id)
+            
+            # If comment without topics yet, get parent's topics
+            if not topic_ids and parent_post_id:
+                topic_ids = self.db.get_post_topics(parent_post_id)
+            
+            # Create sentiment entry for each topic
+            for topic_id in topic_ids:
+                sentiment_data = {
+                    "post_id": post_id,
+                    "user_id": user_id,
+                    "topic_id": topic_id,
+                    "round": self.current_round_id,
+                    "neg": sentiment_scores.get("neg"),
+                    "pos": sentiment_scores.get("pos"),
+                    "neu": sentiment_scores.get("neu"),
+                    "compound": sentiment_scores.get("compound"),
+                    "sentiment_parent": parent_sentiment,
+                    "is_post": 1 if is_post else 0,
+                    "is_comment": 1 if is_comment else 0,
+                    "is_reaction": 0
+                }
+                self.db.add_post_sentiment(sentiment_data)
+            
+            if topic_ids:
+                self.logger.info(f"Added sentiment for post {post_id} across {len(topic_ids)} topics")
+        
+        # Process toxicity
+        toxicity_scores = annotations.get("toxicity")
+        if toxicity_scores:
+            toxicity_data = {
+                "post_id": post_id,
+                "toxicity": toxicity_scores.get("TOXICITY", 0.0),
+                "severe_toxicity": toxicity_scores.get("SEVERE_TOXICITY", 0.0),
+                "identity_attack": toxicity_scores.get("IDENTITY_ATTACK", 0.0),
+                "insult": toxicity_scores.get("INSULT", 0.0),
+                "profanity": toxicity_scores.get("PROFANITY", 0.0),
+                "threat": toxicity_scores.get("THREAT", 0.0),
+                "sexually_explicit": toxicity_scores.get("SEXUALLY_EXPLICIT", 0.0),
+                "flirtation": toxicity_scores.get("FLIRTATION", 0.0)
+            }
+            self.db.add_post_toxicity(toxicity_data)
+            self.logger.info(f"Added toxicity data for post {post_id}")
+    
     def _recompute_all_agent_interests(self):
         """
         Recompute interests for all registered agents based on the sliding attention window.
@@ -818,6 +922,10 @@ class OrchestratorServer:
                     if post_id:
                         new_ids.append(post_id)
                         
+                        # Process annotations if provided
+                        if hasattr(act, 'annotations') and act.annotations:
+                            self._process_annotations(post_id, act.agent_id, act.annotations, is_post=True, is_comment=False)
+                        
                         # If this is an article post, extract and store topics
                         if article_id:
                             # Get article details from database
@@ -878,6 +986,16 @@ class OrchestratorServer:
                         post_id = self.db.add_post(post_data)
                         if post_id:
                             new_ids.append(post_id)
+                            
+                            # Process annotations if provided
+                            if hasattr(act, 'annotations') and act.annotations:
+                                # Get parent post sentiment for sentiment_parent field
+                                parent_sentiment = None
+                                if parent_post and parent_post.get("tweet"):
+                                    # We could compute parent sentiment here, or retrieve if already stored
+                                    # For now, we'll pass None and compute it if needed
+                                    parent_sentiment = None
+                                self._process_annotations(post_id, act.agent_id, act.annotations, is_post=False, is_comment=True, parent_post_id=act.target_post_id, parent_sentiment=parent_sentiment)
                             
                             # When commenting on a post, save the post's topics as user interests
                             parent_post_id = act.target_post_id

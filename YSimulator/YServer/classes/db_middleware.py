@@ -1623,3 +1623,253 @@ class DatabaseMiddleware:
             return False
         finally:
             session.close()
+
+    def add_or_get_hashtag(self, hashtag_text: str) -> Optional[str]:
+        """
+        Add a hashtag to the database or get its UUID if it already exists.
+        
+        Args:
+            hashtag_text: Hashtag text (without # prefix)
+            
+        Returns:
+            str: Hashtag UUID, or None if error
+        """
+        from YSimulator.YServer.classes.models import Hashtag
+        import uuid
+        
+        session = Session(self.engine)
+        try:
+            # Check if hashtag already exists
+            existing = session.query(Hashtag).filter(Hashtag.hashtag == hashtag_text).first()
+            
+            if existing:
+                return existing.id
+            
+            # Create new hashtag
+            hashtag_id = str(uuid.uuid4())
+            hashtag = Hashtag(
+                id=hashtag_id,
+                hashtag=hashtag_text
+            )
+            session.add(hashtag)
+            session.commit()
+            self.logger.info(f"Created new hashtag: id={hashtag_id}, hashtag={hashtag_text}")
+            return hashtag_id
+            
+        except Exception as e:
+            session.rollback()
+            self.logger.error(
+                f"Error adding/getting hashtag: {e}",
+                extra={"extra_data": {"error": str(e), "hashtag": hashtag_text}}
+            )
+            return None
+        finally:
+            session.close()
+
+    def add_post_hashtag(self, post_id: str, hashtag_id: str) -> bool:
+        """
+        Add a post-hashtag association to the database.
+        
+        Args:
+            post_id: Post UUID
+            hashtag_id: Hashtag UUID
+            
+        Returns:
+            bool: True if successful, False otherwise
+        """
+        from YSimulator.YServer.classes.models import PostHashtag
+        import uuid
+        
+        session = Session(self.engine)
+        try:
+            # Check if already exists
+            existing = session.query(PostHashtag).filter(
+                PostHashtag.post_id == post_id,
+                PostHashtag.hashtag_id == hashtag_id
+            ).first()
+            
+            if existing:
+                return True  # Already exists
+            
+            # Create post hashtag record
+            post_hashtag_id = str(uuid.uuid4())
+            post_hashtag = PostHashtag(
+                id=post_hashtag_id,
+                post_id=post_id,
+                hashtag_id=hashtag_id
+            )
+            session.add(post_hashtag)
+            session.commit()
+            return True
+            
+        except Exception as e:
+            session.rollback()
+            self.logger.error(
+                f"Error adding post hashtag: {e}",
+                extra={"extra_data": {"error": str(e), "post_id": post_id, "hashtag_id": hashtag_id}}
+            )
+            return False
+        finally:
+            session.close()
+
+    def get_user_by_username(self, username: str) -> Optional[Dict[str, Any]]:
+        """
+        Get a user by their username.
+        
+        Args:
+            username: Username to search for
+            
+        Returns:
+            dict: User data dict with 'id' and other fields, or None if not found
+        """
+        from YSimulator.YServer.classes.models import User_mgmt
+        
+        session = Session(self.engine)
+        try:
+            user = session.query(User_mgmt).filter(User_mgmt.username == username).first()
+            
+            if user:
+                return {
+                    "id": user.id,
+                    "username": user.username,
+                    "email": user.email
+                }
+            return None
+            
+        except Exception as e:
+            self.logger.error(
+                f"Error getting user by username: {e}",
+                extra={"extra_data": {"error": str(e), "username": username}}
+            )
+            return None
+        finally:
+            session.close()
+
+    def add_mention(self, mention_data: Dict[str, Any]) -> bool:
+        """
+        Add a mention to the database.
+        
+        Args:
+            mention_data: Dict with keys: user_id, post_id, round, answered (default 0)
+            
+        Returns:
+            bool: True if successful, False otherwise
+        """
+        from YSimulator.YServer.classes.models import Mention
+        import uuid
+        
+        session = Session(self.engine)
+        try:
+            mention_id = str(uuid.uuid4())
+            mention = Mention(
+                id=mention_id,
+                user_id=mention_data["user_id"],
+                post_id=mention_data["post_id"],
+                round=mention_data["round"],
+                answered=mention_data.get("answered", 0)
+            )
+            session.add(mention)
+            session.commit()
+            self.logger.info(f"Created mention: id={mention_id}, user_id={mention_data['user_id']}, post_id={mention_data['post_id']}")
+            return True
+            
+        except Exception as e:
+            session.rollback()
+            self.logger.error(
+                f"Error adding mention: {e}",
+                extra={"extra_data": {"error": str(e), "mention_data": mention_data}}
+            )
+            return False
+        finally:
+            session.close()
+
+    def add_post_sentiment(self, sentiment_data: Dict[str, Any]) -> bool:
+        """
+        Add sentiment analysis data for a post/comment.
+        
+        Args:
+            sentiment_data: Dict with keys: post_id, user_id, topic_id, round,
+                          neg, pos, neu, compound, sentiment_parent,
+                          is_post, is_comment, is_reaction
+            
+        Returns:
+            bool: True if successful, False otherwise
+        """
+        from YSimulator.YServer.classes.models import PostSentiment
+        import uuid
+        
+        session = Session(self.engine)
+        try:
+            sentiment_id = str(uuid.uuid4())
+            sentiment = PostSentiment(
+                id=sentiment_id,
+                post_id=sentiment_data["post_id"],
+                user_id=sentiment_data["user_id"],
+                topic_id=sentiment_data["topic_id"],
+                round=sentiment_data["round"],
+                neg=sentiment_data.get("neg"),
+                pos=sentiment_data.get("pos"),
+                neu=sentiment_data.get("neu"),
+                compound=sentiment_data.get("compound"),
+                sentiment_parent=sentiment_data.get("sentiment_parent"),
+                is_post=sentiment_data.get("is_post", 0),
+                is_comment=sentiment_data.get("is_comment", 0),
+                is_reaction=sentiment_data.get("is_reaction", 0)
+            )
+            session.add(sentiment)
+            session.commit()
+            return True
+            
+        except Exception as e:
+            session.rollback()
+            self.logger.error(
+                f"Error adding post sentiment: {e}",
+                extra={"extra_data": {"error": str(e), "sentiment_data": sentiment_data}}
+            )
+            return False
+        finally:
+            session.close()
+
+    def add_post_toxicity(self, toxicity_data: Dict[str, Any]) -> bool:
+        """
+        Add toxicity analysis data for a post/comment.
+        
+        Args:
+            toxicity_data: Dict with keys: post_id, toxicity, severe_toxicity,
+                          identity_attack, insult, profanity, threat,
+                          sexually_explicit, flirtation
+            
+        Returns:
+            bool: True if successful, False otherwise
+        """
+        from YSimulator.YServer.classes.models import PostToxicity
+        import uuid
+        
+        session = Session(self.engine)
+        try:
+            toxicity_id = str(uuid.uuid4())
+            toxicity = PostToxicity(
+                id=toxicity_id,
+                post_id=toxicity_data["post_id"],
+                toxicity=toxicity_data.get("toxicity", 0.0),
+                severe_toxicity=toxicity_data.get("severe_toxicity", 0.0),
+                identity_attack=toxicity_data.get("identity_attack", 0.0),
+                insult=toxicity_data.get("insult", 0.0),
+                profanity=toxicity_data.get("profanity", 0.0),
+                threat=toxicity_data.get("threat", 0.0),
+                sexually_explicit=toxicity_data.get("sexually_explicit", 0.0),
+                flirtation=toxicity_data.get("flirtation", 0.0)
+            )
+            session.add(toxicity)
+            session.commit()
+            return True
+            
+        except Exception as e:
+            session.rollback()
+            self.logger.error(
+                f"Error adding post toxicity: {e}",
+                extra={"extra_data": {"error": str(e), "toxicity_data": toxicity_data}}
+            )
+            return False
+        finally:
+            session.close()
