@@ -246,7 +246,14 @@ class OrchestratorServer:
         Args:
             post_id: UUID of the post/comment
             user_id: UUID of the user who created the post/comment
-            annotations: Dict with 'hashtags', 'mentions', 'sentiment', 'toxicity'
+            annotations: Dict with annotation data:
+                - 'hashtags': List[str] - Hashtag text without # prefix
+                - 'mentions': List[str] - Usernames without @ prefix
+                - 'sentiment': Dict[str, float] or None - VADER sentiment scores 
+                  with keys: 'neg', 'pos', 'neu', 'compound'
+                - 'toxicity': Dict[str, float] or None - Perspective API scores
+                  with keys: 'TOXICITY', 'SEVERE_TOXICITY', 'IDENTITY_ATTACK',
+                  'INSULT', 'PROFANITY', 'THREAT', 'SEXUALLY_EXPLICIT', 'FLIRTATION'
             is_post: Whether this is a post (not a comment)
             is_comment: Whether this is a comment
             parent_post_id: UUID of parent post (for comments)
