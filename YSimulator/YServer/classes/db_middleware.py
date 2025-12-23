@@ -23,6 +23,9 @@ from sqlalchemy.orm import Session
 
 from YSimulator.YServer.classes.models import Base, Reaction, Post, User_mgmt, Round, Follow
 
+# Constants
+DEFAULT_USERNAME = "Someone"  # Default username when user data is not found
+
 
 class DatabaseMiddleware:
     """
@@ -467,6 +470,165 @@ class DatabaseMiddleware:
                 f"Error getting post: {e}", extra={"extra_data": {"error": str(e)}}
             )
             return None
+
+    def get_thread_context(self, post_id: str, max_length: int = 5) -> List[Dict[str, Any]]:
+        """
+        Get thread context for a post - retrieve up to max_length of the most recent
+        posts/comments that precede the target post in the discussion thread.
+        
+        If the thread has more than max_length posts/comments before the target,
+        only the most recent max_length items are returned (to provide the most
+        relevant recent context).
+        
+        Returns posts in chronological order (oldest first) to allow the agent
+        to follow the discussion thread naturally.
+        
+        Args:
+            post_id: Post UUID to get context for
+            max_length: Maximum number of preceding posts/comments to return
+            
+        Returns:
+            List of dicts with keys: id, user_id, username, tweet, round
+            in chronological order (oldest first), containing up to max_length
+            of the most recent posts before the target
+        """
+        try:
+            # First, get the target post to find its thread_id
+            target_post = self.get_post(post_id)
+            if not target_post:
+                return []
+            
+            thread_id = target_post.get("thread_id")
+            if not thread_id:
+                return []
+            
+            if self.use_redis:
+                # Redis implementation: get all posts in thread, filter and sort
+                thread_posts = []
+                
+                # Get all recent post IDs to check
+                all_post_ids = self.redis_client.lrange(
+                    self._redis_key("posts", "recent"), 0, -1
+                )
+                
+                for pid in all_post_ids:
+                    pid_str = pid.decode('utf-8') if isinstance(pid, bytes) else str(pid)
+                    if pid_str == post_id:
+                        continue  # Skip the target post itself
+                    
+                    key = self._redis_key("posts", pid_str)
+                    post_data = self.redis_client.hgetall(key)
+                    
+                    if not post_data:
+                        continue
+                    
+                    # Decode bytes to strings
+                    post_dict = {}
+                    for k, v in post_data.items():
+                        k_str = k.decode('utf-8') if isinstance(k, bytes) else k
+                        v_str = v.decode('utf-8') if isinstance(v, bytes) else v
+                        post_dict[k_str] = v_str
+                    
+                    # Check if this post is in the same thread
+                    if post_dict.get("thread_id") == thread_id:
+                        # Get username for this post
+                        user_id = post_dict.get("user_id")
+                        username = DEFAULT_USERNAME
+                        if user_id:
+                            user_key = self._redis_key("users", user_id)
+                            user_data = self.redis_client.hgetall(user_key)
+                            if user_data:
+                                username_bytes = user_data.get(b"username") or user_data.get("username")
+                                if username_bytes:
+                                    username = username_bytes.decode('utf-8') if isinstance(username_bytes, bytes) else username_bytes
+                        
+                        # Get round info for sorting - need to query database for day/hour
+                        round_id = post_dict.get("round")
+                        round_data = None
+                        if round_id:
+                            # Try to get from Redis first
+                            round_key = self._redis_key("rounds", round_id)
+                            round_redis_data = self.redis_client.hgetall(round_key)
+                            if round_redis_data:
+                                day = round_redis_data.get(b"day") or round_redis_data.get("day")
+                                hour = round_redis_data.get(b"hour") or round_redis_data.get("hour")
+                                if day and hour:
+                                    day_int = int(day.decode('utf-8') if isinstance(day, bytes) else day)
+                                    hour_int = int(hour.decode('utf-8') if isinstance(hour, bytes) else hour)
+                                    round_data = (day_int, hour_int)
+                        
+                        # If no round data, skip this post and log a warning
+                        if round_data:
+                            thread_posts.append({
+                                "id": pid_str,
+                                "user_id": post_dict.get("user_id"),
+                                "username": username,
+                                "tweet": post_dict.get("tweet", ""),
+                                "round": post_dict.get("round"),
+                                "sort_key": round_data  # Tuple of (day, hour) for sorting
+                            })
+                        else:
+                            self.logger.warning(
+                                f"Skipping post {pid_str} in thread context: missing or invalid round data",
+                                extra={"extra_data": {"post_id": pid_str, "round_id": round_id}}
+                            )
+                
+                # Sort by day and hour chronologically (oldest first)
+                thread_posts.sort(key=lambda x: x.get("sort_key", (0, 0)))
+                
+                # Remove sort_key before returning
+                for post in thread_posts:
+                    post.pop("sort_key", None)
+                
+                # Return up to max_length posts, ending just before target post
+                return thread_posts[-max_length:] if len(thread_posts) > max_length else thread_posts
+                
+            else:
+                # Database implementation using SQLAlchemy
+                session = Session(self.engine)
+                try:
+                    # Get all posts in the same thread except the target post
+                    query = session.query(
+                        Post.id,
+                        Post.user_id,
+                        User_mgmt.username,
+                        Post.tweet,
+                        Post.round
+                    ).join(
+                        User_mgmt, Post.user_id == User_mgmt.id
+                    ).join(
+                        Round, Post.round == Round.id
+                    ).filter(
+                        Post.thread_id == thread_id,
+                        Post.id != post_id
+                    ).order_by(
+                        Round.day.asc(),
+                        Round.hour.asc()
+                    ).all()
+                    
+                    thread_posts = [
+                        {
+                            "id": row[0],
+                            "user_id": row[1],
+                            "username": row[2] or DEFAULT_USERNAME,
+                            "tweet": row[3],
+                            "round": row[4]
+                        }
+                        for row in query
+                    ]
+                    
+                    # Return up to max_length posts (already in chronological order)
+                    return thread_posts[-max_length:] if len(thread_posts) > max_length else thread_posts
+                    
+                finally:
+                    session.close()
+                    
+        except Exception as e:
+            self.logger.error(
+                f"Error getting thread context: {e}",
+                extra={"extra_data": {"error": str(e), "post_id": post_id}}
+            )
+            return []
 
     def get_recent_posts(self, limit: int = 50) -> List[str]:
         """

@@ -154,6 +154,7 @@ class SimulationClient:
         agents_config = simulation_config.get("agents", {})
         self.probability_of_secondary_follow = agents_config.get("probability_of_secondary_follow", 0.0)
         self.probability_of_daily_follow = agents_config.get("probability_of_daily_follow", 0.0)
+        self.max_length_thread_reading = agents_config.get("max_length_thread_reading", 5)
 
         # Create agents from configuration
         self.agent_profiles = []
@@ -1079,9 +1080,13 @@ class SimulationClient:
                     author_user = ray.get(self.server.get_user.remote(author_id))
                     if author_user:
                         author_name = author_user.get("username", "Someone")
-                # Fire off async LLM call to generate comment with agent attributes and author name
+                
+                # Get thread context (preceding posts/comments in chronological order)
+                thread_context = ray.get(self.server.get_thread_context.remote(target_post, self.max_length_thread_reading))
+                
+                # Fire off async LLM call to generate comment with agent attributes, author name, and thread context
                 agent_attrs = self._extract_agent_attrs(agent)
-                future = self.llm.generate_comment.remote(agent.cluster, post_content, agent_attrs, author_name)
+                future = self.llm.generate_comment.remote(agent.cluster, post_content, agent_attrs, author_name, thread_context)
                 pending_llm_reactions.append((agent.id, agent.cluster, target_post, future))
         else:
             # Rule-based: Just comment "COMMENT"

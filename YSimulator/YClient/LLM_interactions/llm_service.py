@@ -191,7 +191,7 @@ class LLMService:
             title = article_title if len(article_title) <= 97 else article_title[:97] + "..."
             return f"Check out this article: {title}"
     
-    def generate_comment(self, cluster_id: int, post_content: str, agent_attrs: dict = None, author_name: str = "Someone") -> str:
+    def generate_comment(self, cluster_id: int, post_content: str, agent_attrs: dict = None, author_name: str = "Someone", thread_context: list = None) -> str:
         """
         Generate a comment on a post to continue the discussion.
         
@@ -202,6 +202,8 @@ class LLMService:
             post_content: Content of the post to comment on
             agent_attrs: Dict with agent attributes for dynamic persona building
             author_name: Username of the post author
+            thread_context: List of dicts with thread context (preceding posts/comments in chronological order)
+                           Each dict has keys: username, tweet
             
         Returns:
             str: Generated comment text
@@ -216,9 +218,25 @@ class LLMService:
         system_template = self.prompts_config["generate_comment"]["system_template"]
         user_template = self.prompts_config["generate_comment"]["user_template"]
         
+        # Format thread context if provided
+        thread_context_str = ""
+        thread_context_instruction = ""
+        if thread_context and len(thread_context) > 0:
+            thread_context_lines = []
+            for ctx in thread_context:
+                username = ctx.get("username", "Someone")
+                tweet = ctx.get("tweet", "")
+                thread_context_lines.append(f"{username}: {tweet}")
+            thread_context_str = "\n".join(thread_context_lines)
+            thread_context_instruction = f"Previous discussion in this thread:\n{thread_context_str}\n\n"
+        
         # Format templates
         system_msg = system_template.format(persona=persona, toxicity=toxicity)
-        user_msg = user_template.format(author_name=author_name, post_content=post_content)
+        user_msg = user_template.format(
+            author_name=author_name, 
+            post_content=post_content,
+            thread_context_instruction=thread_context_instruction
+        )
         
         prompt = ChatPromptTemplate.from_messages([
             ("system", system_msg),
