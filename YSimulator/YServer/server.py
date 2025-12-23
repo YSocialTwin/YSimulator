@@ -734,6 +734,30 @@ class OrchestratorServer:
             )
             return False
 
+    def get_unreplied_mentions(self, user_id: str) -> List[Dict[str, Any]]:
+        """
+        Get all unreplied mentions for a user.
+        
+        Args:
+            user_id: UUID of the user
+            
+        Returns:
+            List[Dict]: List of mention records with keys: id, user_id, post_id, round, answered
+        """
+        return self.db.get_unreplied_mentions(user_id)
+
+    def mark_mention_replied(self, mention_id: str) -> bool:
+        """
+        Mark a mention as replied by setting answered=1.
+        
+        Args:
+            mention_id: UUID of the mention
+            
+        Returns:
+            bool: True if successful, False otherwise
+        """
+        return self.db.mark_mention_replied(mention_id)
+
     def register_client(self, client_id: str, num_days: int = 0) -> dict:
         """
         Register a new client with the server.

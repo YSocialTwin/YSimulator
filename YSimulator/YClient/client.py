@@ -1370,6 +1370,87 @@ class SimulationClient:
             self._annotate_action_content(action)
             actions.append(action)
     
+    def _handle_reply_to_mention(self, agent, agent_type, pending_llm_reactions, actions):
+        """
+        Handle reply to mention for an agent.
+        
+        This method checks if the agent has unreplied mentions, randomly selects one,
+        and creates a comment action (reply) using the existing comment pipeline.
+        After creating the reply action, marks the mention as replied.
+        
+        Args:
+            agent: AgentProfile of the agent
+            agent_type: "llm" or "rule_based"
+            pending_llm_reactions: List to append pending LLM comment futures
+            actions: List to append immediate (rule-based) actions
+            
+        Returns:
+            str or None: mention_id if a reply was generated, None otherwise
+        """
+        # Page agents do not reply to mentions
+        if agent.is_page == 1:
+            return None
+        
+        # Get unreplied mentions for this agent
+        try:
+            unreplied_mentions = ray.get(self.server.get_unreplied_mentions.remote(agent.id))
+            
+            if not unreplied_mentions:
+                return None  # No mentions to reply to
+            
+            # Randomly select one mention to reply to
+            selected_mention = random.choice(unreplied_mentions)
+            mention_id = selected_mention["id"]
+            post_id = selected_mention["post_id"]
+            
+            self.logger.info(f"Agent {agent.username} replying to mention in post {post_id}")
+            
+            # Get the post content to reply to
+            post_data = ray.get(self.server.get_post.remote(post_id))
+            if not post_data:
+                self.logger.warning(f"Post {post_id} not found for mention {mention_id}")
+                return None
+            
+            post_content = post_data.get("tweet", "")
+            author_id = post_data.get("user_id")
+            
+            # Generate reply using the existing comment pipeline
+            if agent_type == "llm":
+                # Get author username
+                author_name = "Someone"
+                if author_id:
+                    author_user = ray.get(self.server.get_user.remote(author_id))
+                    if author_user:
+                        author_name = author_user.get("username", "Someone")
+                
+                # Get thread context (preceding posts/comments in chronological order)
+                thread_context = ray.get(self.server.get_thread_context.remote(post_id, self.max_length_thread_reading))
+                
+                # Fire off async LLM call to generate comment with agent attributes, author name, and thread context
+                agent_attrs = self._extract_agent_attrs(agent)
+                future = self.llm.generate_comment.remote(agent.cluster, post_content, agent_attrs, author_name, thread_context)
+                # Store the mention_id with the pending reaction so we can mark it as replied later
+                pending_llm_reactions.append((agent.id, agent.cluster, post_id, future, mention_id))
+            else:
+                # Rule-based: Just comment "COMMENT"
+                action = generate_rule_based_comment(agent.id, agent.cluster, post_id)
+                # Annotate rule-based comment
+                self._annotate_action_content(action)
+                actions.append(action)
+                
+                # Mark mention as replied immediately for rule-based agents
+                ray.get(self.server.mark_mention_replied.remote(mention_id))
+                self.logger.info(f"Marked mention {mention_id} as replied (rule-based)")
+            
+            return mention_id
+            
+        except Exception as e:
+            self.logger.error(
+                f"Error handling reply to mention for agent {agent.username}: {e}",
+                extra={"extra_data": {"error": str(e), "agent_id": agent.id}}
+            )
+            return None
+    
     def _simulate(self, day: int, slot: int, recent_posts: list) -> list:
         """
         Simulate agent behaviors for a given time slot using modular action implementations.
@@ -1450,8 +1531,23 @@ class SimulationClient:
         # Each entry: (agent_id, cluster_id, post_author_id, post_content, is_llm=False)
         rule_based_interactions = []
         
+        # Track mention IDs that need to be marked as replied (for LLM agents after gathering)
+        pending_mention_replies = []  # List of mention_ids
+        
         # --- SCATTER PHASE: Select and dispatch actions ---
         for agent in active_agents:
+            # Determine agent type (llm or rule_based)
+            agent_type = "llm" if agent.llm else "rule_based"
+            
+            # REPLY PIPELINE: Check for unreplied mentions and reply to one if present
+            # This happens BEFORE the agent's normal actions
+            # Page agents are excluded from reply pipeline
+            mention_id = self._handle_reply_to_mention(agent, agent_type, pending_llm_reactions, actions)
+            if mention_id and agent_type == "llm":
+                # For LLM agents, we need to mark the mention as replied after gathering the results
+                # The mention_id is stored in the pending_llm_reactions tuple (5th element)
+                pass  # Will be handled in gather phase
+            
             # Sample number of actions for this agent based on daily_activity_level
             # Page agents can perform at most 1 action (0 or 1)
             # Regular agents: Random from 1 to daily_activity_level (minimum 1)
@@ -1569,7 +1665,9 @@ class SimulationClient:
         Gather and resolve all pending LLM reaction/comment generation calls.
         
         Args:
-            pending_llm_reactions: List of (agent_id, cluster_id, target_post_id, future) tuples
+            pending_llm_reactions: List of tuples:
+                - (agent_id, cluster_id, target_post_id, future) for regular reactions/comments
+                - (agent_id, cluster_id, target_post_id, future, mention_id) for replies to mentions
             actions: List to append resolved reaction/comment actions to
             
         Returns:
@@ -1585,7 +1683,14 @@ class SimulationClient:
         results = ray.get(futures)  # Blocks once for ALL reactions/comments
         
         for i, res_act in enumerate(results):
-            a_id, cid, target, _ = pending_llm_reactions[i]
+            # Handle both 4-element and 5-element tuples
+            reaction_tuple = pending_llm_reactions[i]
+            a_id = reaction_tuple[0]
+            cid = reaction_tuple[1]
+            target = reaction_tuple[2]
+            # Check if this is a reply to mention (5th element is mention_id)
+            mention_id = reaction_tuple[4] if len(reaction_tuple) > 4 else None
+            
             # Check if result is a comment (text) or a reaction type
             if res_act and res_act.upper() not in REACTION_TYPES:
                 # This is a comment text from LLM
@@ -1601,6 +1706,12 @@ class SimulationClient:
                 self.logger.info(f"LLM comment annotated for agent {a_id}: has_sentiment={bool(annotations.get('sentiment'))}, has_toxicity={bool(annotations.get('toxicity'))}, has_emotions={bool(annotations.get('emotions'))}, hashtags={len(annotations.get('hashtags', []))}, mentions={len(annotations.get('mentions', []))}")
                 action = ActionDTO(a_id, cid, "COMMENT", content=res_act, target_post_id=target, annotations=annotations)
                 actions.append(action)
+                
+                # If this was a reply to a mention, mark it as replied
+                if mention_id:
+                    ray.get(self.server.mark_mention_replied.remote(mention_id))
+                    self.logger.info(f"Marked mention {mention_id} as replied (LLM)")
+                
                 # Track for secondary follow (comment action)
                 post_data = ray.get(self.server.get_post.remote(target))
                 if post_data:
