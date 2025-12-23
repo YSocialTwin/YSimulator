@@ -36,8 +36,8 @@
     "note": "Secondary follow decisions after interactions. Set probabilities between 0.0 and 1.0."
   },
   "extract_article_topics": {
-    "system_template": "You are a topic extraction assistant. Extract exactly 1 or 2 main topics from the article. Return ONLY the topics, separated by commas, no other text.",
-    "user_template": "Extract 1-2 main topics from this article:\n\n{article_text}\n\nTopics (comma-separated):"
+    "system_template": "You are a topic extraction assistant. Extract exactly 1 or 2 main topics from the article. Each topic MUST be a SINGLE WORD (not a phrase). Return ONLY the topics, separated by commas, no other text.",
+    "user_template": "Extract 1-2 single-word topics from this article:\n\n{article_text}\n\nTopics (single words, comma-separated):"
   },
   "extract_emotions": {
     "system_template": "You are an emotion classification assistant trained on the GoEmotions taxonomy. Identify which emotions the text elicits in readers. Return ONLY emotion names from the taxonomy, no explanations.",

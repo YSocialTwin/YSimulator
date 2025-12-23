@@ -395,8 +395,22 @@ class LLMService:
             response = chain.invoke({"article_text": article_text})
             # Parse response - split by comma and clean up
             topics = [t.strip() for t in response.split(',') if t.strip()]
-            # Return up to 2 topics
-            return topics[:2]
+            
+            # Enforce single-word topics - take only the first word if multiple words present
+            single_word_topics = []
+            for topic in topics:
+                # Split on whitespace and take the first word
+                words = topic.split()
+                if words:
+                    # Take first word and convert to lowercase for consistency
+                    single_word = words[0].lower()
+                    # Remove any punctuation from the word
+                    single_word = ''.join(char for char in single_word if char.isalnum() or char == '-' or char == '_')
+                    if single_word:  # Only add if not empty after cleaning
+                        single_word_topics.append(single_word)
+            
+            # Return up to 2 single-word topics
+            return single_word_topics[:2]
         except Exception as e:
             # If extraction fails, return empty list
             return []
