@@ -290,12 +290,18 @@ class OrchestratorServer:
         # Process sentiment
         sentiment_scores = annotations.get("sentiment")
         if sentiment_scores:
+            self.logger.info(f"Processing sentiment for post {post_id}: compound={sentiment_scores.get('compound', 0):.3f}")
             # Get topics associated with this post/comment
             topic_ids = self.db.get_post_topics(post_id)
             
             # If comment without topics yet, get parent's topics
             if not topic_ids and parent_post_id:
                 topic_ids = self.db.get_post_topics(parent_post_id)
+                if topic_ids:
+                    self.logger.info(f"Using {len(topic_ids)} topics from parent post {parent_post_id} for comment {post_id}")
+            
+            if not topic_ids:
+                self.logger.warning(f"No topics found for post {post_id}, skipping sentiment storage. Sentiment data will not be saved.")
             
             # Create sentiment entry for each topic
             for topic_id in topic_ids:
@@ -313,14 +319,21 @@ class OrchestratorServer:
                     "is_comment": 1 if is_comment else 0,
                     "is_reaction": 0
                 }
-                self.db.add_post_sentiment(sentiment_data)
+                success = self.db.add_post_sentiment(sentiment_data)
+                if success:
+                    self.logger.info(f"Added sentiment entry for post {post_id}, topic {topic_id}")
+                else:
+                    self.logger.error(f"Failed to add sentiment entry for post {post_id}, topic {topic_id}")
             
             if topic_ids:
-                self.logger.info(f"Added sentiment for post {post_id} across {len(topic_ids)} topics")
+                self.logger.info(f"Successfully added sentiment for post {post_id} across {len(topic_ids)} topics")
+        else:
+            self.logger.debug(f"No sentiment data in annotations for post {post_id}")
         
         # Process toxicity
         toxicity_scores = annotations.get("toxicity")
         if toxicity_scores:
+            self.logger.info(f"Processing toxicity for post {post_id}: TOXICITY={toxicity_scores.get('TOXICITY', 0):.3f}")
             toxicity_data = {
                 "post_id": post_id,
                 "toxicity": toxicity_scores.get("TOXICITY", 0.0),
@@ -332,8 +345,13 @@ class OrchestratorServer:
                 "sexually_explicit": toxicity_scores.get("SEXUALLY_EXPLICIT", 0.0),
                 "flirtation": toxicity_scores.get("FLIRTATION", 0.0)
             }
-            self.db.add_post_toxicity(toxicity_data)
-            self.logger.info(f"Added toxicity data for post {post_id}")
+            success = self.db.add_post_toxicity(toxicity_data)
+            if success:
+                self.logger.info(f"Successfully added toxicity data for post {post_id}")
+            else:
+                self.logger.error(f"Failed to add toxicity data for post {post_id}")
+        else:
+            self.logger.debug(f"No toxicity data in annotations for post {post_id}")
     
     def _recompute_all_agent_interests(self):
         """
@@ -929,10 +947,6 @@ class OrchestratorServer:
                     if post_id:
                         new_ids.append(post_id)
                         
-                        # Process annotations if provided
-                        if hasattr(act, 'annotations') and act.annotations:
-                            self._process_annotations(post_id, act.agent_id, act.annotations, is_post=True, is_comment=False)
-                        
                         # If this is an article post, extract and store topics
                         if article_id:
                             # Get article details from database
@@ -960,6 +974,10 @@ class OrchestratorServer:
                                 
                                 # Increment the agent's interest counter for this topic
                                 self._update_agent_interest_counter(act.agent_id, act.topic, increment=1)
+                        
+                        # Process annotations AFTER topics are assigned
+                        if hasattr(act, 'annotations') and act.annotations:
+                            self._process_annotations(post_id, act.agent_id, act.annotations, is_post=True, is_comment=False)
                     else:
                         self.logger.warning(
                             f"Failed to add post for agent {act.agent_id}",
