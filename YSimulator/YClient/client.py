@@ -1391,30 +1391,37 @@ class SimulationClient:
         """
         # Page agents do not reply to mentions
         if agent.is_page == 1:
+            self.logger.debug(f"[REPLY] Agent {agent.username} is a page agent - skipping reply pipeline")
             return None
         
         # Get unreplied mentions for this agent
         try:
+            self.logger.debug(f"[REPLY] Checking unreplied mentions for agent {agent.username} (ID: {agent.id})")
             unreplied_mentions = ray.get(self.server.get_unreplied_mentions.remote(agent.id))
             
             if not unreplied_mentions:
+                self.logger.debug(f"[REPLY] No unreplied mentions found for agent {agent.username}")
                 return None  # No mentions to reply to
+            
+            self.logger.info(f"[REPLY] Agent {agent.username} has {len(unreplied_mentions)} unreplied mention(s)")
             
             # Randomly select one mention to reply to
             selected_mention = random.choice(unreplied_mentions)
             mention_id = selected_mention["id"]
             post_id = selected_mention["post_id"]
             
-            self.logger.info(f"Agent {agent.username} replying to mention in post {post_id}")
+            self.logger.info(f"[REPLY] Agent {agent.username} ({agent_type}) selected mention {mention_id} in post {post_id}")
             
             # Get the post content to reply to
             post_data = ray.get(self.server.get_post.remote(post_id))
             if not post_data:
-                self.logger.warning(f"Post {post_id} not found for mention {mention_id}")
+                self.logger.warning(f"[REPLY] Post {post_id} not found for mention {mention_id} - cannot reply")
                 return None
             
             post_content = post_data.get("tweet", "")
             author_id = post_data.get("user_id")
+            
+            self.logger.debug(f"[REPLY] Post content preview: '{post_content[:50]}...' (author: {author_id})")
             
             # Get author username
             author_username = "Someone"
@@ -1423,10 +1430,13 @@ class SimulationClient:
                 if author_user:
                     author_username = author_user.get("username", "Someone")
             
+            self.logger.info(f"[REPLY] Agent {agent.username} will reply to @{author_username}'s post")
+            
             # Generate reply using the reply-specific action functions
             if agent_type == "llm":
                 # Get thread context (preceding posts/comments in chronological order)
                 thread_context = ray.get(self.server.get_thread_context.remote(post_id, self.max_length_thread_reading))
+                self.logger.debug(f"[REPLY] Retrieved thread context: {len(thread_context)} previous posts/comments")
                 
                 # Fire off async LLM call to generate reply
                 agent_attrs = self._extract_agent_attrs(agent)
@@ -1435,24 +1445,28 @@ class SimulationClient:
                 )
                 # Store the mention_id with the pending reaction so we can mark it as replied later
                 pending_llm_reactions.append((agent.id, agent.cluster, post_id, future, mention_id))
+                self.logger.info(f"[REPLY] LLM reply request queued for agent {agent.username} (mention: {mention_id})")
             else:
                 # Rule-based: Generate reply with @username mention
                 action = generate_rule_based_reply_to_mention(agent.id, agent.cluster, post_id, author_username)
                 # Annotate rule-based comment
                 self._annotate_action_content(action)
                 actions.append(action)
+                self.logger.info(f"[REPLY] Rule-based reply created: '{action.content}' for agent {agent.username}")
                 
                 # Mark mention as replied immediately for rule-based agents
                 ray.get(self.server.mark_mention_replied.remote(mention_id))
-                self.logger.info(f"Marked mention {mention_id} as replied (rule-based)")
+                self.logger.info(f"[REPLY] Marked mention {mention_id} as replied (rule-based)")
             
             return mention_id
             
         except Exception as e:
             self.logger.error(
-                f"Error handling reply to mention for agent {agent.username}: {e}",
+                f"[REPLY] Error handling reply to mention for agent {agent.username}: {e}",
                 extra={"extra_data": {"error": str(e), "agent_id": agent.id}}
             )
+            import traceback
+            self.logger.error(f"[REPLY] Traceback: {traceback.format_exc()}")
             return None
     
     def _simulate(self, day: int, slot: int, recent_posts: list) -> list:
@@ -1535,6 +1549,8 @@ class SimulationClient:
         # Each entry: (agent_id, cluster_id, post_author_id, post_content, is_llm=False)
         rule_based_interactions = []
         
+        self.logger.info(f"[REPLY] Starting simulation for {len(active_agents)} active agents")
+        
         # --- SCATTER PHASE: Select and dispatch actions ---
         for agent in active_agents:
             # Determine agent type (llm or rule_based)
@@ -1543,6 +1559,7 @@ class SimulationClient:
             # REPLY PIPELINE: Check for unreplied mentions and reply to one if present
             # This happens BEFORE the agent's normal actions
             # Page agents are excluded from reply pipeline
+            self.logger.debug(f"[REPLY] Processing agent {agent.username} (type: {agent_type}, is_page: {agent.is_page})")
             self._handle_reply_to_mention(agent, agent_type, pending_llm_reactions, actions)
             
             # Sample number of actions for this agent based on daily_activity_level
@@ -1675,6 +1692,13 @@ class SimulationClient:
         if not pending_llm_reactions:
             return secondary_follow_candidates
         
+        self.logger.info(f"[REPLY] Gathering {len(pending_llm_reactions)} pending LLM reactions/comments")
+        
+        # Count how many are mention replies
+        mention_replies = sum(1 for r in pending_llm_reactions if len(r) > 4)
+        if mention_replies > 0:
+            self.logger.info(f"[REPLY] {mention_replies} of these are mention replies")
+        
         # Extract futures and wait for all reactions in parallel
         futures = [r[3] for r in pending_llm_reactions]
         results = ray.get(futures)  # Blocks once for ALL reactions/comments
@@ -1691,6 +1715,8 @@ class SimulationClient:
             # Check if result is a comment (text) or a reaction type
             if res_act and res_act.upper() not in REACTION_TYPES:
                 # This is a comment text from LLM
+                self.logger.debug(f"[REPLY] LLM generated comment for agent {a_id}: '{res_act[:50]}...' (is_mention_reply: {mention_id is not None})")
+                
                 # Annotate the comment text
                 annotations = annotate_text(
                     res_act,
@@ -1706,8 +1732,9 @@ class SimulationClient:
                 
                 # If this was a reply to a mention, mark it as replied
                 if mention_id:
+                    self.logger.info(f"[REPLY] Marking mention {mention_id} as replied for agent {a_id}")
                     ray.get(self.server.mark_mention_replied.remote(mention_id))
-                    self.logger.info(f"Marked mention {mention_id} as replied (LLM)")
+                    self.logger.info(f"[REPLY] Successfully marked mention {mention_id} as replied (LLM)")
                 
                 # Track for secondary follow (comment action)
                 post_data = ray.get(self.server.get_post.remote(target))
@@ -1715,6 +1742,7 @@ class SimulationClient:
                     secondary_follow_candidates.append((a_id, cid, post_data.get("user_id"), post_data.get("tweet", ""), True))
             elif res_act.upper() != "IGNORE":
                 # This is a reaction type
+                self.logger.debug(f"[REPLY] LLM generated reaction for agent {a_id}: {res_act}")
                 actions.append(ActionDTO(a_id, cid, res_act, target_post_id=target))
                 # Track for secondary follow (read/reaction action)
                 post_data = ray.get(self.server.get_post.remote(target))

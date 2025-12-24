@@ -1859,9 +1859,12 @@ class DatabaseMiddleware:
         """
         try:
             if self.use_redis:
+                self.logger.debug(f"[REPLY_DB] Getting unreplied mentions for user {user_id} (Redis mode)")
                 # Get mention IDs for this user
                 user_mentions_key = self._redis_key("mentions", f"by_user:{user_id}")
                 mention_ids = self.redis_client.smembers(user_mentions_key)
+                
+                self.logger.debug(f"[REPLY_DB] Found {len(mention_ids) if mention_ids else 0} total mentions for user {user_id}")
                 
                 if not mention_ids:
                     return []
@@ -1882,11 +1885,15 @@ class DatabaseMiddleware:
                             for k, v in mention_data.items()
                         }
                         # Check if unreplied (answered is "0")
-                        if mention_dict.get("answered", "0") == "0":
+                        answered_value = mention_dict.get("answered", "0")
+                        self.logger.debug(f"[REPLY_DB] Mention {mention_id_str}: answered={answered_value}")
+                        if answered_value == "0":
                             unreplied_mentions.append(mention_dict)
                 
+                self.logger.info(f"[REPLY_DB] Returning {len(unreplied_mentions)} unreplied mentions for user {user_id}")
                 return unreplied_mentions
             else:
+                self.logger.debug(f"[REPLY_DB] Getting unreplied mentions for user {user_id} (SQL mode)")
                 from YSimulator.YServer.classes.models import Mention
                 session = Session(self.engine)
                 try:
@@ -1905,14 +1912,17 @@ class DatabaseMiddleware:
                         }
                         for m in mentions
                     ]
+                    self.logger.info(f"[REPLY_DB] Returning {len(result)} unreplied mentions for user {user_id} (SQL)")
                     return result
                 finally:
                     session.close()
         except Exception as e:
             self.logger.error(
-                f"Error getting unreplied mentions for user {user_id}: {e}",
+                f"[REPLY_DB] Error getting unreplied mentions for user {user_id}: {e}",
                 extra={"extra_data": {"error": str(e), "user_id": user_id}}
             )
+            import traceback
+            self.logger.error(f"[REPLY_DB] Traceback: {traceback.format_exc()}")
             return []
 
     def mark_mention_replied(self, mention_id: str) -> bool:
@@ -1929,7 +1939,7 @@ class DatabaseMiddleware:
             if self.use_redis:
                 mention_key = self._redis_key("mentions", mention_id)
                 self.redis_client.hset(mention_key, "answered", "1")
-                self.logger.info(f"Marked mention {mention_id} as replied (Redis)")
+                self.logger.info(f"[REPLY_DB] Marked mention {mention_id} as replied (Redis)")
                 return True
             else:
                 from YSimulator.YServer.classes.models import Mention
@@ -1939,18 +1949,20 @@ class DatabaseMiddleware:
                     if mention:
                         mention.answered = 1
                         session.commit()
-                        self.logger.info(f"Marked mention {mention_id} as replied (DB)")
+                        self.logger.info(f"[REPLY_DB] Marked mention {mention_id} as replied (DB)")
                         return True
                     else:
-                        self.logger.warning(f"Mention {mention_id} not found")
+                        self.logger.warning(f"[REPLY_DB] Mention {mention_id} not found - cannot mark as replied")
                         return False
                 finally:
                     session.close()
         except Exception as e:
             self.logger.error(
-                f"Error marking mention {mention_id} as replied: {e}",
+                f"[REPLY_DB] Error marking mention {mention_id} as replied: {e}",
                 extra={"extra_data": {"error": str(e), "mention_id": mention_id}}
             )
+            import traceback
+            self.logger.error(f"[REPLY_DB] Traceback: {traceback.format_exc()}")
             return False
 
     def get_post_sentiment(self, post_id: str) -> Optional[Dict[str, Any]]:
