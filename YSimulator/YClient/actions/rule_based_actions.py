@@ -88,6 +88,34 @@ def generate_rule_based_comment(agent_id: int, cluster_id: int, target_post_id: 
     return ActionDTO(agent_id, cluster_id, "COMMENT", content=content, target_post_id=target_post_id)
 
 
+def generate_rule_based_reply_to_mention(agent_id: int, cluster_id: int, target_post_id: str, 
+                                          author_username: str) -> ActionDTO:
+    """
+    Generate a rule-based reply to a mention.
+    
+    Rule-based agents create simple replies that include a mention of the original author.
+    This ensures the reply is contextually linked to the person who mentioned them.
+    
+    Args:
+        agent_id: Unique identifier for the agent
+        cluster_id: Cluster/group the agent belongs to
+        target_post_id: UUID of the post to comment on
+        author_username: Username of the person who mentioned this agent
+        
+    Returns:
+        ActionDTO: COMMENT action with @mention targeting the specified post
+        
+    Example:
+        >>> action = generate_rule_based_reply_to_mention(42, 1, "post-uuid-123", "alice")
+        >>> action.action_type
+        'COMMENT'
+        >>> action.content
+        '@alice COMMENT'
+    """
+    content = f"@{author_username} COMMENT"
+    return ActionDTO(agent_id, cluster_id, "COMMENT", content=content, target_post_id=target_post_id)
+
+
 def generate_rule_based_share(agent_id: int, cluster_id: int, target_post_id: str) -> ActionDTO:
     """
     Generate a simple rule-based share action.

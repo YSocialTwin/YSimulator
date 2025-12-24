@@ -1847,6 +1847,124 @@ class DatabaseMiddleware:
             )
             return False
 
+    def get_unreplied_mentions(self, user_id: str) -> List[Dict[str, Any]]:
+        """
+        Get all unreplied mentions for a user.
+        
+        Args:
+            user_id: UUID of the user
+            
+        Returns:
+            List[Dict]: List of mention records with keys: id, user_id, post_id, round, answered
+        """
+        try:
+            if self.use_redis:
+                self.logger.debug(f"[REPLY_DB] Getting unreplied mentions for user {user_id} (Redis mode)")
+                # Get mention IDs for this user
+                user_mentions_key = self._redis_key("mentions", f"by_user:{user_id}")
+                mention_ids = self.redis_client.smembers(user_mentions_key)
+                
+                self.logger.debug(f"[REPLY_DB] Found {len(mention_ids) if mention_ids else 0} total mentions for user {user_id}")
+                
+                if not mention_ids:
+                    return []
+                
+                # Filter to only unreplied mentions
+                unreplied_mentions = []
+                for mention_id in mention_ids:
+                    # Decode mention_id if it's bytes (Redis returns bytes)
+                    mention_id_str = mention_id.decode() if isinstance(mention_id, bytes) else mention_id
+                    mention_key = self._redis_key("mentions", mention_id_str)
+                    mention_data = self.redis_client.hgetall(mention_key)
+                    
+                    if mention_data:
+                        # Convert bytes to strings and handle answered field properly
+                        mention_dict = {
+                            k.decode() if isinstance(k, bytes) else k: 
+                            v.decode() if isinstance(v, bytes) else v 
+                            for k, v in mention_data.items()
+                        }
+                        # Check if unreplied (answered is "0")
+                        answered_value = mention_dict.get("answered", "0")
+                        self.logger.debug(f"[REPLY_DB] Mention {mention_id_str}: answered={answered_value}")
+                        if answered_value == "0":
+                            unreplied_mentions.append(mention_dict)
+                
+                self.logger.info(f"[REPLY_DB] Returning {len(unreplied_mentions)} unreplied mentions for user {user_id}")
+                return unreplied_mentions
+            else:
+                self.logger.debug(f"[REPLY_DB] Getting unreplied mentions for user {user_id} (SQL mode)")
+                from YSimulator.YServer.classes.models import Mention
+                session = Session(self.engine)
+                try:
+                    mentions = session.query(Mention).filter(
+                        Mention.user_id == user_id,
+                        Mention.answered == 0
+                    ).all()
+                    
+                    result = [
+                        {
+                            "id": m.id,
+                            "user_id": m.user_id,
+                            "post_id": m.post_id,
+                            "round": m.round,
+                            "answered": m.answered
+                        }
+                        for m in mentions
+                    ]
+                    self.logger.info(f"[REPLY_DB] Returning {len(result)} unreplied mentions for user {user_id} (SQL)")
+                    return result
+                finally:
+                    session.close()
+        except Exception as e:
+            self.logger.error(
+                f"[REPLY_DB] Error getting unreplied mentions for user {user_id}: {e}",
+                extra={"extra_data": {"error": str(e), "user_id": user_id}}
+            )
+            import traceback
+            self.logger.error(f"[REPLY_DB] Traceback: {traceback.format_exc()}")
+            return []
+
+    def mark_mention_replied(self, mention_id: str) -> bool:
+        """
+        Mark a mention as replied by setting answered=1.
+        
+        Args:
+            mention_id: UUID of the mention
+            
+        Returns:
+            bool: True if successful, False otherwise
+        """
+        try:
+            if self.use_redis:
+                mention_key = self._redis_key("mentions", mention_id)
+                self.redis_client.hset(mention_key, "answered", "1")
+                self.logger.info(f"[REPLY_DB] Marked mention {mention_id} as replied (Redis)")
+                return True
+            else:
+                from YSimulator.YServer.classes.models import Mention
+                session = Session(self.engine)
+                try:
+                    mention = session.query(Mention).filter(Mention.id == mention_id).first()
+                    if mention:
+                        mention.answered = 1
+                        session.commit()
+                        self.logger.info(f"[REPLY_DB] Marked mention {mention_id} as replied (DB)")
+                        return True
+                    else:
+                        self.logger.warning(f"[REPLY_DB] Mention {mention_id} not found - cannot mark as replied")
+                        return False
+                finally:
+                    session.close()
+        except Exception as e:
+            self.logger.error(
+                f"[REPLY_DB] Error marking mention {mention_id} as replied: {e}",
+                extra={"extra_data": {"error": str(e), "mention_id": mention_id}}
+            )
+            import traceback
+            self.logger.error(f"[REPLY_DB] Traceback: {traceback.format_exc()}")
+            return False
+
     def get_post_sentiment(self, post_id: str) -> Optional[Dict[str, Any]]:
         """
         Get sentiment data for a post/comment.
