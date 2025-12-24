@@ -462,6 +462,11 @@ class NewsFeedService:
         """
         import uuid
         
+        # Check if LLM service is available
+        if not self.llm_service:
+            print(f"[NewsFeedService] WARNING: LLM service not available, skipping image descriptions")
+            return
+        
         for image_url in image_urls:
             try:
                 # Get image description from LLM

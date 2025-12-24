@@ -5,6 +5,12 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 
 
+# Default prompt templates for image description
+DEFAULT_IMAGE_DESCRIPTION_PROMPTS = {
+    "system_template": "You are an image description assistant. Describe images accurately and concisely in English.",
+    "user_template": "Describe the following image. Write in english. <img {url}>"
+}
+
 # Use standard Ray actor (CPU) - the GPU is managed by Ollama internally
 @ray.remote
 class LLMService:
@@ -484,11 +490,10 @@ class LLMService:
         if not self.llm_v:
             return None
         
-        # Get prompts from configuration
-        system_template = self.prompts_config.get("describe_image", {}).get("system_template",
-            "You are an image description assistant. Describe images accurately and concisely in English.")
-        user_template = self.prompts_config.get("describe_image", {}).get("user_template",
-            "Describe the following image. Write in english. <img {url}>")
+        # Get prompts from configuration with defaults
+        describe_image_config = self.prompts_config.get("describe_image", DEFAULT_IMAGE_DESCRIPTION_PROMPTS)
+        system_template = describe_image_config.get("system_template", DEFAULT_IMAGE_DESCRIPTION_PROMPTS["system_template"])
+        user_template = describe_image_config.get("user_template", DEFAULT_IMAGE_DESCRIPTION_PROMPTS["user_template"])
         
         # Format templates
         system_msg = system_template
