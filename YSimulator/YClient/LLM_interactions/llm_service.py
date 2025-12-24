@@ -1,4 +1,5 @@
 import ray
+from typing import Optional
 from langchain_ollama import ChatOllama
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
@@ -466,7 +467,7 @@ class LLMService:
             # If extraction fails, return empty list
             return []
     
-    def describe_image(self, image_url: str) -> str:
+    def describe_image(self, image_url: str) -> Optional[str]:
         """
         Generate a description of an image using the vision LLM.
         
@@ -477,7 +478,7 @@ class LLMService:
             image_url: URL of the image to describe
             
         Returns:
-            str: Description of the image, or None if vision LLM not available or error occurs
+            Optional[str]: Description of the image, or None if vision LLM not available or error occurs
         """
         # Check if vision LLM is available
         if not self.llm_v:

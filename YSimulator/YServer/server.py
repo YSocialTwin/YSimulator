@@ -1352,6 +1352,20 @@ class OrchestratorServer:
             str: Article ID if successful, None otherwise
         """
         return self.db.add_article(article_data)
+    
+    def add_image(self, image_data: dict) -> Optional[str]:
+        """
+        Add an image to the database.
+        
+        This is a wrapper method that can be called remotely from Ray actors.
+        
+        Args:
+            image_data: Dictionary containing image information (url, description, article_id)
+            
+        Returns:
+            str: Image ID if successful, None otherwise
+        """
+        return self.db.add_image(image_data)
 
     def _check_barrier_and_advance(self) -> None:
         """

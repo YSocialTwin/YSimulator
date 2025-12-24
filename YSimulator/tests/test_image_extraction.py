@@ -44,6 +44,39 @@ class TestImageExtraction(unittest.TestCase):
         # Create tables
         from YSimulator.YServer.classes.models import Base
         Base.metadata.create_all(self.db.engine)
+    
+    @staticmethod
+    def _extract_images_from_entry(entry):
+        """
+        Helper method to test image extraction logic.
+        Replicates the logic from NewsFeedService._extract_images_from_entry.
+        """
+        image_urls = []
+        
+        # Check media_content
+        if hasattr(entry, 'media_content') and entry.media_content:
+            for media in entry.media_content:
+                if media.get('type', '').startswith('image/'):
+                    url = media.get('url')
+                    if url and url not in image_urls:
+                        image_urls.append(url)
+        
+        # Check media_thumbnail
+        if hasattr(entry, 'media_thumbnail') and entry.media_thumbnail:
+            for thumb in entry.media_thumbnail:
+                url = thumb.get('url')
+                if url and url not in image_urls:
+                    image_urls.append(url)
+        
+        # Check enclosures
+        if hasattr(entry, 'enclosures') and entry.enclosures:
+            for enclosure in entry.enclosures:
+                if enclosure.get('type', '').startswith('image/'):
+                    url = enclosure.get('href')
+                    if url and url not in image_urls:
+                        image_urls.append(url)
+        
+        return image_urls
         
     def test_01_image_model_structure(self):
         """Test that Image model has correct structure."""
@@ -156,38 +189,6 @@ class TestImageExtraction(unittest.TestCase):
         """Test image URL extraction from RSS feed entries."""
         print("\n=== Test 4: Extract Images from RSS Entry ===")
         
-        # Test the extraction logic directly
-        # Create a simple class with the same method to test the logic
-        class TestNewsFeedService:
-            def _extract_images_from_entry(self, entry):
-                """Extract image URLs from an RSS feed entry."""
-                image_urls = []
-                
-                # Check media_content
-                if hasattr(entry, 'media_content') and entry.media_content:
-                    for media in entry.media_content:
-                        if media.get('type', '').startswith('image/'):
-                            url = media.get('url')
-                            if url and url not in image_urls:
-                                image_urls.append(url)
-                
-                # Check media_thumbnail
-                if hasattr(entry, 'media_thumbnail') and entry.media_thumbnail:
-                    for thumb in entry.media_thumbnail:
-                        url = thumb.get('url')
-                        if url and url not in image_urls:
-                            image_urls.append(url)
-                
-                # Check enclosures
-                if hasattr(entry, 'enclosures') and entry.enclosures:
-                    for enclosure in entry.enclosures:
-                        if enclosure.get('type', '').startswith('image/'):
-                            url = enclosure.get('href')
-                            if url and url not in image_urls:
-                                image_urls.append(url)
-                
-                return image_urls
-        
         # Create a mock entry with various image formats
         mock_entry = MagicMock()
         
@@ -207,9 +208,8 @@ class TestImageExtraction(unittest.TestCase):
             {"href": "https://example.com/enc1.jpg", "type": "image/jpeg"},
         ]
         
-        # Create service instance and extract images
-        service = TestNewsFeedService()
-        image_urls = service._extract_images_from_entry(mock_entry)
+        # Use helper method to extract images
+        image_urls = self._extract_images_from_entry(mock_entry)
         
         # Verify all images were extracted
         self.assertEqual(len(image_urls), 4)
@@ -224,37 +224,6 @@ class TestImageExtraction(unittest.TestCase):
     def test_05_extract_images_no_duplicates(self):
         """Test that duplicate image URLs are filtered out."""
         print("\n=== Test 5: No Duplicate Images ===")
-        
-        # Test the extraction logic directly
-        class TestNewsFeedService:
-            def _extract_images_from_entry(self, entry):
-                """Extract image URLs from an RSS feed entry."""
-                image_urls = []
-                
-                # Check media_content
-                if hasattr(entry, 'media_content') and entry.media_content:
-                    for media in entry.media_content:
-                        if media.get('type', '').startswith('image/'):
-                            url = media.get('url')
-                            if url and url not in image_urls:
-                                image_urls.append(url)
-                
-                # Check media_thumbnail
-                if hasattr(entry, 'media_thumbnail') and entry.media_thumbnail:
-                    for thumb in entry.media_thumbnail:
-                        url = thumb.get('url')
-                        if url and url not in image_urls:
-                            image_urls.append(url)
-                
-                # Check enclosures
-                if hasattr(entry, 'enclosures') and entry.enclosures:
-                    for enclosure in entry.enclosures:
-                        if enclosure.get('type', '').startswith('image/'):
-                            url = enclosure.get('href')
-                            if url and url not in image_urls:
-                                image_urls.append(url)
-                
-                return image_urls
         
         # Create a mock entry with duplicate URLs
         mock_entry = MagicMock()
@@ -273,8 +242,8 @@ class TestImageExtraction(unittest.TestCase):
             {"href": duplicate_url, "type": "image/jpeg"},
         ]
         
-        service = TestNewsFeedService()
-        image_urls = service._extract_images_from_entry(mock_entry)
+        # Use helper method to extract images
+        image_urls = self._extract_images_from_entry(mock_entry)
         
         # Should only have one URL despite being in multiple places
         self.assertEqual(len(image_urls), 1)
