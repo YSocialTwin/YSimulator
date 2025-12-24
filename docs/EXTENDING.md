@@ -479,6 +479,173 @@ response = self.server.submit_action(data)  # Blocks!
 response = ray.get(self.server.submit_action.remote(data))
 ```
 
+## Example: Image Sharing Action
+
+The image sharing action demonstrates a complex action with multiple components: database queries, LLM interaction, and topic management.
+
+### Overview
+
+The image action allows agents to:
+1. Randomly select an image from the images table
+2. Retrieve topics from the associated article
+3. Generate commentary using LLM (or use "IMAGE" text for rule-based agents)
+4. Create a post with image_id reference
+5. Link topics to the post
+
+### Implementation Components
+
+#### 1. Database Methods
+
+```python
+# In db_middleware.py
+
+def get_random_image(self) -> Optional[Dict[str, Any]]:
+    """Get a random image from the images table."""
+    session = Session(self.engine)
+    try:
+        image = session.query(Image).order_by(func.random()).first()
+        if image:
+            return {
+                "id": image.id,
+                "url": image.url,
+                "description": image.description,
+                "article_id": image.article_id
+            }
+        return None
+    finally:
+        session.close()
+
+def get_interest_by_id(self, interest_ids: List[str]) -> List[str]:
+    """Retrieve topic names from topic IDs."""
+    session = Session(self.engine)
+    try:
+        topics = session.query(Interest).filter(Interest.iid.in_(interest_ids)).all()
+        return [topic.interest_name for topic in topics]
+    finally:
+        session.close()
+```
+
+#### 2. LLM Service Method
+
+```python
+# In llm_service.py
+
+def generate_image_commentary(self, image_description: str, persona: str, toxicity: float, topics: List[str]) -> Optional[str]:
+    """Generate social media commentary about an image."""
+    prompt_config = self.prompts.get("generate_image_commentary", {})
+    system_template = prompt_config.get("system_template", "{persona}")
+    user_template = prompt_config.get("user_template", "Create a post about: {image_description}")
+    
+    # Format topics instruction
+    topics_instruction = f"Mention these topics: {', '.join(topics)}" if topics else ""
+    
+    # Format templates
+    system_prompt = system_template.format(persona=persona, toxicity=toxicity)
+    user_prompt = user_template.format(
+        image_description=image_description,
+        topics_instruction=topics_instruction
+    )
+    
+    response = self._call_llm(system_prompt, user_prompt)
+    return response[:280] if response else None  # Limit to 280 chars
+```
+
+#### 3. Client Action Handler
+
+```python
+# In client.py
+
+def _handle_image_action(self, agent, actions):
+    """Handle image sharing action for an agent."""
+    try:
+        # 1. Get random image
+        image_result = ray.get(self.server.get_random_image.remote())
+        if not image_result:
+            self.logger.info(f"No images available for agent {agent.username}")
+            return
+        
+        image_id = image_result["id"]
+        article_id = image_result["article_id"]
+        
+        # 2. Get topics from article
+        topic_ids = ray.get(self.server.get_article_topics.remote(article_id))
+        
+        # 3. Generate post
+        if agent.is_llm:
+            # LLM generates commentary
+            future = self.llm_service.generate_image_commentary_async.remote(
+                image_description=image_result["description"],
+                persona=agent.persona,
+                toxicity=agent.toxicity,
+                topics=topic_names
+            )
+            self.llm_pending_posts.append((agent.id, agent.cluster, future, None, image_id, topic_ids))
+        else:
+            # Rule-based uses "IMAGE" text
+            action = generate_rule_based_image_post(agent.id, agent.cluster, image_id)
+            action.topic_ids = topic_ids
+            actions.append(action)
+            
+    except Exception as e:
+        self.logger.error(f"Error handling image action: {e}")
+```
+
+#### 4. Server Handler
+
+```python
+# In server.py
+
+# Add image_id to post_data
+if hasattr(act, 'image_id') and act.image_id:
+    post_data["image_id"] = act.image_id
+
+# After post creation, link topics
+if hasattr(act, 'topic_ids') and act.topic_ids:
+    for topic_id in act.topic_ids:
+        self.db.add_post_topic(post_id, topic_id)
+```
+
+### Configuration
+
+```json
+// In simulation_config.json
+{
+  "llm_v": {
+    "address": "localhost",
+    "port": 11434,
+    "model": "minicpm-v",
+    "temperature": 0.5
+  },
+  "agents": {
+    "actions_likelihood": {
+      "post": 0.3,
+      "image": 0.1
+    }
+  }
+}
+
+// In llm_prompts.json
+{
+  "describe_image": {
+    "system_template": "You are an AI that describes images accurately.",
+    "user_template": "Describe this image. <img {url}>"
+  },
+  "generate_image_commentary": {
+    "system_template": "{persona} Toxicity: {toxicity}",
+    "user_template": "Post about: {image_description}. {topics_instruction}"
+  }
+}
+```
+
+### Key Features
+
+- **Database Integration**: Queries images and topics
+- **Vision LLM**: Uses llm_v for image description
+- **Text LLM**: Uses standard LLM for commentary
+- **Async Processing**: LLM calls are asynchronous
+- **Topic Linking**: Automatically links article topics to post
+- **Fallback**: Rule-based agents share without LLM
+
 ## Conclusion
 
 Adding new actions to YSimulator follows a consistent pattern:
