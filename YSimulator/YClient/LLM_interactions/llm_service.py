@@ -1,5 +1,5 @@
 import ray
-from typing import Optional
+from typing import Optional, List
 from langchain_ollama import ChatOllama
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
@@ -524,3 +524,64 @@ class LLMService:
             import traceback
             traceback.print_exc()
             return None
+    
+    def generate_image_commentary(self, image_description: str, topics: List[str] = None, 
+                                   agent_attrs: dict = None, cluster_id: int = 0) -> str:
+        """
+        Generate commentary for sharing an image on social media.
+        
+        Uses the agent's persona to create engaging content that references the image.
+        
+        Args:
+            image_description: Description of the image from the database
+            topics: Optional list of topic names related to the image
+            agent_attrs: Optional dict with agent attributes for persona building
+            cluster_id: Agent cluster ID for fallback persona
+            
+        Returns:
+            str: Generated commentary text
+        """
+        # Build persona
+        persona = self._build_persona(cluster_id, agent_attrs)
+        
+        # Get toxicity level
+        toxicity = ""
+        if agent_attrs and "toxicity" in agent_attrs:
+            toxicity_level = agent_attrs.get("toxicity", "").lower()
+            if toxicity_level in ["low", "medium", "high"]:
+                toxicity = toxicity_level
+        
+        # Build topics instruction
+        topics_instruction = ""
+        if topics:
+            topics_str = ", ".join(topics)
+            topics_instruction = f"Related topics: {topics_str}. "
+        
+        # Get prompts from configuration
+        config = self.prompts_config.get("generate_image_commentary", {})
+        system_template = config.get("system_template", 
+            "{persona} You are sharing an image on social media.")
+        user_template = config.get("user_template",
+            "You are sharing an image described as: \"{image_description}\"\n\n{topics_instruction}Write a brief, engaging post to share this image (max 280 characters).")
+        
+        # Format templates
+        system_msg = system_template.format(persona=persona, toxicity=toxicity)
+        user_msg = user_template.format(
+            image_description=image_description,
+            topics_instruction=topics_instruction
+        )
+        
+        # Build prompts
+        prompt = ChatPromptTemplate.from_messages([
+            ("system", system_msg),
+            ("user", user_msg)
+        ])
+        
+        try:
+            chain = prompt | self.llm | StrOutputParser()
+            commentary = chain.invoke({})
+            return commentary.strip() if commentary else "IMAGE"
+        except Exception as e:
+            # If generation fails, return fallback
+            print(f"[LLMService] ERROR: Failed to generate image commentary: {e}")
+            return "IMAGE"

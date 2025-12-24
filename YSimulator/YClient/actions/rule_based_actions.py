@@ -226,3 +226,30 @@ def generate_rule_based_follow(agent_id: int, cluster_id: int, target_user_id: s
         'user-uuid-123'
     """
     return ActionDTO(agent_id, cluster_id, "FOLLOW", target_user_id=target_user_id)
+
+
+def generate_rule_based_image_post(agent_id: int, cluster_id: int, image_id: str) -> ActionDTO:
+    """
+    Generate a simple rule-based image post action.
+    
+    Rule-based agents share images with a simple "IMAGE" text.
+    The image_id references the image in the database.
+    
+    Args:
+        agent_id: Unique identifier for the agent
+        cluster_id: Cluster/group the agent belongs to
+        image_id: UUID of the image to share
+        
+    Returns:
+        ActionDTO: POST action with "IMAGE" content and image_id
+        
+    Example:
+        >>> action = generate_rule_based_image_post(42, 1, "image-uuid-123")
+        >>> action.action_type
+        'POST'
+        >>> action.content
+        'IMAGE'
+        >>> action.image_id
+        'image-uuid-123'
+    """
+    return ActionDTO(agent_id, cluster_id, "POST", content="IMAGE", image_id=image_id)

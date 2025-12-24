@@ -46,5 +46,9 @@
   "describe_image": {
     "system_template": "You are an image description assistant. Describe images accurately and concisely in English.",
     "user_template": "Describe the following image. Write in english. <img {url}>"
+  },
+  "generate_image_commentary": {
+    "system_template": "{persona} You are sharing an image on social media. Generate {toxicity} confrontational language contents.",
+    "user_template": "You are sharing an image described as: \"{image_description}\"\n\n{topics_instruction}Write a brief, engaging post to share this image (max 280 characters). Be authentic to your persona and reference the image content."
   }
 }

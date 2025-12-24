@@ -30,6 +30,8 @@ from YSimulator.YClient.actions import (
     generate_rule_based_follow,
     generate_news_post_async,
     generate_rule_based_news_post,
+    generate_image_post_async,
+    generate_rule_based_image_post,
 )
 from YSimulator.YClient.classes.ray_models import ActionDTO, AgentProfile
 from YSimulator.YClient.text_support.text_annotator import annotate_text
@@ -1337,22 +1339,50 @@ class SimulationClient:
             actions.append(action)
     
     def _handle_image_action(self, agent, agent_type, day, slot, pending_llm_posts, actions):
-        """Handle image post action (stub for future image generation)."""
-        if agent_type == "llm":
-            future = generate_llm_post_async(self.llm, agent.cluster, day, slot)
-            pending_llm_posts.append((agent.id, agent.cluster, future, None))
-        else:
-            # Rule-based: Execute immediately with sampled topic
-            # Sample a topic from agent's interests (same as LLM agents)
-            agent_attrs = self._extract_agent_attrs(agent)
-            selected_topic = agent_attrs.get("topic")
-            action = generate_rule_based_post(agent.id, agent.cluster)
-            # Attach the sampled topic to the action
-            if selected_topic:
-                action.topic = selected_topic
-            # Annotate rule-based post
-            self._annotate_action_content(action)
-            actions.append(action)
+        """Handle image post action - share an image with commentary."""
+        # Get a random image from the database
+        try:
+            image_data = ray.get(self.server.get_random_image.remote())
+            
+            if not image_data:
+                self.logger.info(f"No images available for agent {agent.username} to share")
+                return
+            
+            image_id = image_data.get("id")
+            article_id = image_data.get("article_id")
+            
+            # Get topics associated with the article
+            topic_ids = []
+            topic_names = []
+            if article_id:
+                topic_ids = ray.get(self.server.get_article_topics.remote(article_id))
+                # Get topic names from interest table
+                for topic_id in topic_ids:
+                    interest = ray.get(self.server.get_interest_by_id.remote(topic_id))
+                    if interest:
+                        topic_names.append(interest.get("interest", ""))
+            
+            if agent_type == "llm":
+                # LLM agent: Generate personalized commentary
+                agent_attrs = self._extract_agent_attrs(agent)
+                future, img_id = generate_image_post_async(
+                    self.server, self.llm, agent.cluster, image_data, topic_names, agent_attrs
+                )
+                # Store future along with image_id and topic_ids
+                pending_llm_posts.append((agent.id, agent.cluster, future, None, img_id, topic_ids))
+            else:
+                # Rule-based: Share with "IMAGE" text
+                action = generate_rule_based_image_post(agent.id, agent.cluster, image_id)
+                # Store topic_ids to be added after post creation
+                action.topic_ids = topic_ids
+                # Annotate content
+                self._annotate_action_content(action)
+                actions.append(action)
+                
+        except Exception as e:
+            self.logger.error(f"Error handling image action for agent {agent.username}: {e}")
+            import traceback
+            traceback.print_exc()
     
     def _handle_cast_action(self, agent, agent_type, day, slot, pending_llm_posts, actions):
         """Handle cast/broadcast action (stub for future broadcast mechanism)."""
@@ -1632,7 +1662,9 @@ class SimulationClient:
         Gather and resolve all pending LLM post generation calls.
         
         Args:
-            pending_llm_posts: List of (agent_id, cluster_id, future, topic_or_article_id) tuples
+            pending_llm_posts: List of tuples:
+                - (agent_id, cluster_id, future, topic_or_article_id) for regular/news posts
+                - (agent_id, cluster_id, future, None, image_id, topic_ids) for image posts
             actions: List to append resolved post actions to
         """
         if not pending_llm_posts:
@@ -1643,8 +1675,36 @@ class SimulationClient:
         results = ray.get(futures)  # Blocks once for ALL posts
         
         for i, res_txt in enumerate(results):
-            a_id, cid, _, topic_or_article = pending_llm_posts[i]
-            action = ActionDTO(a_id, cid, "POST", content=res_txt)
+            pending_item = pending_llm_posts[i]
+            a_id = pending_item[0]
+            cid = pending_item[1]
+            
+            # Check if this is an image post (has 6 elements)
+            if len(pending_item) == 6:
+                # Image post: (agent_id, cluster_id, future, None, image_id, topic_ids)
+                _, _, _, _, image_id, topic_ids = pending_item
+                action = ActionDTO(a_id, cid, "POST", content=res_txt, image_id=image_id)
+                action.topic_ids = topic_ids  # Store for later processing
+                self.logger.info(f"LLM image post for agent {a_id}: image_id={image_id}, topics={len(topic_ids)}, content_len={len(res_txt)}")
+            else:
+                # Regular/news post: (agent_id, cluster_id, future, topic_or_article_id)
+                topic_or_article = pending_item[3] if len(pending_item) > 3 else None
+                action = ActionDTO(a_id, cid, "POST", content=res_txt)
+                
+                # Check if the fourth element is an article_id (UUID format) or a topic (string)
+                if topic_or_article:
+                    # Try to parse as UUID - if successful, it's an article_id
+                    try:
+                        import uuid
+                        uuid.UUID(topic_or_article)
+                        action.article_id = topic_or_article
+                        self.logger.info(f"LLM post for agent {a_id}: article_id={topic_or_article}, content_len={len(res_txt)}")
+                    except (ValueError, AttributeError):
+                        # Not a valid UUID, treat as topic string
+                        action.topic = topic_or_article
+                        self.logger.info(f"LLM post for agent {a_id}: topic={topic_or_article}, content_len={len(res_txt)}")
+                else:
+                    self.logger.info(f"LLM post for agent {a_id}: NO article_id/topic, content_len={len(res_txt)}")
             
             # Annotate the post text
             annotations = annotate_text(
@@ -1658,20 +1718,6 @@ class SimulationClient:
             action.annotations = annotations
             self.logger.info(f"LLM post annotated for agent {a_id}: has_sentiment={bool(annotations.get('sentiment'))}, has_toxicity={bool(annotations.get('toxicity'))}, has_emotions={bool(annotations.get('emotions'))}, hashtags={len(annotations.get('hashtags', []))}, mentions={len(annotations.get('mentions', []))}")
             
-            # Check if the fourth element is an article_id (UUID format) or a topic (string)
-            if topic_or_article:
-                # Try to parse as UUID - if successful, it's an article_id
-                try:
-                    import uuid
-                    uuid.UUID(topic_or_article)
-                    action.article_id = topic_or_article
-                    self.logger.info(f"LLM post for agent {a_id}: article_id={topic_or_article}, content_len={len(res_txt)}")
-                except (ValueError, AttributeError):
-                    # Not a valid UUID, treat as topic string
-                    action.topic = topic_or_article
-                    self.logger.info(f"LLM post for agent {a_id}: topic={topic_or_article}, content_len={len(res_txt)}")
-            else:
-                self.logger.info(f"LLM post for agent {a_id}: NO article_id/topic, content_len={len(res_txt)}")
             actions.append(action)
     
     def _gather_pending_llm_reactions(self, pending_llm_reactions: list, actions: list) -> list:

@@ -1334,6 +1334,45 @@ class DatabaseMiddleware:
             return None
         finally:
             session.close()
+    
+    def get_random_image(self) -> Optional[Dict[str, Any]]:
+        """
+        Get a random image from the database.
+        
+        Returns:
+            dict: Image data with keys: id, url, description, article_id
+                 Returns None if no images available
+        """
+        from YSimulator.YServer.classes.models import Image
+        import random
+        
+        session = Session(self.engine)
+        try:
+            # Get all images
+            images = session.query(Image).all()
+            
+            if not images:
+                self.logger.info("No images available in database")
+                return None
+            
+            # Select random image
+            image = random.choice(images)
+            
+            return {
+                "id": image.id,
+                "url": image.url,
+                "description": image.description,
+                "article_id": image.article_id
+            }
+            
+        except Exception as e:
+            self.logger.error(
+                f"Error getting random image: {e}",
+                extra={"extra_data": {"error": str(e)}}
+            )
+            return None
+        finally:
+            session.close()
 
     def get_website_by_rss(self, rss_url: str) -> Optional[Dict[str, Any]]:
         """
@@ -1365,6 +1404,38 @@ class DatabaseMiddleware:
             self.logger.error(
                 f"Error getting website by RSS: {e}",
                 extra={"extra_data": {"error": str(e), "rss_url": rss_url}}
+            )
+            return None
+        finally:
+            session.close()
+    
+    def get_interest_by_id(self, interest_id: str) -> Optional[dict]:
+        """
+        Get interest details by ID.
+        
+        Args:
+            interest_id: Interest UUID (iid)
+            
+        Returns:
+            dict: Interest data with 'iid' and 'interest' keys, or None if not found
+        """
+        from YSimulator.YServer.classes.models import Interest
+        
+        session = Session(self.engine)
+        try:
+            interest = session.query(Interest).filter(Interest.iid == interest_id).first()
+            
+            if interest:
+                return {
+                    "iid": interest.iid,
+                    "interest": interest.interest
+                }
+            return None
+            
+        except Exception as e:
+            self.logger.error(
+                f"Error getting interest by ID: {e}",
+                extra={"extra_data": {"error": str(e), "interest_id": interest_id}}
             )
             return None
         finally:
