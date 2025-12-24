@@ -1028,6 +1028,11 @@ class OrchestratorServer:
                         post_data["news_id"] = act.article_id
                         article_id = act.article_id
                     
+                    # Add image_id if this is an image post
+                    if hasattr(act, 'image_id') and act.image_id:
+                        post_data["image_id"] = act.image_id
+                        self.logger.info(f"Adding image post: agent={act.agent_id}, image_id={act.image_id}")
+                    
                     post_id = self.db.add_post(post_data)
                     if post_id:
                         new_ids.append(post_id)

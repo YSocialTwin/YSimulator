@@ -1375,6 +1375,8 @@ class SimulationClient:
                 action = generate_rule_based_image_post(agent.id, agent.cluster, image_id)
                 # Store topic_ids to be added after post creation
                 action.topic_ids = topic_ids
+                # Log the action details
+                self.logger.info(f"Rule-based image action created for agent {agent.username}: image_id={action.image_id if hasattr(action, 'image_id') else 'NOT SET'}, topics={len(topic_ids)}")
                 # Annotate content
                 self._annotate_action_content(action)
                 actions.append(action)
@@ -1686,7 +1688,7 @@ class SimulationClient:
                 action = ActionDTO(a_id, cid, "POST", content=res_txt)
                 action.image_id = image_id  # Set image_id as attribute
                 action.topic_ids = topic_ids  # Store for later processing
-                self.logger.info(f"LLM image post for agent {a_id}: image_id={image_id}, topics={len(topic_ids)}, content_len={len(res_txt)}")
+                self.logger.info(f"LLM image post for agent {a_id}: image_id={image_id}, has_image_id_attr={hasattr(action, 'image_id')}, topics={len(topic_ids)}, content_len={len(res_txt)}")
             else:
                 # Regular/news post: (agent_id, cluster_id, future, topic_or_article_id)
                 topic_or_article = pending_item[3] if len(pending_item) > 3 else None
