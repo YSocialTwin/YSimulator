@@ -252,4 +252,6 @@ def generate_rule_based_image_post(agent_id: int, cluster_id: int, image_id: str
         >>> action.image_id
         'image-uuid-123'
     """
-    return ActionDTO(agent_id, cluster_id, "POST", content="IMAGE", image_id=image_id)
+    action = ActionDTO(agent_id, cluster_id, "POST", content="IMAGE")
+    action.image_id = image_id  # Set image_id as attribute
+    return action

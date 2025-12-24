@@ -1683,7 +1683,8 @@ class SimulationClient:
             if len(pending_item) == 6:
                 # Image post: (agent_id, cluster_id, future, None, image_id, topic_ids)
                 _, _, _, _, image_id, topic_ids = pending_item
-                action = ActionDTO(a_id, cid, "POST", content=res_txt, image_id=image_id)
+                action = ActionDTO(a_id, cid, "POST", content=res_txt)
+                action.image_id = image_id  # Set image_id as attribute
                 action.topic_ids = topic_ids  # Store for later processing
                 self.logger.info(f"LLM image post for agent {a_id}: image_id={image_id}, topics={len(topic_ids)}, content_len={len(res_txt)}")
             else:
