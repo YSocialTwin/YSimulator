@@ -202,14 +202,20 @@ class NewsFeedService:
         """
         articles = []
         website_id = self.website_ids.get(feed_url)
+        total_images_found = 0
         
         try:
             feed = feedparser.parse(feed_url)
+            print(f"[NewsFeedService] Fetching from {feed_name}: found {len(feed.entries)} entries")
             
             for entry in feed.entries[:20]:  # Limit to 20 most recent articles
                 try:
                     # Extract image URLs from the entry
                     image_urls = self._extract_images_from_entry(entry)
+                    
+                    if image_urls:
+                        total_images_found += len(image_urls)
+                        print(f"[NewsFeedService] Article '{entry.get('title', 'No title')[:50]}' has {len(image_urls)} image(s)")
                     
                     article = {
                         "title": entry.get("title", "No title"),
@@ -223,12 +229,15 @@ class NewsFeedService:
                     articles.append(article)
                 except Exception as e:
                     # Skip problematic entries
+                    print(f"[NewsFeedService] WARNING: Failed to process entry: {e}")
                     continue
                     
         except Exception as e:
             # Feed parsing failed, return empty list
+            print(f"[NewsFeedService] ERROR: Failed to parse feed {feed_url}: {e}")
             pass
         
+        print(f"[NewsFeedService] Feed {feed_name}: {len(articles)} articles, {total_images_found} total images")
         return articles
     
     def _extract_images_from_entry(self, entry) -> List[str]:
@@ -438,8 +447,16 @@ class NewsFeedService:
                 
                 # Process and save images if any
                 image_urls = article.get("image_urls", [])
-                if image_urls and self.llm_service:
-                    self._process_and_save_images(article_id, image_urls)
+                print(f"[NewsFeedService] Article has {len(image_urls)} image(s) to process")
+                
+                if image_urls:
+                    if self.llm_service:
+                        print(f"[NewsFeedService] Starting image processing for article {article_id}")
+                        self._process_and_save_images(article_id, image_urls)
+                    else:
+                        print(f"[NewsFeedService] WARNING: LLM service not available, skipping {len(image_urls)} image(s)")
+                else:
+                    print(f"[NewsFeedService] No images to process for this article")
             else:
                 print(f"[NewsFeedService] ERROR: Failed to save article (server returned None)")
             
@@ -467,14 +484,19 @@ class NewsFeedService:
             print(f"[NewsFeedService] WARNING: LLM service not available, skipping image descriptions")
             return
         
-        for image_url in image_urls:
+        print(f"[NewsFeedService] Processing {len(image_urls)} image(s) for article {article_id}")
+        successful_saves = 0
+        failed_descriptions = 0
+        failed_saves = 0
+        
+        for idx, image_url in enumerate(image_urls, 1):
             try:
                 # Get image description from LLM
-                print(f"[NewsFeedService] Requesting description for image: {image_url[:80]}...")
+                print(f"[NewsFeedService] [{idx}/{len(image_urls)}] Requesting description for image: {image_url[:80]}...")
                 description = ray.get(self.llm_service.describe_image.remote(image_url))
                 
                 if description:
-                    print(f"[NewsFeedService] Got description: {description[:100]}...")
+                    print(f"[NewsFeedService] [{idx}/{len(image_urls)}] Got description ({len(description)} chars): {description[:100]}...")
                     
                     # Save image to database
                     image_data = {
@@ -484,19 +506,33 @@ class NewsFeedService:
                         "article_id": article_id
                     }
                     
+                    print(f"[NewsFeedService] [{idx}/{len(image_urls)}] Saving image to database...")
                     image_id = ray.get(self.server.add_image.remote(image_data))
                     
                     if image_id:
-                        print(f"[NewsFeedService] Image saved successfully: id={image_id}")
+                        successful_saves += 1
+                        print(f"[NewsFeedService] [{idx}/{len(image_urls)}] ✓ Image saved successfully: id={image_id}")
                     else:
-                        print(f"[NewsFeedService] WARNING: Failed to save image")
+                        failed_saves += 1
+                        print(f"[NewsFeedService] [{idx}/{len(image_urls)}] ✗ WARNING: Failed to save image to database")
                 else:
-                    print(f"[NewsFeedService] WARNING: No description returned for image")
+                    failed_descriptions += 1
+                    print(f"[NewsFeedService] [{idx}/{len(image_urls)}] ✗ WARNING: No description returned from LLM for image")
                     
             except Exception as e:
                 # Log error but continue with other images
-                print(f"[NewsFeedService] ERROR: Failed to process image {image_url[:80]}: {e}")
+                failed_descriptions += 1
+                print(f"[NewsFeedService] [{idx}/{len(image_urls)}] ✗ ERROR: Failed to process image {image_url[:80]}: {e}")
+                import traceback
+                traceback.print_exc()
                 continue
+        
+        # Summary logging
+        print(f"[NewsFeedService] Image processing summary for article {article_id}:")
+        print(f"[NewsFeedService]   - Total images: {len(image_urls)}")
+        print(f"[NewsFeedService]   - Successfully saved: {successful_saves}")
+        print(f"[NewsFeedService]   - Failed descriptions: {failed_descriptions}")
+        print(f"[NewsFeedService]   - Failed saves: {failed_saves}")
     
     def get_feed_status(self) -> Dict:
         """

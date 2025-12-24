@@ -488,6 +488,7 @@ class LLMService:
         """
         # Check if vision LLM is available
         if not self.llm_v:
+            print(f"[LLMService] WARNING: Vision LLM (llm_v) not configured, cannot describe image")
             return None
         
         # Get prompts from configuration with defaults
@@ -506,9 +507,20 @@ class LLMService:
         ])
         
         try:
+            print(f"[LLMService] Calling vision LLM to describe image: {image_url[:80]}...")
             chain = prompt | self.llm_v | StrOutputParser()
             description = chain.invoke({})
-            return description.strip() if description else None
+            
+            if description:
+                result = description.strip()
+                print(f"[LLMService] Vision LLM returned description ({len(result)} chars)")
+                return result
+            else:
+                print(f"[LLMService] WARNING: Vision LLM returned empty description")
+                return None
         except Exception as e:
             # If description fails, return None
+            print(f"[LLMService] ERROR: Vision LLM failed to describe image: {e}")
+            import traceback
+            traceback.print_exc()
             return None

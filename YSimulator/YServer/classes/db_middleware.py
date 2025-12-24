@@ -1301,6 +1301,10 @@ class DatabaseMiddleware:
                 Image.article_id == article_id
             ).first()
             if existing:
+                self.logger.info(
+                    f"Image already exists for article, returning existing ID: {existing.id}",
+                    extra={"extra_data": {"image_id": existing.id, "article_id": article_id, "url": image_data.get("url")[:80]}}
+                )
                 return existing.id
             
             # Create new image
@@ -1313,6 +1317,11 @@ class DatabaseMiddleware:
             
             session.add(image)
             session.commit()
+            
+            self.logger.info(
+                f"Image added successfully: {image_id}",
+                extra={"extra_data": {"image_id": image_id, "article_id": article_id, "url": image_data.get("url")[:80], "description_length": len(image_data.get("description", ""))}}
+            )
             
             return image_id
             
