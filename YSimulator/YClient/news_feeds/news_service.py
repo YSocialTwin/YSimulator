@@ -257,13 +257,28 @@ class NewsFeedService:
         """
         image_urls = []
         
+        # Log what fields are available for debugging
+        available_fields = []
+        if hasattr(entry, 'media_content') and entry.media_content:
+            available_fields.append('media_content')
+        if hasattr(entry, 'media_thumbnail') and entry.media_thumbnail:
+            available_fields.append('media_thumbnail')
+        if hasattr(entry, 'enclosures') and entry.enclosures:
+            available_fields.append('enclosures')
+        
+        if available_fields:
+            print(f"[NewsFeedService] Entry has image fields: {', '.join(available_fields)}")
+        
         # Check media_content
         if hasattr(entry, 'media_content') and entry.media_content:
             for media in entry.media_content:
-                if media.get('type', '').startswith('image/'):
+                media_type = media.get('type', '')
+                print(f"[NewsFeedService] Checking media_content item: type={media_type}")
+                if media_type.startswith('image/'):
                     url = media.get('url')
                     if url and url not in image_urls:
                         image_urls.append(url)
+                        print(f"[NewsFeedService] ✓ Found image in media_content: {url[:80]}")
         
         # Check media_thumbnail
         if hasattr(entry, 'media_thumbnail') and entry.media_thumbnail:
@@ -271,14 +286,21 @@ class NewsFeedService:
                 url = thumb.get('url')
                 if url and url not in image_urls:
                     image_urls.append(url)
+                    print(f"[NewsFeedService] ✓ Found image in media_thumbnail: {url[:80]}")
         
         # Check enclosures
         if hasattr(entry, 'enclosures') and entry.enclosures:
             for enclosure in entry.enclosures:
-                if enclosure.get('type', '').startswith('image/'):
+                enclosure_type = enclosure.get('type', '')
+                print(f"[NewsFeedService] Checking enclosure item: type={enclosure_type}")
+                if enclosure_type.startswith('image/'):
                     url = enclosure.get('href')
                     if url and url not in image_urls:
                         image_urls.append(url)
+                        print(f"[NewsFeedService] ✓ Found image in enclosures: {url[:80]}")
+        
+        if not image_urls and not available_fields:
+            print(f"[NewsFeedService] Entry has no image-related fields (media_content, media_thumbnail, enclosures)")
         
         return image_urls
     
@@ -292,12 +314,16 @@ class NewsFeedService:
         Returns:
             dict: Status dictionary with success/failure and article count
         """
+        print(f"[NewsFeedService] refresh_feed called for: {feed_url[:80]}")
+        
         feed_config = next((f for f in self.feeds_config if f.get("url") == feed_url), None)
         
         if not feed_config:
+            print(f"[NewsFeedService] ERROR: Feed not configured: {feed_url[:80]}")
             return {"success": False, "error": "Feed not configured", "count": 0}
         
         feed_name = feed_config.get("name", "Unknown")
+        print(f"[NewsFeedService] Fetching feed '{feed_name}' from {feed_url[:80]}")
         articles = self._fetch_feed(feed_url, feed_name)
         
         if articles:
@@ -307,8 +333,10 @@ class NewsFeedService:
             }
             self.last_fetched[feed_url] = time.time()
             
+            print(f"[NewsFeedService] Feed '{feed_name}' cached: {len(articles)} articles")
             return {"success": True, "count": len(articles), "feed": feed_name}
         else:
+            print(f"[NewsFeedService] WARNING: No articles fetched from feed '{feed_name}'")
             return {"success": False, "error": "No articles fetched", "count": 0}
     
     def refresh_all_feeds(self) -> Dict:
@@ -392,18 +420,32 @@ class NewsFeedService:
             feed_url (str): RSS feed URL
             
         Returns:
-            dict or None: Article dictionary with keys: title, summary, link, source, website_id
+            dict or None: Article dictionary with keys: title, summary, link, source, website_id, image_urls
                          Returns None if no articles available
         """
+        print(f"[NewsFeedService] get_article_from_feed called for: {feed_url[:80]}")
+        
         # Refresh cache if stale
         if self._should_refresh_cache(feed_url):
+            print(f"[NewsFeedService] Cache is stale, refreshing feed")
             self.refresh_feed(feed_url)
+        else:
+            print(f"[NewsFeedService] Using cached articles")
         
         # Get articles from this specific feed
         if feed_url in self.cached_news:
             articles = self.cached_news[feed_url].get("articles", [])
+            print(f"[NewsFeedService] Feed has {len(articles)} cached articles")
+            
             if articles:
-                return random.choice(articles)
+                article = random.choice(articles)
+                image_count = len(article.get("image_urls", []))
+                print(f"[NewsFeedService] Returning article: '{article.get('title', 'NO TITLE')[:50]}' with {image_count} image(s)")
+                return article
+            else:
+                print(f"[NewsFeedService] No articles available in cache")
+        else:
+            print(f"[NewsFeedService] WARNING: Feed URL not in cached_news dictionary")
         
         return None
     
