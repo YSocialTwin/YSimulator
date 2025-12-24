@@ -1258,6 +1258,73 @@ class DatabaseMiddleware:
             return None
         finally:
             session.close()
+    
+    def add_image(self, image_data: Dict[str, Any]) -> Optional[str]:
+        """
+        Add an image to the database.
+        
+        Args:
+            image_data (dict): Image information with keys:
+                - id: Image UUID (optional, will be generated)
+                - url: Image URL
+                - description: Image description (from LLM)
+                - article_id: Reference to article (UUID)
+                
+        Returns:
+            str: Image ID if successful, None otherwise
+        """
+        from YSimulator.YServer.classes.models import Image, Article
+        import uuid
+        
+        session = Session(self.engine)
+        try:
+            # Verify article exists
+            article_id = image_data.get("article_id")
+            if not article_id:
+                self.logger.error("Cannot add image: no article_id provided")
+                return None
+            
+            article_exists = session.query(Article).filter(Article.id == article_id).first()
+            if not article_exists:
+                self.logger.error(
+                    f"Cannot add image: article {article_id} does not exist",
+                    extra={"extra_data": {"article_id": article_id}}
+                )
+                return None
+            
+            # Generate UUID if not provided
+            image_id = image_data.get("id", str(uuid.uuid4()))
+            
+            # Check if image with same URL already exists for this article
+            existing = session.query(Image).filter(
+                Image.url == image_data.get("url"),
+                Image.article_id == article_id
+            ).first()
+            if existing:
+                return existing.id
+            
+            # Create new image
+            image = Image(
+                id=image_id,
+                url=image_data.get("url"),
+                description=image_data.get("description"),
+                article_id=article_id
+            )
+            
+            session.add(image)
+            session.commit()
+            
+            return image_id
+            
+        except Exception as e:
+            session.rollback()
+            self.logger.error(
+                f"Error adding image: {e}",
+                extra={"extra_data": {"error": str(e), "image_data": image_data}}
+            )
+            return None
+        finally:
+            session.close()
 
     def get_website_by_rss(self, rss_url: str) -> Optional[Dict[str, Any]]:
         """

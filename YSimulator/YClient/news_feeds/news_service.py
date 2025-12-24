@@ -34,7 +34,7 @@ class NewsFeedService:
         cache_duration (int): Cache duration in seconds (default: 3600)
     """
     
-    def __init__(self, feeds_config: Optional[Dict] = None):
+    def __init__(self, feeds_config: Optional[Dict] = None, llm_service=None):
         """
         Initialize the NewsFeedService actor.
         
@@ -55,6 +55,7 @@ class NewsFeedService:
                     ],
                     "cache_duration": 3600  # seconds
                 }
+            llm_service: Ray actor reference for LLMService (for image descriptions)
         """
         # Load configuration with defaults
         # Note: Feeds are now registered by page agents, so we start with an empty list
@@ -66,6 +67,7 @@ class NewsFeedService:
         
         self.feeds_config = feeds_config.get("feeds", [])
         self.cache_duration = feeds_config.get("cache_duration", 3600)
+        self.llm_service = llm_service  # Store LLM service reference for image descriptions
         
         # Get server actor reference
         try:
@@ -196,7 +198,7 @@ class NewsFeedService:
             feed_name (str): Human-readable feed name
             
         Returns:
-            list: List of article dictionaries with keys: title, summary, link, website_id
+            list: List of article dictionaries with keys: title, summary, link, website_id, images
         """
         articles = []
         website_id = self.website_ids.get(feed_url)
@@ -206,13 +208,17 @@ class NewsFeedService:
             
             for entry in feed.entries[:20]:  # Limit to 20 most recent articles
                 try:
+                    # Extract image URLs from the entry
+                    image_urls = self._extract_images_from_entry(entry)
+                    
                     article = {
                         "title": entry.get("title", "No title"),
                         "summary": entry.get("summary", entry.get("description", "No summary available")),
                         "link": entry.get("link", ""),
                         "published": entry.get("published", "Unknown date"),
                         "source": feed_name,
-                        "website_id": website_id  # Include website_id for database reference
+                        "website_id": website_id,  # Include website_id for database reference
+                        "image_urls": image_urls  # Add image URLs to article
                     }
                     articles.append(article)
                 except Exception as e:
@@ -224,6 +230,48 @@ class NewsFeedService:
             pass
         
         return articles
+    
+    def _extract_images_from_entry(self, entry) -> List[str]:
+        """
+        Extract image URLs from an RSS feed entry.
+        
+        Images can be found in various fields:
+        - media_content
+        - media_thumbnail
+        - enclosures
+        
+        Args:
+            entry: RSS feed entry from feedparser
+            
+        Returns:
+            list: List of image URLs found in the entry
+        """
+        image_urls = []
+        
+        # Check media_content
+        if hasattr(entry, 'media_content') and entry.media_content:
+            for media in entry.media_content:
+                if media.get('type', '').startswith('image/'):
+                    url = media.get('url')
+                    if url and url not in image_urls:
+                        image_urls.append(url)
+        
+        # Check media_thumbnail
+        if hasattr(entry, 'media_thumbnail') and entry.media_thumbnail:
+            for thumb in entry.media_thumbnail:
+                url = thumb.get('url')
+                if url and url not in image_urls:
+                    image_urls.append(url)
+        
+        # Check enclosures
+        if hasattr(entry, 'enclosures') and entry.enclosures:
+            for enclosure in entry.enclosures:
+                if enclosure.get('type', '').startswith('image/'):
+                    url = enclosure.get('href')
+                    if url and url not in image_urls:
+                        image_urls.append(url)
+        
+        return image_urls
     
     def refresh_feed(self, feed_url: str) -> Dict:
         """
@@ -352,10 +400,10 @@ class NewsFeedService:
     
     def save_article_to_db(self, article: Dict) -> Optional[str]:
         """
-        Save an article to the database.
+        Save an article to the database along with its images.
         
         Args:
-            article (dict): Article dictionary with keys: title, summary, link, website_id
+            article (dict): Article dictionary with keys: title, summary, link, website_id, image_urls
             
         Returns:
             str: Article ID if successful, None otherwise
@@ -387,6 +435,11 @@ class NewsFeedService:
             
             if article_id:
                 print(f"[NewsFeedService] Article saved successfully: id={article_id}")
+                
+                # Process and save images if any
+                image_urls = article.get("image_urls", [])
+                if image_urls and self.llm_service:
+                    self._process_and_save_images(article_id, image_urls)
             else:
                 print(f"[NewsFeedService] ERROR: Failed to save article (server returned None)")
             
@@ -398,6 +451,47 @@ class NewsFeedService:
             import traceback
             traceback.print_exc()
             return None
+    
+    def _process_and_save_images(self, article_id: str, image_urls: List[str]):
+        """
+        Process images by getting descriptions from LLM and saving to database.
+        
+        Args:
+            article_id: UUID of the article these images belong to
+            image_urls: List of image URLs to process
+        """
+        import uuid
+        
+        for image_url in image_urls:
+            try:
+                # Get image description from LLM
+                print(f"[NewsFeedService] Requesting description for image: {image_url[:80]}...")
+                description = ray.get(self.llm_service.describe_image.remote(image_url))
+                
+                if description:
+                    print(f"[NewsFeedService] Got description: {description[:100]}...")
+                    
+                    # Save image to database
+                    image_data = {
+                        "id": str(uuid.uuid4()),
+                        "url": image_url,
+                        "description": description,
+                        "article_id": article_id
+                    }
+                    
+                    image_id = ray.get(self.server.add_image.remote(image_data))
+                    
+                    if image_id:
+                        print(f"[NewsFeedService] Image saved successfully: id={image_id}")
+                    else:
+                        print(f"[NewsFeedService] WARNING: Failed to save image")
+                else:
+                    print(f"[NewsFeedService] WARNING: No description returned for image")
+                    
+            except Exception as e:
+                # Log error but continue with other images
+                print(f"[NewsFeedService] ERROR: Failed to process image {image_url[:80]}: {e}")
+                continue
     
     def get_feed_status(self) -> Dict:
         """

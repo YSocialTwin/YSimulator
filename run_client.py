@@ -209,14 +209,15 @@ if __name__ == "__main__":
 
     # Create LLM service with configuration
     llm_start = time.time()
-    llm_service = LLMService.remote(sim_config["llm"], prompts_config)
+    llm_v_config = sim_config.get("llm_v")  # Get vision LLM config if available
+    llm_service = LLMService.remote(sim_config["llm"], prompts_config, llm_v_config)
     llm_time = (time.time() - llm_start) * 1000
     
     # Create News Feed service with configuration (optional)
     # Always create the service - page agents will register their feeds dynamically
     news_start = time.time()
     news_feeds_config = sim_config.get("news_feeds", {"feeds": []})
-    news_service = NewsFeedService.remote(news_feeds_config)
+    news_service = NewsFeedService.remote(news_feeds_config, llm_service)
     feed_count = len(news_feeds_config.get("feeds", []))
     if feed_count > 0:
         logger.info("News feed service enabled with static feeds", extra={"extra_data": {"feeds": feed_count}})

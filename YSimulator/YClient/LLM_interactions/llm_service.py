@@ -7,7 +7,7 @@ from langchain_core.output_parsers import StrOutputParser
 # Use standard Ray actor (CPU) - the GPU is managed by Ollama internally
 @ray.remote
 class LLMService:
-    def __init__(self, llm_config=None, prompts_config=None):
+    def __init__(self, llm_config=None, prompts_config=None, llm_v_config=None):
         # Load configuration with defaults
         if llm_config is None:
             llm_config = {
@@ -46,6 +46,16 @@ class LLMService:
             temperature=llm_config["temperature"],
             base_url=base_url
         )
+        
+        # Initialize vision LLM if config provided
+        self.llm_v = None
+        if llm_v_config:
+            base_url_v = f"http://{llm_v_config['address']}:{llm_v_config['port']}"
+            self.llm_v = ChatOllama(
+                model=llm_v_config["model"],
+                temperature=llm_v_config.get("temperature", 0.5),
+                base_url=base_url_v
+            )
 
     def _build_persona(self, cluster_id: int, agent_attrs: dict = None) -> str:
         """
@@ -455,3 +465,44 @@ class LLMService:
         except Exception as e:
             # If extraction fails, return empty list
             return []
+    
+    def describe_image(self, image_url: str) -> str:
+        """
+        Generate a description of an image using the vision LLM.
+        
+        This method uses the llm_v (vision) model to analyze and describe an image
+        from a given URL. The description is generated in English.
+        
+        Args:
+            image_url: URL of the image to describe
+            
+        Returns:
+            str: Description of the image, or None if vision LLM not available or error occurs
+        """
+        # Check if vision LLM is available
+        if not self.llm_v:
+            return None
+        
+        # Get prompts from configuration
+        system_template = self.prompts_config.get("describe_image", {}).get("system_template",
+            "You are an image description assistant. Describe images accurately and concisely in English.")
+        user_template = self.prompts_config.get("describe_image", {}).get("user_template",
+            "Describe the following image. Write in english. <img {url}>")
+        
+        # Format templates
+        system_msg = system_template
+        user_msg = user_template.format(url=image_url)
+        
+        # Build prompts
+        prompt = ChatPromptTemplate.from_messages([
+            ("system", system_msg),
+            ("user", user_msg)
+        ])
+        
+        try:
+            chain = prompt | self.llm_v | StrOutputParser()
+            description = chain.invoke({})
+            return description.strip() if description else None
+        except Exception as e:
+            # If description fails, return None
+            return None
