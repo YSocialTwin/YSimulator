@@ -1109,6 +1109,13 @@ class OrchestratorServer:
                         if post_id:
                             new_ids.append(post_id)
                             
+                            # Increment reaction count for the parent post
+                            count_updated = self.db.increment_post_reaction_count(act.target_post_id)
+                            if count_updated:
+                                self.logger.info(f"Incremented reaction count for post {act.target_post_id} after COMMENT by agent {act.agent_id}")
+                            else:
+                                self.logger.warning(f"Failed to increment reaction count for post {act.target_post_id}")
+                            
                             # Process annotations if provided
                             if hasattr(act, 'annotations') and act.annotations:
                                 # Get parent post sentiment for sentiment_parent field
@@ -1230,7 +1237,15 @@ class OrchestratorServer:
                         "type": act.action_type,  # Field name is 'type' not 'reaction_type'
                         "round": self.current_round_id,  # FK to rounds.id
                     }
-                    self.db.add_interaction(interaction_data)
+                    success = self.db.add_interaction(interaction_data)
+                    
+                    # Increment reaction count for the post
+                    if success:
+                        count_updated = self.db.increment_post_reaction_count(act.target_post_id)
+                        if count_updated:
+                            self.logger.info(f"Incremented reaction count for post {act.target_post_id} after {act.action_type} by agent {act.agent_id}")
+                        else:
+                            self.logger.warning(f"Failed to increment reaction count for post {act.target_post_id}")
                     
                     # Save sentiment for reactions
                     # Get the post being reacted to

@@ -390,6 +390,45 @@ class DatabaseMiddleware:
                 f"Error adding interaction: {e}", extra={"extra_data": {"error": str(e)}}
             )
             return False
+    
+    def increment_post_reaction_count(self, post_id: str) -> bool:
+        """
+        Increment the reaction_count field for a post.
+        
+        Args:
+            post_id: Post UUID
+            
+        Returns:
+            bool: True if successful, False otherwise
+        """
+        try:
+            if self.use_redis:
+                # Increment reaction count in Redis
+                key = self._redis_key("posts", post_id)
+                # Get current count, increment, and set
+                current_count = self.redis_client.hget(key, "reaction_count")
+                new_count = int(current_count or 0) + 1
+                self.redis_client.hset(key, "reaction_count", new_count)
+                return True
+            else:
+                session = Session(self.engine)
+                try:
+                    post = session.query(Post).filter(Post.id == post_id).first()
+                    if post:
+                        post.reaction_count = (post.reaction_count or 0) + 1
+                        session.commit()
+                        return True
+                    else:
+                        self.logger.warning(f"Post {post_id} not found for reaction count increment")
+                        return False
+                finally:
+                    session.close()
+        except Exception as e:
+            self.logger.error(
+                f"Error incrementing reaction count for post {post_id}: {e}",
+                extra={"extra_data": {"error": str(e), "post_id": post_id}}
+            )
+            return False
 
     def add_follow(self, follow_data: Dict[str, Any]) -> bool:
         """
