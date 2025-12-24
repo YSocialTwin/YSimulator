@@ -443,9 +443,29 @@ Main configuration for client simulation parameters:
     "model": "llama3.2",
     "temperature": 0.7
   },
+  "llm_v": {
+    "address": "localhost",
+    "port": 11434,
+    "model": "minicpm-v",
+    "temperature": 0.5
+  },
   "simulation": {
     "num_days": 0,
     "num_slots_per_day": 24
+  },
+  "agents": {
+    "reading_from_follower_ratio": 0.6,
+    "max_length_thread_reading": 5,
+    "attention_window": 336,
+    "probability_of_daily_follow": 0.0,
+    "probability_of_secondary_follow": 0.0,
+    "actions_likelihood": {
+      "post": 0.3,
+      "image": 0.1,
+      "like": 0.2,
+      "comment": 0.15,
+      "share": 0.1
+    }
   }
 }
 ```
@@ -459,10 +479,15 @@ Main configuration for client simulation parameters:
 - `llm.port`: LLM server port (e.g., 11434 for Ollama)
 - `llm.model`: LLM model name (e.g., "llama3.2")
 - `llm.temperature`: LLM temperature for generation (0.0-1.0)
+- `llm_v.address`: **Vision LLM** server address (optional, for image description)
+- `llm_v.port`: **Vision LLM** server port (optional)
+- `llm_v.model`: **Vision LLM** model name (e.g., "minicpm-v" for image understanding)
+- `llm_v.temperature`: **Vision LLM** temperature for generation (0.0-1.0)
 - `simulation.num_days`: Number of days to simulate (0 = infinite, continues until manually stopped)
 - `simulation.num_slots_per_day`: Time slots per day (typically 24)
 - `agents.probability_of_daily_follow`: Probability (0.0-1.0) of evaluating new follows at end of each day for active agents (default: 0.0)
 - `agents.probability_of_secondary_follow`: Probability (0.0-1.0) of evaluating follow/unfollow after read/comment actions (default: 0.0)
+- `agents.actions_likelihood`: **Action probabilities** - Dictionary mapping action types to their likelihood (optional)
 
 **Agent Behavior Configuration:**
 
@@ -475,7 +500,14 @@ The `agents` section controls agent behavior parameters:
     "max_length_thread_reading": 5,
     "attention_window": 336,
     "probability_of_daily_follow": 0.0,
-    "probability_of_secondary_follow": 0.0
+    "probability_of_secondary_follow": 0.0,
+    "actions_likelihood": {
+      "post": 0.3,
+      "image": 0.1,
+      "like": 0.2,
+      "comment": 0.15,
+      "share": 0.1
+    }
   }
 }
 ```
@@ -485,6 +517,32 @@ The `agents` section controls agent behavior parameters:
 - `attention_window`: Time slots of content visibility (default: 336 = 14 days × 24 slots)
 - `probability_of_daily_follow`: Probability of evaluating new follows at end of each day for active agents (0.0-1.0, default: 0.0)
 - `probability_of_secondary_follow`: Probability of follow/unfollow evaluation after content interactions (0.0-1.0, default: 0.0)
+- `actions_likelihood`: Dictionary of action types and their relative probabilities (optional)
+  - `post`: Create a new post
+  - `image`: Share an image with commentary (requires llm_v configuration and images in database)
+  - `like`: React to a post
+  - `comment`: Comment on a post
+  - `share`: Share a post
+
+**Vision LLM Configuration (llm_v):**
+
+The `llm_v` section configures a vision-capable language model for image understanding:
+
+- **Purpose**: Describes images extracted from RSS feeds and generates image commentary
+- **Requirements**: A vision-capable LLM like minicpm-v running on Ollama
+- **Optional**: If not configured, image extraction will be skipped
+- **Image Action**: Requires llm_v to be configured for agents to share images
+
+**Action Likelihood System:**
+
+The `actions_likelihood` dictionary allows fine-grained control over agent behavior:
+
+- **Values**: Relative probabilities (not required to sum to 1.0)
+- **Optional**: If not provided, default probabilities are used
+- **Image Action**: Requires:
+  - `llm_v` configuration in simulation_config.json
+  - Images in the database (extracted from RSS feeds by page agents)
+  - `describe_image` and `generate_image_commentary` prompts in llm_prompts.json
 
 ### 4. `llm_prompts.json` - LLM Prompt Templates
 
@@ -504,6 +562,14 @@ Defines personas and prompt templates for LLM interactions:
   "decide_reaction": {
     "system_template": "You are user type {cluster_id}. Read post. Reply ONLY: 'LIKE', 'COMMENT', 'IGNORE'.",
     "user_template": "{post_content}"
+  },
+  "describe_image": {
+    "system_template": "You are an AI assistant that describes images accurately and concisely.",
+    "user_template": "Describe the following image. Write in English. <img {url}>"
+  },
+  "generate_image_commentary": {
+    "system_template": "{persona} Your toxicity level is {toxicity}.",
+    "user_template": "Create a social media post about this image: {image_description}. {topics_instruction} Max 280 characters."
   }
 }
 ```
@@ -518,6 +584,26 @@ Defines personas and prompt templates for LLM interactions:
   - Available variables: `{cluster_id}`
 - `decide_reaction.user_template`: User prompt template for reaction decisions
   - Available variables: `{post_content}`
+- `describe_image.system_template`: System prompt for vision LLM image description
+- `describe_image.user_template`: User prompt template for image description
+  - Available variables: `{url}` - Image URL
+- `generate_image_commentary.system_template`: System prompt for image post generation
+  - Available variables: `{persona}`, `{toxicity}`
+- `generate_image_commentary.user_template`: User prompt for creating image posts
+  - Available variables: `{image_description}`, `{topics_instruction}`
+
+**Image-Related Prompts:**
+
+The `describe_image` prompt is used by the vision LLM (llm_v) to generate descriptions of images extracted from RSS feeds:
+- **Input**: Image URL from RSS feed entry
+- **Output**: Text description stored in the images table
+- **Requirements**: llm_v configuration with a vision-capable model (e.g., minicpm-v)
+
+The `generate_image_commentary` prompt creates social media posts for the image sharing action:
+- **Input**: Image description, agent persona, agent toxicity level, and related topics
+- **Output**: Social media post text (max 280 characters)
+- **Usage**: LLM agents use this to create personalized commentary when sharing images
+- **Rule-based agents**: Share images with the text "IMAGE" instead of using this prompt
 
 ### 5. `network.csv` - Social Network Topology (Optional)
 

@@ -45,17 +45,17 @@ The `DatabaseMiddleware` class provides a unified interface that switches betwee
 ### Current State
 
 ```
-Total Methods: 41
-├─ Redis Supported: 19 (46%)
-├─ Database Only: 18 (44%)
-└─ Special/Utility: 4 (10%)
+Total Methods: 44
+├─ Redis Supported: 21 (48%)
+├─ Database Only: 19 (43%)
+└─ Special/Utility: 4 (9%)
 ```
 
 ---
 
 ## Method-by-Method Analysis
 
-### ✅ Methods WITH Redis Support (19)
+### ✅ Methods WITH Redis Support (21)
 
 These methods have complete dual implementations:
 
@@ -66,13 +66,14 @@ These methods have complete dual implementations:
 | `get_user` | Hash: `ysim:user:{id}` | Full support |
 | `get_user_by_username` | ❌ **DB Only** | Username lookup requires index |
 
-#### Posts & Content (4/4)
+#### Posts & Content (5/5)
 | Method | Redis Structure | Notes |
 |--------|----------------|-------|
 | `add_post` | Hash + List | `ysim:post:{id}`, `ysim:recent_posts` |
 | `get_post` | Hash | Full support |
 | `get_recent_posts` | List | Returns from `ysim:recent_posts` |
 | `get_thread_context` | Multiple hashes | Recursive parent traversal |
+| `increment_post_reaction_count` | Hash field increment | Increments `reaction_count` field |
 
 #### Interactions & Social (2/2)
 | Method | Redis Structure | Notes |
@@ -87,11 +88,12 @@ These methods have complete dual implementations:
 | `get_unreplied_mentions` | Set traversal | **Fixed**: Now properly decodes bytes |
 | `mark_mention_replied` | Hash update | Sets `answered=1` |
 
-#### Articles & News (2/4)
+#### Articles & News (3/5)
 | Method | Redis Structure | Notes |
 |--------|----------------|-------|
 | `add_website` | Hash | `ysim:website:{id}` |
 | `add_article` | Hash | `ysim:article:{id}` |
+| `add_image` | Hash | `ysim:image:{id}` |
 
 #### Annotations (7/7)
 | Method | Redis Structure | Notes |
@@ -105,7 +107,7 @@ These methods have complete dual implementations:
 
 ---
 
-### ❌ Methods WITHOUT Redis Support (18)
+### ❌ Methods WITHOUT Redis Support (19)
 
 These methods **only** use the SQL database:
 
@@ -125,10 +127,12 @@ These methods **only** use the SQL database:
 - `compute_interest_counts_in_window` - Interest aggregation
 - `add_article_topic` - Article-topic relationships
 - `get_article_topics` - Retrieve article topics
+- `get_interest_by_id` - Retrieve topic names from IDs
 
-#### Articles & News (2)
+#### Articles & News (3)
 - `get_article` - Article retrieval by ID
 - `get_website_by_rss` - Website lookup by RSS URL
+- `get_random_image` - Random image selection for sharing
 
 #### Annotations (1)
 - `get_emotion_by_name` - Emotion lookup by name
@@ -228,11 +232,18 @@ These are complex to implement efficiently in Redis without secondary indices.
 ```
 ✅ add_website           - CREATE
 ✅ add_article           - CREATE
+✅ add_image             - CREATE (stores image URL, description, article reference)
 ❌ get_article           - READ
 ❌ get_website_by_rss    - LOOKUP by RSS URL
+❌ get_random_image      - RANDOM SELECTION (used for image sharing action)
 ```
 
-**Impact:** Articles can be written to Redis but reads always hit SQL. Affects news-sharing page agents.
+**Impact:** Articles and images can be written to Redis but reads always hit SQL. Affects news-sharing page agents and image sharing actions.
+
+**Note on Images:** The new `add_image` method stores images extracted from RSS feeds with:
+- `url`: Image URL from feed
+- `description`: Vision LLM-generated description
+- `article_id`: Reference to source article
 
 ---
 
