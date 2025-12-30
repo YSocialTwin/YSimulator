@@ -269,7 +269,7 @@ class DatabaseMiddleware:
             )
             return False
 
-    def register_users_batch(self, users_data: List[Dict[str, Any]]) -> int:
+    def register_users_batch(self, users_data: List[Dict[str, Any]]) -> tuple:
         """
         Register multiple users in the database in a single transaction.
 
@@ -280,15 +280,16 @@ class DatabaseMiddleware:
             users_data: List of dictionaries, each containing user data for User_mgmt model
 
         Returns:
-            int: Number of users successfully registered (excludes already existing users)
+            tuple: (count of users registered, set of newly registered user IDs)
         """
         if not users_data:
-            return 0
+            return (0, set())
 
         try:
             if self.use_redis:
                 # Store users in Redis
                 registered_count = 0
+                newly_registered_ids = set()
                 for user_data in users_data:
                     user_id = user_data["id"]
                     key = self._redis_key("user_mgmt", user_id)
@@ -305,7 +306,8 @@ class DatabaseMiddleware:
                     # Add to user set
                     self.redis_client.sadd(self._redis_key("user_mgmt", "ids"), user_id)
                     registered_count += 1
-                return registered_count
+                    newly_registered_ids.add(user_id)
+                return (registered_count, newly_registered_ids)
             else:
                 # Use bulk insert for SQL databases
                 session = Session(self.engine)
@@ -322,12 +324,15 @@ class DatabaseMiddleware:
                     new_users = [u for u in users_data if u["id"] not in existing_ids]
 
                     if not new_users:
-                        return 0
+                        return (0, set())
 
                     # Bulk insert new users
                     session.bulk_insert_mappings(User_mgmt, new_users)
                     session.commit()
-                    return len(new_users)
+
+                    # Return count and set of newly registered IDs
+                    newly_registered_ids = {u["id"] for u in new_users}
+                    return (len(new_users), newly_registered_ids)
                 except Exception as e:
                     session.rollback()
                     self.logger.error(
@@ -342,7 +347,7 @@ class DatabaseMiddleware:
                 f"Error registering users in batch: {e}",
                 extra={"extra_data": {"error": str(e), "batch_size": len(users_data)}},
             )
-            return 0
+            return (0, set())
 
     def get_user(self, user_id: int) -> Optional[Dict[str, Any]]:
         """

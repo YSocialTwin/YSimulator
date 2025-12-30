@@ -506,9 +506,12 @@ class OrchestratorServer:
         # Prepare all user data for batch insertion
         users_data = []
         websites_data = []
-        agents_with_interests = []
+        agent_id_to_profile = {}
 
         for agent_profile in agents:
+            # Store agent profile for later lookup
+            agent_id_to_profile[str(agent_profile.id)] = agent_profile
+
             # Prepare user data
             user_data = {
                 "id": str(agent_profile.id),  # Convert to UUID string
@@ -542,10 +545,6 @@ class OrchestratorServer:
             }
             users_data.append(user_data)
 
-            # Track agents with interests for later processing
-            if agent_profile.interests:
-                agents_with_interests.append(agent_profile)
-
             # Prepare website data for page agents
             if agent_profile.is_page == 1 and agent_profile.feed_url:
                 website_data = {
@@ -560,8 +559,8 @@ class OrchestratorServer:
                 websites_data.append(website_data)
 
         try:
-            # Batch register users
-            registered_count = self.db.register_users_batch(users_data)
+            # Batch register users - returns (count, set of newly registered IDs)
+            registered_count, newly_registered_ids = self.db.register_users_batch(users_data)
 
             # All agents (new and existing) should be in registered_agents dict
             for agent_profile in agents:
@@ -569,15 +568,16 @@ class OrchestratorServer:
 
             skipped_count = len(agents) - registered_count
 
-            # Initialize interests for newly registered agents
-            # Note: This is still done individually as it involves complex logic
-            # TODO: Consider batching interest initialization in the future
-            for agent_profile in agents_with_interests:
-                self.interest_manager.initialize_agent_interests(
-                    agent_id=str(agent_profile.id),
-                    interests=agent_profile.interests,
-                    round_id=self.current_round_id,
-                )
+            # Initialize interests ONLY for newly registered agents
+            # This prevents duplicate interest entries for already-existing agents
+            for agent_id in newly_registered_ids:
+                agent_profile = agent_id_to_profile.get(agent_id)
+                if agent_profile and agent_profile.interests:
+                    self.interest_manager.initialize_agent_interests(
+                        agent_id=agent_id,
+                        interests=agent_profile.interests,
+                        round_id=self.current_round_id,
+                    )
 
             # Batch register websites for page agents
             pages_registered = 0
