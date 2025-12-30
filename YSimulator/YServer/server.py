@@ -689,6 +689,39 @@ class OrchestratorServer:
             # On error, assume network not loaded to be safe
             return False
 
+    def add_follow_relationships_batch(self, follows_data: list) -> int:
+        """
+        Add multiple follow relationships to the database in batch.
+        
+        This method is optimized for bulk insertion of follow relationships
+        (e.g., loading initial social network from network.csv). It uses a single
+        database transaction to insert all relationships, which is much faster than
+        individual inserts.
+        
+        Args:
+            follows_data: List of dictionaries, each containing:
+                - user_id: UUID of user being followed
+                - follower_id: UUID of follower
+                - action: 'follow' or 'unfollow'
+                - round: Round ID (can be empty for initial setup)
+        
+        Returns:
+            int: Number of follow relationships successfully added
+        """
+        try:
+            count = self.db.add_follows_batch(follows_data)
+            self.logger.info(
+                f"Batch added {count} follow relationships",
+                extra={"extra_data": {"count": count, "batch_size": len(follows_data)}}
+            )
+            return count
+        except Exception as e:
+            self.logger.error(
+                f"Error batch adding follow relationships: {e}",
+                extra={"extra_data": {"error": str(e), "batch_size": len(follows_data)}}
+            )
+            return 0
+
     def get_first_round_id(self) -> str:
         """
         Get the UUID of the first round (day 1, slot 1).
@@ -781,6 +814,9 @@ class OrchestratorServer:
 
         Provides the current server state (day and slot) as the starting point.
         The client will handle its own simulation step counting from this point.
+        
+        If a client was previously completed, it will be re-registered and removed
+        from the completed clients list, allowing it to run again.
 
         Args:
             client_id: Unique identifier for the client
@@ -794,6 +830,12 @@ class OrchestratorServer:
         if client_id not in self.registered_clients:
             self.registered_clients.add(client_id)
             self.last_heartbeat[client_id] = time.time()
+            
+            # If this client was previously completed, remove it from completed set
+            # This allows the same client to re-run the simulation
+            if client_id in self.completed_clients:
+                self.completed_clients.remove(client_id)
+                self.logger.info(f"Re-registering previously completed client {client_id}")
             
             execution_time = (time.time() - start_time) * 1000
 

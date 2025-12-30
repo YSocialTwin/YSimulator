@@ -563,7 +563,7 @@ class SimulationClient:
         
         This method reads a network.csv file where each row represents an edge
         in the social network as "agent1_name,agent2_name" and creates Follow
-        records in the database for each edge.
+        records in the database using batch insertion for optimal performance.
         
         Args:
             network_csv_path: Path to the network.csv file
@@ -582,7 +582,14 @@ class SimulationClient:
         # Create a mapping from username to agent ID for quick lookup
         username_to_id = {agent.username: str(agent.id) for agent in self.agent_profiles}
         
-        follow_count = 0
+        # Get first round UUID from server (for initial network setup)
+        try:
+            first_round_id = ray.get(self.server.get_first_round_id.remote())
+        except Exception as e:
+            self.logger.error(f"Error getting first round ID: {e}")
+            first_round_id = ""
+        
+        follows_to_create = []
         skipped_count = 0
         
         try:
@@ -616,41 +623,26 @@ class SimulationClient:
                     follower_id = username_to_id[follower_name]
                     user_id = username_to_id[user_name]
                     
-                    # Get first round UUID from server (for initial network setup)
-                    # We only need to fetch this once for all edges
-                    if follow_count == 0:
-                        try:
-                            first_round_id = ray.get(self.server.get_first_round_id.remote())
-                        except Exception as e:
-                            self.logger.error(f"Error getting first round ID: {e}")
-                            first_round_id = ""
-                    
-                    # Create follow relationship via server
-                    # We use the server's method to insert follow data
-                    # The round is set to first round UUID for initial network setup
+                    # Prepare follow relationship data
                     follow_data = {
                         "follower_id": follower_id,
                         "user_id": user_id,
                         "action": "follow",
                         "round": first_round_id,  # First round UUID for initial network setup
                     }
-                    
-                    # Call server to add the follow relationship
-                    try:
-                        success = ray.get(self.server.add_follow_relationship.remote(follow_data))
-                        if success:
-                            follow_count += 1
-                        else:
-                            self.logger.warning(
-                                f"Failed to create follow relationship: {follower_name} -> {user_name}"
-                            )
-                            skipped_count += 1
-                    except Exception as e:
-                        self.logger.error(
-                            f"Error creating follow relationship: {follower_name} -> {user_name}: {e}",
-                            extra={"extra_data": {"error": str(e)}}
-                        )
-                        skipped_count += 1
+                    follows_to_create.append(follow_data)
+            
+            # Batch insert all follow relationships if any were collected
+            follow_count = 0
+            if follows_to_create:
+                try:
+                    follow_count = ray.get(self.server.add_follow_relationships_batch.remote(follows_to_create))
+                except Exception as e:
+                    self.logger.error(
+                        f"Error creating follow relationships in batch: {e}",
+                        extra={"extra_data": {"error": str(e)}}
+                    )
+                    return 0
             
             self.logger.info(
                 f"Social network loaded: {follow_count} relationships created, {skipped_count} skipped",

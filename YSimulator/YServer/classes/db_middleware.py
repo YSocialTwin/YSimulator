@@ -471,6 +471,65 @@ class DatabaseMiddleware:
             )
             return False
 
+    def add_follows_batch(self, follows_data: List[Dict[str, Any]]) -> int:
+        """
+        Add multiple follow relationships to the database in a single transaction.
+        
+        This method is optimized for bulk inserts (e.g., loading social network from CSV)
+        and significantly reduces database write overhead compared to individual inserts.
+        
+        Args:
+            follows_data: List of dictionaries, each containing follow data with keys:
+                - user_id: UUID of user being followed
+                - follower_id: UUID of follower
+                - action: 'follow' or 'unfollow'
+                - round: Round ID (optional)
+        
+        Returns:
+            int: Number of follow relationships successfully added
+        """
+        if not follows_data:
+            return 0
+        
+        try:
+            # Generate UUIDs for all follow records
+            for follow_data in follows_data:
+                follow_data["id"] = str(uuid.uuid4())
+            
+            if self.use_redis:
+                # Store follow relationships in Redis
+                count = 0
+                for follow_data in follows_data:
+                    key = self._redis_key("follow", follow_data["id"])
+                    # Filter out None values for Redis
+                    redis_data = {k: v for k, v in follow_data.items() if v is not None}
+                    self.redis_client.hset(key, mapping=redis_data)
+                    count += 1
+                return count
+            else:
+                # Use bulk insert for SQL databases
+                session = Session(self.engine)
+                try:
+                    follow_objects = [Follow(**follow_data) for follow_data in follows_data]
+                    session.bulk_save_objects(follow_objects)
+                    session.commit()
+                    return len(follow_objects)
+                except Exception as e:
+                    session.rollback()
+                    self.logger.error(
+                        f"Error in batch follow insert: {e}",
+                        extra={"extra_data": {"error": str(e), "batch_size": len(follows_data)}}
+                    )
+                    raise
+                finally:
+                    session.close()
+        except Exception as e:
+            self.logger.error(
+                f"Error adding follow relationships in batch: {e}",
+                extra={"extra_data": {"error": str(e), "batch_size": len(follows_data)}}
+            )
+            return 0
+
     def get_post(self, post_id: str) -> Optional[Dict[str, Any]]:
         """
         Get post data by ID.
