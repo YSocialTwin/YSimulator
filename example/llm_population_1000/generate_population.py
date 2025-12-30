@@ -235,7 +235,7 @@ def generate_simulation_config():
                 "share": 1.0,
                 "search": 5.0,
                 "cast": 0.0,
-                "share_link": 0,
+                "share_link": 0.0,
                 "follow": 0.1
             },
             "agent_archetypes": {
