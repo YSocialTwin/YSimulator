@@ -21,6 +21,7 @@ from YSimulator.YClient.actions import (
     generate_llm_read_async,
     generate_llm_follow_async,
     generate_llm_reply_to_mention_async,
+    generate_llm_search_action_async,
     generate_rule_based_post,
     generate_rule_based_reaction,
     generate_rule_based_comment,
@@ -1338,6 +1339,83 @@ class SimulationClient:
             action = generate_rule_based_share(agent.id, agent.cluster, target)
             actions.append(action)
     
+    def _handle_search_action(self, agent, agent_type, pending_llm_reactions, actions):
+        """
+        Handle search action for an agent.
+        
+        Agent searches for posts on a topic of interest:
+        1. Sample a topic from agent's interests (same as post action)
+        2. Search for up to 10 recent posts on that topic from other users
+        3. Randomly sample one of the found posts
+        4. Decide whether to comment, share, or react to it
+        5. Execute the selected action
+        """
+        # Sample a topic from agent's interests
+        agent_attrs = self._extract_agent_attrs(agent)
+        selected_topic = agent_attrs.get("topic")
+        
+        if not selected_topic:
+            # No topics available, skip search action
+            return
+        
+        # Get topic_id from topic name
+        try:
+            topic_id = ray.get(self.server.get_topic_id_by_name.remote(selected_topic))
+            if not topic_id:
+                self.logger.debug(f"Topic '{selected_topic}' not found in database, skipping search")
+                return
+        except Exception as e:
+            self.logger.warning(f"Error getting topic_id for '{selected_topic}': {e}")
+            return
+        
+        # Search for posts on this topic (up to 10 recent posts from other users)
+        try:
+            found_posts = ray.get(self.server.search_posts_by_topic.remote(topic_id, agent.id, limit=10))
+        except Exception as e:
+            self.logger.warning(f"Error searching posts by topic '{selected_topic}': {e}")
+            return
+        
+        if not found_posts:
+            # No posts found on this topic
+            self.logger.debug(f"No posts found for topic '{selected_topic}'")
+            return
+        
+        # Randomly sample one post from the found posts
+        target_post = random.choice(found_posts)
+        
+        # Get the post content
+        try:
+            post_data = ray.get(self.server.get_post.remote(target_post))
+            if not post_data:
+                return
+            post_content = post_data.get("tweet", "")
+        except Exception as e:
+            self.logger.warning(f"Error getting post {target_post}: {e}")
+            return
+        
+        if agent_type == "llm":
+            # LLM: Ask LLM to decide which action to perform (comment/share/react)
+            future = generate_llm_search_action_async(self.llm, agent.cluster, post_content, agent_attrs)
+            pending_llm_reactions.append((agent.id, agent.cluster, target_post, future))
+        else:
+            # Rule-based: Randomly select action among comment, share, or react
+            possible_actions = ["comment", "share", "react"]
+            selected_action = random.choice(possible_actions)
+            
+            if selected_action == "comment":
+                action = generate_rule_based_comment(agent.id, agent.cluster, target_post)
+            elif selected_action == "share":
+                action = generate_rule_based_share(agent.id, agent.cluster, target_post)
+            else:  # react
+                # Random reaction (LIKE or ANGRY)
+                reaction_type = random.choice(["LIKE", "ANGRY"])
+                action = ActionDTO(agent.id, agent.cluster, reaction_type, target_post_id=target_post)
+            
+            # Annotate rule-based action if it has content
+            if hasattr(action, 'content') and action.content:
+                self._annotate_action_content(action)
+            actions.append(action)
+    
     def _handle_image_action(self, agent, agent_type, day, slot, pending_llm_posts, actions):
         """Handle image post action - share an image with commentary."""
         # Get a random image from the database
@@ -1635,8 +1713,7 @@ class SimulationClient:
                 elif action_type == "share":
                     self._handle_share_action(agent, agent_type, target, actions)
                 elif action_type == "search":
-                    # Stub: Search action - future implementation
-                    pass
+                    self._handle_search_action(agent, agent_type, pending_llm_reactions, actions)
                 elif action_type == "cast":
                     self._handle_cast_action(agent, agent_type, day, slot, pending_llm_posts, actions)
         

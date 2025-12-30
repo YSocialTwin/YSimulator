@@ -440,6 +440,18 @@ class OrchestratorServer:
         """
         return self.interest_manager.get_article_topics(article_id)
     
+    def get_topic_id_by_name(self, topic_name: str) -> Optional[str]:
+        """
+        Get topic ID by topic name.
+        
+        Args:
+            topic_name: Name of the topic/interest
+            
+        Returns:
+            str: Topic UUID or None if not found
+        """
+        return self.db.get_topic_id_by_name(topic_name)
+    
     def store_article_topics(self, article_id: str, topic_names: List[str]) -> List[str]:
         """
         Store topics for an article in the database.
@@ -1980,6 +1992,20 @@ class OrchestratorServer:
             Dictionary with user data or None if not found
         """
         return self.db.get_user(user_id)
+    
+    def search_posts_by_topic(self, topic_id: str, agent_id: str, limit: int = 10) -> List[str]:
+        """
+        Search for recent posts on a specific topic from other users.
+        
+        Args:
+            topic_id: Topic/interest UUID to search for
+            agent_id: Agent UUID (to exclude agent's own posts)
+            limit: Maximum number of posts to return (default: 10)
+            
+        Returns:
+            List[str]: List of post UUIDs from other users on this topic
+        """
+        return self.db.search_posts_by_topic(topic_id, agent_id, limit)
 
     def get_follow_suggestions(
         self,

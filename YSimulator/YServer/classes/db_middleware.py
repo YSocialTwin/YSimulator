@@ -1516,6 +1516,36 @@ class DatabaseMiddleware:
             return None
         finally:
             session.close()
+    
+    def get_topic_id_by_name(self, topic_name: str) -> Optional[str]:
+        """
+        Get topic/interest ID by name.
+        
+        Args:
+            topic_name: Name of the topic/interest
+            
+        Returns:
+            str: Topic UUID or None if not found
+        """
+        from YSimulator.YServer.classes.models import Interest
+        
+        session = Session(self.engine)
+        try:
+            # Search for interest by name (case-sensitive exact match)
+            interest = session.query(Interest).filter(Interest.interest == topic_name).first()
+            
+            if interest:
+                return interest.iid
+            return None
+            
+        except Exception as e:
+            self.logger.error(
+                f"Error getting topic ID by name: {e}",
+                extra={"extra_data": {"error": str(e), "topic_name": topic_name}}
+            )
+            return None
+        finally:
+            session.close()
 
     def add_user_interest(self, user_id: str, interest_id: str, round_id: str) -> bool:
         """
@@ -1614,6 +1644,43 @@ class DatabaseMiddleware:
             self.logger.error(
                 f"Error getting post topics: {e}",
                 extra={"extra_data": {"error": str(e), "post_id": post_id}}
+            )
+            return []
+        finally:
+            session.close()
+    
+    def search_posts_by_topic(self, topic_id: str, agent_id: str, limit: int = 10) -> List[str]:
+        """
+        Search for recent posts on a specific topic from other users.
+        
+        Args:
+            topic_id: Topic/interest UUID to search for
+            agent_id: Agent UUID (to exclude agent's own posts)
+            limit: Maximum number of posts to return (default: 10)
+            
+        Returns:
+            List[str]: List of post UUIDs from other users on this topic
+        """
+        from YSimulator.YServer.classes.models import PostTopic, Post
+        
+        session = Session(self.engine)
+        try:
+            # Query posts with this topic, excluding agent's own posts, ordered by recency
+            posts = (
+                session.query(Post.id)
+                .join(PostTopic, Post.id == PostTopic.post_id)
+                .filter(PostTopic.topic_id == topic_id)
+                .filter(Post.user_id != agent_id)
+                .order_by(Post.id.desc())
+                .limit(limit)
+                .all()
+            )
+            return [post.id for post in posts]
+            
+        except Exception as e:
+            self.logger.error(
+                f"Error searching posts by topic: {e}",
+                extra={"extra_data": {"error": str(e), "topic_id": topic_id, "agent_id": agent_id}}
             )
             return []
         finally:

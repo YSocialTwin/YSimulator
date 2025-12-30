@@ -199,6 +199,49 @@ def generate_llm_follow_async(llm_handle, cluster_id: int, candidate_users: list
     return llm_handle.generate_follow_decision.remote(cluster_id, candidate_users)
 
 
+def generate_llm_search_action_async(llm_handle, cluster_id: int, content: str, agent_attrs: dict = None):
+    """
+    Initiate async LLM search action decision.
+    
+    This function doesn't wait for the LLM response - it immediately returns
+    a Ray ObjectRef (future) that can be resolved later. This enables parallel
+    execution of multiple LLM calls.
+    
+    The LLM service will decide how to engage with a searched post based on:
+    - Cluster ID (determines persona/behavior)
+    - Post content (what the agent found via search)
+    - Agent attributes for dynamic persona building
+    
+    Possible return values from LLM:
+    - "COMMENT": Engage by commenting
+    - "SHARE": Reshare the post
+    - "LIKE", "LOVE", "LAUGH", "ANGRY", "SAD": React to the post
+    - "IGNORE": Choose not to engage
+    
+    Args:
+        llm_handle: Ray actor handle for the LLM service
+        cluster_id: Cluster/group the agent belongs to (determines persona)
+        content: Content of the post found via search
+        agent_attrs: Optional dict with agent attributes for dynamic persona building
+        
+    Returns:
+        Ray ObjectRef: Future that will resolve to action type (str)
+        
+    Usage:
+        # Fire off LLM call to decide action on searched post
+        future = generate_llm_search_action_async(llm, agent.cluster, post_content, attrs)
+        # Later, resolve the future to get the decision
+        action_type = ray.get(future)
+        if action_type == "COMMENT":
+            # Generate comment
+        elif action_type == "SHARE":
+            # Create share action
+        elif action_type != "IGNORE":
+            # Create reaction action
+    """
+    return llm_handle.decide_search_action.remote(cluster_id, content, agent_attrs)
+
+
 def generate_llm_reply_to_mention_async(llm_handle, cluster_id: int, post_content: str, 
                                          agent_attrs: dict, author_name: str, thread_context: list):
     """

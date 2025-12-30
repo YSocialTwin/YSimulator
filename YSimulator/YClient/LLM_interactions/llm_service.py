@@ -350,6 +350,64 @@ class LLMService:
         else:
             return None  # Skip following this time
     
+    def decide_search_action(self, cluster_id: int, post_content: str, agent_attrs: dict = None) -> str:
+        """
+        Decide which action to perform on a searched post: comment, share, or react.
+        
+        This method is called remotely via Ray actor for the search action.
+        LLM agents use this to decide how to engage with discovered content.
+        
+        Args:
+            cluster_id: Cluster/persona ID of the agent
+            post_content: Content of the post found via search
+            agent_attrs: Dict with agent attributes for dynamic persona building
+            
+        Returns:
+            str: Action type - one of: "COMMENT", "SHARE", "LIKE", "LOVE", "LAUGH", "ANGRY", "SAD", "IGNORE"
+        """
+        # Build persona using attributes or fallback
+        persona = self._build_persona(cluster_id, agent_attrs)
+        
+        # Get prompt templates from configuration, with fallback
+        search_action_config = self.prompts_config.get("decide_search_action", {})
+        system_template = search_action_config.get(
+            "system_template",
+            "{persona} You found a post on a topic you're interested in. Decide how to engage with it."
+        )
+        user_template = search_action_config.get(
+            "user_template",
+            "Post: {post_content}\n\nHow do you want to engage? Reply ONLY with: COMMENT, SHARE, LIKE, LOVE, LAUGH, ANGRY, SAD, or IGNORE."
+        )
+        
+        # Format templates
+        system_msg = system_template.format(persona=persona)
+        user_msg = user_template.format(post_content=post_content)
+        
+        prompt = ChatPromptTemplate.from_messages([
+            ("system", system_msg),
+            ("user", user_msg)
+        ])
+        
+        try:
+            chain = prompt | self.llm | StrOutputParser()
+            result = chain.invoke({}).strip().upper()
+            
+            # Parse LLM response - look for valid actions
+            if "COMMENT" in result: return "COMMENT"
+            if "SHARE" in result: return "SHARE"
+            if "LOVE" in result: return "LOVE"
+            if "LIKE" in result: return "LIKE"
+            if "LAUGH" in result: return "LAUGH"
+            if "ANGRY" in result: return "ANGRY"
+            if "SAD" in result: return "SAD"
+            if "IGNORE" in result: return "IGNORE"
+            
+            # Default to LIKE if unclear
+            return "LIKE"
+        except Exception as e:
+            # Fallback if LLM fails - default to LIKE
+            return "LIKE"
+    
     def generate_secondary_follow_decision(self, cluster_id: int, post_content: str, is_currently_following: bool) -> str:
         """
         Decide whether to follow or unfollow a post author based on interaction.
