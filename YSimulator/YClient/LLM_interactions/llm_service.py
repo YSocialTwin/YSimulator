@@ -370,16 +370,20 @@ class LLMService:
         # Build persona using attributes or fallback
         persona = self._build_persona(cluster_id, agent_attrs)
         
-        # Get prompt templates from configuration, with fallback
+        # Get prompt templates from configuration
         search_action_config = self.prompts_config.get("decide_search_action", {})
-        system_template = search_action_config.get(
-            "system_template",
-            "{persona} You found a post on a topic you're interested in. Decide how to engage with it."
-        )
-        user_template = search_action_config.get(
-            "user_template",
-            "Post: {post_content}\n\nHow do you want to engage? Reply ONLY with: COMMENT, SHARE, LIKE, LOVE, LAUGH, ANGRY, SAD, or IGNORE."
-        )
+        system_template = search_action_config.get("system_template")
+        user_template = search_action_config.get("user_template")
+        
+        # Validate templates are configured
+        if not system_template or not user_template:
+            # Log warning and return default fallback
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning(
+                "decide_search_action prompts not configured in llm_prompts.json, using default fallback"
+            )
+            return DEFAULT_FALLBACK_REACTION
         
         # Format templates
         system_msg = system_template.format(persona=persona)

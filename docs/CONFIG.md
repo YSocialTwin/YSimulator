@@ -543,6 +543,13 @@ The `actions_likelihood` dictionary allows fine-grained control over agent behav
   - `llm_v` configuration in simulation_config.json
   - Images in the database (extracted from RSS feeds by page agents)
   - `describe_image` and `generate_image_commentary` prompts in llm_prompts.json
+- **Search Action**: Allows agents to discover content by topic interest:
+  - Agents sample topics from their interests (weighted by interaction count)
+  - Queries database for up to 10 recent posts on the selected topic
+  - LLM agents use `decide_search_action` prompt to choose engagement
+  - Rule-based agents randomly select action (comment/share/react)
+  - Primarily used by Explorer archetype agents
+  - Requires `decide_search_action` prompts in llm_prompts.json
 
 ### 4. `llm_prompts.json` - LLM Prompt Templates
 
@@ -562,6 +569,10 @@ Defines personas and prompt templates for LLM interactions:
   "decide_reaction": {
     "system_template": "You are user type {cluster_id}. Read post. Reply ONLY: 'LIKE', 'COMMENT', 'IGNORE'.",
     "user_template": "{post_content}"
+  },
+  "decide_search_action": {
+    "system_template": "{persona} You searched for posts on a topic you're interested in and found relevant content.",
+    "user_template": "You found this post:\n\n\"{post_content}\"\n\nHow do you want to engage? Reply with ONLY ONE WORD: COMMENT, SHARE, LIKE, LOVE, LAUGH, ANGRY, SAD, or IGNORE."
   },
   "describe_image": {
     "system_template": "You are an AI assistant that describes images accurately and concisely.",
@@ -584,6 +595,10 @@ Defines personas and prompt templates for LLM interactions:
   - Available variables: `{cluster_id}`
 - `decide_reaction.user_template`: User prompt template for reaction decisions
   - Available variables: `{post_content}`
+- `decide_search_action.system_template`: System prompt for search action engagement
+  - Available variables: `{persona}`
+- `decide_search_action.user_template`: User prompt for deciding how to engage with searched post
+  - Available variables: `{post_content}`
 - `describe_image.system_template`: System prompt for vision LLM image description
 - `describe_image.user_template`: User prompt template for image description
   - Available variables: `{url}` - Image URL
@@ -591,6 +606,14 @@ Defines personas and prompt templates for LLM interactions:
   - Available variables: `{persona}`, `{toxicity}`
 - `generate_image_commentary.user_template`: User prompt for creating image posts
   - Available variables: `{image_description}`, `{topics_instruction}`
+
+**Search Action Prompts:**
+
+The `decide_search_action` prompt is used when agents actively search for posts on topics they're interested in:
+- **Input**: Post content found via topic search
+- **Output**: Action decision (COMMENT, SHARE, or reaction type)
+- **Context**: Agent's persona and the fact they searched for this topic
+- **Usage**: Primarily by Explorer archetype agents
 
 **Image-Related Prompts:**
 

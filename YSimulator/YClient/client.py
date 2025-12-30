@@ -1352,35 +1352,66 @@ class SimulationClient:
         4. Decide whether to comment, share, or react to it
         5. Execute the selected action
         """
+        self.logger.info(
+            f"search action initiated: agent={agent.username}, type={agent_type}",
+            extra={"extra_data": {"agent_id": agent.id, "agent_type": agent_type, "archetype": agent.archetype}}
+        )
+        
         # Sample a topic from agent's interests
         agent_attrs = self._extract_agent_attrs(agent)
         selected_topic = agent_attrs.get("topic")
         
         if not selected_topic:
             # No topics available, skip search action
+            self.logger.debug(
+                f"search action skipped: no topics available for agent {agent.username}",
+                extra={"extra_data": {"agent_id": agent.id}}
+            )
             return
+        
+        self.logger.info(
+            f"search action: topic sampled '{selected_topic}' for agent {agent.username}",
+            extra={"extra_data": {"agent_id": agent.id, "topic": selected_topic}}
+        )
         
         # Get topic_id from topic name
         try:
             topic_id = ray.get(self.server.get_topic_id_by_name.remote(selected_topic))
             if not topic_id:
-                self.logger.debug(f"Topic '{selected_topic}' not found in database, skipping search")
+                self.logger.debug(
+                    f"search action: topic '{selected_topic}' not found in database, skipping for agent {agent.username}",
+                    extra={"extra_data": {"agent_id": agent.id, "topic": selected_topic}}
+                )
                 return
         except Exception as e:
-            self.logger.warning(f"Error getting topic_id for '{selected_topic}': {e}")
+            self.logger.warning(
+                f"search action error: failed to get topic_id for '{selected_topic}' for agent {agent.username}: {e}",
+                extra={"extra_data": {"agent_id": agent.id, "topic": selected_topic, "error": str(e)}}
+            )
             return
         
         # Search for posts on this topic (up to 10 recent posts from other users)
         try:
             found_posts = ray.get(self.server.search_posts_by_topic.remote(topic_id, agent.id, limit=10))
         except Exception as e:
-            self.logger.warning(f"Error searching posts by topic '{selected_topic}': {e}")
+            self.logger.warning(
+                f"search action error: failed to search posts for topic '{selected_topic}' for agent {agent.username}: {e}",
+                extra={"extra_data": {"agent_id": agent.id, "topic": selected_topic, "topic_id": topic_id, "error": str(e)}}
+            )
             return
         
         if not found_posts:
             # No posts found on this topic
-            self.logger.debug(f"No posts found for topic '{selected_topic}'")
+            self.logger.debug(
+                f"search action: no posts found for topic '{selected_topic}' for agent {agent.username}",
+                extra={"extra_data": {"agent_id": agent.id, "topic": selected_topic, "topic_id": topic_id}}
+            )
             return
+        
+        self.logger.info(
+            f"search action: found {len(found_posts)} posts on topic '{selected_topic}' for agent {agent.username}",
+            extra={"extra_data": {"agent_id": agent.id, "topic": selected_topic, "posts_found": len(found_posts)}}
+        )
         
         # Randomly sample one post from the found posts
         target_post = random.choice(found_posts)
@@ -1389,20 +1420,42 @@ class SimulationClient:
         try:
             post_data = ray.get(self.server.get_post.remote(target_post))
             if not post_data:
+                self.logger.warning(
+                    f"search action: post {target_post} not found for agent {agent.username}",
+                    extra={"extra_data": {"agent_id": agent.id, "target_post_id": target_post}}
+                )
                 return
             post_content = post_data.get("tweet", "")
+            post_author_id = post_data.get("user_id", "unknown")
         except Exception as e:
-            self.logger.warning(f"Error getting post {target_post}: {e}")
+            self.logger.warning(
+                f"search action error: failed to get post {target_post} for agent {agent.username}: {e}",
+                extra={"extra_data": {"agent_id": agent.id, "target_post_id": target_post, "error": str(e)}}
+            )
             return
+        
+        self.logger.info(
+            f"search action: selected post {target_post} on topic '{selected_topic}' for agent {agent.username}",
+            extra={"extra_data": {"agent_id": agent.id, "topic": selected_topic, "target_post_id": target_post, "post_author_id": post_author_id, "post_length": len(post_content)}}
+        )
         
         if agent_type == "llm":
             # LLM: Ask LLM to decide which action to perform (comment/share/react)
+            self.logger.info(
+                f"search action: LLM deciding engagement for agent {agent.username}",
+                extra={"extra_data": {"agent_id": agent.id, "target_post_id": target_post}}
+            )
             future = generate_llm_search_action_async(self.llm, agent.cluster, post_content, agent_attrs)
             pending_llm_reactions.append((agent.id, agent.cluster, target_post, future))
         else:
             # Rule-based: Randomly select action among comment, share, or react
             possible_actions = ["comment", "share", "react"]
             selected_action = random.choice(possible_actions)
+            
+            self.logger.info(
+                f"search action: rule-based agent {agent.username} selected '{selected_action}' action",
+                extra={"extra_data": {"agent_id": agent.id, "selected_action": selected_action, "target_post_id": target_post}}
+            )
             
             if selected_action == "comment":
                 action = generate_rule_based_comment(agent.id, agent.cluster, target_post)
@@ -1412,11 +1465,20 @@ class SimulationClient:
                 # Use basic reactions (simple positive/negative responses)
                 reaction_type = random.choice(BASIC_REACTIONS)
                 action = ActionDTO(agent.id, agent.cluster, reaction_type, target_post_id=target_post)
+                self.logger.info(
+                    f"search action: rule-based agent {agent.username} reacting with {reaction_type}",
+                    extra={"extra_data": {"agent_id": agent.id, "reaction_type": reaction_type, "target_post_id": target_post}}
+                )
             
             # Annotate rule-based action if it has content
             if hasattr(action, 'content') and action.content:
                 self._annotate_action_content(action)
             actions.append(action)
+            
+            self.logger.info(
+                f"search action completed: rule-based action created for agent {agent.username}",
+                extra={"extra_data": {"agent_id": agent.id, "action_type": action.action_type, "target_post_id": target_post}}
+            )
     
     def _handle_image_action(self, agent, agent_type, day, slot, pending_llm_posts, actions):
         """Handle image post action - share an image with commentary."""
@@ -1872,10 +1934,24 @@ class SimulationClient:
                 # This is a reaction type
                 self.logger.debug(f"[REPLY] LLM generated reaction for agent {a_id}: {res_act}")
                 actions.append(ActionDTO(a_id, cid, res_act, target_post_id=target))
+                
+                # Log if this is from a search action (heuristic: check if we have a complete action decision)
+                if res_act in ["SHARE"]:
+                    self.logger.info(
+                        f"search action: LLM agent {a_id} decided to {res_act}",
+                        extra={"extra_data": {"agent_id": a_id, "action_type": res_act, "target_post_id": target}}
+                    )
+                
                 # Track for secondary follow (read/reaction action)
                 post_data = ray.get(self.server.get_post.remote(target))
                 if post_data:
                     secondary_follow_candidates.append((a_id, cid, post_data.get("user_id"), post_data.get("tweet", ""), True))
+            else:
+                # IGNORE action - log for search action context
+                self.logger.debug(
+                    f"LLM agent {a_id} chose to IGNORE post {target}",
+                    extra={"extra_data": {"agent_id": a_id, "action_type": "IGNORE", "target_post_id": target}}
+                )
         
         return secondary_follow_candidates
     
