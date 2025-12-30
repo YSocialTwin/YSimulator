@@ -1931,16 +1931,23 @@ class SimulationClient:
                 if post_data:
                     secondary_follow_candidates.append((a_id, cid, post_data.get("user_id"), post_data.get("tweet", ""), True))
             elif res_act.upper() != "IGNORE":
-                # This is a reaction type
+                # This is a reaction type (or SHARE)
                 self.logger.debug(f"[REPLY] LLM generated reaction for agent {a_id}: {res_act}")
-                actions.append(ActionDTO(a_id, cid, res_act, target_post_id=target))
                 
-                # Log if this is from a search action (heuristic: check if we have a complete action decision)
-                if res_act in ["SHARE"]:
+                # Special handling for SHARE - generate share commentary
+                if res_act.upper() == "SHARE":
+                    # For SHARE actions, use cluster-specific share content (similar to rule-based)
+                    share_content = f"Sharing from cluster {cid}"
+                    action = ActionDTO(a_id, cid, res_act.upper(), content=share_content, target_post_id=target)
                     self.logger.info(
-                        f"search action: LLM agent {a_id} decided to {res_act}",
-                        extra={"extra_data": {"agent_id": a_id, "action_type": res_act, "target_post_id": target}}
+                        f"search action: LLM agent {a_id} decided to SHARE with content",
+                        extra={"extra_data": {"agent_id": a_id, "action_type": "SHARE", "target_post_id": target}}
                     )
+                else:
+                    # Regular reaction (LIKE, LOVE, LAUGH, ANGRY, SAD)
+                    action = ActionDTO(a_id, cid, res_act, target_post_id=target)
+                
+                actions.append(action)
                 
                 # Track for secondary follow (read/reaction action)
                 post_data = ray.get(self.server.get_post.remote(target))
