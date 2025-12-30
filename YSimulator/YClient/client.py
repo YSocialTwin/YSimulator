@@ -60,6 +60,8 @@ from YSimulator.YClient.recsys.FollowRecSysRay import (
 
 # Constants
 REACTION_TYPES = ["LIKE", "LOVE", "LAUGH", "ANGRY", "SAD", "IGNORE"]
+# Basic reactions for rule-based agents (simple positive/negative responses)
+BASIC_REACTIONS = ["LIKE", "ANGRY"]
 
 # Recommendation system class mapping
 RECSYS_CLASS_MAP = {
@@ -1407,10 +1409,8 @@ class SimulationClient:
             elif selected_action == "share":
                 action = generate_rule_based_share(agent.id, agent.cluster, target_post)
             else:  # react
-                # Random reaction (LIKE or ANGRY as simple positive/negative)
-                # Exclude IGNORE since we want to perform an action
-                valid_reactions = [r for r in REACTION_TYPES if r not in ["IGNORE", "LOVE", "LAUGH", "SAD"]]
-                reaction_type = random.choice(valid_reactions)
+                # Use basic reactions (simple positive/negative responses)
+                reaction_type = random.choice(BASIC_REACTIONS)
                 action = ActionDTO(agent.id, agent.cluster, reaction_type, target_post_id=target_post)
             
             # Annotate rule-based action if it has content

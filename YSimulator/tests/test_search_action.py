@@ -4,6 +4,7 @@ Test the search action implementation to verify it works correctly.
 
 import sys
 import os
+import random
 from pathlib import Path
 
 # Add parent directory to path
@@ -41,7 +42,6 @@ class TestSearchAction(unittest.TestCase):
         Base.metadata.create_all(self.db.engine)
         
         # Create test fixtures
-        import random
         with Session(self.db.engine) as session:
             # Create round
             self.round_id = str(uuid.uuid4())

@@ -1,3 +1,4 @@
+import random
 import ray
 from typing import Optional, List
 from langchain_ollama import ChatOllama
@@ -337,8 +338,6 @@ class LLMService:
         Returns:
             str: User ID to follow, or None to skip following
         """
-        import random
-        
         # If no candidates, return None
         if not candidate_users:
             return None
@@ -426,8 +425,6 @@ class LLMService:
         Returns:
             str: Decision - "follow", "unfollow", or "no_change"
         """
-        import random
-        
         # Get follow decision probabilities from configuration
         follow_config = self.prompts_config.get("generate_secondary_follow_decision", {})
         follow_prob = follow_config.get("follow_probability_when_not_following", 0.3)
