@@ -143,6 +143,7 @@ apply_persona()                # Tailor content to agent personality
 - **Behavior**: daily_activity_level, activity_profile, toxicity
 - **Social**: leaning, archetype, cluster
 - **Technical**: llm (boolean), owner
+- **Archetype Override**: agent_downcast configuration can force validators and explorers to use rule-based behavior
 
 ### 2. Server Components
 
@@ -758,6 +759,7 @@ Track active agents → End of day → Evaluate with probability → Get suggest
 - ✅ Evaluate daily follows (at end of each day)
 - ✅ Track active agents per day
 - ✅ Select action types based on agent archetypes
+- ✅ Apply agent_downcast override to force rule-based behavior for validators and explorers
 
 ### What the Client Does NOT Do
 - ❌ Coordinate with other clients directly

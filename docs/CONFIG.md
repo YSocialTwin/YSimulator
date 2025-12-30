@@ -451,7 +451,16 @@ Main configuration for client simulation parameters:
   },
   "simulation": {
     "num_days": 0,
-    "num_slots_per_day": 24
+    "num_slots_per_day": 24,
+    "agent_archetypes": {
+      "enabled": true,
+      "agent_downcast": true,
+      "distribution": {
+        "validator": 0.33,
+        "broadcaster": 0.33,
+        "explorer": 0.34
+      }
+    }
   },
   "agents": {
     "reading_from_follower_ratio": 0.6,
@@ -485,6 +494,13 @@ Main configuration for client simulation parameters:
 - `llm_v.temperature`: **Vision LLM** temperature for generation (0.0-1.0)
 - `simulation.num_days`: Number of days to simulate (0 = infinite, continues until manually stopped)
 - `simulation.num_slots_per_day`: Time slots per day (typically 24)
+- `simulation.agent_archetypes`: **Agent archetype configuration** (optional)
+  - `enabled`: Enable archetype-based behavior (true/false, default: false)
+  - `agent_downcast`: Force validator and explorer agents to use rule-based behavior regardless of LLM setting (true/false, default: false)
+  - `distribution`: Distribution of agents across archetypes (must sum to ~1.0)
+    - `validator`: Proportion of validator agents (0.0-1.0)
+    - `broadcaster`: Proportion of broadcaster agents (0.0-1.0)
+    - `explorer`: Proportion of explorer agents (0.0-1.0)
 - `agents.probability_of_daily_follow`: Probability (0.0-1.0) of evaluating new follows at end of each day for active agents (default: 0.0)
 - `agents.probability_of_secondary_follow`: Probability (0.0-1.0) of evaluating follow/unfollow after read/comment actions (default: 0.0)
 - `agents.actions_likelihood`: **Action probabilities** - Dictionary mapping action types to their likelihood (optional)
@@ -550,6 +566,89 @@ The `actions_likelihood` dictionary allows fine-grained control over agent behav
   - Rule-based agents randomly select action (comment/share/react)
   - Primarily used by Explorer archetype agents
   - Requires `decide_search_action` prompts in llm_prompts.json
+
+**Agent Archetypes System:**
+
+The `agent_archetypes` section enables differentiated agent behaviors based on social media user types:
+
+```json
+{
+  "simulation": {
+    "agent_archetypes": {
+      "enabled": true,
+      "agent_downcast": true,
+      "distribution": {
+        "validator": 0.33,
+        "broadcaster": 0.33,
+        "explorer": 0.34
+      }
+    }
+  }
+}
+```
+
+- **enabled**: When `true`, agents are assigned specific action sets based on their archetype
+- **agent_downcast**: When `true`, forces validator and explorer agents to use rule-based behavior even if their `llm` field is `true`. Broadcaster agents are unaffected and maintain their configured LLM setting. This is useful for reducing LLM API costs while maintaining realistic behavior patterns.
+- **distribution**: Defines the proportion of each archetype during agent sampling (values should sum to approximately 1.0)
+
+**Archetype Behaviors:**
+
+Each archetype has a distinct action profile that reflects real social media user patterns:
+
+1. **Validator** (Skeptical Content Consumers):
+   - Available actions: `share`, `read`, `share_link`
+   - Behavior: Reactive users who evaluate and share content but rarely create original posts
+   - Personality: Skeptical, brief, authentic (from persona in llm_prompts.json)
+
+2. **Broadcaster** (Content Producers):
+   - Available actions: `post`, `image`, `share`, `comment`
+   - Behavior: Active content creators who post frequently and engage with others
+   - Personality: High energy, viral-seeking, controversial (from persona in llm_prompts.json)
+
+3. **Explorer** (Network Builders):
+   - Available actions: `search`, `follow`
+   - Behavior: Users focused on discovering content and building their network
+   - Personality: Curious, asking questions (from persona in llm_prompts.json)
+
+**Agent Downcast Feature:**
+
+The `agent_downcast` option provides cost-efficient simulation by selectively overriding LLM usage:
+
+- **Use Case**: Reduce LLM API costs while maintaining behavioral diversity
+- **Effect**: Validator and explorer archetypes use rule-based actions (faster, cheaper)
+- **Unaffected**: Broadcaster archetypes maintain their LLM setting (creative content generation)
+- **Rationale**: Validators and explorers perform simpler actions (react, share, search) that don't require sophisticated language generation, while broadcasters benefit from LLM-generated original content
+- **Case-Insensitive**: Archetype matching is case-insensitive (Validator, validator, VALIDATOR all work)
+
+**Example Configuration:**
+
+```json
+// Full LLM population with archetype behaviors
+{
+  "agent_archetypes": {
+    "enabled": true,
+    "agent_downcast": false,  // All agents use LLM as configured
+    "distribution": {
+      "validator": 0.33,
+      "broadcaster": 0.33,
+      "explorer": 0.34
+    }
+  }
+}
+
+// Cost-optimized mixed population
+{
+  "agent_archetypes": {
+    "enabled": true,
+    "agent_downcast": true,  // Only broadcasters use LLM
+    "distribution": {
+      "validator": 0.33,
+      "broadcaster": 0.33,
+      "explorer": 0.34
+    }
+  }
+}
+```
 
 ### 4. `llm_prompts.json` - LLM Prompt Templates
 
