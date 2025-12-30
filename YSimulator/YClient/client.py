@@ -474,7 +474,7 @@ class SimulationClient:
             else:
                 start_index = 1
 
-            archetypes = ["Validator", "Broadcaster", "Explorer"]
+            archetypes = ["validator", "broadcaster", "explorer"]
             activity_profiles = ["Always On", "Morning Active", "Evening Active", "Weekend Warrior"]
             professions = ["Engineer", "Teacher", "Designer", "Writer", "Analyst", "Manager"]
             genders = ["male", "female", "non-binary"]
@@ -1004,19 +1004,19 @@ class SimulationClient:
         # NOTE: Future enhancement - these mappings could be moved to simulation_config.json
         # for easier customization without code changes
         archetype_actions = {
-            "Validator": [
+            "validator": [
                 "share",
                 "read",
                 "share_link",
             ],  # Validators react and share content: they are active content consumers
-            "Broadcaster": [
+            "broadcaster": [
                 "post",
                 "image",
                 "share",
                 "comment",
+                "search"
             ],  # Broadcasters post, comment and share contents and images: they are content producers
-            "Explorer": [
-                "search",
+            "explorer": [
                 "follow",
             ],  # Explorers follow and search to grow network: they are lurkers
         }
