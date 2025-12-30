@@ -1,6 +1,0 @@
-validator_001,TechNewsPage
-broadcaster_001,TechNewsPage
-explorer_001,TechNewsPage
-validator_001,broadcaster_001
-broadcaster_001,explorer_001
-explorer_001,validator_001

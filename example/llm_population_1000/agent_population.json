@@ -62,12 +62,14 @@
         [
           "Analysis",
           "Facts",
-          "Verification"
+          "Verification",
+          "Education"
         ],
         [
-          7,
-          5,
-          4
+          8,
+          6,
+          4,
+          1
         ]
       ]
     },
@@ -101,7 +103,7 @@
         ],
         [
           8,
-          5,
+          6,
           5
         ]
       ]
@@ -167,12 +169,14 @@
         [
           "Education",
           "Learning",
-          "Teaching"
+          "Teaching",
+          "Curiosity"
         ],
         [
-          8,
+          13,
           6,
-          4
+          4,
+          1
         ]
       ]
     },
@@ -202,12 +206,14 @@
         [
           "Analysis",
           "Facts",
-          "Verification"
+          "Verification",
+          "Education"
         ],
         [
           7,
-          5,
-          4
+          6,
+          4,
+          1
         ]
       ]
     },
@@ -310,7 +316,7 @@
           "Verification"
         ],
         [
-          7,
+          8,
           5,
           4
         ]
@@ -380,9 +386,9 @@
           "Curiosity"
         ],
         [
-          8,
+          9,
           5,
-          5
+          6
         ]
       ]
     },
@@ -415,8 +421,8 @@
           "Curiosity"
         ],
         [
-          8,
-          5,
+          9,
+          6,
           5
         ]
       ]
@@ -552,12 +558,14 @@
         [
           "Analysis",
           "Facts",
-          "Verification"
+          "Verification",
+          "ai"
         ],
         [
           7,
           5,
-          4
+          4,
+          1
         ]
       ]
     },
@@ -591,7 +599,7 @@
         ],
         [
           8,
-          6,
+          7,
           4
         ]
       ]
@@ -622,12 +630,20 @@
         [
           "Discovery",
           "Learning",
-          "Curiosity"
+          "Curiosity",
+          "Analysis",
+          "high-end",
+          "wealthy",
+          "Facts"
         ],
         [
-          8,
+          9,
           5,
-          5
+          6,
+          1,
+          1,
+          1,
+          1
         ]
       ]
     },
@@ -727,12 +743,14 @@
         [
           "Discovery",
           "Learning",
-          "Curiosity"
+          "Curiosity",
+          "Facts"
         ],
         [
           8,
           5,
-          5
+          5,
+          1
         ]
       ]
     },
@@ -797,12 +815,14 @@
         [
           "Analysis",
           "Facts",
-          "Verification"
+          "Verification",
+          "Education"
         ],
         [
           7,
           5,
-          4
+          4,
+          1
         ]
       ]
     },
@@ -836,7 +856,7 @@
         ],
         [
           5,
-          5,
+          6,
           2
         ]
       ]
@@ -867,12 +887,16 @@
         [
           "Discovery",
           "Learning",
-          "Curiosity"
+          "Curiosity",
+          "reckless",
+          "social"
         ],
         [
           8,
           5,
-          5
+          5,
+          1,
+          1
         ]
       ]
     },
@@ -942,7 +966,7 @@
         [
           8,
           6,
-          4
+          5
         ]
       ]
     },
@@ -976,7 +1000,7 @@
         ],
         [
           5,
-          5,
+          6,
           2
         ]
       ]
@@ -1042,12 +1066,14 @@
         [
           "Learning",
           "Education",
-          "Technology"
+          "Technology",
+          "Curiosity"
         ],
         [
+          6,
           5,
-          5,
-          2
+          2,
+          1
         ]
       ]
     },
@@ -1182,12 +1208,14 @@
         [
           "Education",
           "Learning",
-          "Teaching"
+          "Teaching",
+          "Engagement"
         ],
         [
           8,
           6,
-          4
+          4,
+          1
         ]
       ]
     },
@@ -1217,12 +1245,18 @@
         [
           "News",
           "Trends",
-          "Engagement"
+          "Engagement",
+          "Curiosity",
+          "Learning",
+          "Education"
         ],
         [
           8,
-          6,
-          5
+          7,
+          5,
+          1,
+          1,
+          1
         ]
       ]
     },
@@ -1322,12 +1356,14 @@
         [
           "Discovery",
           "Learning",
-          "Curiosity"
+          "Curiosity",
+          "Engagement"
         ],
         [
           8,
-          5,
-          5
+          6,
+          6,
+          1
         ]
       ]
     },
@@ -1360,7 +1396,7 @@
           "Verification"
         ],
         [
-          7,
+          9,
           5,
           4
         ]
@@ -1465,8 +1501,8 @@
           "Curiosity"
         ],
         [
-          8,
-          5,
+          9,
+          6,
           5
         ]
       ]
@@ -1606,7 +1642,7 @@
         ],
         [
           5,
-          5,
+          6,
           2
         ]
       ]
@@ -1920,7 +1956,7 @@
           "Engagement"
         ],
         [
-          8,
+          9,
           6,
           5
         ]
@@ -1952,12 +1988,16 @@
         [
           "Learning",
           "Education",
-          "Technology"
+          "Technology",
+          "google",
+          "smart"
         ],
         [
           5,
           5,
-          2
+          2,
+          1,
+          1
         ]
       ]
     },
@@ -2057,12 +2097,16 @@
         [
           "Analysis",
           "Facts",
-          "Verification"
+          "Verification",
+          "Trends",
+          "Learning"
         ],
         [
           7,
           5,
-          4
+          4,
+          1,
+          2
         ]
       ]
     },
@@ -2095,8 +2139,8 @@
           "Teaching"
         ],
         [
+          9,
           8,
-          6,
           4
         ]
       ]
@@ -2197,12 +2241,14 @@
         [
           "News",
           "Trends",
-          "Engagement"
+          "Engagement",
+          "Education"
         ],
         [
-          8,
-          6,
-          5
+          9,
+          7,
+          5,
+          1
         ]
       ]
     },
@@ -2236,7 +2282,7 @@
         ],
         [
           5,
-          5,
+          6,
           2
         ]
       ]
@@ -2337,12 +2383,18 @@
         [
           "News",
           "Trends",
-          "Engagement"
+          "Engagement",
+          "im",
+          "but",
+          "Discovery"
         ],
         [
           8,
           6,
-          5
+          5,
+          1,
+          1,
+          1
         ]
       ]
     },
@@ -2372,12 +2424,14 @@
         [
           "Learning",
           "Education",
-          "Technology"
+          "Technology",
+          "Discovery"
         ],
         [
+          6,
           5,
-          5,
-          2
+          2,
+          1
         ]
       ]
     },
@@ -2407,12 +2461,16 @@
         [
           "Discovery",
           "Learning",
-          "Curiosity"
+          "Curiosity",
+          "apple",
+          "choosing"
         ],
         [
           8,
           5,
-          5
+          5,
+          1,
+          1
         ]
       ]
     },
@@ -2512,12 +2570,16 @@
         [
           "Discovery",
           "Learning",
-          "Curiosity"
+          "Curiosity",
+          "Verification",
+          "Education"
         ],
         [
-          8,
+          9,
           5,
-          5
+          5,
+          1,
+          1
         ]
       ]
     },
@@ -2585,7 +2647,7 @@
           "Teaching"
         ],
         [
-          8,
+          9,
           6,
           4
         ]
@@ -2617,12 +2679,14 @@
         [
           "News",
           "Trends",
-          "Engagement"
+          "Engagement",
+          "Verification"
         ],
         [
           8,
           6,
-          5
+          5,
+          1
         ]
       ]
     },
@@ -2687,12 +2751,14 @@
         [
           "Discovery",
           "Learning",
-          "Curiosity"
+          "Curiosity",
+          "Education"
         ],
         [
-          8,
+          9,
           5,
-          5
+          5,
+          1
         ]
       ]
     },
@@ -2726,7 +2792,7 @@
         ],
         [
           8,
-          6,
+          7,
           4
         ]
       ]
@@ -2792,12 +2858,14 @@
         [
           "Discovery",
           "Learning",
-          "Curiosity"
+          "Curiosity",
+          "Education"
         ],
         [
-          8,
+          9,
           5,
-          5
+          5,
+          1
         ]
       ]
     },
@@ -2827,12 +2895,16 @@
         [
           "News",
           "Trends",
-          "Engagement"
+          "Engagement",
+          "im",
+          "but"
         ],
         [
           8,
           6,
-          5
+          5,
+          1,
+          1
         ]
       ]
     },
@@ -2901,7 +2973,7 @@
         ],
         [
           7,
-          5,
+          6,
           4
         ]
       ]
@@ -2970,7 +3042,7 @@
           "Technology"
         ],
         [
-          5,
+          6,
           5,
           2
         ]
@@ -3177,12 +3249,14 @@
         [
           "Education",
           "Learning",
-          "Teaching"
+          "Teaching",
+          "Curiosity"
         ],
         [
           8,
           6,
-          4
+          4,
+          1
         ]
       ]
     },
@@ -3215,9 +3289,9 @@
           "Curiosity"
         ],
         [
-          8,
+          9,
           5,
-          5
+          6
         ]
       ]
     },
@@ -3320,7 +3394,7 @@
           "Technology"
         ],
         [
-          5,
+          6,
           5,
           2
         ]
@@ -3422,12 +3496,14 @@
         [
           "Education",
           "Learning",
-          "Teaching"
+          "Teaching",
+          "Curiosity"
         ],
         [
           8,
           6,
-          4
+          4,
+          1
         ]
       ]
     },
@@ -3531,7 +3607,7 @@
         ],
         [
           8,
-          6,
+          7,
           4
         ]
       ]
@@ -3667,12 +3743,14 @@
         [
           "Discovery",
           "Learning",
-          "Curiosity"
+          "Curiosity",
+          "Engagement"
         ],
         [
-          8,
+          9,
           5,
-          5
+          5,
+          1
         ]
       ]
     },
@@ -3737,12 +3815,14 @@
         [
           "Analysis",
           "Facts",
-          "Verification"
+          "Verification",
+          "Learning"
         ],
         [
-          7,
+          8,
           5,
-          4
+          5,
+          1
         ]
       ]
     },
@@ -3772,12 +3852,14 @@
         [
           "Analysis",
           "Facts",
-          "Verification"
+          "Verification",
+          "Technology"
         ],
         [
           7,
           5,
-          4
+          4,
+          1
         ]
       ]
     },
@@ -3985,7 +4067,7 @@
           "Curiosity"
         ],
         [
-          8,
+          9,
           5,
           5
         ]
@@ -4055,9 +4137,9 @@
           "Verification"
         ],
         [
-          7,
-          5,
-          4
+          8,
+          6,
+          5
         ]
       ]
     },
@@ -4090,8 +4172,8 @@
           "Teaching"
         ],
         [
-          8,
-          6,
+          9,
+          7,
           4
         ]
       ]
@@ -4160,7 +4242,7 @@
           "Teaching"
         ],
         [
-          8,
+          10,
           6,
           4
         ]
@@ -4196,7 +4278,7 @@
         ],
         [
           7,
-          5,
+          6,
           4
         ]
       ]
@@ -4262,12 +4344,14 @@
         [
           "News",
           "Trends",
-          "Engagement"
+          "Engagement",
+          "Analysis"
         ],
         [
-          8,
-          6,
-          5
+          9,
+          7,
+          5,
+          1
         ]
       ]
     },
@@ -4336,7 +4420,7 @@
         ],
         [
           8,
-          5,
+          6,
           5
         ]
       ]
@@ -4577,12 +4661,16 @@
         [
           "News",
           "Trends",
-          "Engagement"
+          "Engagement",
+          "consumer",
+          "startup"
         ],
         [
           8,
-          6,
-          5
+          7,
+          5,
+          1,
+          1
         ]
       ]
     },
@@ -4685,7 +4773,7 @@
           "Engagement"
         ],
         [
-          8,
+          9,
           6,
           5
         ]
@@ -4752,12 +4840,14 @@
         [
           "Analysis",
           "Facts",
-          "Verification"
+          "Verification",
+          "Learning"
         ],
         [
           7,
           5,
-          4
+          4,
+          1
         ]
       ]
     },
@@ -4927,12 +5017,14 @@
         [
           "News",
           "Trends",
-          "Engagement"
+          "Engagement",
+          "Education"
         ],
         [
           8,
           6,
-          5
+          5,
+          1
         ]
       ]
     },
@@ -4965,7 +5057,7 @@
           "Technology"
         ],
         [
-          5,
+          6,
           5,
           2
         ]
@@ -5032,12 +5124,14 @@
         [
           "Education",
           "Learning",
-          "Teaching"
+          "Teaching",
+          "Curiosity"
         ],
         [
-          8,
+          9,
           6,
-          4
+          4,
+          1
         ]
       ]
     },
@@ -5172,12 +5266,16 @@
         [
           "Discovery",
           "Learning",
-          "Curiosity"
+          "Curiosity",
+          "ai",
+          "business"
         ],
         [
-          8,
+          9,
           5,
-          5
+          5,
+          1,
+          1
         ]
       ]
     },
@@ -5207,12 +5305,14 @@
         [
           "News",
           "Trends",
-          "Engagement"
+          "Engagement",
+          "Learning"
         ],
         [
           8,
           6,
-          5
+          5,
+          1
         ]
       ]
     },
@@ -5245,8 +5345,8 @@
           "Teaching"
         ],
         [
-          8,
-          6,
+          9,
+          7,
           4
         ]
       ]
@@ -5417,12 +5517,14 @@
         [
           "Discovery",
           "Learning",
-          "Curiosity"
+          "Curiosity",
+          "Verification"
         ],
         [
           8,
           5,
-          5
+          5,
+          1
         ]
       ]
     },
@@ -5452,12 +5554,14 @@
         [
           "Discovery",
           "Learning",
-          "Curiosity"
+          "Curiosity",
+          "News"
         ],
         [
           8,
           5,
-          5
+          5,
+          1
         ]
       ]
     },
@@ -5522,12 +5626,16 @@
         [
           "News",
           "Trends",
-          "Engagement"
+          "Engagement",
+          "apple",
+          "choosing"
         ],
         [
-          8,
+          9,
           6,
-          5
+          5,
+          1,
+          1
         ]
       ]
     },
@@ -5701,7 +5809,7 @@
         ],
         [
           8,
-          6,
+          8,
           4
         ]
       ]
@@ -5735,7 +5843,7 @@
           "Technology"
         ],
         [
-          5,
+          6,
           5,
           2
         ]
@@ -5767,12 +5875,14 @@
         [
           "Education",
           "Learning",
-          "Teaching"
+          "Teaching",
+          "Analysis"
         ],
         [
           8,
           6,
-          4
+          5,
+          1
         ]
       ]
     },
@@ -5910,7 +6020,7 @@
           "Engagement"
         ],
         [
-          8,
+          9,
           6,
           5
         ]
@@ -5942,12 +6052,16 @@
         [
           "Education",
           "Learning",
-          "Teaching"
+          "Teaching",
+          "us",
+          "potential"
         ],
         [
           8,
           6,
-          4
+          4,
+          1,
+          1
         ]
       ]
     },
@@ -6050,7 +6164,7 @@
           "Engagement"
         ],
         [
-          8,
+          9,
           6,
           5
         ]
@@ -6155,7 +6269,7 @@
           "Teaching"
         ],
         [
-          8,
+          9,
           6,
           4
         ]
@@ -6187,12 +6301,16 @@
         [
           "News",
           "Trends",
-          "Engagement"
+          "Engagement",
+          "Teaching",
+          "Facts"
         ],
         [
           8,
           6,
-          5
+          5,
+          1,
+          1
         ]
       ]
     },
@@ -6225,8 +6343,8 @@
           "Curiosity"
         ],
         [
-          8,
-          5,
+          9,
+          6,
           5
         ]
       ]
@@ -6397,12 +6515,22 @@
         [
           "News",
           "Trends",
-          "Engagement"
+          "Engagement",
+          "ai",
+          "business",
+          "google",
+          "smart",
+          "Learning"
         ],
         [
           8,
           6,
-          5
+          5,
+          1,
+          1,
+          1,
+          1,
+          1
         ]
       ]
     },
@@ -6467,12 +6595,14 @@
         [
           "Education",
           "Learning",
-          "Teaching"
+          "Teaching",
+          "Trends"
         ],
         [
           8,
           6,
-          4
+          4,
+          1
         ]
       ]
     },
@@ -6537,12 +6667,14 @@
         [
           "Discovery",
           "Learning",
-          "Curiosity"
+          "Curiosity",
+          "News"
         ],
         [
-          8,
+          9,
           5,
-          5
+          5,
+          1
         ]
       ]
     },
@@ -6612,7 +6744,7 @@
         [
           5,
           5,
-          2
+          3
         ]
       ]
     },
@@ -6715,7 +6847,7 @@
           "Technology"
         ],
         [
-          5,
+          6,
           5,
           2
         ]
@@ -6782,12 +6914,18 @@
         [
           "News",
           "Trends",
-          "Engagement"
+          "Engagement",
+          "Technology",
+          "artificial",
+          "venture"
         ],
         [
           8,
           6,
-          5
+          5,
+          1,
+          1,
+          1
         ]
       ]
     },
@@ -6957,12 +7095,14 @@
         [
           "Learning",
           "Education",
-          "Technology"
+          "Technology",
+          "Trends"
         ],
         [
           5,
           5,
-          2
+          2,
+          1
         ]
       ]
     },
@@ -7132,12 +7272,14 @@
         [
           "Learning",
           "Education",
-          "Technology"
+          "Technology",
+          "Analysis"
         ],
         [
           5,
-          5,
-          2
+          6,
+          2,
+          1
         ]
       ]
     },
@@ -7170,7 +7312,7 @@
           "Teaching"
         ],
         [
-          8,
+          9,
           6,
           4
         ]
@@ -7272,12 +7414,16 @@
         [
           "Discovery",
           "Learning",
-          "Curiosity"
+          "Curiosity",
+          "artificial",
+          "venture"
         ],
         [
           8,
           5,
-          5
+          5,
+          1,
+          1
         ]
       ]
     },
@@ -7307,12 +7453,18 @@
         [
           "Education",
           "Learning",
-          "Teaching"
+          "Teaching",
+          "Verification",
+          "unique",
+          "memorable"
         ],
         [
           8,
           6,
-          4
+          5,
+          1,
+          1,
+          1
         ]
       ]
     },
@@ -7346,7 +7498,7 @@
         ],
         [
           5,
-          5,
+          6,
           2
         ]
       ]
@@ -7412,12 +7564,14 @@
         [
           "Discovery",
           "Learning",
-          "Curiosity"
+          "Curiosity",
+          "Education"
         ],
         [
-          8,
+          10,
           5,
-          5
+          6,
+          1
         ]
       ]
     },
@@ -7522,7 +7676,7 @@
         [
           8,
           6,
-          4
+          5
         ]
       ]
     },
@@ -7660,7 +7814,7 @@
           "Technology"
         ],
         [
-          5,
+          6,
           5,
           2
         ]
@@ -7937,12 +8091,14 @@
         [
           "Learning",
           "Education",
-          "Technology"
+          "Technology",
+          "Analysis"
         ],
         [
           5,
           5,
-          2
+          2,
+          1
         ]
       ]
     },
@@ -7972,12 +8128,14 @@
         [
           "Analysis",
           "Facts",
-          "Verification"
+          "Verification",
+          "Discovery"
         ],
         [
           7,
           5,
-          4
+          5,
+          1
         ]
       ]
     },
@@ -8182,12 +8340,16 @@
         [
           "Discovery",
           "Learning",
-          "Curiosity"
+          "Curiosity",
+          "high-end",
+          "wealthy"
         ],
         [
           8,
           5,
-          5
+          5,
+          1,
+          1
         ]
       ]
     },
@@ -8255,7 +8417,7 @@
           "Verification"
         ],
         [
-          7,
+          9,
           5,
           4
         ]
@@ -8467,7 +8629,7 @@
         [
           8,
           5,
-          5
+          6
         ]
       ]
     },
@@ -8606,7 +8768,7 @@
         ],
         [
           8,
-          5,
+          6,
           5
         ]
       ]
@@ -8676,7 +8838,7 @@
         ],
         [
           7,
-          5,
+          6,
           4
         ]
       ]
@@ -8707,12 +8869,14 @@
         [
           "Education",
           "Learning",
-          "Teaching"
+          "Teaching",
+          "Trends"
         ],
         [
           8,
           6,
-          4
+          5,
+          1
         ]
       ]
     },
@@ -8742,12 +8906,14 @@
         [
           "News",
           "Trends",
-          "Engagement"
+          "Engagement",
+          "Education"
         ],
         [
           8,
           6,
-          5
+          5,
+          1
         ]
       ]
     },
@@ -8812,12 +8978,16 @@
         [
           "Education",
           "Learning",
-          "Teaching"
+          "Teaching",
+          "Technology",
+          "Analysis"
         ],
         [
           8,
           6,
-          4
+          5,
+          1,
+          1
         ]
       ]
     },
@@ -8882,12 +9052,16 @@
         [
           "Education",
           "Learning",
-          "Teaching"
+          "Teaching",
+          "News",
+          "Curiosity"
         ],
         [
           8,
-          6,
-          4
+          7,
+          4,
+          1,
+          1
         ]
       ]
     },
@@ -8952,12 +9126,16 @@
         [
           "Analysis",
           "Facts",
-          "Verification"
+          "Verification",
+          "us",
+          "acquisition"
         ],
         [
           7,
           5,
-          4
+          4,
+          1,
+          1
         ]
       ]
     },
@@ -9131,7 +9309,7 @@
         ],
         [
           5,
-          5,
+          6,
           2
         ]
       ]
@@ -9267,12 +9445,16 @@
         [
           "News",
           "Trends",
-          "Engagement"
+          "Engagement",
+          "Learning",
+          "Verification"
         ],
         [
           8,
           6,
-          5
+          5,
+          1,
+          1
         ]
       ]
     },
@@ -9306,7 +9488,7 @@
         ],
         [
           8,
-          6,
+          7,
           5
         ]
       ]
@@ -9445,7 +9627,7 @@
           "Teaching"
         ],
         [
-          8,
+          9,
           6,
           4
         ]
@@ -9512,12 +9694,14 @@
         [
           "News",
           "Trends",
-          "Engagement"
+          "Engagement",
+          "Education"
         ],
         [
           8,
           6,
-          5
+          5,
+          1
         ]
       ]
     },
@@ -10002,12 +10186,16 @@
         [
           "News",
           "Trends",
-          "Engagement"
+          "Engagement",
+          "Learning",
+          "Teaching"
         ],
         [
           8,
-          6,
-          5
+          7,
+          5,
+          1,
+          1
         ]
       ]
     },
@@ -10107,12 +10295,16 @@
         [
           "Discovery",
           "Learning",
-          "Curiosity"
+          "Curiosity",
+          "unique",
+          "memorable"
         ],
         [
           8,
           5,
-          5
+          5,
+          1,
+          1
         ]
       ]
     },
@@ -10286,7 +10478,7 @@
         ],
         [
           5,
-          5,
+          6,
           2
         ]
       ]
@@ -10320,9 +10512,9 @@
           "Verification"
         ],
         [
-          7,
+          8,
           5,
-          4
+          5
         ]
       ]
     },
@@ -10355,7 +10547,7 @@
           "Engagement"
         ],
         [
-          8,
+          9,
           6,
           5
         ]
@@ -10387,12 +10579,16 @@
         [
           "Discovery",
           "Learning",
-          "Curiosity"
+          "Curiosity",
+          "Facts",
+          "Education"
         ],
         [
           8,
           5,
-          5
+          5,
+          1,
+          1
         ]
       ]
     },
@@ -10495,8 +10691,8 @@
           "Technology"
         ],
         [
-          5,
-          5,
+          6,
+          6,
           2
         ]
       ]
@@ -10527,12 +10723,14 @@
         [
           "News",
           "Trends",
-          "Engagement"
+          "Engagement",
+          "Learning"
         ],
         [
           8,
-          6,
-          5
+          7,
+          5,
+          1
         ]
       ]
     },
@@ -10671,7 +10869,7 @@
         ],
         [
           8,
-          5,
+          6,
           5
         ]
       ]
@@ -10772,12 +10970,16 @@
         [
           "News",
           "Trends",
-          "Engagement"
+          "Engagement",
+          "Learning",
+          "Facts"
         ],
         [
           8,
           6,
-          5
+          6,
+          1,
+          1
         ]
       ]
     },
@@ -10807,12 +11009,16 @@
         [
           "News",
           "Trends",
-          "Engagement"
+          "Engagement",
+          "ai",
+          "Learning"
         ],
         [
           8,
           6,
-          5
+          5,
+          1,
+          1
         ]
       ]
     },
@@ -10912,12 +11118,16 @@
         [
           "Analysis",
           "Facts",
-          "Verification"
+          "Verification",
+          "Education",
+          "Discovery"
         ],
         [
           7,
-          5,
-          4
+          6,
+          4,
+          1,
+          1
         ]
       ]
     },
@@ -10947,12 +11157,14 @@
         [
           "Learning",
           "Education",
-          "Technology"
+          "Technology",
+          "Discovery"
         ],
         [
           5,
           5,
-          2
+          2,
+          1
         ]
       ]
     },
@@ -10986,7 +11198,7 @@
         ],
         [
           5,
-          5,
+          6,
           2
         ]
       ]
@@ -11021,7 +11233,7 @@
         ],
         [
           7,
-          5,
+          6,
           4
         ]
       ]
@@ -11092,7 +11304,7 @@
         [
           8,
           6,
-          5
+          6
         ]
       ]
     },
@@ -11160,7 +11372,7 @@
           "Engagement"
         ],
         [
-          8,
+          9,
           6,
           5
         ]
@@ -11297,12 +11509,16 @@
         [
           "Discovery",
           "Learning",
-          "Curiosity"
+          "Curiosity",
+          "artificial",
+          "venture"
         ],
         [
           8,
+          6,
           5,
-          5
+          1,
+          1
         ]
       ]
     },
@@ -11337,7 +11553,7 @@
         [
           8,
           5,
-          5
+          6
         ]
       ]
     },
@@ -11402,12 +11618,14 @@
         [
           "Learning",
           "Education",
-          "Technology"
+          "Technology",
+          "Trends"
         ],
         [
           5,
           5,
-          2
+          2,
+          1
         ]
       ]
     },
@@ -11437,12 +11655,16 @@
         [
           "Education",
           "Learning",
-          "Teaching"
+          "Teaching",
+          "ai-powered",
+          "portable"
         ],
         [
           8,
           6,
-          4
+          4,
+          1,
+          1
         ]
       ]
     },
@@ -11510,7 +11732,7 @@
           "Verification"
         ],
         [
-          7,
+          8,
           5,
           4
         ]
@@ -11542,12 +11764,18 @@
         [
           "Education",
           "Learning",
-          "Teaching"
+          "Teaching",
+          "government",
+          "tech",
+          "Facts"
         ],
         [
-          8,
+          9,
           6,
-          4
+          4,
+          1,
+          1,
+          1
         ]
       ]
     },
@@ -11577,12 +11805,14 @@
         [
           "Learning",
           "Education",
-          "Technology"
+          "Technology",
+          "Trends"
         ],
         [
           5,
-          5,
-          2
+          6,
+          2,
+          1
         ]
       ]
     },
@@ -11615,7 +11845,7 @@
           "Curiosity"
         ],
         [
-          8,
+          9,
           5,
           5
         ]
@@ -11790,7 +12020,7 @@
           "Curiosity"
         ],
         [
-          8,
+          9,
           5,
           5
         ]
@@ -11857,12 +12087,14 @@
         [
           "Analysis",
           "Facts",
-          "Verification"
+          "Verification",
+          "Learning"
         ],
         [
           7,
           5,
-          4
+          4,
+          1
         ]
       ]
     },
@@ -11965,7 +12197,7 @@
           "Curiosity"
         ],
         [
-          8,
+          9,
           5,
           5
         ]
@@ -12000,7 +12232,7 @@
           "Teaching"
         ],
         [
-          8,
+          9,
           6,
           4
         ]
@@ -12032,12 +12264,14 @@
         [
           "News",
           "Trends",
-          "Engagement"
+          "Engagement",
+          "Analysis"
         ],
         [
           8,
           6,
-          5
+          5,
+          1
         ]
       ]
     },
@@ -12316,7 +12550,7 @@
         ],
         [
           8,
-          6,
+          7,
           4
         ]
       ]
@@ -12452,12 +12686,18 @@
         [
           "Analysis",
           "Facts",
-          "Verification"
+          "Verification",
+          "chatgpt",
+          "integrating",
+          "Learning"
         ],
         [
           7,
           5,
-          4
+          4,
+          1,
+          1,
+          1
         ]
       ]
     },
@@ -12557,12 +12797,14 @@
         [
           "News",
           "Trends",
-          "Engagement"
+          "Engagement",
+          "Discovery"
         ],
         [
           8,
           6,
-          5
+          6,
+          1
         ]
       ]
     },
@@ -12701,8 +12943,8 @@
         ],
         [
           8,
-          5,
-          5
+          6,
+          6
         ]
       ]
     },
@@ -12771,7 +13013,7 @@
         ],
         [
           8,
-          6,
+          7,
           4
         ]
       ]
@@ -12872,12 +13114,14 @@
         [
           "Discovery",
           "Learning",
-          "Curiosity"
+          "Curiosity",
+          "Education"
         ],
         [
           8,
           5,
-          5
+          5,
+          1
         ]
       ]
     },
@@ -12910,7 +13154,7 @@
           "Teaching"
         ],
         [
-          8,
+          9,
           6,
           4
         ]
@@ -12947,7 +13191,7 @@
         [
           7,
           5,
-          4
+          5
         ]
       ]
     },
@@ -13082,12 +13326,16 @@
         [
           "Analysis",
           "Facts",
-          "Verification"
+          "Verification",
+          "im",
+          "but"
         ],
         [
           7,
           5,
-          4
+          4,
+          1,
+          1
         ]
       ]
     },
@@ -13157,7 +13405,7 @@
         [
           8,
           5,
-          5
+          6
         ]
       ]
     },
@@ -13190,7 +13438,7 @@
           "Engagement"
         ],
         [
-          8,
+          9,
           6,
           5
         ]
@@ -13226,8 +13474,8 @@
         ],
         [
           7,
-          5,
-          4
+          7,
+          5
         ]
       ]
     },
@@ -13296,7 +13544,7 @@
         ],
         [
           8,
-          6,
+          7,
           5
         ]
       ]
@@ -13327,12 +13575,18 @@
         [
           "Learning",
           "Education",
-          "Technology"
+          "Technology",
+          "Curiosity",
+          "Discovery",
+          "Facts"
         ],
         [
           5,
           5,
-          2
+          2,
+          1,
+          1,
+          1
         ]
       ]
     },
@@ -13400,7 +13654,7 @@
           "Verification"
         ],
         [
-          7,
+          9,
           5,
           4
         ]
@@ -13470,7 +13724,7 @@
           "Technology"
         ],
         [
-          5,
+          6,
           5,
           2
         ]
@@ -13541,7 +13795,7 @@
         ],
         [
           8,
-          6,
+          7,
           4
         ]
       ]
@@ -13646,8 +13900,8 @@
         ],
         [
           8,
-          6,
-          5
+          7,
+          6
         ]
       ]
     },
@@ -13712,12 +13966,14 @@
         [
           "Discovery",
           "Learning",
-          "Curiosity"
+          "Curiosity",
+          "Engagement"
         ],
         [
           8,
           5,
-          5
+          5,
+          1
         ]
       ]
     },
@@ -13750,7 +14006,7 @@
           "Curiosity"
         ],
         [
-          8,
+          9,
           5,
           5
         ]
@@ -13852,12 +14108,14 @@
         [
           "Analysis",
           "Facts",
-          "Verification"
+          "Verification",
+          "Trends"
         ],
         [
           7,
           5,
-          4
+          4,
+          1
         ]
       ]
     },
@@ -13887,12 +14145,14 @@
         [
           "Education",
           "Learning",
-          "Teaching"
+          "Teaching",
+          "Discovery"
         ],
         [
           8,
-          6,
-          4
+          7,
+          4,
+          1
         ]
       ]
     },
@@ -13922,12 +14182,18 @@
         [
           "Discovery",
           "Learning",
-          "Curiosity"
+          "Curiosity",
+          "government",
+          "tech",
+          "Education"
         ],
         [
-          8,
+          9,
           5,
-          5
+          5,
+          1,
+          1,
+          1
         ]
       ]
     },
@@ -14062,12 +14328,14 @@
         [
           "Learning",
           "Education",
-          "Technology"
+          "Technology",
+          "Teaching"
         ],
         [
           5,
-          5,
-          2
+          6,
+          2,
+          1
         ]
       ]
     },
@@ -14097,12 +14365,16 @@
         [
           "Analysis",
           "Facts",
-          "Verification"
+          "Verification",
+          "enterprise",
+          "vc"
         ],
         [
           7,
           5,
-          4
+          4,
+          1,
+          1
         ]
       ]
     },
@@ -14132,12 +14404,14 @@
         [
           "Education",
           "Learning",
-          "Teaching"
+          "Teaching",
+          "Facts"
         ],
         [
           8,
-          6,
-          4
+          7,
+          4,
+          1
         ]
       ]
     },
@@ -14242,7 +14516,7 @@
         [
           8,
           5,
-          5
+          6
         ]
       ]
     },
@@ -14345,7 +14619,7 @@
           "Engagement"
         ],
         [
-          8,
+          10,
           6,
           5
         ]
@@ -14487,7 +14761,7 @@
         [
           8,
           6,
-          4
+          5
         ]
       ]
     },
@@ -14626,7 +14900,7 @@
         ],
         [
           5,
-          5,
+          6,
           2
         ]
       ]
@@ -14692,12 +14966,16 @@
         [
           "News",
           "Trends",
-          "Engagement"
+          "Engagement",
+          "Analysis",
+          "Education"
         ],
         [
           8,
           6,
-          5
+          5,
+          1,
+          1
         ]
       ]
     },
@@ -14730,7 +15008,7 @@
           "Teaching"
         ],
         [
-          8,
+          10,
           6,
           4
         ]
@@ -14766,7 +15044,7 @@
         ],
         [
           5,
-          5,
+          6,
           2
         ]
       ]
@@ -14832,12 +15110,14 @@
         [
           "News",
           "Trends",
-          "Engagement"
+          "Engagement",
+          "Learning"
         ],
         [
           8,
           6,
-          5
+          5,
+          1
         ]
       ]
     },
@@ -14937,12 +15217,18 @@
         [
           "Discovery",
           "Learning",
-          "Curiosity"
+          "Curiosity",
+          "us",
+          "potential",
+          "Teaching"
         ],
         [
           8,
+          6,
           5,
-          5
+          1,
+          1,
+          1
         ]
       ]
     },
@@ -15007,12 +15293,14 @@
         [
           "Analysis",
           "Facts",
-          "Verification"
+          "Verification",
+          "Trends"
         ],
         [
           7,
           5,
-          4
+          4,
+          1
         ]
       ]
     },
@@ -15112,12 +15400,16 @@
         [
           "Discovery",
           "Learning",
-          "Curiosity"
+          "Curiosity",
+          "sauron",
+          "home"
         ],
         [
           8,
           5,
-          5
+          5,
+          1,
+          1
         ]
       ]
     },
@@ -15150,9 +15442,9 @@
           "Engagement"
         ],
         [
-          8,
+          10,
           6,
-          5
+          6
         ]
       ]
     },
@@ -15186,7 +15478,7 @@
         ],
         [
           8,
-          6,
+          7,
           4
         ]
       ]
@@ -15217,12 +15509,14 @@
         [
           "Education",
           "Learning",
-          "Teaching"
+          "Teaching",
+          "Facts"
         ],
         [
           8,
           6,
-          4
+          4,
+          1
         ]
       ]
     },
@@ -15357,12 +15651,14 @@
         [
           "News",
           "Trends",
-          "Engagement"
+          "Engagement",
+          "Analysis"
         ],
         [
           8,
           6,
-          5
+          5,
+          1
         ]
       ]
     },
@@ -15392,12 +15688,14 @@
         [
           "Learning",
           "Education",
-          "Technology"
+          "Technology",
+          "Analysis"
         ],
         [
+          7,
           5,
-          5,
-          2
+          2,
+          1
         ]
       ]
     },
@@ -15427,12 +15725,14 @@
         [
           "News",
           "Trends",
-          "Engagement"
+          "Engagement",
+          "Learning"
         ],
         [
           8,
           6,
-          5
+          5,
+          1
         ]
       ]
     },
@@ -15465,7 +15765,7 @@
           "Teaching"
         ],
         [
-          8,
+          9,
           6,
           4
         ]
@@ -15500,7 +15800,7 @@
           "Engagement"
         ],
         [
-          8,
+          9,
           6,
           5
         ]
@@ -15536,7 +15836,7 @@
         ],
         [
           8,
-          6,
+          7,
           5
         ]
       ]
@@ -15677,7 +15977,7 @@
         [
           8,
           5,
-          5
+          6
         ]
       ]
     },
@@ -15886,8 +16186,8 @@
         ],
         [
           8,
-          6,
-          5
+          7,
+          6
         ]
       ]
     },
@@ -15992,7 +16292,7 @@
         [
           7,
           5,
-          4
+          5
         ]
       ]
     },
@@ -16060,7 +16360,7 @@
           "Teaching"
         ],
         [
-          8,
+          9,
           6,
           4
         ]
@@ -16092,12 +16392,14 @@
         [
           "Education",
           "Learning",
-          "Teaching"
+          "Teaching",
+          "Trends"
         ],
         [
           8,
-          6,
-          4
+          7,
+          5,
+          1
         ]
       ]
     },
@@ -16131,7 +16433,7 @@
         ],
         [
           5,
-          5,
+          6,
           2
         ]
       ]
@@ -16162,12 +16464,16 @@
         [
           "Discovery",
           "Learning",
-          "Curiosity"
+          "Curiosity",
+          "google",
+          "samsung"
         ],
         [
           8,
           5,
-          5
+          6,
+          1,
+          1
         ]
       ]
     },
@@ -16337,12 +16643,14 @@
         [
           "Learning",
           "Education",
-          "Technology"
+          "Technology",
+          "News"
         ],
         [
           5,
           5,
-          2
+          2,
+          1
         ]
       ]
     },
@@ -16372,12 +16680,14 @@
         [
           "News",
           "Trends",
-          "Engagement"
+          "Engagement",
+          "Discovery"
         ],
         [
           8,
           6,
-          5
+          5,
+          1
         ]
       ]
     },
@@ -16410,7 +16720,7 @@
           "Curiosity"
         ],
         [
-          8,
+          9,
           5,
           5
         ]
@@ -16442,12 +16752,14 @@
         [
           "Education",
           "Learning",
-          "Teaching"
+          "Teaching",
+          "Discovery"
         ],
         [
           8,
-          6,
-          4
+          7,
+          4,
+          1
         ]
       ]
     },
@@ -16585,7 +16897,7 @@
           "Technology"
         ],
         [
-          5,
+          6,
           5,
           2
         ]
@@ -16692,7 +17004,7 @@
         [
           8,
           6,
-          4
+          5
         ]
       ]
     },
@@ -16726,7 +17038,7 @@
         ],
         [
           8,
-          5,
+          6,
           5
         ]
       ]
@@ -16761,7 +17073,7 @@
         ],
         [
           8,
-          5,
+          6,
           5
         ]
       ]
@@ -16830,7 +17142,7 @@
           "Curiosity"
         ],
         [
-          8,
+          9,
           5,
           5
         ]
@@ -16970,8 +17282,8 @@
           "Curiosity"
         ],
         [
-          8,
-          5,
+          9,
+          6,
           5
         ]
       ]
@@ -17212,12 +17524,14 @@
         [
           "Discovery",
           "Learning",
-          "Curiosity"
+          "Curiosity",
+          "Education"
         ],
         [
           8,
           5,
-          5
+          6,
+          1
         ]
       ]
     },
@@ -17317,12 +17631,14 @@
         [
           "Education",
           "Learning",
-          "Teaching"
+          "Teaching",
+          "Facts"
         ],
         [
           8,
           6,
-          4
+          4,
+          1
         ]
       ]
     },
@@ -17425,8 +17741,8 @@
           "Teaching"
         ],
         [
-          8,
-          6,
+          9,
+          7,
           4
         ]
       ]
@@ -17496,7 +17812,7 @@
         ],
         [
           8,
-          6,
+          7,
           5
         ]
       ]
@@ -17636,7 +17952,7 @@
         ],
         [
           8,
-          6,
+          7,
           4
         ]
       ]
@@ -17912,12 +18228,14 @@
         [
           "Education",
           "Learning",
-          "Teaching"
+          "Teaching",
+          "Discovery"
         ],
         [
           8,
           6,
-          4
+          4,
+          1
         ]
       ]
     },
@@ -18160,7 +18478,7 @@
           "Verification"
         ],
         [
-          7,
+          9,
           5,
           4
         ]
@@ -18267,7 +18585,7 @@
         [
           7,
           5,
-          4
+          5
         ]
       ]
     },
@@ -18402,12 +18720,16 @@
         [
           "Learning",
           "Education",
-          "Technology"
+          "Technology",
+          "ai-powered",
+          "portable"
         ],
         [
-          5,
-          5,
-          2
+          6,
+          6,
+          2,
+          1,
+          1
         ]
       ]
     },
@@ -18437,12 +18759,14 @@
         [
           "News",
           "Trends",
-          "Engagement"
+          "Engagement",
+          "Facts"
         ],
         [
           8,
           6,
-          5
+          5,
+          1
         ]
       ]
     },
@@ -18472,12 +18796,14 @@
         [
           "Education",
           "Learning",
-          "Teaching"
+          "Teaching",
+          "ai"
         ],
         [
-          8,
+          9,
           6,
-          4
+          4,
+          1
         ]
       ]
     },
@@ -18612,12 +18938,14 @@
         [
           "Discovery",
           "Learning",
-          "Curiosity"
+          "Curiosity",
+          "News"
         ],
         [
           8,
           5,
-          5
+          5,
+          1
         ]
       ]
     },
@@ -18717,12 +19045,18 @@
         [
           "Education",
           "Learning",
-          "Teaching"
+          "Teaching",
+          "Discovery",
+          "file",
+          "privacy"
         ],
         [
           8,
           6,
-          4
+          4,
+          1,
+          1,
+          1
         ]
       ]
     },
@@ -18752,12 +19086,14 @@
         [
           "Discovery",
           "Learning",
-          "Curiosity"
+          "Curiosity",
+          "Technology"
         ],
         [
-          8,
+          10,
           5,
-          5
+          6,
+          1
         ]
       ]
     },
@@ -18825,9 +19161,9 @@
           "Curiosity"
         ],
         [
-          8,
-          5,
-          5
+          10,
+          9,
+          6
         ]
       ]
     },
@@ -18896,7 +19232,7 @@
         ],
         [
           5,
-          5,
+          6,
           2
         ]
       ]
@@ -18930,7 +19266,7 @@
           "Technology"
         ],
         [
-          5,
+          6,
           5,
           2
         ]
@@ -19071,7 +19407,7 @@
         ],
         [
           7,
-          5,
+          6,
           4
         ]
       ]
@@ -19137,12 +19473,18 @@
         [
           "Analysis",
           "Facts",
-          "Verification"
+          "Verification",
+          "reckless",
+          "social",
+          "Learning"
         ],
         [
           7,
           5,
-          4
+          4,
+          1,
+          1,
+          1
         ]
       ]
     },
@@ -19212,7 +19554,7 @@
         [
           8,
           5,
-          5
+          7
         ]
       ]
     },
@@ -19347,12 +19689,14 @@
         [
           "Learning",
           "Education",
-          "Technology"
+          "Technology",
+          "Trends"
         ],
         [
+          6,
           5,
-          5,
-          2
+          2,
+          1
         ]
       ]
     },
@@ -19385,7 +19729,7 @@
           "Teaching"
         ],
         [
-          8,
+          9,
           6,
           4
         ]
@@ -19455,7 +19799,7 @@
           "Teaching"
         ],
         [
-          8,
+          9,
           6,
           4
         ]
@@ -19487,12 +19831,14 @@
         [
           "Discovery",
           "Learning",
-          "Curiosity"
+          "Curiosity",
+          "News"
         ],
         [
-          8,
+          9,
+          6,
           5,
-          5
+          1
         ]
       ]
     },
@@ -19562,7 +19908,7 @@
         [
           7,
           5,
-          4
+          5
         ]
       ]
     },
@@ -19592,12 +19938,14 @@
         [
           "Discovery",
           "Learning",
-          "Curiosity"
+          "Curiosity",
+          "Engagement"
         ],
         [
           8,
           5,
-          5
+          5,
+          1
         ]
       ]
     },
@@ -19627,12 +19975,14 @@
         [
           "Discovery",
           "Learning",
-          "Curiosity"
+          "Curiosity",
+          "Facts"
         ],
         [
           8,
           5,
-          5
+          5,
+          1
         ]
       ]
     },
@@ -19701,7 +20051,7 @@
         ],
         [
           8,
-          6,
+          7,
           4
         ]
       ]
@@ -19841,7 +20191,7 @@
         ],
         [
           8,
-          5,
+          6,
           5
         ]
       ]
@@ -19907,12 +20257,14 @@
         [
           "Analysis",
           "Facts",
-          "Verification"
+          "Verification",
+          "Education"
         ],
         [
           7,
           5,
-          4
+          4,
+          1
         ]
       ]
     },
@@ -19980,7 +20332,7 @@
           "Technology"
         ],
         [
-          5,
+          6,
           5,
           2
         ]
@@ -20082,12 +20434,14 @@
         [
           "News",
           "Trends",
-          "Engagement"
+          "Engagement",
+          "Education"
         ],
         [
           8,
           6,
-          5
+          5,
+          1
         ]
       ]
     },
@@ -20120,7 +20474,7 @@
           "Engagement"
         ],
         [
-          8,
+          9,
           6,
           5
         ]
@@ -20225,7 +20579,7 @@
           "Teaching"
         ],
         [
-          8,
+          9,
           6,
           4
         ]
@@ -20297,7 +20651,7 @@
         [
           8,
           6,
-          4
+          5
         ]
       ]
     },
@@ -20397,12 +20751,14 @@
         [
           "Discovery",
           "Learning",
-          "Curiosity"
+          "Curiosity",
+          "Facts"
         ],
         [
           8,
           5,
-          5
+          5,
+          1
         ]
       ]
     },
@@ -20471,7 +20827,7 @@
         ],
         [
           8,
-          5,
+          6,
           5
         ]
       ]
@@ -20537,12 +20893,14 @@
         [
           "News",
           "Trends",
-          "Engagement"
+          "Engagement",
+          "Learning"
         ],
         [
           8,
           6,
-          5
+          6,
+          1
         ]
       ]
     },
@@ -20575,7 +20933,7 @@
           "Technology"
         ],
         [
-          5,
+          6,
           5,
           2
         ]
@@ -20680,7 +21038,7 @@
           "Technology"
         ],
         [
-          5,
+          6,
           5,
           2
         ]
@@ -20782,12 +21140,14 @@
         [
           "News",
           "Trends",
-          "Engagement"
+          "Engagement",
+          "Learning"
         ],
         [
           8,
           6,
-          5
+          5,
+          1
         ]
       ]
     },
@@ -20852,12 +21212,14 @@
         [
           "Discovery",
           "Learning",
-          "Curiosity"
+          "Curiosity",
+          "Facts"
         ],
         [
-          8,
+          9,
           5,
-          5
+          5,
+          2
         ]
       ]
     },
@@ -20926,7 +21288,7 @@
         ],
         [
           7,
-          5,
+          6,
           4
         ]
       ]
@@ -20962,7 +21324,7 @@
         [
           5,
           5,
-          2
+          3
         ]
       ]
     },
@@ -21066,7 +21428,7 @@
         ],
         [
           7,
-          5,
+          6,
           4
         ]
       ]
@@ -21170,7 +21532,7 @@
           "Technology"
         ],
         [
-          5,
+          6,
           5,
           2
         ]
@@ -21202,12 +21564,14 @@
         [
           "Analysis",
           "Facts",
-          "Verification"
+          "Verification",
+          "Learning"
         ],
         [
           7,
           5,
-          4
+          4,
+          1
         ]
       ]
     },
@@ -21240,7 +21604,7 @@
           "Technology"
         ],
         [
-          5,
+          6,
           5,
           2
         ]
@@ -21275,8 +21639,8 @@
           "Curiosity"
         ],
         [
-          8,
-          5,
+          9,
+          6,
           5
         ]
       ]
@@ -21347,7 +21711,7 @@
         [
           8,
           5,
-          5
+          6
         ]
       ]
     },
@@ -21450,7 +21814,7 @@
           "Verification"
         ],
         [
-          7,
+          8,
           5,
           4
         ]
@@ -21517,12 +21881,14 @@
         [
           "News",
           "Trends",
-          "Engagement"
+          "Engagement",
+          "Education"
         ],
         [
           8,
           6,
-          5
+          6,
+          1
         ]
       ]
     },
@@ -21556,7 +21922,7 @@
         ],
         [
           5,
-          5,
+          6,
           2
         ]
       ]
@@ -21591,8 +21957,8 @@
         ],
         [
           8,
-          6,
-          5
+          7,
+          6
         ]
       ]
     },
@@ -21622,12 +21988,14 @@
         [
           "Analysis",
           "Facts",
-          "Verification"
+          "Verification",
+          "ai"
         ],
         [
           7,
           5,
-          4
+          4,
+          1
         ]
       ]
     },
@@ -21835,7 +22203,7 @@
           "Technology"
         ],
         [
-          5,
+          6,
           5,
           2
         ]
@@ -21902,12 +22270,14 @@
         [
           "News",
           "Trends",
-          "Engagement"
+          "Engagement",
+          "Learning"
         ],
         [
           8,
-          6,
-          5
+          7,
+          5,
+          1
         ]
       ]
     },
@@ -22045,9 +22415,9 @@
           "Verification"
         ],
         [
-          7,
+          8,
           5,
-          4
+          5
         ]
       ]
     },
@@ -22220,7 +22590,7 @@
           "Teaching"
         ],
         [
-          8,
+          10,
           6,
           4
         ]
@@ -22255,7 +22625,7 @@
           "Engagement"
         ],
         [
-          8,
+          9,
           6,
           5
         ]
@@ -22287,12 +22657,14 @@
         [
           "Discovery",
           "Learning",
-          "Curiosity"
+          "Curiosity",
+          "Education"
         ],
         [
-          8,
+          9,
+          6,
           5,
-          5
+          1
         ]
       ]
     },
@@ -22360,9 +22732,9 @@
           "Teaching"
         ],
         [
-          8,
+          9,
           6,
-          4
+          5
         ]
       ]
     },
@@ -22392,12 +22764,16 @@
         [
           "Analysis",
           "Facts",
-          "Verification"
+          "Verification",
+          "Learning",
+          "Trends"
         ],
         [
           7,
           5,
-          4
+          4,
+          1,
+          1
         ]
       ]
     },
@@ -22465,9 +22841,9 @@
           "Verification"
         ],
         [
-          7,
+          8,
           5,
-          4
+          5
         ]
       ]
     },
@@ -22497,12 +22873,14 @@
         [
           "Learning",
           "Education",
-          "Technology"
+          "Technology",
+          "Discovery"
         ],
         [
           5,
-          5,
-          2
+          6,
+          3,
+          1
         ]
       ]
     },
@@ -22532,12 +22910,18 @@
         [
           "Analysis",
           "Facts",
-          "Verification"
+          "Verification",
+          "Education",
+          "apple",
+          "choosing"
         ],
         [
           7,
+          7,
           5,
-          4
+          1,
+          1,
+          1
         ]
       ]
     },
@@ -22812,12 +23196,14 @@
         [
           "Analysis",
           "Facts",
-          "Verification"
+          "Verification",
+          "Learning"
         ],
         [
           7,
           5,
-          4
+          4,
+          1
         ]
       ]
     },
@@ -22882,12 +23268,14 @@
         [
           "Discovery",
           "Learning",
-          "Curiosity"
+          "Curiosity",
+          "Education"
         ],
         [
           8,
+          6,
           5,
-          5
+          1
         ]
       ]
     },
@@ -22955,7 +23343,7 @@
           "Verification"
         ],
         [
-          7,
+          8,
           5,
           4
         ]
@@ -22987,12 +23375,14 @@
         [
           "Discovery",
           "Learning",
-          "Curiosity"
+          "Curiosity",
+          "apple"
         ],
         [
           8,
+          6,
           5,
-          5
+          1
         ]
       ]
     },
@@ -23026,7 +23416,7 @@
         ],
         [
           5,
-          5,
+          6,
           2
         ]
       ]
@@ -23057,12 +23447,14 @@
         [
           "Analysis",
           "Facts",
-          "Verification"
+          "Verification",
+          "Learning"
         ],
         [
-          7,
+          9,
           5,
-          4
+          4,
+          1
         ]
       ]
     },
@@ -23096,8 +23488,8 @@
         ],
         [
           8,
-          5,
-          5
+          6,
+          6
         ]
       ]
     },
@@ -23127,12 +23519,14 @@
         [
           "Education",
           "Learning",
-          "Teaching"
+          "Teaching",
+          "ai"
         ],
         [
           8,
           6,
-          4
+          4,
+          1
         ]
       ]
     },
@@ -23165,7 +23559,7 @@
           "Verification"
         ],
         [
-          7,
+          8,
           5,
           4
         ]
@@ -23342,7 +23736,7 @@
         [
           8,
           6,
-          5
+          7
         ]
       ]
     },
@@ -23375,9 +23769,9 @@
           "Engagement"
         ],
         [
-          8,
+          9,
           6,
-          5
+          6
         ]
       ]
     },
@@ -23726,7 +24120,7 @@
         ],
         [
           7,
-          5,
+          6,
           4
         ]
       ]
@@ -23795,8 +24189,8 @@
           "Technology"
         ],
         [
-          5,
-          5,
+          7,
+          7,
           2
         ]
       ]
@@ -24072,12 +24466,16 @@
         [
           "News",
           "Trends",
-          "Engagement"
+          "Engagement",
+          "consumer",
+          "startup"
         ],
         [
           8,
           6,
-          5
+          5,
+          1,
+          1
         ]
       ]
     },
@@ -24107,12 +24505,16 @@
         [
           "News",
           "Trends",
-          "Engagement"
+          "Engagement",
+          "Discovery",
+          "Learning"
         ],
         [
-          8,
+          9,
           6,
-          5
+          6,
+          1,
+          1
         ]
       ]
     },
@@ -24145,7 +24547,7 @@
           "Engagement"
         ],
         [
-          8,
+          9,
           6,
           5
         ]
@@ -24212,12 +24614,14 @@
         [
           "News",
           "Trends",
-          "Engagement"
+          "Engagement",
+          "Education"
         ],
         [
           8,
           6,
-          5
+          5,
+          1
         ]
       ]
     },
@@ -24251,7 +24655,7 @@
         ],
         [
           8,
-          6,
+          7,
           4
         ]
       ]
@@ -24282,11 +24686,13 @@
         [
           "Learning",
           "Education",
-          "Technology"
+          "Technology",
+          "Discovery"
         ],
         [
           5,
           5,
+          2,
           2
         ]
       ]
@@ -24317,12 +24723,14 @@
         [
           "Learning",
           "Education",
-          "Technology"
+          "Technology",
+          "Trends"
         ],
         [
           5,
           5,
-          2
+          2,
+          1
         ]
       ]
     },
@@ -24391,7 +24799,7 @@
         ],
         [
           8,
-          5,
+          6,
           5
         ]
       ]
@@ -24461,7 +24869,7 @@
         ],
         [
           8,
-          6,
+          7,
           4
         ]
       ]
@@ -24492,12 +24900,18 @@
         [
           "Discovery",
           "Learning",
-          "Curiosity"
+          "Curiosity",
+          "Education",
+          "News",
+          "Engagement"
         ],
         [
           8,
           5,
-          5
+          5,
+          1,
+          1,
+          1
         ]
       ]
     },
@@ -24527,12 +24941,14 @@
         [
           "News",
           "Trends",
-          "Engagement"
+          "Engagement",
+          "Technology"
         ],
         [
           8,
           6,
-          5
+          5,
+          1
         ]
       ]
     },
@@ -24632,12 +25048,14 @@
         [
           "Learning",
           "Education",
-          "Technology"
+          "Technology",
+          "Curiosity"
         ],
         [
+          6,
           5,
-          5,
-          2
+          2,
+          1
         ]
       ]
     },
@@ -24807,12 +25225,22 @@
         [
           "Analysis",
           "Facts",
-          "Verification"
+          "Verification",
+          "News",
+          "Learning",
+          "Engagement",
+          "Education",
+          "Discovery"
         ],
         [
           7,
           5,
-          4
+          4,
+          1,
+          1,
+          1,
+          1,
+          1
         ]
       ]
     },
@@ -24842,12 +25270,16 @@
         [
           "News",
           "Trends",
-          "Engagement"
+          "Engagement",
+          "home",
+          "wealth"
         ],
         [
-          8,
+          9,
           6,
-          5
+          5,
+          1,
+          1
         ]
       ]
     },
@@ -24877,12 +25309,14 @@
         [
           "Analysis",
           "Facts",
-          "Verification"
+          "Verification",
+          "Discovery"
         ],
         [
           7,
-          5,
-          4
+          6,
+          4,
+          1
         ]
       ]
     },
@@ -24947,12 +25381,14 @@
         [
           "Learning",
           "Education",
-          "Technology"
+          "Technology",
+          "Verification"
         ],
         [
           5,
           5,
-          2
+          2,
+          1
         ]
       ]
     },
@@ -25055,7 +25491,7 @@
           "Curiosity"
         ],
         [
-          8,
+          9,
           5,
           5
         ]
@@ -25157,12 +25593,14 @@
         [
           "Discovery",
           "Learning",
-          "Curiosity"
+          "Curiosity",
+          "Teaching"
         ],
         [
           8,
           5,
-          5
+          5,
+          1
         ]
       ]
     },
@@ -25195,9 +25633,9 @@
           "Verification"
         ],
         [
-          7,
+          8,
           5,
-          4
+          6
         ]
       ]
     },
@@ -25367,12 +25805,14 @@
         [
           "Analysis",
           "Facts",
-          "Verification"
+          "Verification",
+          "Discovery"
         ],
         [
           7,
           5,
-          4
+          4,
+          1
         ]
       ]
     },
@@ -25472,12 +25912,16 @@
         [
           "Learning",
           "Education",
-          "Technology"
+          "Technology",
+          "Analysis",
+          "News"
         ],
         [
           5,
-          5,
-          2
+          8,
+          2,
+          1,
+          1
         ]
       ]
     },
@@ -25545,7 +25989,7 @@
           "Technology"
         ],
         [
-          5,
+          6,
           5,
           2
         ]
@@ -25580,9 +26024,9 @@
           "Curiosity"
         ],
         [
-          8,
+          9,
           5,
-          5
+          6
         ]
       ]
     },
@@ -25717,12 +26161,14 @@
         [
           "Discovery",
           "Learning",
-          "Curiosity"
+          "Curiosity",
+          "Education"
         ],
         [
           8,
           5,
-          5
+          5,
+          1
         ]
       ]
     },
@@ -25752,12 +26198,14 @@
         [
           "Education",
           "Learning",
-          "Teaching"
+          "Teaching",
+          "Discovery"
         ],
         [
           8,
           6,
-          4
+          4,
+          1
         ]
       ]
     },
@@ -25822,12 +26270,14 @@
         [
           "News",
           "Trends",
-          "Engagement"
+          "Engagement",
+          "Learning"
         ],
         [
-          8,
+          9,
           6,
-          5
+          5,
+          1
         ]
       ]
     },
@@ -25860,7 +26310,7 @@
           "Teaching"
         ],
         [
-          8,
+          9,
           6,
           4
         ]
@@ -26032,12 +26482,16 @@
         [
           "Discovery",
           "Learning",
-          "Curiosity"
+          "Curiosity",
+          "sauron",
+          "home"
         ],
         [
-          8,
+          9,
+          6,
           5,
-          5
+          1,
+          1
         ]
       ]
     },
@@ -26102,12 +26556,14 @@
         [
           "Discovery",
           "Learning",
-          "Curiosity"
+          "Curiosity",
+          "Analysis"
         ],
         [
           8,
           5,
-          5
+          6,
+          1
         ]
       ]
     },
@@ -26137,12 +26593,16 @@
         [
           "Learning",
           "Education",
-          "Technology"
+          "Technology",
+          "Trends",
+          "Curiosity"
         ],
         [
+          7,
           5,
-          5,
-          2
+          2,
+          1,
+          1
         ]
       ]
     },
@@ -26316,7 +26776,7 @@
         ],
         [
           5,
-          5,
+          6,
           2
         ]
       ]
@@ -26422,7 +26882,7 @@
         [
           8,
           6,
-          4
+          5
         ]
       ]
     },
@@ -26491,8 +26951,8 @@
         ],
         [
           8,
-          5,
-          5
+          7,
+          6
         ]
       ]
     },
@@ -26522,11 +26982,13 @@
         [
           "Learning",
           "Education",
-          "Technology"
+          "Technology",
+          "Discovery"
         ],
         [
+          6,
           5,
-          5,
+          2,
           2
         ]
       ]
@@ -26557,12 +27019,14 @@
         [
           "News",
           "Trends",
-          "Engagement"
+          "Engagement",
+          "Learning"
         ],
         [
           8,
           6,
-          5
+          6,
+          2
         ]
       ]
     },
@@ -26630,7 +27094,7 @@
           "Curiosity"
         ],
         [
-          8,
+          9,
           5,
           5
         ]
@@ -26665,9 +27129,9 @@
           "Technology"
         ],
         [
-          5,
-          5,
-          2
+          6,
+          7,
+          3
         ]
       ]
     },
@@ -26732,12 +27196,14 @@
         [
           "Analysis",
           "Facts",
-          "Verification"
+          "Verification",
+          "Trends"
         ],
         [
           7,
           5,
-          4
+          4,
+          1
         ]
       ]
     },
@@ -26837,12 +27303,14 @@
         [
           "News",
           "Trends",
-          "Engagement"
+          "Engagement",
+          "Learning"
         ],
         [
           8,
           6,
-          5
+          5,
+          1
         ]
       ]
     },
@@ -26977,12 +27445,14 @@
         [
           "News",
           "Trends",
-          "Engagement"
+          "Engagement",
+          "Learning"
         ],
         [
           8,
-          6,
-          5
+          8,
+          5,
+          1
         ]
       ]
     },
@@ -27015,7 +27485,7 @@
           "Technology"
         ],
         [
-          5,
+          6,
           5,
           2
         ]
@@ -27047,12 +27517,14 @@
         [
           "Education",
           "Learning",
-          "Teaching"
+          "Teaching",
+          "Curiosity"
         ],
         [
-          8,
-          6,
-          4
+          9,
+          7,
+          4,
+          1
         ]
       ]
     },
@@ -27156,7 +27628,7 @@
         ],
         [
           8,
-          5,
+          6,
           5
         ]
       ]
@@ -27222,12 +27694,14 @@
         [
           "Analysis",
           "Facts",
-          "Verification"
+          "Verification",
+          "Education"
         ],
         [
           7,
           5,
-          4
+          4,
+          1
         ]
       ]
     },
@@ -27292,12 +27766,14 @@
         [
           "News",
           "Trends",
-          "Engagement"
+          "Engagement",
+          "Curiosity"
         ],
         [
           8,
-          6,
-          5
+          7,
+          5,
+          1
         ]
       ]
     },
@@ -27507,7 +27983,7 @@
         [
           8,
           6,
-          5
+          6
         ]
       ]
     },
@@ -27540,7 +28016,7 @@
           "Verification"
         ],
         [
-          7,
+          8,
           5,
           4
         ]
@@ -27575,7 +28051,7 @@
           "Teaching"
         ],
         [
-          8,
+          9,
           6,
           4
         ]
@@ -27642,12 +28118,14 @@
         [
           "News",
           "Trends",
-          "Engagement"
+          "Engagement",
+          "Verification"
         ],
         [
-          8,
+          9,
           6,
-          5
+          6,
+          1
         ]
       ]
     },
@@ -27751,7 +28229,7 @@
         ],
         [
           8,
-          6,
+          7,
           5
         ]
       ]
@@ -27855,8 +28333,8 @@
           "Teaching"
         ],
         [
-          8,
-          6,
+          10,
+          7,
           4
         ]
       ]
@@ -27887,12 +28365,14 @@
         [
           "Education",
           "Learning",
-          "Teaching"
+          "Teaching",
+          "Discovery"
         ],
         [
           8,
           6,
-          4
+          4,
+          1
         ]
       ]
     },
@@ -28031,8 +28511,8 @@
         ],
         [
           8,
-          5,
-          5
+          6,
+          7
         ]
       ]
     },
@@ -28342,12 +28822,16 @@
         [
           "Analysis",
           "Facts",
-          "Verification"
+          "Verification",
+          "chatgpt",
+          "integrating"
         ],
         [
           7,
           5,
-          4
+          4,
+          1,
+          1
         ]
       ]
     },
@@ -28416,7 +28900,7 @@
         ],
         [
           5,
-          5,
+          6,
           2
         ]
       ]
@@ -28447,12 +28931,14 @@
         [
           "News",
           "Trends",
-          "Engagement"
+          "Engagement",
+          "Discovery"
         ],
         [
           8,
           6,
-          5
+          5,
+          1
         ]
       ]
     },
@@ -28486,7 +28972,7 @@
         ],
         [
           5,
-          5,
+          6,
           2
         ]
       ]
@@ -28590,7 +29076,7 @@
           "Curiosity"
         ],
         [
-          8,
+          9,
           5,
           5
         ]
@@ -28762,12 +29248,14 @@
         [
           "Analysis",
           "Facts",
-          "Verification"
+          "Verification",
+          "Education"
         ],
         [
           7,
           5,
-          4
+          4,
+          1
         ]
       ]
     },
@@ -28832,12 +29320,16 @@
         [
           "News",
           "Trends",
-          "Engagement"
+          "Engagement",
+          "algorithm",
+          "social"
         ],
         [
-          8,
-          6,
-          5
+          9,
+          7,
+          5,
+          1,
+          1
         ]
       ]
     },
@@ -28972,12 +29464,14 @@
         [
           "Discovery",
           "Learning",
-          "Curiosity"
+          "Curiosity",
+          "News"
         ],
         [
           8,
           5,
-          5
+          5,
+          1
         ]
       ]
     },
@@ -29077,12 +29571,16 @@
         [
           "News",
           "Trends",
-          "Engagement"
+          "Engagement",
+          "reckless",
+          "social"
         ],
         [
           8,
           6,
-          5
+          6,
+          1,
+          1
         ]
       ]
     },
@@ -29152,7 +29650,7 @@
         [
           7,
           5,
-          4
+          5
         ]
       ]
     },
@@ -29220,7 +29718,7 @@
           "Engagement"
         ],
         [
-          8,
+          9,
           6,
           5
         ]
@@ -29252,12 +29750,14 @@
         [
           "News",
           "Trends",
-          "Engagement"
+          "Engagement",
+          "Education"
         ],
         [
           8,
           6,
-          5
+          5,
+          1
         ]
       ]
     },
@@ -29291,7 +29791,7 @@
         ],
         [
           5,
-          5,
+          6,
           2
         ]
       ]
@@ -29322,12 +29822,14 @@
         [
           "News",
           "Trends",
-          "Engagement"
+          "Engagement",
+          "Discovery"
         ],
         [
           8,
           6,
-          5
+          5,
+          1
         ]
       ]
     },
@@ -29360,8 +29862,8 @@
           "Technology"
         ],
         [
-          5,
-          5,
+          6,
+          6,
           2
         ]
       ]
@@ -29395,8 +29897,8 @@
           "Teaching"
         ],
         [
+          9,
           8,
-          6,
           4
         ]
       ]
@@ -29427,12 +29929,14 @@
         [
           "Learning",
           "Education",
-          "Technology"
+          "Technology",
+          "Analysis"
         ],
         [
           5,
           5,
-          2
+          2,
+          1
         ]
       ]
     },
@@ -29497,12 +30001,14 @@
         [
           "News",
           "Trends",
-          "Engagement"
+          "Engagement",
+          "Learning"
         ],
         [
           8,
           6,
-          5
+          5,
+          1
         ]
       ]
     },
@@ -29532,12 +30038,14 @@
         [
           "Analysis",
           "Facts",
-          "Verification"
+          "Verification",
+          "Education"
         ],
         [
           7,
-          5,
-          4
+          6,
+          4,
+          1
         ]
       ]
     },
@@ -29567,12 +30075,14 @@
         [
           "News",
           "Trends",
-          "Engagement"
+          "Engagement",
+          "Analysis"
         ],
         [
           8,
           6,
-          5
+          5,
+          1
         ]
       ]
     },
@@ -29602,12 +30112,14 @@
         [
           "Analysis",
           "Facts",
-          "Verification"
+          "Verification",
+          "Learning"
         ],
         [
-          7,
+          8,
           5,
-          4
+          4,
+          1
         ]
       ]
     },
@@ -29672,11 +30184,13 @@
         [
           "Learning",
           "Education",
-          "Technology"
+          "Technology",
+          "ai"
         ],
         [
           5,
           5,
+          2,
           2
         ]
       ]
@@ -29707,12 +30221,14 @@
         [
           "News",
           "Trends",
-          "Engagement"
+          "Engagement",
+          "Education"
         ],
         [
           8,
           6,
-          5
+          5,
+          1
         ]
       ]
     },
@@ -29781,7 +30297,7 @@
         ],
         [
           5,
-          5,
+          6,
           2
         ]
       ]
@@ -29882,12 +30398,14 @@
         [
           "Analysis",
           "Facts",
-          "Verification"
+          "Verification",
+          "Learning"
         ],
         [
           7,
           5,
-          4
+          4,
+          1
         ]
       ]
     },
@@ -29917,12 +30435,16 @@
         [
           "Education",
           "Learning",
-          "Teaching"
+          "Teaching",
+          "Engagement",
+          "News"
         ],
         [
-          8,
+          9,
           6,
-          4
+          4,
+          1,
+          1
         ]
       ]
     },
@@ -29987,12 +30509,14 @@
         [
           "Education",
           "Learning",
-          "Teaching"
+          "Teaching",
+          "Verification"
         ],
         [
           8,
-          6,
-          4
+          7,
+          4,
+          1
         ]
       ]
     },
@@ -30027,7 +30551,7 @@
         [
           7,
           5,
-          4
+          5
         ]
       ]
     },
@@ -30057,12 +30581,14 @@
         [
           "Education",
           "Learning",
-          "Teaching"
+          "Teaching",
+          "Curiosity"
         ],
         [
-          8,
-          6,
-          4
+          9,
+          7,
+          4,
+          1
         ]
       ]
     },
@@ -30127,12 +30653,18 @@
         [
           "Discovery",
           "Learning",
-          "Curiosity"
+          "Curiosity",
+          "google",
+          "smart",
+          "Education"
         ],
         [
           8,
+          6,
           5,
-          5
+          1,
+          1,
+          1
         ]
       ]
     },
@@ -30162,12 +30694,14 @@
         [
           "Learning",
           "Education",
-          "Technology"
+          "Technology",
+          "Discovery"
         ],
         [
           5,
           5,
-          2
+          2,
+          1
         ]
       ]
     },
@@ -30235,7 +30769,7 @@
           "Curiosity"
         ],
         [
-          8,
+          10,
           5,
           5
         ]
@@ -30305,7 +30839,7 @@
           "Teaching"
         ],
         [
-          8,
+          9,
           6,
           4
         ]
@@ -30372,12 +30906,16 @@
         [
           "Learning",
           "Education",
-          "Technology"
+          "Technology",
+          "Curiosity",
+          "Trends"
         ],
         [
-          5,
-          5,
-          2
+          6,
+          6,
+          2,
+          1,
+          1
         ]
       ]
     },
@@ -30410,7 +30948,7 @@
           "Curiosity"
         ],
         [
-          8,
+          9,
           5,
           5
         ]
@@ -30480,8 +31018,8 @@
           "Curiosity"
         ],
         [
-          8,
-          5,
+          9,
+          6,
           5
         ]
       ]
@@ -30725,7 +31263,7 @@
           "Technology"
         ],
         [
-          5,
+          6,
           5,
           2
         ]
@@ -30757,12 +31295,16 @@
         [
           "News",
           "Trends",
-          "Engagement"
+          "Engagement",
+          "government",
+          "cyber"
         ],
         [
           8,
           6,
-          5
+          5,
+          1,
+          1
         ]
       ]
     },
@@ -30795,7 +31337,7 @@
           "Curiosity"
         ],
         [
-          8,
+          9,
           5,
           5
         ]
@@ -30897,12 +31439,16 @@
         [
           "Learning",
           "Education",
-          "Technology"
+          "Technology",
+          "high-end",
+          "wealthy"
         ],
         [
+          6,
           5,
-          5,
-          2
+          3,
+          1,
+          1
         ]
       ]
     },
@@ -30935,8 +31481,8 @@
           "Teaching"
         ],
         [
-          8,
-          6,
+          9,
+          7,
           4
         ]
       ]
@@ -30970,7 +31516,7 @@
           "Technology"
         ],
         [
-          5,
+          6,
           5,
           2
         ]
@@ -31181,7 +31727,7 @@
         ],
         [
           8,
-          6,
+          7,
           5
         ]
       ]
@@ -31215,7 +31761,7 @@
           "Teaching"
         ],
         [
-          8,
+          9,
           6,
           4
         ]
@@ -31352,12 +31898,14 @@
         [
           "Education",
           "Learning",
-          "Teaching"
+          "Teaching",
+          "Verification"
         ],
         [
+          9,
           8,
-          6,
-          4
+          4,
+          1
         ]
       ]
     },
@@ -31457,12 +32005,16 @@
         [
           "Learning",
           "Education",
-          "Technology"
+          "Technology",
+          "Analysis",
+          "Engagement"
         ],
         [
           5,
-          5,
-          2
+          6,
+          3,
+          1,
+          1
         ]
       ]
     },
@@ -31495,7 +32047,7 @@
           "Engagement"
         ],
         [
-          8,
+          9,
           6,
           5
         ]
@@ -31597,12 +32149,16 @@
         [
           "Analysis",
           "Facts",
-          "Verification"
+          "Verification",
+          "Discovery",
+          "Education"
         ],
         [
-          7,
+          8,
           5,
-          4
+          4,
+          1,
+          1
         ]
       ]
     },
@@ -31632,12 +32188,14 @@
         [
           "News",
           "Trends",
-          "Engagement"
+          "Engagement",
+          "Discovery"
         ],
         [
-          8,
+          9,
           6,
-          5
+          5,
+          1
         ]
       ]
     },
@@ -31737,12 +32295,16 @@
         [
           "Discovery",
           "Learning",
-          "Curiosity"
+          "Curiosity",
+          "Education",
+          "News"
         ],
         [
           8,
           5,
-          5
+          5,
+          1,
+          1
         ]
       ]
     },
@@ -31877,12 +32439,20 @@
         [
           "Learning",
           "Education",
-          "Technology"
+          "Technology",
+          "reckless",
+          "social",
+          "government",
+          "cyber"
         ],
         [
           5,
           5,
-          2
+          2,
+          1,
+          1,
+          1,
+          1
         ]
       ]
     },
@@ -31912,12 +32482,14 @@
         [
           "Learning",
           "Education",
-          "Technology"
+          "Technology",
+          "Discovery"
         ],
         [
           5,
-          5,
-          2
+          6,
+          2,
+          1
         ]
       ]
     },
@@ -32052,12 +32624,14 @@
         [
           "News",
           "Trends",
-          "Engagement"
+          "Engagement",
+          "Learning"
         ],
         [
           8,
           6,
-          5
+          5,
+          1
         ]
       ]
     },
@@ -32122,12 +32696,18 @@
         [
           "Learning",
           "Education",
-          "Technology"
+          "Technology",
+          "Facts",
+          "Engagement",
+          "Analysis"
         ],
         [
+          6,
           5,
-          5,
-          2
+          2,
+          1,
+          1,
+          1
         ]
       ]
     },
@@ -32157,12 +32737,14 @@
         [
           "Discovery",
           "Learning",
-          "Curiosity"
+          "Curiosity",
+          "Education"
         ],
         [
-          8,
+          9,
           5,
-          5
+          5,
+          1
         ]
       ]
     },
@@ -32367,12 +32949,14 @@
         [
           "Analysis",
           "Facts",
-          "Verification"
+          "Verification",
+          "Teaching"
         ],
         [
           7,
           5,
-          4
+          4,
+          1
         ]
       ]
     },
@@ -32822,12 +33406,16 @@
         [
           "Education",
           "Learning",
-          "Teaching"
+          "Teaching",
+          "Curiosity",
+          "Verification"
         ],
         [
           8,
-          6,
-          4
+          7,
+          4,
+          1,
+          1
         ]
       ]
     },
@@ -32997,12 +33585,14 @@
         [
           "Analysis",
           "Facts",
-          "Verification"
+          "Verification",
+          "Learning"
         ],
         [
           7,
           5,
-          4
+          4,
+          1
         ]
       ]
     },
@@ -33032,12 +33622,18 @@
         [
           "Education",
           "Learning",
-          "Teaching"
+          "Teaching",
+          "sauron",
+          "home",
+          "Curiosity"
         ],
         [
-          8,
+          9,
           6,
-          4
+          4,
+          1,
+          1,
+          1
         ]
       ]
     },
@@ -33070,7 +33666,7 @@
           "Curiosity"
         ],
         [
-          8,
+          9,
           5,
           5
         ]
@@ -33141,7 +33737,7 @@
         ],
         [
           8,
-          6,
+          8,
           5
         ]
       ]
@@ -33245,7 +33841,7 @@
           "Technology"
         ],
         [
-          5,
+          6,
           5,
           2
         ]
@@ -33277,12 +33873,14 @@
         [
           "Discovery",
           "Learning",
-          "Curiosity"
+          "Curiosity",
+          "Facts"
         ],
         [
           8,
           5,
-          5
+          6,
+          1
         ]
       ]
     },
@@ -33312,12 +33910,14 @@
         [
           "Education",
           "Learning",
-          "Teaching"
+          "Teaching",
+          "Discovery"
         ],
         [
-          8,
-          6,
-          4
+          10,
+          7,
+          4,
+          1
         ]
       ]
     },
@@ -33347,12 +33947,14 @@
         [
           "News",
           "Trends",
-          "Engagement"
+          "Engagement",
+          "Curiosity"
         ],
         [
           8,
           6,
-          5
+          5,
+          1
         ]
       ]
     },
@@ -33387,7 +33989,7 @@
         [
           7,
           5,
-          4
+          5
         ]
       ]
     },
@@ -33455,9 +34057,9 @@
           "Teaching"
         ],
         [
-          8,
+          9,
           6,
-          4
+          5
         ]
       ]
     },
@@ -33487,12 +34089,16 @@
         [
           "Learning",
           "Education",
-          "Technology"
+          "Technology",
+          "government",
+          "cyber"
         ],
         [
           5,
-          5,
-          2
+          6,
+          2,
+          1,
+          1
         ]
       ]
     },
@@ -33560,9 +34166,9 @@
           "Curiosity"
         ],
         [
-          8,
+          9,
           5,
-          5
+          6
         ]
       ]
     },
@@ -33805,7 +34411,7 @@
           "Curiosity"
         ],
         [
-          8,
+          9,
           5,
           5
         ]
@@ -33875,7 +34481,7 @@
           "Engagement"
         ],
         [
-          8,
+          9,
           6,
           5
         ]
@@ -33910,7 +34516,7 @@
           "Curiosity"
         ],
         [
-          8,
+          9,
           5,
           5
         ]
@@ -34012,12 +34618,14 @@
         [
           "Learning",
           "Education",
-          "Technology"
+          "Technology",
+          "Curiosity"
         ],
         [
           5,
           5,
-          2
+          2,
+          1
         ]
       ]
     },
@@ -34086,8 +34694,8 @@
         ],
         [
           8,
-          6,
-          5
+          7,
+          6
         ]
       ]
     },
@@ -34117,12 +34725,14 @@
         [
           "Analysis",
           "Facts",
-          "Verification"
+          "Verification",
+          "News"
         ],
         [
           7,
           5,
-          4
+          4,
+          1
         ]
       ]
     },
@@ -34190,7 +34800,7 @@
           "Engagement"
         ],
         [
-          8,
+          9,
           6,
           5
         ]
@@ -34222,12 +34832,14 @@
         [
           "Analysis",
           "Facts",
-          "Verification"
+          "Verification",
+          "Education"
         ],
         [
           7,
           5,
-          4
+          4,
+          2
         ]
       ]
     },
@@ -34292,12 +34904,14 @@
         [
           "Learning",
           "Education",
-          "Technology"
+          "Technology",
+          "Curiosity"
         ],
         [
           5,
           5,
-          2
+          2,
+          1
         ]
       ]
     },
@@ -34397,12 +35011,16 @@
         [
           "Education",
           "Learning",
-          "Teaching"
+          "Teaching",
+          "News",
+          "Trends"
         ],
         [
-          8,
+          9,
           6,
-          4
+          5,
+          2,
+          1
         ]
       ]
     },
@@ -34432,12 +35050,14 @@
         [
           "News",
           "Trends",
-          "Engagement"
+          "Engagement",
+          "Learning"
         ],
         [
           8,
           6,
-          5
+          5,
+          1
         ]
       ]
     },
@@ -34467,12 +35087,14 @@
         [
           "Analysis",
           "Facts",
-          "Verification"
+          "Verification",
+          "Learning"
         ],
         [
           7,
           5,
-          4
+          5,
+          1
         ]
       ]
     },
@@ -34502,12 +35124,14 @@
         [
           "News",
           "Trends",
-          "Engagement"
+          "Engagement",
+          "Discovery"
         ],
         [
           8,
           6,
-          5
+          5,
+          1
         ]
       ]
     },
@@ -34607,12 +35231,14 @@
         [
           "Learning",
           "Education",
-          "Technology"
+          "Technology",
+          "Facts"
         ],
         [
           5,
           5,
-          2
+          2,
+          1
         ]
       ]
     },
@@ -34645,7 +35271,7 @@
           "Teaching"
         ],
         [
-          8,
+          9,
           6,
           4
         ]
@@ -34677,12 +35303,14 @@
         [
           "Analysis",
           "Facts",
-          "Verification"
+          "Verification",
+          "Learning"
         ],
         [
           7,
           5,
-          4
+          4,
+          1
         ]
       ]
     },
@@ -34752,7 +35380,7 @@
         [
           8,
           6,
-          4
+          5
         ]
       ]
     },
@@ -34821,7 +35449,7 @@
         ],
         [
           8,
-          6,
+          7,
           4
         ]
       ]
@@ -34857,7 +35485,7 @@
         [
           8,
           6,
-          5
+          6
         ]
       ]
     },
@@ -34887,12 +35515,16 @@
         [
           "News",
           "Trends",
-          "Engagement"
+          "Engagement",
+          "Learning",
+          "Education"
         ],
         [
           8,
           6,
-          5
+          5,
+          1,
+          1
         ]
       ]
     },
