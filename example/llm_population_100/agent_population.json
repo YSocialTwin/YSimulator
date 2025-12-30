@@ -1,0 +1,3567 @@
+{
+  "agents": [
+    {
+      "id": "4ef8052b-608d-50f2-9785-91b2bce1d72a",
+      "username": "NewsPage",
+      "email": "news@pages.local",
+      "leaning": "neutral",
+      "user_type": "page",
+      "age": 0,
+      "language": "en",
+      "education_level": "graduate",
+      "gender": "other",
+      "nationality": "US",
+      "profession": "News Publisher",
+      "activity_profile": "Always On",
+      "archetype": null,
+      "cluster": 0,
+      "llm": true,
+      "toxicity": "no",
+      "daily_activity_level": 4,
+      "round_actions": 6,
+      "is_page": 1,
+      "feed_url": "https://techcrunch.com/feed/",
+      "recsys_type": "random",
+      "frecsys_type": "random",
+      "interests": [
+        [
+          "News",
+          "Current Events",
+          "Information"
+        ],
+        [
+          10,
+          10,
+          8
+        ]
+      ]
+    },
+    {
+      "id": "f0873540-80ea-5c59-ad8a-d88dc6e49c5d",
+      "username": "agent_000",
+      "email": "agent_000@simulation.local",
+      "leaning": "left",
+      "user_type": "agent",
+      "age": 58,
+      "language": "en",
+      "education_level": "high_school",
+      "gender": "male",
+      "nationality": "UK",
+      "profession": "Engineer",
+      "activity_profile": "Always On",
+      "archetype": "validator",
+      "cluster": 0,
+      "llm": true,
+      "toxicity": "no",
+      "daily_activity_level": 3,
+      "round_actions": 4,
+      "is_page": 0,
+      "recsys_type": "rchrono_followers",
+      "frecsys_type": "preferential_attachment",
+      "interests": [
+        [
+          "Analysis",
+          "Facts",
+          "Verification"
+        ],
+        [
+          7,
+          5,
+          4
+        ]
+      ]
+    },
+    {
+      "id": "14430652-2420-50af-afb2-d2d7ba955faf",
+      "username": "agent_001",
+      "email": "agent_001@simulation.local",
+      "leaning": "neutral",
+      "user_type": "agent",
+      "age": 55,
+      "language": "en",
+      "education_level": "high_school",
+      "gender": "male",
+      "nationality": "US",
+      "profession": "Student",
+      "activity_profile": "Always On",
+      "archetype": "broadcaster",
+      "cluster": 1,
+      "llm": true,
+      "toxicity": "no",
+      "daily_activity_level": 1,
+      "round_actions": 2,
+      "is_page": 0,
+      "recsys_type": "random",
+      "frecsys_type": "preferential_attachment",
+      "interests": [
+        [
+          "Discovery",
+          "Learning",
+          "Curiosity"
+        ],
+        [
+          8,
+          5,
+          5
+        ]
+      ]
+    },
+    {
+      "id": "180b45ff-5786-5606-a5fa-d27b22155fa4",
+      "username": "agent_002",
+      "email": "agent_002@simulation.local",
+      "leaning": "neutral",
+      "user_type": "agent",
+      "age": 32,
+      "language": "en",
+      "education_level": "high_school",
+      "gender": "other",
+      "nationality": "AU",
+      "profession": "Doctor",
+      "activity_profile": "Evening Active",
+      "archetype": "explorer",
+      "cluster": 2,
+      "llm": true,
+      "toxicity": "no",
+      "daily_activity_level": 2,
+      "round_actions": 2,
+      "is_page": 0,
+      "recsys_type": "rchrono",
+      "frecsys_type": "common_neighbors",
+      "interests": [
+        [
+          "Learning",
+          "Education",
+          "Technology"
+        ],
+        [
+          5,
+          5,
+          2
+        ]
+      ]
+    },
+    {
+      "id": "e795e3e5-8bcd-582c-bcd6-3d1b8ff5c154",
+      "username": "agent_003",
+      "email": "agent_003@simulation.local",
+      "leaning": "left",
+      "user_type": "agent",
+      "age": 39,
+      "language": "en",
+      "education_level": "college",
+      "gender": "female",
+      "nationality": "CA",
+      "profession": "Engineer",
+      "activity_profile": "Always On",
+      "archetype": "validator",
+      "cluster": 0,
+      "llm": true,
+      "toxicity": "no",
+      "daily_activity_level": 2,
+      "round_actions": 2,
+      "is_page": 0,
+      "recsys_type": "rchrono_followers",
+      "frecsys_type": "adamic_adar",
+      "interests": [
+        [
+          "Education",
+          "Learning",
+          "Teaching"
+        ],
+        [
+          8,
+          6,
+          4
+        ]
+      ]
+    },
+    {
+      "id": "214ce831-51ed-5ffb-88be-17350ce839f4",
+      "username": "agent_004",
+      "email": "agent_004@simulation.local",
+      "leaning": "neutral",
+      "user_type": "agent",
+      "age": 25,
+      "language": "en",
+      "education_level": "graduate",
+      "gender": "other",
+      "nationality": "CA",
+      "profession": "Student",
+      "activity_profile": "Always On",
+      "archetype": "broadcaster",
+      "cluster": 1,
+      "llm": true,
+      "toxicity": "no",
+      "daily_activity_level": 3,
+      "round_actions": 4,
+      "is_page": 0,
+      "recsys_type": "random",
+      "frecsys_type": "random",
+      "interests": [
+        [
+          "Analysis",
+          "Facts",
+          "Verification"
+        ],
+        [
+          7,
+          5,
+          4
+        ]
+      ]
+    },
+    {
+      "id": "30f96503-a318-5e3d-bdae-bf188f87d15a",
+      "username": "agent_005",
+      "email": "agent_005@simulation.local",
+      "leaning": "center",
+      "user_type": "agent",
+      "age": 60,
+      "language": "en",
+      "education_level": "high_school",
+      "gender": "female",
+      "nationality": "CA",
+      "profession": "Artist",
+      "activity_profile": "Morning Active",
+      "archetype": "explorer",
+      "cluster": 2,
+      "llm": true,
+      "toxicity": "no",
+      "daily_activity_level": 1,
+      "round_actions": 3,
+      "is_page": 0,
+      "recsys_type": "rchrono_followers",
+      "frecsys_type": "jaccard",
+      "interests": [
+        [
+          "Learning",
+          "Education",
+          "Technology"
+        ],
+        [
+          5,
+          5,
+          2
+        ]
+      ]
+    },
+    {
+      "id": "16088adb-7be6-5783-9131-9d12c8c8c2f3",
+      "username": "agent_006",
+      "email": "agent_006@simulation.local",
+      "leaning": "right",
+      "user_type": "agent",
+      "age": 41,
+      "language": "en",
+      "education_level": "graduate",
+      "gender": "other",
+      "nationality": "US",
+      "profession": "Student",
+      "activity_profile": "Always On",
+      "archetype": "validator",
+      "cluster": 0,
+      "llm": true,
+      "toxicity": "no",
+      "daily_activity_level": 3,
+      "round_actions": 4,
+      "is_page": 0,
+      "recsys_type": "rchrono_followers",
+      "frecsys_type": "common_neighbors",
+      "interests": [
+        [
+          "Education",
+          "Learning",
+          "Teaching"
+        ],
+        [
+          8,
+          6,
+          4
+        ]
+      ]
+    },
+    {
+      "id": "b02a2220-aafb-5f96-a5c2-b4740f87d22b",
+      "username": "agent_007",
+      "email": "agent_007@simulation.local",
+      "leaning": "center",
+      "user_type": "agent",
+      "age": 64,
+      "language": "en",
+      "education_level": "college",
+      "gender": "other",
+      "nationality": "UK",
+      "profession": "Doctor",
+      "activity_profile": "Always On",
+      "archetype": "broadcaster",
+      "cluster": 1,
+      "llm": true,
+      "toxicity": "no",
+      "daily_activity_level": 2,
+      "round_actions": 5,
+      "is_page": 0,
+      "recsys_type": "random",
+      "frecsys_type": "common_neighbors",
+      "interests": [
+        [
+          "Analysis",
+          "Facts",
+          "Verification"
+        ],
+        [
+          7,
+          5,
+          4
+        ]
+      ]
+    },
+    {
+      "id": "58e0280a-60ca-5afd-b226-d0272a47b0f3",
+      "username": "agent_008",
+      "email": "agent_008@simulation.local",
+      "leaning": "neutral",
+      "user_type": "agent",
+      "age": 38,
+      "language": "en",
+      "education_level": "graduate",
+      "gender": "other",
+      "nationality": "CA",
+      "profession": "Teacher",
+      "activity_profile": "Morning Active",
+      "archetype": "explorer",
+      "cluster": 2,
+      "llm": true,
+      "toxicity": "no",
+      "daily_activity_level": 1,
+      "round_actions": 3,
+      "is_page": 0,
+      "recsys_type": "rchrono_followers",
+      "frecsys_type": "adamic_adar",
+      "interests": [
+        [
+          "Discovery",
+          "Learning",
+          "Curiosity"
+        ],
+        [
+          8,
+          5,
+          5
+        ]
+      ]
+    },
+    {
+      "id": "a921f3b2-f1ad-581e-8d2d-4ce42062df85",
+      "username": "agent_009",
+      "email": "agent_009@simulation.local",
+      "leaning": "neutral",
+      "user_type": "agent",
+      "age": 59,
+      "language": "en",
+      "education_level": "high_school",
+      "gender": "other",
+      "nationality": "CA",
+      "profession": "Student",
+      "activity_profile": "Always On",
+      "archetype": "validator",
+      "cluster": 0,
+      "llm": true,
+      "toxicity": "no",
+      "daily_activity_level": 2,
+      "round_actions": 3,
+      "is_page": 0,
+      "recsys_type": "rchrono",
+      "frecsys_type": "preferential_attachment",
+      "interests": [
+        [
+          "Discovery",
+          "Learning",
+          "Curiosity"
+        ],
+        [
+          8,
+          5,
+          5
+        ]
+      ]
+    },
+    {
+      "id": "68e28025-8e39-53f5-9ae5-12cd2a2e9307",
+      "username": "agent_010",
+      "email": "agent_010@simulation.local",
+      "leaning": "center",
+      "user_type": "agent",
+      "age": 41,
+      "language": "en",
+      "education_level": "high_school",
+      "gender": "male",
+      "nationality": "US",
+      "profession": "Teacher",
+      "activity_profile": "Always On",
+      "archetype": "broadcaster",
+      "cluster": 1,
+      "llm": true,
+      "toxicity": "no",
+      "daily_activity_level": 3,
+      "round_actions": 5,
+      "is_page": 0,
+      "recsys_type": "rchrono_followers",
+      "frecsys_type": "common_neighbors",
+      "interests": [
+        [
+          "Discovery",
+          "Learning",
+          "Curiosity"
+        ],
+        [
+          8,
+          5,
+          5
+        ]
+      ]
+    },
+    {
+      "id": "eb78b4a3-17f9-54d1-b98f-6b76b0e5ebf4",
+      "username": "agent_011",
+      "email": "agent_011@simulation.local",
+      "leaning": "left",
+      "user_type": "agent",
+      "age": 56,
+      "language": "en",
+      "education_level": "graduate",
+      "gender": "female",
+      "nationality": "US",
+      "profession": "Engineer",
+      "activity_profile": "Morning Active",
+      "archetype": "explorer",
+      "cluster": 2,
+      "llm": true,
+      "toxicity": "no",
+      "daily_activity_level": 2,
+      "round_actions": 5,
+      "is_page": 0,
+      "recsys_type": "rchrono_followers",
+      "frecsys_type": "preferential_attachment",
+      "interests": [
+        [
+          "News",
+          "Trends",
+          "Engagement"
+        ],
+        [
+          8,
+          6,
+          5
+        ]
+      ]
+    },
+    {
+      "id": "3c238afd-d57b-5c78-80d2-dc14e72dedc4",
+      "username": "agent_012",
+      "email": "agent_012@simulation.local",
+      "leaning": "right",
+      "user_type": "agent",
+      "age": 59,
+      "language": "en",
+      "education_level": "high_school",
+      "gender": "female",
+      "nationality": "US",
+      "profession": "Doctor",
+      "activity_profile": "Always On",
+      "archetype": "validator",
+      "cluster": 0,
+      "llm": true,
+      "toxicity": "no",
+      "daily_activity_level": 2,
+      "round_actions": 5,
+      "is_page": 0,
+      "recsys_type": "rchrono_followers",
+      "frecsys_type": "common_neighbors",
+      "interests": [
+        [
+          "Education",
+          "Learning",
+          "Teaching"
+        ],
+        [
+          8,
+          6,
+          4
+        ]
+      ]
+    },
+    {
+      "id": "3137ed80-6dd3-52c1-9981-c58fb22d0db7",
+      "username": "agent_013",
+      "email": "agent_013@simulation.local",
+      "leaning": "right",
+      "user_type": "agent",
+      "age": 24,
+      "language": "en",
+      "education_level": "high_school",
+      "gender": "female",
+      "nationality": "UK",
+      "profession": "Student",
+      "activity_profile": "Evening Active",
+      "archetype": "broadcaster",
+      "cluster": 1,
+      "llm": true,
+      "toxicity": "no",
+      "daily_activity_level": 3,
+      "round_actions": 3,
+      "is_page": 0,
+      "recsys_type": "rchrono_followers",
+      "frecsys_type": "random",
+      "interests": [
+        [
+          "Education",
+          "Learning",
+          "Teaching"
+        ],
+        [
+          8,
+          6,
+          4
+        ]
+      ]
+    },
+    {
+      "id": "03b5b681-6301-54ab-b0fb-29e46de6676a",
+      "username": "agent_014",
+      "email": "agent_014@simulation.local",
+      "leaning": "neutral",
+      "user_type": "agent",
+      "age": 38,
+      "language": "en",
+      "education_level": "college",
+      "gender": "male",
+      "nationality": "US",
+      "profession": "Teacher",
+      "activity_profile": "Always On",
+      "archetype": "explorer",
+      "cluster": 2,
+      "llm": true,
+      "toxicity": "no",
+      "daily_activity_level": 1,
+      "round_actions": 4,
+      "is_page": 0,
+      "recsys_type": "rchrono_followers",
+      "frecsys_type": "random",
+      "interests": [
+        [
+          "Analysis",
+          "Facts",
+          "Verification"
+        ],
+        [
+          7,
+          5,
+          4
+        ]
+      ]
+    },
+    {
+      "id": "ecf0c9b8-6c52-5b1d-9c01-47344ea0fd72",
+      "username": "agent_015",
+      "email": "agent_015@simulation.local",
+      "leaning": "neutral",
+      "user_type": "agent",
+      "age": 64,
+      "language": "en",
+      "education_level": "high_school",
+      "gender": "other",
+      "nationality": "AU",
+      "profession": "Student",
+      "activity_profile": "Always On",
+      "archetype": "validator",
+      "cluster": 0,
+      "llm": true,
+      "toxicity": "no",
+      "daily_activity_level": 3,
+      "round_actions": 3,
+      "is_page": 0,
+      "recsys_type": "random",
+      "frecsys_type": "jaccard",
+      "interests": [
+        [
+          "Education",
+          "Learning",
+          "Teaching"
+        ],
+        [
+          8,
+          6,
+          4
+        ]
+      ]
+    },
+    {
+      "id": "cc27529e-a039-5a43-a6b0-20ea72578b79",
+      "username": "agent_016",
+      "email": "agent_016@simulation.local",
+      "leaning": "neutral",
+      "user_type": "agent",
+      "age": 56,
+      "language": "en",
+      "education_level": "graduate",
+      "gender": "female",
+      "nationality": "AU",
+      "profession": "Doctor",
+      "activity_profile": "Always On",
+      "archetype": "broadcaster",
+      "cluster": 1,
+      "llm": true,
+      "toxicity": "no",
+      "daily_activity_level": 3,
+      "round_actions": 3,
+      "is_page": 0,
+      "recsys_type": "rchrono",
+      "frecsys_type": "preferential_attachment",
+      "interests": [
+        [
+          "Discovery",
+          "Learning",
+          "Curiosity"
+        ],
+        [
+          8,
+          5,
+          5
+        ]
+      ]
+    },
+    {
+      "id": "920c6512-cd88-5aad-b3b8-e613c50f0b96",
+      "username": "agent_017",
+      "email": "agent_017@simulation.local",
+      "leaning": "center",
+      "user_type": "agent",
+      "age": 25,
+      "language": "en",
+      "education_level": "high_school",
+      "gender": "other",
+      "nationality": "UK",
+      "profession": "Student",
+      "activity_profile": "Always On",
+      "archetype": "explorer",
+      "cluster": 2,
+      "llm": true,
+      "toxicity": "no",
+      "daily_activity_level": 1,
+      "round_actions": 4,
+      "is_page": 0,
+      "recsys_type": "random",
+      "frecsys_type": "random",
+      "interests": [
+        [
+          "Analysis",
+          "Facts",
+          "Verification"
+        ],
+        [
+          7,
+          5,
+          4
+        ]
+      ]
+    },
+    {
+      "id": "644d7882-f75a-5375-a9dd-88c05743ce87",
+      "username": "agent_018",
+      "email": "agent_018@simulation.local",
+      "leaning": "left",
+      "user_type": "agent",
+      "age": 63,
+      "language": "en",
+      "education_level": "college",
+      "gender": "male",
+      "nationality": "UK",
+      "profession": "Doctor",
+      "activity_profile": "Always On",
+      "archetype": "validator",
+      "cluster": 0,
+      "llm": true,
+      "toxicity": "no",
+      "daily_activity_level": 1,
+      "round_actions": 2,
+      "is_page": 0,
+      "recsys_type": "rchrono_followers",
+      "frecsys_type": "adamic_adar",
+      "interests": [
+        [
+          "Learning",
+          "Education",
+          "Technology"
+        ],
+        [
+          5,
+          5,
+          2
+        ]
+      ]
+    },
+    {
+      "id": "ba7a7165-6491-54ca-9cf3-b44e1f9ed57e",
+      "username": "agent_019",
+      "email": "agent_019@simulation.local",
+      "leaning": "center",
+      "user_type": "agent",
+      "age": 52,
+      "language": "en",
+      "education_level": "high_school",
+      "gender": "female",
+      "nationality": "AU",
+      "profession": "Teacher",
+      "activity_profile": "Evening Active",
+      "archetype": "broadcaster",
+      "cluster": 1,
+      "llm": true,
+      "toxicity": "no",
+      "daily_activity_level": 3,
+      "round_actions": 5,
+      "is_page": 0,
+      "recsys_type": "random",
+      "frecsys_type": "random",
+      "interests": [
+        [
+          "Discovery",
+          "Learning",
+          "Curiosity"
+        ],
+        [
+          8,
+          5,
+          5
+        ]
+      ]
+    },
+    {
+      "id": "fad4e543-045f-515f-bfa4-7b3fbc854627",
+      "username": "agent_020",
+      "email": "agent_020@simulation.local",
+      "leaning": "neutral",
+      "user_type": "agent",
+      "age": 40,
+      "language": "en",
+      "education_level": "graduate",
+      "gender": "other",
+      "nationality": "US",
+      "profession": "Engineer",
+      "activity_profile": "Morning Active",
+      "archetype": "explorer",
+      "cluster": 2,
+      "llm": true,
+      "toxicity": "no",
+      "daily_activity_level": 2,
+      "round_actions": 2,
+      "is_page": 0,
+      "recsys_type": "rchrono",
+      "frecsys_type": "jaccard",
+      "interests": [
+        [
+          "Analysis",
+          "Facts",
+          "Verification"
+        ],
+        [
+          7,
+          5,
+          4
+        ]
+      ]
+    },
+    {
+      "id": "0ad3de0c-a827-50a7-95ea-8d9516a66c21",
+      "username": "agent_021",
+      "email": "agent_021@simulation.local",
+      "leaning": "center",
+      "user_type": "agent",
+      "age": 33,
+      "language": "en",
+      "education_level": "high_school",
+      "gender": "female",
+      "nationality": "UK",
+      "profession": "Doctor",
+      "activity_profile": "Always On",
+      "archetype": "validator",
+      "cluster": 0,
+      "llm": true,
+      "toxicity": "no",
+      "daily_activity_level": 3,
+      "round_actions": 5,
+      "is_page": 0,
+      "recsys_type": "rchrono",
+      "frecsys_type": "common_neighbors",
+      "interests": [
+        [
+          "Analysis",
+          "Facts",
+          "Verification"
+        ],
+        [
+          7,
+          5,
+          4
+        ]
+      ]
+    },
+    {
+      "id": "d0f039f4-ab08-520b-890e-cf0da64056bd",
+      "username": "agent_022",
+      "email": "agent_022@simulation.local",
+      "leaning": "left",
+      "user_type": "agent",
+      "age": 46,
+      "language": "en",
+      "education_level": "high_school",
+      "gender": "male",
+      "nationality": "UK",
+      "profession": "Artist",
+      "activity_profile": "Always On",
+      "archetype": "broadcaster",
+      "cluster": 1,
+      "llm": true,
+      "toxicity": "no",
+      "daily_activity_level": 3,
+      "round_actions": 2,
+      "is_page": 0,
+      "recsys_type": "rchrono",
+      "frecsys_type": "adamic_adar",
+      "interests": [
+        [
+          "Learning",
+          "Education",
+          "Technology"
+        ],
+        [
+          5,
+          5,
+          2
+        ]
+      ]
+    },
+    {
+      "id": "7a4256d4-9817-5162-9206-846c3777b89a",
+      "username": "agent_023",
+      "email": "agent_023@simulation.local",
+      "leaning": "left",
+      "user_type": "agent",
+      "age": 43,
+      "language": "en",
+      "education_level": "college",
+      "gender": "female",
+      "nationality": "AU",
+      "profession": "Doctor",
+      "activity_profile": "Always On",
+      "archetype": "explorer",
+      "cluster": 2,
+      "llm": true,
+      "toxicity": "no",
+      "daily_activity_level": 2,
+      "round_actions": 2,
+      "is_page": 0,
+      "recsys_type": "rchrono",
+      "frecsys_type": "preferential_attachment",
+      "interests": [
+        [
+          "Discovery",
+          "Learning",
+          "Curiosity"
+        ],
+        [
+          8,
+          5,
+          5
+        ]
+      ]
+    },
+    {
+      "id": "a35d9b44-4f99-5893-a729-e80e7e84454d",
+      "username": "agent_024",
+      "email": "agent_024@simulation.local",
+      "leaning": "center",
+      "user_type": "agent",
+      "age": 27,
+      "language": "en",
+      "education_level": "graduate",
+      "gender": "other",
+      "nationality": "US",
+      "profession": "Doctor",
+      "activity_profile": "Morning Active",
+      "archetype": "validator",
+      "cluster": 0,
+      "llm": true,
+      "toxicity": "no",
+      "daily_activity_level": 1,
+      "round_actions": 2,
+      "is_page": 0,
+      "recsys_type": "random",
+      "frecsys_type": "random",
+      "interests": [
+        [
+          "Education",
+          "Learning",
+          "Teaching"
+        ],
+        [
+          8,
+          6,
+          4
+        ]
+      ]
+    },
+    {
+      "id": "89f50388-01f2-5516-baf3-fc52f1c6e187",
+      "username": "agent_025",
+      "email": "agent_025@simulation.local",
+      "leaning": "center",
+      "user_type": "agent",
+      "age": 48,
+      "language": "en",
+      "education_level": "high_school",
+      "gender": "male",
+      "nationality": "US",
+      "profession": "Teacher",
+      "activity_profile": "Always On",
+      "archetype": "broadcaster",
+      "cluster": 1,
+      "llm": true,
+      "toxicity": "no",
+      "daily_activity_level": 3,
+      "round_actions": 2,
+      "is_page": 0,
+      "recsys_type": "rchrono",
+      "frecsys_type": "random",
+      "interests": [
+        [
+          "Education",
+          "Learning",
+          "Teaching"
+        ],
+        [
+          8,
+          6,
+          4
+        ]
+      ]
+    },
+    {
+      "id": "1096b6c1-e969-50a8-9a5b-94ae8fa1f840",
+      "username": "agent_026",
+      "email": "agent_026@simulation.local",
+      "leaning": "left",
+      "user_type": "agent",
+      "age": 33,
+      "language": "en",
+      "education_level": "graduate",
+      "gender": "other",
+      "nationality": "CA",
+      "profession": "Doctor",
+      "activity_profile": "Evening Active",
+      "archetype": "explorer",
+      "cluster": 2,
+      "llm": true,
+      "toxicity": "no",
+      "daily_activity_level": 1,
+      "round_actions": 5,
+      "is_page": 0,
+      "recsys_type": "random",
+      "frecsys_type": "jaccard",
+      "interests": [
+        [
+          "Learning",
+          "Education",
+          "Technology"
+        ],
+        [
+          5,
+          5,
+          2
+        ]
+      ]
+    },
+    {
+      "id": "e8b01e2a-277c-5696-b301-343629f2d915",
+      "username": "agent_027",
+      "email": "agent_027@simulation.local",
+      "leaning": "neutral",
+      "user_type": "agent",
+      "age": 34,
+      "language": "en",
+      "education_level": "college",
+      "gender": "female",
+      "nationality": "US",
+      "profession": "Engineer",
+      "activity_profile": "Always On",
+      "archetype": "validator",
+      "cluster": 0,
+      "llm": true,
+      "toxicity": "no",
+      "daily_activity_level": 3,
+      "round_actions": 4,
+      "is_page": 0,
+      "recsys_type": "rchrono",
+      "frecsys_type": "preferential_attachment",
+      "interests": [
+        [
+          "Education",
+          "Learning",
+          "Teaching"
+        ],
+        [
+          8,
+          6,
+          4
+        ]
+      ]
+    },
+    {
+      "id": "e284526a-ed85-5a06-9032-74c59ef7172d",
+      "username": "agent_028",
+      "email": "agent_028@simulation.local",
+      "leaning": "left",
+      "user_type": "agent",
+      "age": 24,
+      "language": "en",
+      "education_level": "high_school",
+      "gender": "female",
+      "nationality": "US",
+      "profession": "Teacher",
+      "activity_profile": "Evening Active",
+      "archetype": "broadcaster",
+      "cluster": 1,
+      "llm": true,
+      "toxicity": "no",
+      "daily_activity_level": 1,
+      "round_actions": 4,
+      "is_page": 0,
+      "recsys_type": "rchrono",
+      "frecsys_type": "jaccard",
+      "interests": [
+        [
+          "Learning",
+          "Education",
+          "Technology"
+        ],
+        [
+          5,
+          5,
+          2
+        ]
+      ]
+    },
+    {
+      "id": "a6d39793-f3f5-5be7-adcf-6c4c1bcc6315",
+      "username": "agent_029",
+      "email": "agent_029@simulation.local",
+      "leaning": "right",
+      "user_type": "agent",
+      "age": 46,
+      "language": "en",
+      "education_level": "graduate",
+      "gender": "other",
+      "nationality": "CA",
+      "profession": "Engineer",
+      "activity_profile": "Evening Active",
+      "archetype": "explorer",
+      "cluster": 2,
+      "llm": true,
+      "toxicity": "no",
+      "daily_activity_level": 3,
+      "round_actions": 2,
+      "is_page": 0,
+      "recsys_type": "random",
+      "frecsys_type": "jaccard",
+      "interests": [
+        [
+          "Analysis",
+          "Facts",
+          "Verification"
+        ],
+        [
+          7,
+          5,
+          4
+        ]
+      ]
+    },
+    {
+      "id": "21223039-cd64-5b0b-9c19-12945820cfff",
+      "username": "agent_030",
+      "email": "agent_030@simulation.local",
+      "leaning": "center",
+      "user_type": "agent",
+      "age": 24,
+      "language": "en",
+      "education_level": "graduate",
+      "gender": "female",
+      "nationality": "UK",
+      "profession": "Doctor",
+      "activity_profile": "Morning Active",
+      "archetype": "validator",
+      "cluster": 0,
+      "llm": true,
+      "toxicity": "no",
+      "daily_activity_level": 2,
+      "round_actions": 3,
+      "is_page": 0,
+      "recsys_type": "rchrono_followers",
+      "frecsys_type": "adamic_adar",
+      "interests": [
+        [
+          "News",
+          "Trends",
+          "Engagement"
+        ],
+        [
+          8,
+          6,
+          5
+        ]
+      ]
+    },
+    {
+      "id": "64bccdd8-6dc2-55c4-8837-58c8470cc91e",
+      "username": "agent_031",
+      "email": "agent_031@simulation.local",
+      "leaning": "left",
+      "user_type": "agent",
+      "age": 21,
+      "language": "en",
+      "education_level": "high_school",
+      "gender": "male",
+      "nationality": "CA",
+      "profession": "Teacher",
+      "activity_profile": "Evening Active",
+      "archetype": "broadcaster",
+      "cluster": 1,
+      "llm": true,
+      "toxicity": "no",
+      "daily_activity_level": 2,
+      "round_actions": 4,
+      "is_page": 0,
+      "recsys_type": "rchrono_followers",
+      "frecsys_type": "jaccard",
+      "interests": [
+        [
+          "Learning",
+          "Education",
+          "Technology"
+        ],
+        [
+          5,
+          5,
+          2
+        ]
+      ]
+    },
+    {
+      "id": "97c1c59e-98ed-5983-81af-6edc2af33927",
+      "username": "agent_032",
+      "email": "agent_032@simulation.local",
+      "leaning": "neutral",
+      "user_type": "agent",
+      "age": 65,
+      "language": "en",
+      "education_level": "graduate",
+      "gender": "male",
+      "nationality": "US",
+      "profession": "Engineer",
+      "activity_profile": "Evening Active",
+      "archetype": "explorer",
+      "cluster": 2,
+      "llm": true,
+      "toxicity": "no",
+      "daily_activity_level": 3,
+      "round_actions": 5,
+      "is_page": 0,
+      "recsys_type": "rchrono_followers",
+      "frecsys_type": "common_neighbors",
+      "interests": [
+        [
+          "Education",
+          "Learning",
+          "Teaching"
+        ],
+        [
+          8,
+          6,
+          4
+        ]
+      ]
+    },
+    {
+      "id": "ab77e340-d622-52ba-a0ad-0bcf4f125e68",
+      "username": "agent_033",
+      "email": "agent_033@simulation.local",
+      "leaning": "right",
+      "user_type": "agent",
+      "age": 20,
+      "language": "en",
+      "education_level": "college",
+      "gender": "male",
+      "nationality": "US",
+      "profession": "Doctor",
+      "activity_profile": "Evening Active",
+      "archetype": "validator",
+      "cluster": 0,
+      "llm": true,
+      "toxicity": "no",
+      "daily_activity_level": 3,
+      "round_actions": 3,
+      "is_page": 0,
+      "recsys_type": "rchrono",
+      "frecsys_type": "random",
+      "interests": [
+        [
+          "News",
+          "Trends",
+          "Engagement"
+        ],
+        [
+          8,
+          6,
+          5
+        ]
+      ]
+    },
+    {
+      "id": "6cea715d-fbb9-551c-95f0-e62856449d24",
+      "username": "agent_034",
+      "email": "agent_034@simulation.local",
+      "leaning": "center",
+      "user_type": "agent",
+      "age": 31,
+      "language": "en",
+      "education_level": "graduate",
+      "gender": "female",
+      "nationality": "UK",
+      "profession": "Teacher",
+      "activity_profile": "Evening Active",
+      "archetype": "broadcaster",
+      "cluster": 1,
+      "llm": true,
+      "toxicity": "no",
+      "daily_activity_level": 1,
+      "round_actions": 4,
+      "is_page": 0,
+      "recsys_type": "random",
+      "frecsys_type": "common_neighbors",
+      "interests": [
+        [
+          "Discovery",
+          "Learning",
+          "Curiosity"
+        ],
+        [
+          8,
+          5,
+          5
+        ]
+      ]
+    },
+    {
+      "id": "e86fd8f4-7498-5c0e-bea5-8616c5d22b05",
+      "username": "agent_035",
+      "email": "agent_035@simulation.local",
+      "leaning": "center",
+      "user_type": "agent",
+      "age": 19,
+      "language": "en",
+      "education_level": "graduate",
+      "gender": "other",
+      "nationality": "UK",
+      "profession": "Doctor",
+      "activity_profile": "Evening Active",
+      "archetype": "explorer",
+      "cluster": 2,
+      "llm": true,
+      "toxicity": "no",
+      "daily_activity_level": 2,
+      "round_actions": 5,
+      "is_page": 0,
+      "recsys_type": "random",
+      "frecsys_type": "random",
+      "interests": [
+        [
+          "Discovery",
+          "Learning",
+          "Curiosity"
+        ],
+        [
+          8,
+          5,
+          5
+        ]
+      ]
+    },
+    {
+      "id": "9c31f7c5-c7f0-5c35-9652-13b1ac27ae00",
+      "username": "agent_036",
+      "email": "agent_036@simulation.local",
+      "leaning": "neutral",
+      "user_type": "agent",
+      "age": 20,
+      "language": "en",
+      "education_level": "college",
+      "gender": "female",
+      "nationality": "UK",
+      "profession": "Teacher",
+      "activity_profile": "Always On",
+      "archetype": "validator",
+      "cluster": 0,
+      "llm": true,
+      "toxicity": "no",
+      "daily_activity_level": 1,
+      "round_actions": 5,
+      "is_page": 0,
+      "recsys_type": "random",
+      "frecsys_type": "common_neighbors",
+      "interests": [
+        [
+          "Discovery",
+          "Learning",
+          "Curiosity"
+        ],
+        [
+          8,
+          5,
+          5
+        ]
+      ]
+    },
+    {
+      "id": "5483ab36-a755-5170-842a-8eb3960c1ec6",
+      "username": "agent_037",
+      "email": "agent_037@simulation.local",
+      "leaning": "right",
+      "user_type": "agent",
+      "age": 39,
+      "language": "en",
+      "education_level": "graduate",
+      "gender": "other",
+      "nationality": "AU",
+      "profession": "Student",
+      "activity_profile": "Always On",
+      "archetype": "broadcaster",
+      "cluster": 1,
+      "llm": true,
+      "toxicity": "no",
+      "daily_activity_level": 2,
+      "round_actions": 4,
+      "is_page": 0,
+      "recsys_type": "rchrono",
+      "frecsys_type": "random",
+      "interests": [
+        [
+          "Analysis",
+          "Facts",
+          "Verification"
+        ],
+        [
+          7,
+          5,
+          4
+        ]
+      ]
+    },
+    {
+      "id": "c3c31289-2d9d-5285-81dd-42d66d7c1d92",
+      "username": "agent_038",
+      "email": "agent_038@simulation.local",
+      "leaning": "center",
+      "user_type": "agent",
+      "age": 34,
+      "language": "en",
+      "education_level": "high_school",
+      "gender": "other",
+      "nationality": "AU",
+      "profession": "Doctor",
+      "activity_profile": "Evening Active",
+      "archetype": "explorer",
+      "cluster": 2,
+      "llm": true,
+      "toxicity": "no",
+      "daily_activity_level": 2,
+      "round_actions": 2,
+      "is_page": 0,
+      "recsys_type": "rchrono_followers",
+      "frecsys_type": "jaccard",
+      "interests": [
+        [
+          "Discovery",
+          "Learning",
+          "Curiosity"
+        ],
+        [
+          8,
+          5,
+          5
+        ]
+      ]
+    },
+    {
+      "id": "df8e0bd0-bf03-5f27-8715-22a3e7f53052",
+      "username": "agent_039",
+      "email": "agent_039@simulation.local",
+      "leaning": "left",
+      "user_type": "agent",
+      "age": 56,
+      "language": "en",
+      "education_level": "college",
+      "gender": "male",
+      "nationality": "AU",
+      "profession": "Engineer",
+      "activity_profile": "Morning Active",
+      "archetype": "validator",
+      "cluster": 0,
+      "llm": true,
+      "toxicity": "no",
+      "daily_activity_level": 3,
+      "round_actions": 3,
+      "is_page": 0,
+      "recsys_type": "rchrono_followers",
+      "frecsys_type": "preferential_attachment",
+      "interests": [
+        [
+          "Learning",
+          "Education",
+          "Technology"
+        ],
+        [
+          5,
+          5,
+          2
+        ]
+      ]
+    },
+    {
+      "id": "c2e9c6f2-844a-5059-95bf-4f20c038bcc5",
+      "username": "agent_040",
+      "email": "agent_040@simulation.local",
+      "leaning": "neutral",
+      "user_type": "agent",
+      "age": 41,
+      "language": "en",
+      "education_level": "graduate",
+      "gender": "female",
+      "nationality": "US",
+      "profession": "Doctor",
+      "activity_profile": "Always On",
+      "archetype": "broadcaster",
+      "cluster": 1,
+      "llm": true,
+      "toxicity": "no",
+      "daily_activity_level": 3,
+      "round_actions": 4,
+      "is_page": 0,
+      "recsys_type": "rchrono_followers",
+      "frecsys_type": "jaccard",
+      "interests": [
+        [
+          "Discovery",
+          "Learning",
+          "Curiosity"
+        ],
+        [
+          8,
+          5,
+          5
+        ]
+      ]
+    },
+    {
+      "id": "49775298-e750-5109-85f3-ed81776b559f",
+      "username": "agent_041",
+      "email": "agent_041@simulation.local",
+      "leaning": "neutral",
+      "user_type": "agent",
+      "age": 38,
+      "language": "en",
+      "education_level": "high_school",
+      "gender": "female",
+      "nationality": "AU",
+      "profession": "Teacher",
+      "activity_profile": "Evening Active",
+      "archetype": "explorer",
+      "cluster": 2,
+      "llm": true,
+      "toxicity": "no",
+      "daily_activity_level": 2,
+      "round_actions": 3,
+      "is_page": 0,
+      "recsys_type": "rchrono_followers",
+      "frecsys_type": "preferential_attachment",
+      "interests": [
+        [
+          "News",
+          "Trends",
+          "Engagement"
+        ],
+        [
+          8,
+          6,
+          5
+        ]
+      ]
+    },
+    {
+      "id": "e7ed9623-88ab-5ad6-8b2e-0a8a2370cc40",
+      "username": "agent_042",
+      "email": "agent_042@simulation.local",
+      "leaning": "left",
+      "user_type": "agent",
+      "age": 43,
+      "language": "en",
+      "education_level": "college",
+      "gender": "other",
+      "nationality": "CA",
+      "profession": "Artist",
+      "activity_profile": "Morning Active",
+      "archetype": "validator",
+      "cluster": 0,
+      "llm": true,
+      "toxicity": "no",
+      "daily_activity_level": 2,
+      "round_actions": 3,
+      "is_page": 0,
+      "recsys_type": "rchrono",
+      "frecsys_type": "adamic_adar",
+      "interests": [
+        [
+          "Learning",
+          "Education",
+          "Technology"
+        ],
+        [
+          5,
+          5,
+          2
+        ]
+      ]
+    },
+    {
+      "id": "37e4c55f-4796-5532-bd02-331bbb6be1bf",
+      "username": "agent_043",
+      "email": "agent_043@simulation.local",
+      "leaning": "neutral",
+      "user_type": "agent",
+      "age": 50,
+      "language": "en",
+      "education_level": "college",
+      "gender": "other",
+      "nationality": "CA",
+      "profession": "Engineer",
+      "activity_profile": "Evening Active",
+      "archetype": "broadcaster",
+      "cluster": 1,
+      "llm": true,
+      "toxicity": "no",
+      "daily_activity_level": 1,
+      "round_actions": 2,
+      "is_page": 0,
+      "recsys_type": "random",
+      "frecsys_type": "jaccard",
+      "interests": [
+        [
+          "Learning",
+          "Education",
+          "Technology"
+        ],
+        [
+          5,
+          5,
+          2
+        ]
+      ]
+    },
+    {
+      "id": "c9fd0898-798b-5348-9e41-c05aa2e31923",
+      "username": "agent_044",
+      "email": "agent_044@simulation.local",
+      "leaning": "center",
+      "user_type": "agent",
+      "age": 30,
+      "language": "en",
+      "education_level": "college",
+      "gender": "other",
+      "nationality": "US",
+      "profession": "Artist",
+      "activity_profile": "Always On",
+      "archetype": "explorer",
+      "cluster": 2,
+      "llm": true,
+      "toxicity": "no",
+      "daily_activity_level": 1,
+      "round_actions": 3,
+      "is_page": 0,
+      "recsys_type": "rchrono",
+      "frecsys_type": "preferential_attachment",
+      "interests": [
+        [
+          "Learning",
+          "Education",
+          "Technology"
+        ],
+        [
+          5,
+          5,
+          2
+        ]
+      ]
+    },
+    {
+      "id": "08839bbd-bc9f-595a-afd8-4a4e5a45e03c",
+      "username": "agent_045",
+      "email": "agent_045@simulation.local",
+      "leaning": "neutral",
+      "user_type": "agent",
+      "age": 63,
+      "language": "en",
+      "education_level": "high_school",
+      "gender": "other",
+      "nationality": "US",
+      "profession": "Engineer",
+      "activity_profile": "Morning Active",
+      "archetype": "validator",
+      "cluster": 0,
+      "llm": true,
+      "toxicity": "no",
+      "daily_activity_level": 2,
+      "round_actions": 3,
+      "is_page": 0,
+      "recsys_type": "rchrono",
+      "frecsys_type": "common_neighbors",
+      "interests": [
+        [
+          "Learning",
+          "Education",
+          "Technology"
+        ],
+        [
+          5,
+          5,
+          2
+        ]
+      ]
+    },
+    {
+      "id": "6e670a0d-cb95-5d28-87ee-a6b403bcfbb3",
+      "username": "agent_046",
+      "email": "agent_046@simulation.local",
+      "leaning": "neutral",
+      "user_type": "agent",
+      "age": 62,
+      "language": "en",
+      "education_level": "high_school",
+      "gender": "female",
+      "nationality": "UK",
+      "profession": "Artist",
+      "activity_profile": "Always On",
+      "archetype": "broadcaster",
+      "cluster": 1,
+      "llm": true,
+      "toxicity": "no",
+      "daily_activity_level": 3,
+      "round_actions": 3,
+      "is_page": 0,
+      "recsys_type": "rchrono_followers",
+      "frecsys_type": "preferential_attachment",
+      "interests": [
+        [
+          "Education",
+          "Learning",
+          "Teaching"
+        ],
+        [
+          8,
+          6,
+          4
+        ]
+      ]
+    },
+    {
+      "id": "ac090bae-ee52-568c-9db2-e470ca3b7824",
+      "username": "agent_047",
+      "email": "agent_047@simulation.local",
+      "leaning": "right",
+      "user_type": "agent",
+      "age": 56,
+      "language": "en",
+      "education_level": "graduate",
+      "gender": "female",
+      "nationality": "UK",
+      "profession": "Artist",
+      "activity_profile": "Morning Active",
+      "archetype": "explorer",
+      "cluster": 2,
+      "llm": true,
+      "toxicity": "no",
+      "daily_activity_level": 3,
+      "round_actions": 5,
+      "is_page": 0,
+      "recsys_type": "rchrono",
+      "frecsys_type": "jaccard",
+      "interests": [
+        [
+          "Learning",
+          "Education",
+          "Technology"
+        ],
+        [
+          5,
+          5,
+          2
+        ]
+      ]
+    },
+    {
+      "id": "2982e290-2d1d-58c6-940e-9510d55ba39d",
+      "username": "agent_048",
+      "email": "agent_048@simulation.local",
+      "leaning": "right",
+      "user_type": "agent",
+      "age": 58,
+      "language": "en",
+      "education_level": "college",
+      "gender": "female",
+      "nationality": "US",
+      "profession": "Doctor",
+      "activity_profile": "Evening Active",
+      "archetype": "validator",
+      "cluster": 0,
+      "llm": true,
+      "toxicity": "no",
+      "daily_activity_level": 2,
+      "round_actions": 3,
+      "is_page": 0,
+      "recsys_type": "random",
+      "frecsys_type": "jaccard",
+      "interests": [
+        [
+          "News",
+          "Trends",
+          "Engagement"
+        ],
+        [
+          8,
+          6,
+          5
+        ]
+      ]
+    },
+    {
+      "id": "92f81c45-33b4-52cb-a105-160c53d11bb9",
+      "username": "agent_049",
+      "email": "agent_049@simulation.local",
+      "leaning": "left",
+      "user_type": "agent",
+      "age": 38,
+      "language": "en",
+      "education_level": "college",
+      "gender": "other",
+      "nationality": "UK",
+      "profession": "Teacher",
+      "activity_profile": "Always On",
+      "archetype": "broadcaster",
+      "cluster": 1,
+      "llm": true,
+      "toxicity": "no",
+      "daily_activity_level": 1,
+      "round_actions": 3,
+      "is_page": 0,
+      "recsys_type": "random",
+      "frecsys_type": "adamic_adar",
+      "interests": [
+        [
+          "Discovery",
+          "Learning",
+          "Curiosity"
+        ],
+        [
+          8,
+          5,
+          5
+        ]
+      ]
+    },
+    {
+      "id": "85a77827-4db4-552e-97d2-969db0bf89f5",
+      "username": "agent_050",
+      "email": "agent_050@simulation.local",
+      "leaning": "neutral",
+      "user_type": "agent",
+      "age": 39,
+      "language": "en",
+      "education_level": "college",
+      "gender": "female",
+      "nationality": "US",
+      "profession": "Student",
+      "activity_profile": "Morning Active",
+      "archetype": "explorer",
+      "cluster": 2,
+      "llm": true,
+      "toxicity": "no",
+      "daily_activity_level": 1,
+      "round_actions": 3,
+      "is_page": 0,
+      "recsys_type": "rchrono",
+      "frecsys_type": "adamic_adar",
+      "interests": [
+        [
+          "Analysis",
+          "Facts",
+          "Verification"
+        ],
+        [
+          7,
+          5,
+          4
+        ]
+      ]
+    },
+    {
+      "id": "06dc5284-97ff-5a1f-9796-82e86a62bd7e",
+      "username": "agent_051",
+      "email": "agent_051@simulation.local",
+      "leaning": "right",
+      "user_type": "agent",
+      "age": 40,
+      "language": "en",
+      "education_level": "college",
+      "gender": "male",
+      "nationality": "CA",
+      "profession": "Artist",
+      "activity_profile": "Morning Active",
+      "archetype": "validator",
+      "cluster": 0,
+      "llm": true,
+      "toxicity": "no",
+      "daily_activity_level": 2,
+      "round_actions": 3,
+      "is_page": 0,
+      "recsys_type": "rchrono",
+      "frecsys_type": "random",
+      "interests": [
+        [
+          "Discovery",
+          "Learning",
+          "Curiosity"
+        ],
+        [
+          8,
+          5,
+          5
+        ]
+      ]
+    },
+    {
+      "id": "bda1c275-5e86-55cd-ac3b-39a41c8118ec",
+      "username": "agent_052",
+      "email": "agent_052@simulation.local",
+      "leaning": "neutral",
+      "user_type": "agent",
+      "age": 39,
+      "language": "en",
+      "education_level": "high_school",
+      "gender": "other",
+      "nationality": "US",
+      "profession": "Artist",
+      "activity_profile": "Evening Active",
+      "archetype": "broadcaster",
+      "cluster": 1,
+      "llm": true,
+      "toxicity": "no",
+      "daily_activity_level": 1,
+      "round_actions": 5,
+      "is_page": 0,
+      "recsys_type": "rchrono_followers",
+      "frecsys_type": "preferential_attachment",
+      "interests": [
+        [
+          "Analysis",
+          "Facts",
+          "Verification"
+        ],
+        [
+          7,
+          5,
+          4
+        ]
+      ]
+    },
+    {
+      "id": "062a9397-ef39-522c-9e1b-37b52e200470",
+      "username": "agent_053",
+      "email": "agent_053@simulation.local",
+      "leaning": "neutral",
+      "user_type": "agent",
+      "age": 23,
+      "language": "en",
+      "education_level": "high_school",
+      "gender": "female",
+      "nationality": "AU",
+      "profession": "Doctor",
+      "activity_profile": "Always On",
+      "archetype": "explorer",
+      "cluster": 2,
+      "llm": true,
+      "toxicity": "no",
+      "daily_activity_level": 2,
+      "round_actions": 3,
+      "is_page": 0,
+      "recsys_type": "random",
+      "frecsys_type": "adamic_adar",
+      "interests": [
+        [
+          "News",
+          "Trends",
+          "Engagement"
+        ],
+        [
+          8,
+          6,
+          5
+        ]
+      ]
+    },
+    {
+      "id": "d825e64e-732f-5e24-a2bc-546b63bdf147",
+      "username": "agent_054",
+      "email": "agent_054@simulation.local",
+      "leaning": "neutral",
+      "user_type": "agent",
+      "age": 39,
+      "language": "en",
+      "education_level": "high_school",
+      "gender": "female",
+      "nationality": "US",
+      "profession": "Student",
+      "activity_profile": "Morning Active",
+      "archetype": "validator",
+      "cluster": 0,
+      "llm": true,
+      "toxicity": "no",
+      "daily_activity_level": 2,
+      "round_actions": 4,
+      "is_page": 0,
+      "recsys_type": "random",
+      "frecsys_type": "jaccard",
+      "interests": [
+        [
+          "Learning",
+          "Education",
+          "Technology"
+        ],
+        [
+          5,
+          5,
+          2
+        ]
+      ]
+    },
+    {
+      "id": "634c82da-7567-5a58-9ae3-0a85cf178ab5",
+      "username": "agent_055",
+      "email": "agent_055@simulation.local",
+      "leaning": "left",
+      "user_type": "agent",
+      "age": 59,
+      "language": "en",
+      "education_level": "high_school",
+      "gender": "male",
+      "nationality": "US",
+      "profession": "Student",
+      "activity_profile": "Evening Active",
+      "archetype": "broadcaster",
+      "cluster": 1,
+      "llm": true,
+      "toxicity": "no",
+      "daily_activity_level": 1,
+      "round_actions": 2,
+      "is_page": 0,
+      "recsys_type": "random",
+      "frecsys_type": "common_neighbors",
+      "interests": [
+        [
+          "Learning",
+          "Education",
+          "Technology"
+        ],
+        [
+          5,
+          5,
+          2
+        ]
+      ]
+    },
+    {
+      "id": "0613ca34-30c8-59f1-8681-29cb0537e19f",
+      "username": "agent_056",
+      "email": "agent_056@simulation.local",
+      "leaning": "left",
+      "user_type": "agent",
+      "age": 48,
+      "language": "en",
+      "education_level": "graduate",
+      "gender": "female",
+      "nationality": "CA",
+      "profession": "Teacher",
+      "activity_profile": "Evening Active",
+      "archetype": "explorer",
+      "cluster": 2,
+      "llm": true,
+      "toxicity": "no",
+      "daily_activity_level": 1,
+      "round_actions": 5,
+      "is_page": 0,
+      "recsys_type": "rchrono_followers",
+      "frecsys_type": "preferential_attachment",
+      "interests": [
+        [
+          "Analysis",
+          "Facts",
+          "Verification"
+        ],
+        [
+          7,
+          5,
+          4
+        ]
+      ]
+    },
+    {
+      "id": "d567e941-757b-5c96-baf6-c098c883a2be",
+      "username": "agent_057",
+      "email": "agent_057@simulation.local",
+      "leaning": "right",
+      "user_type": "agent",
+      "age": 28,
+      "language": "en",
+      "education_level": "college",
+      "gender": "other",
+      "nationality": "AU",
+      "profession": "Artist",
+      "activity_profile": "Always On",
+      "archetype": "validator",
+      "cluster": 0,
+      "llm": true,
+      "toxicity": "no",
+      "daily_activity_level": 3,
+      "round_actions": 2,
+      "is_page": 0,
+      "recsys_type": "rchrono_followers",
+      "frecsys_type": "common_neighbors",
+      "interests": [
+        [
+          "Analysis",
+          "Facts",
+          "Verification"
+        ],
+        [
+          7,
+          5,
+          4
+        ]
+      ]
+    },
+    {
+      "id": "08b48b93-9112-5e1b-b6f1-aafb620e95d5",
+      "username": "agent_058",
+      "email": "agent_058@simulation.local",
+      "leaning": "center",
+      "user_type": "agent",
+      "age": 55,
+      "language": "en",
+      "education_level": "graduate",
+      "gender": "other",
+      "nationality": "US",
+      "profession": "Student",
+      "activity_profile": "Always On",
+      "archetype": "broadcaster",
+      "cluster": 1,
+      "llm": true,
+      "toxicity": "no",
+      "daily_activity_level": 3,
+      "round_actions": 4,
+      "is_page": 0,
+      "recsys_type": "random",
+      "frecsys_type": "jaccard",
+      "interests": [
+        [
+          "Education",
+          "Learning",
+          "Teaching"
+        ],
+        [
+          8,
+          6,
+          4
+        ]
+      ]
+    },
+    {
+      "id": "c156d028-b2a2-557b-a4d0-58d240e5737b",
+      "username": "agent_059",
+      "email": "agent_059@simulation.local",
+      "leaning": "right",
+      "user_type": "agent",
+      "age": 45,
+      "language": "en",
+      "education_level": "high_school",
+      "gender": "female",
+      "nationality": "AU",
+      "profession": "Engineer",
+      "activity_profile": "Always On",
+      "archetype": "explorer",
+      "cluster": 2,
+      "llm": true,
+      "toxicity": "no",
+      "daily_activity_level": 3,
+      "round_actions": 4,
+      "is_page": 0,
+      "recsys_type": "rchrono",
+      "frecsys_type": "jaccard",
+      "interests": [
+        [
+          "Discovery",
+          "Learning",
+          "Curiosity"
+        ],
+        [
+          8,
+          5,
+          5
+        ]
+      ]
+    },
+    {
+      "id": "81859b72-eccd-559a-9a0c-7c8a6cdd2525",
+      "username": "agent_060",
+      "email": "agent_060@simulation.local",
+      "leaning": "center",
+      "user_type": "agent",
+      "age": 63,
+      "language": "en",
+      "education_level": "graduate",
+      "gender": "other",
+      "nationality": "AU",
+      "profession": "Artist",
+      "activity_profile": "Morning Active",
+      "archetype": "validator",
+      "cluster": 0,
+      "llm": true,
+      "toxicity": "no",
+      "daily_activity_level": 1,
+      "round_actions": 4,
+      "is_page": 0,
+      "recsys_type": "rchrono",
+      "frecsys_type": "preferential_attachment",
+      "interests": [
+        [
+          "News",
+          "Trends",
+          "Engagement"
+        ],
+        [
+          8,
+          6,
+          5
+        ]
+      ]
+    },
+    {
+      "id": "9d277f1f-a65e-542d-8aec-63529972db2d",
+      "username": "agent_061",
+      "email": "agent_061@simulation.local",
+      "leaning": "center",
+      "user_type": "agent",
+      "age": 38,
+      "language": "en",
+      "education_level": "high_school",
+      "gender": "female",
+      "nationality": "AU",
+      "profession": "Doctor",
+      "activity_profile": "Always On",
+      "archetype": "broadcaster",
+      "cluster": 1,
+      "llm": true,
+      "toxicity": "no",
+      "daily_activity_level": 2,
+      "round_actions": 5,
+      "is_page": 0,
+      "recsys_type": "random",
+      "frecsys_type": "adamic_adar",
+      "interests": [
+        [
+          "News",
+          "Trends",
+          "Engagement"
+        ],
+        [
+          8,
+          6,
+          5
+        ]
+      ]
+    },
+    {
+      "id": "0c0b8782-e4c4-528c-9d81-5f4bcc21921e",
+      "username": "agent_062",
+      "email": "agent_062@simulation.local",
+      "leaning": "neutral",
+      "user_type": "agent",
+      "age": 29,
+      "language": "en",
+      "education_level": "college",
+      "gender": "female",
+      "nationality": "CA",
+      "profession": "Student",
+      "activity_profile": "Always On",
+      "archetype": "explorer",
+      "cluster": 2,
+      "llm": true,
+      "toxicity": "no",
+      "daily_activity_level": 2,
+      "round_actions": 4,
+      "is_page": 0,
+      "recsys_type": "random",
+      "frecsys_type": "preferential_attachment",
+      "interests": [
+        [
+          "Learning",
+          "Education",
+          "Technology"
+        ],
+        [
+          5,
+          5,
+          2
+        ]
+      ]
+    },
+    {
+      "id": "87c692de-c889-5151-969f-8ecb4c358ddb",
+      "username": "agent_063",
+      "email": "agent_063@simulation.local",
+      "leaning": "center",
+      "user_type": "agent",
+      "age": 23,
+      "language": "en",
+      "education_level": "graduate",
+      "gender": "male",
+      "nationality": "AU",
+      "profession": "Artist",
+      "activity_profile": "Evening Active",
+      "archetype": "validator",
+      "cluster": 0,
+      "llm": true,
+      "toxicity": "no",
+      "daily_activity_level": 2,
+      "round_actions": 5,
+      "is_page": 0,
+      "recsys_type": "rchrono",
+      "frecsys_type": "random",
+      "interests": [
+        [
+          "Analysis",
+          "Facts",
+          "Verification"
+        ],
+        [
+          7,
+          5,
+          4
+        ]
+      ]
+    },
+    {
+      "id": "1add4be8-bda3-5c8a-8c12-f5b3c630abeb",
+      "username": "agent_064",
+      "email": "agent_064@simulation.local",
+      "leaning": "center",
+      "user_type": "agent",
+      "age": 36,
+      "language": "en",
+      "education_level": "college",
+      "gender": "other",
+      "nationality": "CA",
+      "profession": "Artist",
+      "activity_profile": "Morning Active",
+      "archetype": "broadcaster",
+      "cluster": 1,
+      "llm": true,
+      "toxicity": "no",
+      "daily_activity_level": 3,
+      "round_actions": 3,
+      "is_page": 0,
+      "recsys_type": "rchrono_followers",
+      "frecsys_type": "preferential_attachment",
+      "interests": [
+        [
+          "News",
+          "Trends",
+          "Engagement"
+        ],
+        [
+          8,
+          6,
+          5
+        ]
+      ]
+    },
+    {
+      "id": "0aab5176-3db4-556e-8996-9044825056ee",
+      "username": "agent_065",
+      "email": "agent_065@simulation.local",
+      "leaning": "right",
+      "user_type": "agent",
+      "age": 45,
+      "language": "en",
+      "education_level": "college",
+      "gender": "female",
+      "nationality": "CA",
+      "profession": "Teacher",
+      "activity_profile": "Morning Active",
+      "archetype": "explorer",
+      "cluster": 2,
+      "llm": true,
+      "toxicity": "no",
+      "daily_activity_level": 3,
+      "round_actions": 5,
+      "is_page": 0,
+      "recsys_type": "random",
+      "frecsys_type": "common_neighbors",
+      "interests": [
+        [
+          "News",
+          "Trends",
+          "Engagement"
+        ],
+        [
+          8,
+          6,
+          5
+        ]
+      ]
+    },
+    {
+      "id": "dcfdbc5c-3452-5bab-98e2-af5b5c3e541c",
+      "username": "agent_066",
+      "email": "agent_066@simulation.local",
+      "leaning": "center",
+      "user_type": "agent",
+      "age": 25,
+      "language": "en",
+      "education_level": "college",
+      "gender": "other",
+      "nationality": "CA",
+      "profession": "Engineer",
+      "activity_profile": "Always On",
+      "archetype": "validator",
+      "cluster": 0,
+      "llm": true,
+      "toxicity": "no",
+      "daily_activity_level": 1,
+      "round_actions": 5,
+      "is_page": 0,
+      "recsys_type": "random",
+      "frecsys_type": "jaccard",
+      "interests": [
+        [
+          "Learning",
+          "Education",
+          "Technology"
+        ],
+        [
+          5,
+          5,
+          2
+        ]
+      ]
+    },
+    {
+      "id": "f9f4d535-4b00-56d5-b1b0-e0eb89d70f5c",
+      "username": "agent_067",
+      "email": "agent_067@simulation.local",
+      "leaning": "center",
+      "user_type": "agent",
+      "age": 41,
+      "language": "en",
+      "education_level": "college",
+      "gender": "male",
+      "nationality": "US",
+      "profession": "Student",
+      "activity_profile": "Morning Active",
+      "archetype": "broadcaster",
+      "cluster": 1,
+      "llm": true,
+      "toxicity": "no",
+      "daily_activity_level": 1,
+      "round_actions": 3,
+      "is_page": 0,
+      "recsys_type": "rchrono",
+      "frecsys_type": "common_neighbors",
+      "interests": [
+        [
+          "Discovery",
+          "Learning",
+          "Curiosity"
+        ],
+        [
+          8,
+          5,
+          5
+        ]
+      ]
+    },
+    {
+      "id": "e6cd9463-4c14-5682-a6b8-64812e1f602a",
+      "username": "agent_068",
+      "email": "agent_068@simulation.local",
+      "leaning": "left",
+      "user_type": "agent",
+      "age": 24,
+      "language": "en",
+      "education_level": "college",
+      "gender": "female",
+      "nationality": "CA",
+      "profession": "Teacher",
+      "activity_profile": "Evening Active",
+      "archetype": "explorer",
+      "cluster": 2,
+      "llm": true,
+      "toxicity": "no",
+      "daily_activity_level": 2,
+      "round_actions": 5,
+      "is_page": 0,
+      "recsys_type": "random",
+      "frecsys_type": "jaccard",
+      "interests": [
+        [
+          "Discovery",
+          "Learning",
+          "Curiosity"
+        ],
+        [
+          8,
+          5,
+          5
+        ]
+      ]
+    },
+    {
+      "id": "ba15ae0b-4241-58da-b991-8db38a85ad7e",
+      "username": "agent_069",
+      "email": "agent_069@simulation.local",
+      "leaning": "left",
+      "user_type": "agent",
+      "age": 25,
+      "language": "en",
+      "education_level": "graduate",
+      "gender": "other",
+      "nationality": "US",
+      "profession": "Teacher",
+      "activity_profile": "Morning Active",
+      "archetype": "validator",
+      "cluster": 0,
+      "llm": true,
+      "toxicity": "no",
+      "daily_activity_level": 2,
+      "round_actions": 2,
+      "is_page": 0,
+      "recsys_type": "random",
+      "frecsys_type": "preferential_attachment",
+      "interests": [
+        [
+          "News",
+          "Trends",
+          "Engagement"
+        ],
+        [
+          8,
+          6,
+          5
+        ]
+      ]
+    },
+    {
+      "id": "97c0278f-7991-5b87-ac22-20d9424f631f",
+      "username": "agent_070",
+      "email": "agent_070@simulation.local",
+      "leaning": "center",
+      "user_type": "agent",
+      "age": 23,
+      "language": "en",
+      "education_level": "graduate",
+      "gender": "other",
+      "nationality": "UK",
+      "profession": "Student",
+      "activity_profile": "Always On",
+      "archetype": "broadcaster",
+      "cluster": 1,
+      "llm": true,
+      "toxicity": "no",
+      "daily_activity_level": 3,
+      "round_actions": 5,
+      "is_page": 0,
+      "recsys_type": "rchrono",
+      "frecsys_type": "adamic_adar",
+      "interests": [
+        [
+          "Discovery",
+          "Learning",
+          "Curiosity"
+        ],
+        [
+          8,
+          5,
+          5
+        ]
+      ]
+    },
+    {
+      "id": "9ddafb81-e097-5a1d-98c7-c7cab3e5495f",
+      "username": "agent_071",
+      "email": "agent_071@simulation.local",
+      "leaning": "neutral",
+      "user_type": "agent",
+      "age": 37,
+      "language": "en",
+      "education_level": "graduate",
+      "gender": "other",
+      "nationality": "US",
+      "profession": "Teacher",
+      "activity_profile": "Morning Active",
+      "archetype": "explorer",
+      "cluster": 2,
+      "llm": true,
+      "toxicity": "no",
+      "daily_activity_level": 3,
+      "round_actions": 2,
+      "is_page": 0,
+      "recsys_type": "rchrono_followers",
+      "frecsys_type": "common_neighbors",
+      "interests": [
+        [
+          "News",
+          "Trends",
+          "Engagement"
+        ],
+        [
+          8,
+          6,
+          5
+        ]
+      ]
+    },
+    {
+      "id": "5f84a240-3689-59b0-9202-6d8f38359d04",
+      "username": "agent_072",
+      "email": "agent_072@simulation.local",
+      "leaning": "left",
+      "user_type": "agent",
+      "age": 60,
+      "language": "en",
+      "education_level": "graduate",
+      "gender": "male",
+      "nationality": "UK",
+      "profession": "Engineer",
+      "activity_profile": "Always On",
+      "archetype": "validator",
+      "cluster": 0,
+      "llm": true,
+      "toxicity": "no",
+      "daily_activity_level": 1,
+      "round_actions": 3,
+      "is_page": 0,
+      "recsys_type": "rchrono",
+      "frecsys_type": "adamic_adar",
+      "interests": [
+        [
+          "Education",
+          "Learning",
+          "Teaching"
+        ],
+        [
+          8,
+          6,
+          4
+        ]
+      ]
+    },
+    {
+      "id": "ddc97700-14bb-5061-8a1f-16364512ca7f",
+      "username": "agent_073",
+      "email": "agent_073@simulation.local",
+      "leaning": "right",
+      "user_type": "agent",
+      "age": 48,
+      "language": "en",
+      "education_level": "graduate",
+      "gender": "female",
+      "nationality": "AU",
+      "profession": "Engineer",
+      "activity_profile": "Always On",
+      "archetype": "broadcaster",
+      "cluster": 1,
+      "llm": true,
+      "toxicity": "no",
+      "daily_activity_level": 1,
+      "round_actions": 4,
+      "is_page": 0,
+      "recsys_type": "rchrono_followers",
+      "frecsys_type": "common_neighbors",
+      "interests": [
+        [
+          "News",
+          "Trends",
+          "Engagement"
+        ],
+        [
+          8,
+          6,
+          5
+        ]
+      ]
+    },
+    {
+      "id": "d1002b81-31f8-5992-afae-4960302b1b49",
+      "username": "agent_074",
+      "email": "agent_074@simulation.local",
+      "leaning": "center",
+      "user_type": "agent",
+      "age": 58,
+      "language": "en",
+      "education_level": "graduate",
+      "gender": "male",
+      "nationality": "CA",
+      "profession": "Teacher",
+      "activity_profile": "Morning Active",
+      "archetype": "explorer",
+      "cluster": 2,
+      "llm": true,
+      "toxicity": "no",
+      "daily_activity_level": 1,
+      "round_actions": 3,
+      "is_page": 0,
+      "recsys_type": "random",
+      "frecsys_type": "random",
+      "interests": [
+        [
+          "Learning",
+          "Education",
+          "Technology"
+        ],
+        [
+          5,
+          5,
+          2
+        ]
+      ]
+    },
+    {
+      "id": "ee7bdff0-754a-5cd4-ac2b-142d6b66ece4",
+      "username": "agent_075",
+      "email": "agent_075@simulation.local",
+      "leaning": "right",
+      "user_type": "agent",
+      "age": 37,
+      "language": "en",
+      "education_level": "graduate",
+      "gender": "female",
+      "nationality": "AU",
+      "profession": "Doctor",
+      "activity_profile": "Morning Active",
+      "archetype": "validator",
+      "cluster": 0,
+      "llm": true,
+      "toxicity": "no",
+      "daily_activity_level": 1,
+      "round_actions": 5,
+      "is_page": 0,
+      "recsys_type": "rchrono_followers",
+      "frecsys_type": "preferential_attachment",
+      "interests": [
+        [
+          "Discovery",
+          "Learning",
+          "Curiosity"
+        ],
+        [
+          8,
+          5,
+          5
+        ]
+      ]
+    },
+    {
+      "id": "e8621e30-b0c3-5a00-91cb-ea9fa26e4f28",
+      "username": "agent_076",
+      "email": "agent_076@simulation.local",
+      "leaning": "left",
+      "user_type": "agent",
+      "age": 46,
+      "language": "en",
+      "education_level": "graduate",
+      "gender": "female",
+      "nationality": "CA",
+      "profession": "Engineer",
+      "activity_profile": "Evening Active",
+      "archetype": "broadcaster",
+      "cluster": 1,
+      "llm": true,
+      "toxicity": "no",
+      "daily_activity_level": 1,
+      "round_actions": 5,
+      "is_page": 0,
+      "recsys_type": "random",
+      "frecsys_type": "common_neighbors",
+      "interests": [
+        [
+          "Education",
+          "Learning",
+          "Teaching"
+        ],
+        [
+          8,
+          6,
+          4
+        ]
+      ]
+    },
+    {
+      "id": "03e2e532-f3a2-54a2-8feb-16680fba8ccb",
+      "username": "agent_077",
+      "email": "agent_077@simulation.local",
+      "leaning": "left",
+      "user_type": "agent",
+      "age": 55,
+      "language": "en",
+      "education_level": "high_school",
+      "gender": "female",
+      "nationality": "AU",
+      "profession": "Doctor",
+      "activity_profile": "Evening Active",
+      "archetype": "explorer",
+      "cluster": 2,
+      "llm": true,
+      "toxicity": "no",
+      "daily_activity_level": 2,
+      "round_actions": 2,
+      "is_page": 0,
+      "recsys_type": "random",
+      "frecsys_type": "preferential_attachment",
+      "interests": [
+        [
+          "Discovery",
+          "Learning",
+          "Curiosity"
+        ],
+        [
+          8,
+          5,
+          5
+        ]
+      ]
+    },
+    {
+      "id": "9b503033-213d-5d9d-8f7b-a8a7eb08855e",
+      "username": "agent_078",
+      "email": "agent_078@simulation.local",
+      "leaning": "neutral",
+      "user_type": "agent",
+      "age": 58,
+      "language": "en",
+      "education_level": "college",
+      "gender": "female",
+      "nationality": "CA",
+      "profession": "Engineer",
+      "activity_profile": "Always On",
+      "archetype": "validator",
+      "cluster": 0,
+      "llm": true,
+      "toxicity": "no",
+      "daily_activity_level": 2,
+      "round_actions": 4,
+      "is_page": 0,
+      "recsys_type": "random",
+      "frecsys_type": "jaccard",
+      "interests": [
+        [
+          "Discovery",
+          "Learning",
+          "Curiosity"
+        ],
+        [
+          8,
+          5,
+          5
+        ]
+      ]
+    },
+    {
+      "id": "fd4c10ed-0662-5ed1-83f4-d006be17e3f9",
+      "username": "agent_079",
+      "email": "agent_079@simulation.local",
+      "leaning": "neutral",
+      "user_type": "agent",
+      "age": 62,
+      "language": "en",
+      "education_level": "graduate",
+      "gender": "male",
+      "nationality": "AU",
+      "profession": "Engineer",
+      "activity_profile": "Morning Active",
+      "archetype": "broadcaster",
+      "cluster": 1,
+      "llm": true,
+      "toxicity": "no",
+      "daily_activity_level": 3,
+      "round_actions": 5,
+      "is_page": 0,
+      "recsys_type": "rchrono",
+      "frecsys_type": "jaccard",
+      "interests": [
+        [
+          "News",
+          "Trends",
+          "Engagement"
+        ],
+        [
+          8,
+          6,
+          5
+        ]
+      ]
+    },
+    {
+      "id": "907a897d-690c-5f86-b59e-63edd21d92d2",
+      "username": "agent_080",
+      "email": "agent_080@simulation.local",
+      "leaning": "neutral",
+      "user_type": "agent",
+      "age": 25,
+      "language": "en",
+      "education_level": "college",
+      "gender": "male",
+      "nationality": "UK",
+      "profession": "Student",
+      "activity_profile": "Evening Active",
+      "archetype": "explorer",
+      "cluster": 2,
+      "llm": true,
+      "toxicity": "no",
+      "daily_activity_level": 1,
+      "round_actions": 5,
+      "is_page": 0,
+      "recsys_type": "rchrono",
+      "frecsys_type": "preferential_attachment",
+      "interests": [
+        [
+          "Discovery",
+          "Learning",
+          "Curiosity"
+        ],
+        [
+          8,
+          5,
+          5
+        ]
+      ]
+    },
+    {
+      "id": "9cfc3126-610f-5191-b399-f42ac878cc5c",
+      "username": "agent_081",
+      "email": "agent_081@simulation.local",
+      "leaning": "neutral",
+      "user_type": "agent",
+      "age": 58,
+      "language": "en",
+      "education_level": "graduate",
+      "gender": "male",
+      "nationality": "CA",
+      "profession": "Artist",
+      "activity_profile": "Always On",
+      "archetype": "validator",
+      "cluster": 0,
+      "llm": true,
+      "toxicity": "no",
+      "daily_activity_level": 1,
+      "round_actions": 4,
+      "is_page": 0,
+      "recsys_type": "rchrono_followers",
+      "frecsys_type": "adamic_adar",
+      "interests": [
+        [
+          "Analysis",
+          "Facts",
+          "Verification"
+        ],
+        [
+          7,
+          5,
+          4
+        ]
+      ]
+    },
+    {
+      "id": "29c5bd78-9af8-5ce2-b0b1-17b433621a7e",
+      "username": "agent_082",
+      "email": "agent_082@simulation.local",
+      "leaning": "center",
+      "user_type": "agent",
+      "age": 19,
+      "language": "en",
+      "education_level": "graduate",
+      "gender": "male",
+      "nationality": "AU",
+      "profession": "Engineer",
+      "activity_profile": "Evening Active",
+      "archetype": "broadcaster",
+      "cluster": 1,
+      "llm": true,
+      "toxicity": "no",
+      "daily_activity_level": 1,
+      "round_actions": 4,
+      "is_page": 0,
+      "recsys_type": "random",
+      "frecsys_type": "random",
+      "interests": [
+        [
+          "Discovery",
+          "Learning",
+          "Curiosity"
+        ],
+        [
+          8,
+          5,
+          5
+        ]
+      ]
+    },
+    {
+      "id": "db9e5699-ba37-5903-bf56-d9df1c6d5b79",
+      "username": "agent_083",
+      "email": "agent_083@simulation.local",
+      "leaning": "center",
+      "user_type": "agent",
+      "age": 25,
+      "language": "en",
+      "education_level": "graduate",
+      "gender": "other",
+      "nationality": "CA",
+      "profession": "Artist",
+      "activity_profile": "Morning Active",
+      "archetype": "explorer",
+      "cluster": 2,
+      "llm": true,
+      "toxicity": "no",
+      "daily_activity_level": 3,
+      "round_actions": 4,
+      "is_page": 0,
+      "recsys_type": "rchrono",
+      "frecsys_type": "adamic_adar",
+      "interests": [
+        [
+          "Learning",
+          "Education",
+          "Technology"
+        ],
+        [
+          5,
+          5,
+          2
+        ]
+      ]
+    },
+    {
+      "id": "a4170e0f-e254-5172-be83-2883da3dd961",
+      "username": "agent_084",
+      "email": "agent_084@simulation.local",
+      "leaning": "center",
+      "user_type": "agent",
+      "age": 47,
+      "language": "en",
+      "education_level": "high_school",
+      "gender": "female",
+      "nationality": "AU",
+      "profession": "Doctor",
+      "activity_profile": "Morning Active",
+      "archetype": "validator",
+      "cluster": 0,
+      "llm": true,
+      "toxicity": "no",
+      "daily_activity_level": 1,
+      "round_actions": 3,
+      "is_page": 0,
+      "recsys_type": "rchrono_followers",
+      "frecsys_type": "jaccard",
+      "interests": [
+        [
+          "Analysis",
+          "Facts",
+          "Verification"
+        ],
+        [
+          7,
+          5,
+          4
+        ]
+      ]
+    },
+    {
+      "id": "6818011a-724c-597d-9ce3-5b421e46644c",
+      "username": "agent_085",
+      "email": "agent_085@simulation.local",
+      "leaning": "right",
+      "user_type": "agent",
+      "age": 36,
+      "language": "en",
+      "education_level": "high_school",
+      "gender": "female",
+      "nationality": "AU",
+      "profession": "Doctor",
+      "activity_profile": "Evening Active",
+      "archetype": "broadcaster",
+      "cluster": 1,
+      "llm": true,
+      "toxicity": "no",
+      "daily_activity_level": 3,
+      "round_actions": 5,
+      "is_page": 0,
+      "recsys_type": "rchrono",
+      "frecsys_type": "preferential_attachment",
+      "interests": [
+        [
+          "Education",
+          "Learning",
+          "Teaching"
+        ],
+        [
+          8,
+          6,
+          4
+        ]
+      ]
+    },
+    {
+      "id": "82211e0f-342e-5798-88ac-47bd40a80c7f",
+      "username": "agent_086",
+      "email": "agent_086@simulation.local",
+      "leaning": "neutral",
+      "user_type": "agent",
+      "age": 42,
+      "language": "en",
+      "education_level": "graduate",
+      "gender": "female",
+      "nationality": "UK",
+      "profession": "Artist",
+      "activity_profile": "Morning Active",
+      "archetype": "explorer",
+      "cluster": 2,
+      "llm": true,
+      "toxicity": "no",
+      "daily_activity_level": 1,
+      "round_actions": 3,
+      "is_page": 0,
+      "recsys_type": "random",
+      "frecsys_type": "jaccard",
+      "interests": [
+        [
+          "Discovery",
+          "Learning",
+          "Curiosity"
+        ],
+        [
+          8,
+          5,
+          5
+        ]
+      ]
+    },
+    {
+      "id": "5e8f6687-2129-579e-a1c6-ce1643cf63dc",
+      "username": "agent_087",
+      "email": "agent_087@simulation.local",
+      "leaning": "neutral",
+      "user_type": "agent",
+      "age": 63,
+      "language": "en",
+      "education_level": "college",
+      "gender": "male",
+      "nationality": "UK",
+      "profession": "Student",
+      "activity_profile": "Morning Active",
+      "archetype": "validator",
+      "cluster": 0,
+      "llm": true,
+      "toxicity": "no",
+      "daily_activity_level": 3,
+      "round_actions": 3,
+      "is_page": 0,
+      "recsys_type": "rchrono_followers",
+      "frecsys_type": "jaccard",
+      "interests": [
+        [
+          "Analysis",
+          "Facts",
+          "Verification"
+        ],
+        [
+          7,
+          5,
+          4
+        ]
+      ]
+    },
+    {
+      "id": "de55ae33-8d69-5642-9589-6dae6ee7a611",
+      "username": "agent_088",
+      "email": "agent_088@simulation.local",
+      "leaning": "left",
+      "user_type": "agent",
+      "age": 46,
+      "language": "en",
+      "education_level": "graduate",
+      "gender": "male",
+      "nationality": "AU",
+      "profession": "Teacher",
+      "activity_profile": "Evening Active",
+      "archetype": "broadcaster",
+      "cluster": 1,
+      "llm": true,
+      "toxicity": "no",
+      "daily_activity_level": 2,
+      "round_actions": 2,
+      "is_page": 0,
+      "recsys_type": "random",
+      "frecsys_type": "adamic_adar",
+      "interests": [
+        [
+          "News",
+          "Trends",
+          "Engagement"
+        ],
+        [
+          8,
+          6,
+          5
+        ]
+      ]
+    },
+    {
+      "id": "a64c89f6-931e-5f70-8992-66bf66f5b1d6",
+      "username": "agent_089",
+      "email": "agent_089@simulation.local",
+      "leaning": "neutral",
+      "user_type": "agent",
+      "age": 39,
+      "language": "en",
+      "education_level": "graduate",
+      "gender": "other",
+      "nationality": "AU",
+      "profession": "Doctor",
+      "activity_profile": "Evening Active",
+      "archetype": "explorer",
+      "cluster": 2,
+      "llm": true,
+      "toxicity": "no",
+      "daily_activity_level": 1,
+      "round_actions": 4,
+      "is_page": 0,
+      "recsys_type": "rchrono_followers",
+      "frecsys_type": "adamic_adar",
+      "interests": [
+        [
+          "Education",
+          "Learning",
+          "Teaching"
+        ],
+        [
+          8,
+          6,
+          4
+        ]
+      ]
+    },
+    {
+      "id": "4794fb56-798d-5127-83d4-e98d66a607ed",
+      "username": "agent_090",
+      "email": "agent_090@simulation.local",
+      "leaning": "left",
+      "user_type": "agent",
+      "age": 20,
+      "language": "en",
+      "education_level": "high_school",
+      "gender": "other",
+      "nationality": "US",
+      "profession": "Artist",
+      "activity_profile": "Always On",
+      "archetype": "validator",
+      "cluster": 0,
+      "llm": true,
+      "toxicity": "no",
+      "daily_activity_level": 3,
+      "round_actions": 4,
+      "is_page": 0,
+      "recsys_type": "random",
+      "frecsys_type": "random",
+      "interests": [
+        [
+          "Discovery",
+          "Learning",
+          "Curiosity"
+        ],
+        [
+          8,
+          5,
+          5
+        ]
+      ]
+    },
+    {
+      "id": "9db5af08-2a18-501b-a801-1492d99eee65",
+      "username": "agent_091",
+      "email": "agent_091@simulation.local",
+      "leaning": "right",
+      "user_type": "agent",
+      "age": 28,
+      "language": "en",
+      "education_level": "high_school",
+      "gender": "female",
+      "nationality": "CA",
+      "profession": "Doctor",
+      "activity_profile": "Always On",
+      "archetype": "broadcaster",
+      "cluster": 1,
+      "llm": true,
+      "toxicity": "no",
+      "daily_activity_level": 1,
+      "round_actions": 4,
+      "is_page": 0,
+      "recsys_type": "rchrono",
+      "frecsys_type": "common_neighbors",
+      "interests": [
+        [
+          "Learning",
+          "Education",
+          "Technology"
+        ],
+        [
+          5,
+          5,
+          2
+        ]
+      ]
+    },
+    {
+      "id": "27342994-5afb-5c2f-bfe3-884229bbd352",
+      "username": "agent_092",
+      "email": "agent_092@simulation.local",
+      "leaning": "neutral",
+      "user_type": "agent",
+      "age": 51,
+      "language": "en",
+      "education_level": "high_school",
+      "gender": "male",
+      "nationality": "US",
+      "profession": "Student",
+      "activity_profile": "Evening Active",
+      "archetype": "explorer",
+      "cluster": 2,
+      "llm": true,
+      "toxicity": "no",
+      "daily_activity_level": 3,
+      "round_actions": 3,
+      "is_page": 0,
+      "recsys_type": "rchrono",
+      "frecsys_type": "preferential_attachment",
+      "interests": [
+        [
+          "Learning",
+          "Education",
+          "Technology"
+        ],
+        [
+          5,
+          5,
+          2
+        ]
+      ]
+    },
+    {
+      "id": "86f22111-6e12-5aa3-a062-1e569e84387c",
+      "username": "agent_093",
+      "email": "agent_093@simulation.local",
+      "leaning": "center",
+      "user_type": "agent",
+      "age": 49,
+      "language": "en",
+      "education_level": "college",
+      "gender": "female",
+      "nationality": "US",
+      "profession": "Artist",
+      "activity_profile": "Always On",
+      "archetype": "validator",
+      "cluster": 0,
+      "llm": true,
+      "toxicity": "no",
+      "daily_activity_level": 2,
+      "round_actions": 4,
+      "is_page": 0,
+      "recsys_type": "rchrono",
+      "frecsys_type": "preferential_attachment",
+      "interests": [
+        [
+          "Learning",
+          "Education",
+          "Technology"
+        ],
+        [
+          5,
+          5,
+          2
+        ]
+      ]
+    },
+    {
+      "id": "d2220ddd-388a-5c79-83c6-6b9eaa92c16d",
+      "username": "agent_094",
+      "email": "agent_094@simulation.local",
+      "leaning": "neutral",
+      "user_type": "agent",
+      "age": 22,
+      "language": "en",
+      "education_level": "graduate",
+      "gender": "female",
+      "nationality": "CA",
+      "profession": "Artist",
+      "activity_profile": "Morning Active",
+      "archetype": "broadcaster",
+      "cluster": 1,
+      "llm": true,
+      "toxicity": "no",
+      "daily_activity_level": 3,
+      "round_actions": 4,
+      "is_page": 0,
+      "recsys_type": "rchrono",
+      "frecsys_type": "common_neighbors",
+      "interests": [
+        [
+          "Discovery",
+          "Learning",
+          "Curiosity"
+        ],
+        [
+          8,
+          5,
+          5
+        ]
+      ]
+    },
+    {
+      "id": "f91861c2-a18d-5f11-9842-67e759ce7c85",
+      "username": "agent_095",
+      "email": "agent_095@simulation.local",
+      "leaning": "left",
+      "user_type": "agent",
+      "age": 48,
+      "language": "en",
+      "education_level": "graduate",
+      "gender": "female",
+      "nationality": "CA",
+      "profession": "Engineer",
+      "activity_profile": "Always On",
+      "archetype": "explorer",
+      "cluster": 2,
+      "llm": true,
+      "toxicity": "no",
+      "daily_activity_level": 2,
+      "round_actions": 4,
+      "is_page": 0,
+      "recsys_type": "rchrono_followers",
+      "frecsys_type": "adamic_adar",
+      "interests": [
+        [
+          "News",
+          "Trends",
+          "Engagement"
+        ],
+        [
+          8,
+          6,
+          5
+        ]
+      ]
+    },
+    {
+      "id": "9c2f2434-0cc3-5e3b-b259-e37e06154aa0",
+      "username": "agent_096",
+      "email": "agent_096@simulation.local",
+      "leaning": "left",
+      "user_type": "agent",
+      "age": 18,
+      "language": "en",
+      "education_level": "college",
+      "gender": "male",
+      "nationality": "CA",
+      "profession": "Teacher",
+      "activity_profile": "Evening Active",
+      "archetype": "validator",
+      "cluster": 0,
+      "llm": true,
+      "toxicity": "no",
+      "daily_activity_level": 3,
+      "round_actions": 5,
+      "is_page": 0,
+      "recsys_type": "rchrono_followers",
+      "frecsys_type": "common_neighbors",
+      "interests": [
+        [
+          "Education",
+          "Learning",
+          "Teaching"
+        ],
+        [
+          8,
+          6,
+          4
+        ]
+      ]
+    },
+    {
+      "id": "177211ac-bd5e-513b-8d54-a6d7cdda990d",
+      "username": "agent_097",
+      "email": "agent_097@simulation.local",
+      "leaning": "center",
+      "user_type": "agent",
+      "age": 34,
+      "language": "en",
+      "education_level": "college",
+      "gender": "female",
+      "nationality": "US",
+      "profession": "Student",
+      "activity_profile": "Evening Active",
+      "archetype": "broadcaster",
+      "cluster": 1,
+      "llm": true,
+      "toxicity": "no",
+      "daily_activity_level": 1,
+      "round_actions": 2,
+      "is_page": 0,
+      "recsys_type": "rchrono",
+      "frecsys_type": "common_neighbors",
+      "interests": [
+        [
+          "Analysis",
+          "Facts",
+          "Verification"
+        ],
+        [
+          7,
+          5,
+          4
+        ]
+      ]
+    },
+    {
+      "id": "e73bbed6-c9e7-58c8-ab05-4a82175fdfcd",
+      "username": "agent_098",
+      "email": "agent_098@simulation.local",
+      "leaning": "right",
+      "user_type": "agent",
+      "age": 36,
+      "language": "en",
+      "education_level": "high_school",
+      "gender": "male",
+      "nationality": "CA",
+      "profession": "Student",
+      "activity_profile": "Evening Active",
+      "archetype": "explorer",
+      "cluster": 2,
+      "llm": true,
+      "toxicity": "no",
+      "daily_activity_level": 2,
+      "round_actions": 3,
+      "is_page": 0,
+      "recsys_type": "rchrono_followers",
+      "frecsys_type": "jaccard",
+      "interests": [
+        [
+          "Learning",
+          "Education",
+          "Technology"
+        ],
+        [
+          5,
+          5,
+          2
+        ]
+      ]
+    },
+    {
+      "id": "36203890-1cc4-5e71-affe-7708d9e80ef1",
+      "username": "agent_099",
+      "email": "agent_099@simulation.local",
+      "leaning": "neutral",
+      "user_type": "agent",
+      "age": 34,
+      "language": "en",
+      "education_level": "high_school",
+      "gender": "female",
+      "nationality": "US",
+      "profession": "Teacher",
+      "activity_profile": "Morning Active",
+      "archetype": "validator",
+      "cluster": 0,
+      "llm": true,
+      "toxicity": "no",
+      "daily_activity_level": 3,
+      "round_actions": 4,
+      "is_page": 0,
+      "recsys_type": "random",
+      "frecsys_type": "adamic_adar",
+      "interests": [
+        [
+          "Education",
+          "Learning",
+          "Teaching"
+        ],
+        [
+          8,
+          6,
+          4
+        ]
+      ]
+    }
+  ],
+  "generation_config": {
+    "num_additional_agents": 0,
+    "cluster_distribution": {
+      "weights": [
+        0.33,
+        0.33,
+        0.34
+      ]
+    },
+    "llm_enabled_probability": 1.0,
+    "age_range": [
+      18,
+      65
+    ],
+    "default_settings": {
+      "leaning": "neutral",
+      "user_type": "agent",
+      "language": "en",
+      "toxicity": "no",
+      "password": "simulation_agent",
+      "education_level": "college",
+      "round_actions": 3,
+      "is_page": 0,
+      "recsys_type": "random",
+      "frecsys_type": "random"
+    }
+  }
+}

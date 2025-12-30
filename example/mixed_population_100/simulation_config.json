@@ -61,16 +61,16 @@
             "23": 0.025
         },
     "actions_likelihood": {
-            "post": 3.0,
+            "post": 2,
             "image": 0.0,
             "news": 0.0,
-            "comment": 5.0,
-            "read": 2.0,
-            "share": 1.0,
-            "search": 5.0,
+            "comment": 0,
+            "read": 0,
+            "share": 0,
+            "search": 1,
             "cast": 0.0,
             "share_link": 0,
-            "follow": 0.1
+            "follow": 0
         },
     "agent_archetypes": {
         "enabled": true,
