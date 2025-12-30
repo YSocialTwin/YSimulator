@@ -16,55 +16,31 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from YSimulator.YClient.classes.ray_models import AgentProfile
 
 
+# Shared helper function for determining agent type based on configuration
+def determine_agent_type(agent_profile, agent_downcast):
+    """
+    Simplified version of agent type determination logic matching client.py implementation.
+    
+    Args:
+        agent_profile: AgentProfile object
+        agent_downcast: Boolean indicating if downcast is enabled
+        
+    Returns:
+        str: "llm" or "rule_based"
+    """
+    agent_type = "llm" if agent_profile.llm else "rule_based"
+    
+    # Apply agent_downcast logic
+    if agent_downcast and agent_profile.archetype:
+        archetype_lower = agent_profile.archetype.lower()
+        if archetype_lower in ["validator", "explorer"]:
+            agent_type = "rule_based"
+    
+    return agent_type
+
+
 def test_agent_downcast_disabled():
     """Test that without agent_downcast, agent types are respected."""
-    
-    # Mock configuration without agent_downcast
-    simulation_config = {
-        "simulation": {
-            "num_days": 1,
-            "num_slots_per_day": 24,
-            "heartbeat_interval": 5,
-            "agent_archetypes": {
-                "enabled": True,
-                "agent_downcast": False,  # Disabled
-                "distribution": {
-                    "validator": 0.33,
-                    "broadcaster": 0.33,
-                    "explorer": 0.34
-                }
-            },
-            "actions_likelihood": {
-                "post": 1,
-                "comment": 1,
-                "read": 1,
-                "share": 1,
-                "search": 1,
-                "follow": 1
-            }
-        }
-    }
-    
-    # Create mock client (simplified for testing)
-    class MockClient:
-        def __init__(self, simulation_config):
-            archetype_config = simulation_config["simulation"].get("agent_archetypes", {})
-            self.agent_downcast = archetype_config.get("agent_downcast", False)
-            self.actions_likelihood = simulation_config["simulation"].get("actions_likelihood", {})
-        
-        def determine_agent_type(self, agent_profile):
-            """Simplified version of agent type determination logic."""
-            agent_type = "llm" if agent_profile.llm else "rule_based"
-            
-            # Apply agent_downcast logic
-            if self.agent_downcast and agent_profile.archetype:
-                archetype_lower = agent_profile.archetype.lower()
-                if archetype_lower in ["validator", "explorer"]:
-                    agent_type = "rule_based"
-            
-            return agent_type
-    
-    client = MockClient(simulation_config)
     
     # Test validator with llm=True (should remain LLM when downcast disabled)
     validator_llm = AgentProfile(
@@ -74,7 +50,7 @@ def test_agent_downcast_disabled():
         llm=True,
         cluster=0
     )
-    assert client.determine_agent_type(validator_llm) == "llm"
+    assert determine_agent_type(validator_llm, False) == "llm"
     print("✓ Validator with llm=True remains LLM when downcast disabled")
     
     # Test explorer with llm=True (should remain LLM when downcast disabled)
@@ -85,7 +61,7 @@ def test_agent_downcast_disabled():
         llm=True,
         cluster=2
     )
-    assert client.determine_agent_type(explorer_llm) == "llm"
+    assert determine_agent_type(explorer_llm, False) == "llm"
     print("✓ Explorer with llm=True remains LLM when downcast disabled")
     
     # Test broadcaster with llm=True (should remain LLM)
@@ -96,59 +72,12 @@ def test_agent_downcast_disabled():
         llm=True,
         cluster=1
     )
-    assert client.determine_agent_type(broadcaster_llm) == "llm"
+    assert determine_agent_type(broadcaster_llm, False) == "llm"
     print("✓ Broadcaster with llm=True remains LLM when downcast disabled")
 
 
 def test_agent_downcast_enabled():
     """Test that with agent_downcast enabled, validators and explorers become rule-based."""
-    
-    # Mock configuration with agent_downcast enabled
-    simulation_config = {
-        "simulation": {
-            "num_days": 1,
-            "num_slots_per_day": 24,
-            "heartbeat_interval": 5,
-            "agent_archetypes": {
-                "enabled": True,
-                "agent_downcast": True,  # Enabled
-                "distribution": {
-                    "validator": 0.33,
-                    "broadcaster": 0.33,
-                    "explorer": 0.34
-                }
-            },
-            "actions_likelihood": {
-                "post": 1,
-                "comment": 1,
-                "read": 1,
-                "share": 1,
-                "search": 1,
-                "follow": 1
-            }
-        }
-    }
-    
-    # Create mock client (simplified for testing)
-    class MockClient:
-        def __init__(self, simulation_config):
-            archetype_config = simulation_config["simulation"].get("agent_archetypes", {})
-            self.agent_downcast = archetype_config.get("agent_downcast", False)
-            self.actions_likelihood = simulation_config["simulation"].get("actions_likelihood", {})
-        
-        def determine_agent_type(self, agent_profile):
-            """Simplified version of agent type determination logic."""
-            agent_type = "llm" if agent_profile.llm else "rule_based"
-            
-            # Apply agent_downcast logic
-            if self.agent_downcast and agent_profile.archetype:
-                archetype_lower = agent_profile.archetype.lower()
-                if archetype_lower in ["validator", "explorer"]:
-                    agent_type = "rule_based"
-            
-            return agent_type
-    
-    client = MockClient(simulation_config)
     
     # Test validator with llm=True (should be downcast to rule_based)
     validator_llm = AgentProfile(
@@ -158,7 +87,7 @@ def test_agent_downcast_enabled():
         llm=True,
         cluster=0
     )
-    assert client.determine_agent_type(validator_llm) == "rule_based"
+    assert determine_agent_type(validator_llm, True) == "rule_based"
     print("✓ Validator with llm=True is downcast to rule_based")
     
     # Test explorer with llm=True (should be downcast to rule_based)
@@ -169,7 +98,7 @@ def test_agent_downcast_enabled():
         llm=True,
         cluster=2
     )
-    assert client.determine_agent_type(explorer_llm) == "rule_based"
+    assert determine_agent_type(explorer_llm, True) == "rule_based"
     print("✓ Explorer with llm=True is downcast to rule_based")
     
     # Test broadcaster with llm=True (should remain LLM)
@@ -180,7 +109,7 @@ def test_agent_downcast_enabled():
         llm=True,
         cluster=1
     )
-    assert client.determine_agent_type(broadcaster_llm) == "llm"
+    assert determine_agent_type(broadcaster_llm, True) == "llm"
     print("✓ Broadcaster with llm=True remains LLM even with downcast enabled")
     
     # Test validator with llm=False (should remain rule_based)
@@ -191,7 +120,7 @@ def test_agent_downcast_enabled():
         llm=False,
         cluster=0
     )
-    assert client.determine_agent_type(validator_rule) == "rule_based"
+    assert determine_agent_type(validator_rule, True) == "rule_based"
     print("✓ Validator with llm=False remains rule_based")
     
     # Test broadcaster with llm=False (should remain rule_based)
@@ -202,56 +131,12 @@ def test_agent_downcast_enabled():
         llm=False,
         cluster=1
     )
-    assert client.determine_agent_type(broadcaster_rule) == "rule_based"
+    assert determine_agent_type(broadcaster_rule, True) == "rule_based"
     print("✓ Broadcaster with llm=False remains rule_based")
 
 
 def test_agent_downcast_case_insensitive():
     """Test that archetype comparison is case-insensitive."""
-    
-    simulation_config = {
-        "simulation": {
-            "num_days": 1,
-            "num_slots_per_day": 24,
-            "agent_archetypes": {
-                "enabled": True,
-                "agent_downcast": True,
-                "distribution": {
-                    "validator": 0.33,
-                    "broadcaster": 0.33,
-                    "explorer": 0.34
-                }
-            },
-            "actions_likelihood": {
-                "post": 1,
-                "comment": 1,
-                "read": 1,
-                "share": 1,
-                "search": 1,
-                "follow": 1
-            }
-        }
-    }
-    
-    class MockClient:
-        def __init__(self, simulation_config):
-            archetype_config = simulation_config["simulation"].get("agent_archetypes", {})
-            self.agent_downcast = archetype_config.get("agent_downcast", False)
-            self.actions_likelihood = simulation_config["simulation"].get("actions_likelihood", {})
-        
-        def determine_agent_type(self, agent_profile):
-            """Simplified version of agent type determination logic."""
-            agent_type = "llm" if agent_profile.llm else "rule_based"
-            
-            # Apply agent_downcast logic
-            if self.agent_downcast and agent_profile.archetype:
-                archetype_lower = agent_profile.archetype.lower()
-                if archetype_lower in ["validator", "explorer"]:
-                    agent_type = "rule_based"
-            
-            return agent_type
-    
-    client = MockClient(simulation_config)
     
     # Test different case variations
     test_cases = [
@@ -274,7 +159,7 @@ def test_agent_downcast_case_insensitive():
             llm=llm,
             cluster=0
         )
-        actual_type = client.determine_agent_type(agent)
+        actual_type = determine_agent_type(agent, True)
         assert actual_type == expected_type, f"Failed for archetype '{archetype_variant}': expected {expected_type}, got {actual_type}"
     
     print("✓ Archetype comparison is case-insensitive")
@@ -282,50 +167,6 @@ def test_agent_downcast_case_insensitive():
 
 def test_agent_without_archetype():
     """Test that agents without archetype are not affected by downcast."""
-    
-    simulation_config = {
-        "simulation": {
-            "num_days": 1,
-            "num_slots_per_day": 24,
-            "agent_archetypes": {
-                "enabled": True,
-                "agent_downcast": True,
-                "distribution": {
-                    "validator": 0.33,
-                    "broadcaster": 0.33,
-                    "explorer": 0.34
-                }
-            },
-            "actions_likelihood": {
-                "post": 1,
-                "comment": 1,
-                "read": 1,
-                "share": 1,
-                "search": 1,
-                "follow": 1
-            }
-        }
-    }
-    
-    class MockClient:
-        def __init__(self, simulation_config):
-            archetype_config = simulation_config["simulation"].get("agent_archetypes", {})
-            self.agent_downcast = archetype_config.get("agent_downcast", False)
-            self.actions_likelihood = simulation_config["simulation"].get("actions_likelihood", {})
-        
-        def determine_agent_type(self, agent_profile):
-            """Simplified version of agent type determination logic."""
-            agent_type = "llm" if agent_profile.llm else "rule_based"
-            
-            # Apply agent_downcast logic
-            if self.agent_downcast and agent_profile.archetype:
-                archetype_lower = agent_profile.archetype.lower()
-                if archetype_lower in ["validator", "explorer"]:
-                    agent_type = "rule_based"
-            
-            return agent_type
-    
-    client = MockClient(simulation_config)
     
     # Test agent without archetype
     agent_no_archetype_llm = AgentProfile(
@@ -335,7 +176,7 @@ def test_agent_without_archetype():
         llm=True,
         cluster=0
     )
-    assert client.determine_agent_type(agent_no_archetype_llm) == "llm"
+    assert determine_agent_type(agent_no_archetype_llm, True) == "llm"
     print("✓ Agent without archetype with llm=True remains LLM")
     
     agent_no_archetype_rule = AgentProfile(
@@ -345,7 +186,7 @@ def test_agent_without_archetype():
         llm=False,
         cluster=0
     )
-    assert client.determine_agent_type(agent_no_archetype_rule) == "rule_based"
+    assert determine_agent_type(agent_no_archetype_rule, True) == "rule_based"
     print("✓ Agent without archetype with llm=False remains rule_based")
 
 
