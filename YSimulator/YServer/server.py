@@ -1028,6 +1028,11 @@ class OrchestratorServer:
                         post_data["news_id"] = act.article_id
                         article_id = act.article_id
                     
+                    # Add image_id if this is an image post
+                    if hasattr(act, 'image_id') and act.image_id:
+                        post_data["image_id"] = act.image_id
+                        self.logger.info(f"Adding image post: agent={act.agent_id}, image_id={act.image_id}")
+                    
                     post_id = self.db.add_post(post_data)
                     if post_id:
                         new_ids.append(post_id)
@@ -1048,6 +1053,13 @@ class OrchestratorServer:
                                         self.db.add_post_topic(post_id, topic_id)
                                     self.logger.info(f"Linked {len(existing_topic_ids)} existing article topics to post {post_id}")
                                 # If no existing topics, they will need to be extracted by client before posting
+                        
+                        # Handle topic_ids for image posts
+                        elif hasattr(act, 'topic_ids') and act.topic_ids:
+                            # Image posts have pre-fetched topic IDs from article
+                            for topic_id in act.topic_ids:
+                                self.db.add_post_topic(post_id, topic_id)
+                            self.logger.info(f"Linked {len(act.topic_ids)} article topics to image post {post_id}")
                         
                         # Save post topic if provided (for non-article posts)
                         elif hasattr(act, 'topic') and act.topic:
@@ -1096,6 +1108,13 @@ class OrchestratorServer:
                         post_id = self.db.add_post(post_data)
                         if post_id:
                             new_ids.append(post_id)
+                            
+                            # Increment reaction count for the parent post
+                            count_updated = self.db.increment_post_reaction_count(act.target_post_id)
+                            if count_updated:
+                                self.logger.info(f"Incremented reaction count for post {act.target_post_id} after COMMENT by agent {act.agent_id}")
+                            else:
+                                self.logger.warning(f"Failed to increment reaction count for post {act.target_post_id}")
                             
                             # Process annotations if provided
                             if hasattr(act, 'annotations') and act.annotations:
@@ -1218,7 +1237,15 @@ class OrchestratorServer:
                         "type": act.action_type,  # Field name is 'type' not 'reaction_type'
                         "round": self.current_round_id,  # FK to rounds.id
                     }
-                    self.db.add_interaction(interaction_data)
+                    success = self.db.add_interaction(interaction_data)
+                    
+                    # Increment reaction count for the post
+                    if success:
+                        count_updated = self.db.increment_post_reaction_count(act.target_post_id)
+                        if count_updated:
+                            self.logger.info(f"Incremented reaction count for post {act.target_post_id} after {act.action_type} by agent {act.agent_id}")
+                        else:
+                            self.logger.warning(f"Failed to increment reaction count for post {act.target_post_id}")
                     
                     # Save sentiment for reactions
                     # Get the post being reacted to
@@ -1352,6 +1379,45 @@ class OrchestratorServer:
             str: Article ID if successful, None otherwise
         """
         return self.db.add_article(article_data)
+    
+    def add_image(self, image_data: dict) -> Optional[str]:
+        """
+        Add an image to the database.
+        
+        This is a wrapper method that can be called remotely from Ray actors.
+        
+        Args:
+            image_data: Dictionary containing image information (url, description, article_id)
+            
+        Returns:
+            str: Image ID if successful, None otherwise
+        """
+        return self.db.add_image(image_data)
+    
+    def get_random_image(self) -> Optional[dict]:
+        """
+        Get a random image from the database.
+        
+        This is a wrapper method that can be called remotely from Ray actors.
+        
+        Returns:
+            dict: Image data or None if no images available
+        """
+        return self.db.get_random_image()
+    
+    def get_interest_by_id(self, interest_id: str) -> Optional[dict]:
+        """
+        Get interest details by ID.
+        
+        This is a wrapper method that can be called remotely from Ray actors.
+        
+        Args:
+            interest_id: Interest UUID
+            
+        Returns:
+            dict: Interest data or None if not found
+        """
+        return self.db.get_interest_by_id(interest_id)
 
     def _check_barrier_and_advance(self) -> None:
         """

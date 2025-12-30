@@ -390,6 +390,45 @@ class DatabaseMiddleware:
                 f"Error adding interaction: {e}", extra={"extra_data": {"error": str(e)}}
             )
             return False
+    
+    def increment_post_reaction_count(self, post_id: str) -> bool:
+        """
+        Increment the reaction_count field for a post.
+        
+        Args:
+            post_id: Post UUID
+            
+        Returns:
+            bool: True if successful, False otherwise
+        """
+        try:
+            if self.use_redis:
+                # Increment reaction count in Redis
+                key = self._redis_key("posts", post_id)
+                # Get current count, increment, and set
+                current_count = self.redis_client.hget(key, "reaction_count")
+                new_count = int(current_count or 0) + 1
+                self.redis_client.hset(key, "reaction_count", new_count)
+                return True
+            else:
+                session = Session(self.engine)
+                try:
+                    post = session.query(Post).filter(Post.id == post_id).first()
+                    if post:
+                        post.reaction_count = (post.reaction_count or 0) + 1
+                        session.commit()
+                        return True
+                    else:
+                        self.logger.warning(f"Post {post_id} not found for reaction count increment")
+                        return False
+                finally:
+                    session.close()
+        except Exception as e:
+            self.logger.error(
+                f"Error incrementing reaction count for post {post_id}: {e}",
+                extra={"extra_data": {"error": str(e), "post_id": post_id}}
+            )
+            return False
 
     def add_follow(self, follow_data: Dict[str, Any]) -> bool:
         """
@@ -1258,6 +1297,121 @@ class DatabaseMiddleware:
             return None
         finally:
             session.close()
+    
+    def add_image(self, image_data: Dict[str, Any]) -> Optional[str]:
+        """
+        Add an image to the database.
+        
+        Args:
+            image_data (dict): Image information with keys:
+                - id: Image UUID (optional, will be generated)
+                - url: Image URL
+                - description: Image description (from LLM)
+                - article_id: Reference to article (UUID)
+                
+        Returns:
+            str: Image ID if successful, None otherwise
+        """
+        from YSimulator.YServer.classes.models import Image, Article
+        import uuid
+        
+        session = Session(self.engine)
+        try:
+            # Verify article exists
+            article_id = image_data.get("article_id")
+            if not article_id:
+                self.logger.error("Cannot add image: no article_id provided")
+                return None
+            
+            article_exists = session.query(Article).filter(Article.id == article_id).first()
+            if not article_exists:
+                self.logger.error(
+                    f"Cannot add image: article {article_id} does not exist",
+                    extra={"extra_data": {"article_id": article_id}}
+                )
+                return None
+            
+            # Generate UUID if not provided
+            image_id = image_data.get("id", str(uuid.uuid4()))
+            
+            # Check if image with same URL already exists for this article
+            existing = session.query(Image).filter(
+                Image.url == image_data.get("url"),
+                Image.article_id == article_id
+            ).first()
+            if existing:
+                self.logger.info(
+                    f"Image already exists for article, returning existing ID: {existing.id}",
+                    extra={"extra_data": {"image_id": existing.id, "article_id": article_id, "url": image_data.get("url")[:80]}}
+                )
+                return existing.id
+            
+            # Create new image
+            image = Image(
+                id=image_id,
+                url=image_data.get("url"),
+                description=image_data.get("description"),
+                article_id=article_id
+            )
+            
+            session.add(image)
+            session.commit()
+            
+            self.logger.info(
+                f"Image added successfully: {image_id}",
+                extra={"extra_data": {"image_id": image_id, "article_id": article_id, "url": image_data.get("url")[:80], "description_length": len(image_data.get("description", ""))}}
+            )
+            
+            return image_id
+            
+        except Exception as e:
+            session.rollback()
+            self.logger.error(
+                f"Error adding image: {e}",
+                extra={"extra_data": {"error": str(e), "image_data": image_data}}
+            )
+            return None
+        finally:
+            session.close()
+    
+    def get_random_image(self) -> Optional[Dict[str, Any]]:
+        """
+        Get a random image from the database.
+        
+        Returns:
+            dict: Image data with keys: id, url, description, article_id
+                 Returns None if no images available
+        """
+        from YSimulator.YServer.classes.models import Image
+        import random
+        
+        session = Session(self.engine)
+        try:
+            # Get all images
+            images = session.query(Image).all()
+            
+            if not images:
+                self.logger.info("No images available in database")
+                return None
+            
+            # Select random image
+            image = random.choice(images)
+            
+            return {
+                "id": image.id,
+                "url": image.url,
+                "description": image.description,
+                "article_id": image.article_id
+            }
+            
+        except Exception as e:
+            self.logger.error(
+                f"Error getting random image: {e}",
+                extra={"extra_data": {"error": str(e)}}
+            )
+            return None
+        finally:
+            session.close()
 
     def get_website_by_rss(self, rss_url: str) -> Optional[Dict[str, Any]]:
         """
@@ -1289,6 +1443,38 @@ class DatabaseMiddleware:
             self.logger.error(
                 f"Error getting website by RSS: {e}",
                 extra={"extra_data": {"error": str(e), "rss_url": rss_url}}
+            )
+            return None
+        finally:
+            session.close()
+    
+    def get_interest_by_id(self, interest_id: str) -> Optional[dict]:
+        """
+        Get interest details by ID.
+        
+        Args:
+            interest_id: Interest UUID (iid)
+            
+        Returns:
+            dict: Interest data with 'iid' and 'interest' keys, or None if not found
+        """
+        from YSimulator.YServer.classes.models import Interest
+        
+        session = Session(self.engine)
+        try:
+            interest = session.query(Interest).filter(Interest.iid == interest_id).first()
+            
+            if interest:
+                return {
+                    "iid": interest.iid,
+                    "interest": interest.interest
+                }
+            return None
+            
+        except Exception as e:
+            self.logger.error(
+                f"Error getting interest by ID: {e}",
+                extra={"extra_data": {"error": str(e), "interest_id": interest_id}}
             )
             return None
         finally:

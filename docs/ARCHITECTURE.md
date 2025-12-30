@@ -106,22 +106,32 @@ complete_client()              # Notify server of completion
 
 **Responsibilities**:
 - Generate agent content (posts, comments, replies)
+- Generate image descriptions using vision LLM (llm_v)
+- Generate image commentary for sharing actions
 - Manage prompt templates per agent cluster
-- Handle LLM API communication
+- Handle LLM API communication (text and vision models)
 - Apply temperature and model configuration
 
 **Key Methods**:
 ```python
 generate_post()                # Create social media post
 generate_comment()             # Create comment on post
+describe_image()               # Vision LLM image description
+generate_image_commentary()    # Generate post about an image
 apply_persona()                # Tailor content to agent personality
 ```
 
 **Configuration**:
-- LLM address and port
-- Model selection
+- LLM address and port (text model)
+- LLM_v address and port (vision model, optional)
+- Model selection (text and vision)
 - Temperature settings
 - Prompt templates per cluster
+
+**Features**:
+- **Dual LLM Support**: Separate text and vision model configurations
+- **Image Processing**: Extracts and describes images from RSS feeds using vision models
+- **Async Operations**: Non-blocking LLM calls for performance
 
 #### Agent Profiles
 **Location**: `classes/models.py` (AgentProfile dataclass)
@@ -243,12 +253,15 @@ compute_interest_counts_in_window()        # Count interests in window
 - Links to user via user_id foreign key
 - Includes temporal context (day, slot)
 - Stores content, likes, shares
+- reaction_count: Automatically incremented on reactions/comments
+- image_id: Optional reference to Image table
 
 **InteractionModel**: User interactions
 - UUID-based ID
 - Captures interaction type (like, comment, share, etc.)
 - Links to both user and target post
 - Includes temporal and spatial context
+- Automatically increments parent post reaction_count
 
 **Follow**: Social network relationships
 - Tracks follow/unfollow actions between users
@@ -258,6 +271,20 @@ compute_interest_counts_in_window()        # Count interests in window
 - round: Temporal context (simulation round)
 - Supports dynamic network evolution
 - Used by follow recommendation algorithms
+
+**Article**: News articles from RSS feeds
+- id (UUID): Article identifier
+- title, url: Article metadata
+- website_id: Reference to source website
+- published: Publication timestamp
+- Extracted by page agents
+
+**Image**: Images from RSS feeds
+- id (UUID): Image identifier
+- url: Image URL from RSS feed
+- description: Vision LLM-generated description
+- article_id: Reference to source article
+- Used for image sharing action
 
 **Interest**: Topic definitions
 - iid (UUID): Unique interest identifier

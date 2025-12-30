@@ -14,6 +14,7 @@ from YSimulator.YClient.actions.llm_actions import (
     generate_llm_reply_to_mention_async,
     generate_news_post_async,
     generate_llm_news_commentary,
+    generate_image_post_async
 )
 from YSimulator.YClient.actions.rule_based_actions import (
     generate_rule_based_post,
@@ -24,6 +25,7 @@ from YSimulator.YClient.actions.rule_based_actions import (
     generate_rule_based_read,
     generate_rule_based_follow,
     generate_rule_based_news_post,
+    generate_rule_based_image_post
 )
 
 __all__ = [
@@ -42,4 +44,7 @@ __all__ = [
     "generate_llm_reply_to_mention_async",
     "generate_news_post_async",
     "generate_llm_news_commentary",
+    "generate_image_post_async",
+    "generate_rule_based_image_post"
+
 ]

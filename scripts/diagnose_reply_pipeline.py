@@ -122,7 +122,7 @@ def main():
         'path': args.db_path
     }
     
-    db = DatabaseMiddleware(db_config, use_redis=False)
+    db = DatabaseMiddleware(db_config)
     
     # Run diagnostics
     diagnose_mentions(db)

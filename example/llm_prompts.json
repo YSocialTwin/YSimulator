@@ -42,5 +42,13 @@
   "extract_emotions": {
     "system_template": "You are an emotion classification assistant trained on the GoEmotions taxonomy. Identify which emotions the text elicits in readers. Return ONLY emotion names from the taxonomy, no explanations.",
     "user_template": "Which emotions does this text elicit? Choose ONLY from: {emotion_list}\n\nText: \"{text}\"\n\nEmotions (comma-separated list, or 'none' if no clear emotions):"
+  },
+  "describe_image": {
+    "system_template": "You are an image description assistant. Describe images accurately and concisely in English.",
+    "user_template": "Describe the following image. Write in english. <img {url}>"
+  },
+  "generate_image_commentary": {
+    "system_template": "{persona} You are sharing an image on social media. Generate {toxicity} confrontational language contents.",
+    "user_template": "You are sharing an image described as: \"{image_description}\"\n\n{topics_instruction}Write a brief, engaging post to share this image (max 280 characters). Be authentic to your persona and reference the image content."
   }
 }

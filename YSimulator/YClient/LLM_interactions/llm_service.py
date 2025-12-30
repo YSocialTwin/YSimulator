@@ -1,13 +1,20 @@
 import ray
+from typing import Optional, List
 from langchain_ollama import ChatOllama
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 
 
+# Default prompt templates for image description
+DEFAULT_IMAGE_DESCRIPTION_PROMPTS = {
+    "system_template": "You are an image description assistant. Describe images accurately and concisely in English.",
+    "user_template": "Describe the following image. Write in english. <img {url}>"
+}
+
 # Use standard Ray actor (CPU) - the GPU is managed by Ollama internally
 @ray.remote
 class LLMService:
-    def __init__(self, llm_config=None, prompts_config=None):
+    def __init__(self, llm_config=None, prompts_config=None, llm_v_config=None):
         # Load configuration with defaults
         if llm_config is None:
             llm_config = {
@@ -46,6 +53,16 @@ class LLMService:
             temperature=llm_config["temperature"],
             base_url=base_url
         )
+        
+        # Initialize vision LLM if config provided
+        self.llm_v = None
+        if llm_v_config:
+            base_url_v = f"http://{llm_v_config['address']}:{llm_v_config['port']}"
+            self.llm_v = ChatOllama(
+                model=llm_v_config["model"],
+                temperature=llm_v_config.get("temperature", 0.5),
+                base_url=base_url_v
+            )
 
     def _build_persona(self, cluster_id: int, agent_attrs: dict = None) -> str:
         """
@@ -455,3 +472,116 @@ class LLMService:
         except Exception as e:
             # If extraction fails, return empty list
             return []
+    
+    def describe_image(self, image_url: str) -> Optional[str]:
+        """
+        Generate a description of an image using the vision LLM.
+        
+        This method uses the llm_v (vision) model to analyze and describe an image
+        from a given URL. The description is generated in English.
+        
+        Args:
+            image_url: URL of the image to describe
+            
+        Returns:
+            Optional[str]: Description of the image, or None if vision LLM not available or error occurs
+        """
+        # Check if vision LLM is available
+        if not self.llm_v:
+            print(f"[LLMService] WARNING: Vision LLM (llm_v) not configured, cannot describe image")
+            return None
+        
+        # Get prompts from configuration with defaults
+        describe_image_config = self.prompts_config.get("describe_image", DEFAULT_IMAGE_DESCRIPTION_PROMPTS)
+        system_template = describe_image_config.get("system_template", DEFAULT_IMAGE_DESCRIPTION_PROMPTS["system_template"])
+        user_template = describe_image_config.get("user_template", DEFAULT_IMAGE_DESCRIPTION_PROMPTS["user_template"])
+        
+        # Format templates
+        system_msg = system_template
+        user_msg = user_template.format(url=image_url)
+        
+        # Build prompts
+        prompt = ChatPromptTemplate.from_messages([
+            ("system", system_msg),
+            ("user", user_msg)
+        ])
+        
+        try:
+            print(f"[LLMService] Calling vision LLM to describe image: {image_url[:80]}...")
+            chain = prompt | self.llm_v | StrOutputParser()
+            description = chain.invoke({})
+            
+            if description:
+                result = description.strip()
+                print(f"[LLMService] Vision LLM returned description ({len(result)} chars)")
+                return result
+            else:
+                print(f"[LLMService] WARNING: Vision LLM returned empty description")
+                return None
+        except Exception as e:
+            # If description fails, return None
+            print(f"[LLMService] ERROR: Vision LLM failed to describe image: {e}")
+            import traceback
+            traceback.print_exc()
+            return None
+    
+    def generate_image_commentary(self, image_description: str, topics: List[str] = None, 
+                                   agent_attrs: dict = None, cluster_id: int = 0) -> str:
+        """
+        Generate commentary for sharing an image on social media.
+        
+        Uses the agent's persona to create engaging content that references the image.
+        
+        Args:
+            image_description: Description of the image from the database
+            topics: Optional list of topic names related to the image
+            agent_attrs: Optional dict with agent attributes for persona building
+            cluster_id: Agent cluster ID for fallback persona
+            
+        Returns:
+            str: Generated commentary text
+        """
+        # Build persona
+        persona = self._build_persona(cluster_id, agent_attrs)
+        
+        # Get toxicity level
+        toxicity = ""
+        if agent_attrs and "toxicity" in agent_attrs:
+            toxicity_level = agent_attrs.get("toxicity", "").lower()
+            if toxicity_level in ["low", "medium", "high"]:
+                toxicity = toxicity_level
+        
+        # Build topics instruction
+        topics_instruction = ""
+        if topics:
+            topics_str = ", ".join(topics)
+            topics_instruction = f"Related topics: {topics_str}. "
+        
+        # Get prompts from configuration
+        config = self.prompts_config.get("generate_image_commentary", {})
+        system_template = config.get("system_template", 
+            "{persona} You are sharing an image on social media.")
+        user_template = config.get("user_template",
+            "You are sharing an image described as: \"{image_description}\"\n\n{topics_instruction}Write a brief, engaging post to share this image (max 280 characters).")
+        
+        # Format templates
+        system_msg = system_template.format(persona=persona, toxicity=toxicity)
+        user_msg = user_template.format(
+            image_description=image_description,
+            topics_instruction=topics_instruction
+        )
+        
+        # Build prompts
+        prompt = ChatPromptTemplate.from_messages([
+            ("system", system_msg),
+            ("user", user_msg)
+        ])
+        
+        try:
+            chain = prompt | self.llm | StrOutputParser()
+            commentary = chain.invoke({})
+            return commentary.strip() if commentary else "IMAGE"
+        except Exception as e:
+            # If generation fails, return fallback
+            print(f"[LLMService] ERROR: Failed to generate image commentary: {e}")
+            return "IMAGE"
