@@ -510,12 +510,12 @@ class DatabaseMiddleware:
                 return count
             else:
                 # Use bulk insert for SQL databases
+                # Use bulk_insert_mappings for better memory efficiency with large batches
                 session = Session(self.engine)
                 try:
-                    follow_objects = [Follow(**follow_data) for follow_data in follows_data]
-                    session.bulk_save_objects(follow_objects)
+                    session.bulk_insert_mappings(Follow, follows_data)
                     session.commit()
-                    return len(follow_objects)
+                    return len(follows_data)
                 except Exception as e:
                     session.rollback()
                     self.logger.error(

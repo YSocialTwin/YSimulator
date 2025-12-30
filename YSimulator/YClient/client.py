@@ -600,11 +600,20 @@ class SimulationClient:
         username_to_id = {agent.username: str(agent.id) for agent in self.agent_profiles}
 
         # Get first round UUID from server (for initial network setup)
+        # This is critical - we cannot proceed without a valid round ID
         try:
             first_round_id = ray.get(self.server.get_first_round_id.remote())
+            if not first_round_id:
+                self.logger.error("Failed to get first round ID from server (empty response)")
+                print(f"[{self.client_id}] ❌ Error: Cannot load network without valid round ID")
+                return 0
         except Exception as e:
-            self.logger.error(f"Error getting first round ID: {e}")
-            first_round_id = ""
+            self.logger.error(
+                f"Failed to get first round ID from server: {e}",
+                extra={"extra_data": {"error": str(e)}},
+            )
+            print(f"[{self.client_id}] ❌ Error: Cannot load network without valid round ID")
+            return 0
 
         follows_to_create = []
         skipped_count = 0
@@ -652,14 +661,29 @@ class SimulationClient:
             # Batch insert all follow relationships if any were collected
             follow_count = 0
             if follows_to_create:
+                expected_count = len(follows_to_create)
+                self.logger.info(
+                    f"Batch inserting {expected_count} follow relationships",
+                    extra={"extra_data": {"batch_size": expected_count}},
+                )
                 try:
                     follow_count = ray.get(
                         self.server.add_follow_relationships_batch.remote(follows_to_create)
                     )
+                    if follow_count != expected_count:
+                        self.logger.warning(
+                            f"Batch insert returned {follow_count} but expected {expected_count}",
+                            extra={
+                                "extra_data": {
+                                    "expected": expected_count,
+                                    "actual": follow_count,
+                                }
+                            },
+                        )
                 except Exception as e:
                     self.logger.error(
-                        f"Error creating follow relationships in batch: {e}",
-                        extra={"extra_data": {"error": str(e)}},
+                        f"Error creating follow relationships in batch (attempted {expected_count} relationships): {e}",
+                        extra={"extra_data": {"error": str(e), "batch_size": expected_count}},
                     )
                     return 0
 
