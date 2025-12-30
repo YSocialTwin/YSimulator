@@ -154,6 +154,7 @@ class SimulationClient:
         archetype_config = simulation_config["simulation"].get("agent_archetypes", {})
         self.archetypes_enabled = archetype_config.get("enabled", False)
         self.archetype_distribution = archetype_config.get("distribution", {})
+        self.agent_downcast = archetype_config.get("agent_downcast", False)
 
         # Load recommendation system configuration
         recsys_config = simulation_config["simulation"].get("recsys", {})
@@ -991,6 +992,11 @@ class SimulationClient:
         # Page agents can ONLY perform share_link action
         if agent_profile.is_page == 1:
             agent_type = "llm" if agent_profile.llm else "rule_based"
+            # Apply agent_downcast logic even for page agents
+            if self.agent_downcast and agent_profile.archetype:
+                archetype_lower = agent_profile.archetype.lower()
+                if archetype_lower in ["validator", "explorer"]:
+                    agent_type = "rule_based"
             return "share_link", agent_type, None
 
         # Define archetype-to-action mappings
@@ -1049,6 +1055,12 @@ class SimulationClient:
 
         # Determine agent type
         agent_type = "llm" if agent_profile.llm else "rule_based"
+        
+        # Apply agent_downcast logic: if enabled, treat validator and explorer as rule-based
+        if self.agent_downcast and agent_profile.archetype:
+            archetype_lower = agent_profile.archetype.lower()
+            if archetype_lower in ["validator", "explorer"]:
+                agent_type = "rule_based"
 
         # Actions that require a target post
         target_required_actions = ["comment", "read", "share"]
