@@ -47,17 +47,17 @@
       "transitions": {
         "validator": {
           "validator": 0.85,
-          "broadcaster": 0.1,
+          "broadcaster": 0.10,
           "explorer": 0.05
         },
         "broadcaster": {
-          "validator": 0.1,
-          "broadcaster": 0.8,
-          "explorer": 0.1
+          "validator": 0.10,
+          "broadcaster": 0.80,
+          "explorer": 0.10
         },
         "explorer": {
           "validator": 0.05,
-          "broadcaster": 0.1,
+          "broadcaster": 0.10,
           "explorer": 0.85
         }
       }
