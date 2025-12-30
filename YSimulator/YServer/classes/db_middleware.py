@@ -1659,19 +1659,21 @@ class DatabaseMiddleware:
             limit: Maximum number of posts to return (default: 10)
             
         Returns:
-            List[str]: List of post UUIDs from other users on this topic
+            List[str]: List of post UUIDs from other users on this topic, ordered by recency
         """
-        from YSimulator.YServer.classes.models import PostTopic, Post
+        from YSimulator.YServer.classes.models import PostTopic, Post, Round
         
         session = Session(self.engine)
         try:
             # Query posts with this topic, excluding agent's own posts, ordered by recency
+            # Join with Round to order by day and hour for proper chronological ordering
             posts = (
                 session.query(Post.id)
                 .join(PostTopic, Post.id == PostTopic.post_id)
+                .join(Round, Post.round == Round.id)
                 .filter(PostTopic.topic_id == topic_id)
                 .filter(Post.user_id != agent_id)
-                .order_by(Post.id.desc())
+                .order_by(Round.day.desc(), Round.hour.desc())
                 .limit(limit)
                 .all()
             )

@@ -5,6 +5,9 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 
 
+# Constants
+DEFAULT_FALLBACK_REACTION = "LIKE"
+
 # Default prompt templates for image description
 DEFAULT_IMAGE_DESCRIPTION_PROMPTS = {
     "system_template": "You are an image description assistant. Describe images accurately and concisely in English.",
@@ -315,11 +318,11 @@ class LLMService:
             if "SAD" in result: return "SAD"
             if "IGNORE" in result: return "IGNORE"
             
-            # Default to LIKE if unclear
-            return "LIKE"
+            # Default to fallback reaction if unclear
+            return DEFAULT_FALLBACK_REACTION
         except Exception as e:
-            # Fallback if LLM fails - default to LIKE
-            return "LIKE"
+            # Fallback if LLM fails
+            return DEFAULT_FALLBACK_REACTION
     
     def generate_follow_decision(self, cluster_id: int, candidate_users: list) -> str:
         """
@@ -402,11 +405,11 @@ class LLMService:
             if "SAD" in result: return "SAD"
             if "IGNORE" in result: return "IGNORE"
             
-            # Default to LIKE if unclear
-            return "LIKE"
+            # Default to fallback reaction if unclear
+            return DEFAULT_FALLBACK_REACTION
         except Exception as e:
-            # Fallback if LLM fails - default to LIKE
-            return "LIKE"
+            # Fallback if LLM fails
+            return DEFAULT_FALLBACK_REACTION
     
     def generate_secondary_follow_decision(self, cluster_id: int, post_content: str, is_currently_following: bool) -> str:
         """
