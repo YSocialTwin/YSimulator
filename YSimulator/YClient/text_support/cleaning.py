@@ -19,6 +19,8 @@ def clean_text(author: str, text: str) -> str:
         .replace("[", "")
         .replace("]", "")
         .replace("@,", "")
+        .replace('"', "")
+        .replace("'", "")
         .strip("()[]{}'")
         .lstrip()
     )
