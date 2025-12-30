@@ -601,19 +601,21 @@ class SimulationClient:
 
         # Get first round UUID from server (for initial network setup)
         # This is critical - we cannot proceed without a valid round ID
+        def _log_round_id_error(error_msg: str = None):
+            """Helper to log and print round ID error."""
+            if error_msg:
+                self.logger.error(error_msg, extra={"extra_data": {"error": error_msg}})
+            print(f"[{self.client_id}] ❌ Error: Cannot load network without valid round ID")
+            return 0
+
         try:
             first_round_id = ray.get(self.server.get_first_round_id.remote())
             if not first_round_id:
-                self.logger.error("Failed to get first round ID from server (empty response)")
-                print(f"[{self.client_id}] ❌ Error: Cannot load network without valid round ID")
-                return 0
+                return _log_round_id_error(
+                    "Failed to get first round ID from server (empty response)"
+                )
         except Exception as e:
-            self.logger.error(
-                f"Failed to get first round ID from server: {e}",
-                extra={"extra_data": {"error": str(e)}},
-            )
-            print(f"[{self.client_id}] ❌ Error: Cannot load network without valid round ID")
-            return 0
+            return _log_round_id_error(f"Failed to get first round ID from server: {e}")
 
         follows_to_create = []
         skipped_count = 0

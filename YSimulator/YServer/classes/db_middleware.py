@@ -487,6 +487,10 @@ class DatabaseMiddleware:
                 - action: 'follow' or 'unfollow'
                 - round: Round ID (optional)
 
+        Note:
+            This method modifies the input list by adding 'id' keys to each dictionary.
+            If this is not desired, pass a copy of the data.
+
         Returns:
             int: Number of follow relationships successfully added
         """
@@ -495,6 +499,7 @@ class DatabaseMiddleware:
 
         try:
             # Generate UUIDs for all follow records
+            # Note: This modifies the input dictionaries
             for follow_data in follows_data:
                 follow_data["id"] = str(uuid.uuid4())
 
