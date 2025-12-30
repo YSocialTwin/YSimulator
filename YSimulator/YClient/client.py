@@ -237,6 +237,27 @@ class SimulationClient:
 
         handler.setFormatter(JsonFormatter())
         self.logger.addHandler(handler)
+        
+        # Create action logger for individual agent actions
+        action_log_file = log_dir / f"{self.client_id}_actions.log"
+        self.action_logger = logging.getLogger(f"YSimulator.Client.{self.client_id}.Actions")
+        self.action_logger.setLevel(logging.INFO)
+        self.action_logger.handlers = []
+        self.action_logger.propagate = False  # Don't propagate to parent logger
+        
+        action_handler = RotatingFileHandler(action_log_file, maxBytes=10 * 1024 * 1024, backupCount=5)
+        
+        class ActionFormatter(logging.Formatter):
+            def format(self, record):
+                # Simple format for action logs: one JSON object per line
+                return record.getMessage()
+        
+        action_handler.setFormatter(ActionFormatter())
+        self.action_logger.addHandler(action_handler)
+        
+        # Initialize tracking variables for hourly and daily summaries
+        self.hourly_actions = []  # Track actions for current hour
+        self.daily_actions = []  # Track actions for current day
 
     def _parse_activity_profiles(self, activity_profiles_config):
         """
@@ -811,6 +832,29 @@ class SimulationClient:
                             extra={"extra_data": {"error": str(e)}}
                         )
 
+                # Log individual actions before submission
+                for action in actions:
+                    # Get agent username from agent_id
+                    agent_profile = next((a for a in self.agent_profiles if a.id == action.agent_id), None)
+                    agent_name = agent_profile.username if agent_profile else str(action.agent_id)
+                    
+                    # Normalize action type to method name (lowercase)
+                    method_name = action.action_type.lower()
+                    
+                    # Estimate execution time based on simulation time divided by number of actions
+                    # This is an approximation since we don't track individual action times
+                    execution_time = (sim_time / 1000.0) / len(actions) if len(actions) > 0 else 0
+                    
+                    # All actions that reach this point are considered successful
+                    self._log_action(agent_name, method_name, execution_time, True, instruction.day, instruction.slot)
+                
+                # Log hourly summary after processing all actions for this slot
+                self._log_hourly_summary(instruction.day, instruction.slot)
+                
+                # Log daily summary if this is the end of a day
+                if is_last_slot:
+                    self._log_daily_summary(instruction.day)
+
                 # Submit
                 submit_start = time.time()
                 ray.get(self.server.submit_actions.remote(self.client_id, actions))
@@ -1050,6 +1094,119 @@ class SimulationClient:
             return None, None
         
         return topics, counts
+
+    def _log_action(self, agent_name: str, method_name: str, execution_time_seconds: float, success: bool, day: int, slot: int):
+        """
+        Log an individual agent action in the standardized format.
+        
+        Args:
+            agent_name: Name of the agent performing the action
+            method_name: Type of action (post, comment, read, follow, etc.)
+            execution_time_seconds: Time taken to execute the action
+            success: Whether the action succeeded
+            day: Current simulation day
+            slot: Current simulation slot (hour)
+        """
+        # Get current timestamp in the required format
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        
+        log_entry = {
+            "time": timestamp,
+            "agent_name": agent_name,
+            "method_name": method_name,
+            "execution_time_seconds": round(execution_time_seconds, 4),
+            "success": success
+        }
+        
+        # Log to action log file
+        self.action_logger.info(json.dumps(log_entry))
+        
+        # Track for hourly/daily summaries
+        action_info = {
+            "method_name": method_name,
+            "execution_time_seconds": execution_time_seconds,
+            "success": success,
+            "day": day,
+            "slot": slot
+        }
+        self.hourly_actions.append(action_info)
+        self.daily_actions.append(action_info)
+    
+    def _log_hourly_summary(self, day: int, slot: int):
+        """
+        Log hourly summary with execution time statistics.
+        
+        Args:
+            day: Simulation day that just ended
+            slot: Simulation slot (hour) that just ended
+        """
+        if not self.hourly_actions:
+            return
+        
+        total_time = sum(a["execution_time_seconds"] for a in self.hourly_actions)
+        total_actions = len(self.hourly_actions)
+        successful_actions = sum(1 for a in self.hourly_actions if a["success"])
+        
+        # Count actions by method
+        method_counts = {}
+        for action in self.hourly_actions:
+            method = action["method_name"]
+            method_counts[method] = method_counts.get(method, 0) + 1
+        
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        summary = {
+            "time": timestamp,
+            "summary_type": "hourly",
+            "day": day,
+            "slot": slot,
+            "total_actions": total_actions,
+            "successful_actions": successful_actions,
+            "total_execution_time_seconds": round(total_time, 4),
+            "average_execution_time_seconds": round(total_time / total_actions if total_actions > 0 else 0, 4),
+            "actions_by_method": method_counts
+        }
+        
+        self.action_logger.info(json.dumps(summary))
+        
+        # Reset hourly tracking
+        self.hourly_actions = []
+    
+    def _log_daily_summary(self, day: int):
+        """
+        Log daily summary with execution time statistics.
+        
+        Args:
+            day: Simulation day that just ended
+        """
+        if not self.daily_actions:
+            return
+        
+        total_time = sum(a["execution_time_seconds"] for a in self.daily_actions)
+        total_actions = len(self.daily_actions)
+        successful_actions = sum(1 for a in self.daily_actions if a["success"])
+        
+        # Count actions by method
+        method_counts = {}
+        for action in self.daily_actions:
+            method = action["method_name"]
+            method_counts[method] = method_counts.get(method, 0) + 1
+        
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        summary = {
+            "time": timestamp,
+            "summary_type": "daily",
+            "day": day,
+            "total_actions": total_actions,
+            "successful_actions": successful_actions,
+            "total_execution_time_seconds": round(total_time, 4),
+            "average_execution_time_seconds": round(total_time / total_actions if total_actions > 0 else 0, 4),
+            "actions_by_method": method_counts
+        }
+        
+        self.action_logger.info(json.dumps(summary))
+        
+        # Reset daily tracking
+        self.daily_actions = []
 
     def _annotate_action_content(self, action: ActionDTO) -> None:
         """

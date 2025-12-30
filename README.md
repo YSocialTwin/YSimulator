@@ -24,6 +24,7 @@ Comprehensive documentation is available in the [`docs/`](docs/) directory:
 - **[Extension Guide](docs/EXTENDING.md)** - How to add new agent actions and features
 - **[System Diagrams](docs/DIAGRAMS.md)** - Visual architecture and interaction diagrams
 - **[Code Formatting](docs/FORMATTING.md)** - Development guidelines and tooling
+- **[Action Logging](docs/ACTION_LOGGING.md)** - Guide to client action logging and summaries
 
 ## Configuration
 
