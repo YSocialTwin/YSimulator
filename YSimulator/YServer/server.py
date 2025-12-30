@@ -827,15 +827,16 @@ class OrchestratorServer:
         """
         start_time = time.time()
 
+        # If this client was previously completed, remove it from completed set
+        # This allows the same client to re-run the simulation
+        was_completed = client_id in self.completed_clients
+        if was_completed:
+            self.completed_clients.remove(client_id)
+            self.logger.info(f"Re-registering previously completed client {client_id}")
+
         if client_id not in self.registered_clients:
             self.registered_clients.add(client_id)
             self.last_heartbeat[client_id] = time.time()
-            
-            # If this client was previously completed, remove it from completed set
-            # This allows the same client to re-run the simulation
-            if client_id in self.completed_clients:
-                self.completed_clients.remove(client_id)
-                self.logger.info(f"Re-registering previously completed client {client_id}")
             
             execution_time = (time.time() - start_time) * 1000
 
@@ -850,6 +851,7 @@ class OrchestratorServer:
                         "total_clients": len(self.registered_clients),
                         "active_clients": len(self._get_active_clients()),
                         "execution_time_ms": execution_time,
+                        "was_completed": was_completed,
                     }
                 },
             )
@@ -858,6 +860,9 @@ class OrchestratorServer:
                 f"Will run for {num_days if num_days > 0 else '∞'} days. "
                 f"Total: {len(self.registered_clients)}, Active: {len(self._get_active_clients())}"
             )
+        else:
+            # Client already registered, just update heartbeat
+            self.last_heartbeat[client_id] = time.time()
         
         # Return current server state as starting point for client
         return {
