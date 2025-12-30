@@ -258,8 +258,6 @@ class SimulationClient:
         # Initialize tracking variables for hourly and daily summaries
         self.hourly_actions = []  # Track actions for current hour
         self.daily_actions = []  # Track actions for current day
-        self.current_tracked_hour = None
-        self.current_tracked_day = None
 
     def _parse_activity_profiles(self, activity_profiles_config):
         """
@@ -845,7 +843,7 @@ class SimulationClient:
                     
                     # Estimate execution time based on simulation time divided by number of actions
                     # This is an approximation since we don't track individual action times
-                    execution_time = (sim_time / 1000.0) / len(actions) if actions else 0
+                    execution_time = (sim_time / 1000.0) / len(actions) if len(actions) > 0 else 0
                     
                     # All actions that reach this point are considered successful
                     self._log_action(agent_name, method_name, execution_time, True, instruction.day, instruction.slot)
