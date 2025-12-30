@@ -1,9 +1,13 @@
+import random
 import ray
 from typing import Optional, List
 from langchain_ollama import ChatOllama
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 
+
+# Constants
+DEFAULT_FALLBACK_REACTION = "LIKE"
 
 # Default prompt templates for image description
 DEFAULT_IMAGE_DESCRIPTION_PROMPTS = {
@@ -315,11 +319,11 @@ class LLMService:
             if "SAD" in result: return "SAD"
             if "IGNORE" in result: return "IGNORE"
             
-            # Default to LIKE if unclear
-            return "LIKE"
+            # Default to fallback reaction if unclear
+            return DEFAULT_FALLBACK_REACTION
         except Exception as e:
-            # Fallback if LLM fails - default to LIKE
-            return "LIKE"
+            # Fallback if LLM fails
+            return DEFAULT_FALLBACK_REACTION
     
     def generate_follow_decision(self, cluster_id: int, candidate_users: list) -> str:
         """
@@ -334,8 +338,6 @@ class LLMService:
         Returns:
             str: User ID to follow, or None to skip following
         """
-        import random
-        
         # If no candidates, return None
         if not candidate_users:
             return None
@@ -349,6 +351,68 @@ class LLMService:
             return random.choice(candidate_users)
         else:
             return None  # Skip following this time
+    
+    def decide_search_action(self, cluster_id: int, post_content: str, agent_attrs: dict = None) -> str:
+        """
+        Decide which action to perform on a searched post: comment, share, or react.
+        
+        This method is called remotely via Ray actor for the search action.
+        LLM agents use this to decide how to engage with discovered content.
+        
+        Args:
+            cluster_id: Cluster/persona ID of the agent
+            post_content: Content of the post found via search
+            agent_attrs: Dict with agent attributes for dynamic persona building
+            
+        Returns:
+            str: Action type - one of: "COMMENT", "SHARE", "LIKE", "LOVE", "LAUGH", "ANGRY", "SAD", "IGNORE"
+        """
+        # Build persona using attributes or fallback
+        persona = self._build_persona(cluster_id, agent_attrs)
+        
+        # Get prompt templates from configuration
+        search_action_config = self.prompts_config.get("decide_search_action", {})
+        system_template = search_action_config.get("system_template")
+        user_template = search_action_config.get("user_template")
+        
+        # Validate templates are configured
+        if not system_template or not user_template:
+            # Log warning and return default fallback
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning(
+                "decide_search_action prompts not configured in llm_prompts.json, using default fallback"
+            )
+            return DEFAULT_FALLBACK_REACTION
+        
+        # Format templates
+        system_msg = system_template.format(persona=persona)
+        user_msg = user_template.format(post_content=post_content)
+        
+        prompt = ChatPromptTemplate.from_messages([
+            ("system", system_msg),
+            ("user", user_msg)
+        ])
+        
+        try:
+            chain = prompt | self.llm | StrOutputParser()
+            result = chain.invoke({}).strip().upper()
+            
+            # Parse LLM response - look for valid actions
+            if "COMMENT" in result: return "COMMENT"
+            if "SHARE" in result: return "SHARE"
+            if "LOVE" in result: return "LOVE"
+            if "LIKE" in result: return "LIKE"
+            if "LAUGH" in result: return "LAUGH"
+            if "ANGRY" in result: return "ANGRY"
+            if "SAD" in result: return "SAD"
+            if "IGNORE" in result: return "IGNORE"
+            
+            # Default to fallback reaction if unclear
+            return DEFAULT_FALLBACK_REACTION
+        except Exception as e:
+            # Fallback if LLM fails
+            return DEFAULT_FALLBACK_REACTION
     
     def generate_secondary_follow_decision(self, cluster_id: int, post_content: str, is_currently_following: bool) -> str:
         """
@@ -365,8 +429,6 @@ class LLMService:
         Returns:
             str: Decision - "follow", "unfollow", or "no_change"
         """
-        import random
-        
         # Get follow decision probabilities from configuration
         follow_config = self.prompts_config.get("generate_secondary_follow_decision", {})
         follow_prob = follow_config.get("follow_probability_when_not_following", 0.3)

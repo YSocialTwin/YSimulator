@@ -22,6 +22,11 @@
     "system_template": "{persona} You're deciding how to react to content you discovered.",
     "user_template": "You found this post:\n\n\"{post_content}\"\n\nHow do you react? Reply with ONLY ONE WORD from these options:\n- LIKE (positive, agree)\n- LOVE (strongly positive)\n- LAUGH (funny, humorous)\n- ANGRY (negative, disagree, dislike)\n- SAD (disappointing, concerning)\n- IGNORE (not interested, skip)\n\nYour reaction:"
   },
+  "decide_search_action": {
+    "system_template": "{persona} You searched for posts on a topic you're interested in and found relevant content. Decide how to engage with it.",
+    "user_template": "You found this post on your topic of interest:\n\n\"{post_content}\"\n\nHow do you want to engage? Reply with ONLY ONE WORD from these options:\n- COMMENT (engage in discussion, share your thoughts)\n- SHARE (reshare with your followers)\n- LIKE (positive, agree)\n- LOVE (strongly positive)\n- LAUGH (funny, humorous)\n- ANGRY (negative, disagree)\n- SAD (disappointing, concerning)\n- IGNORE (not interested, skip)\n\nYour choice:",
+    "note": "Used when agents perform search action to decide engagement with discovered posts"
+  },
   "generate_news_commentary": {
     "system_template": "You are the social media manager for {website_name}. Your job is to present news articles to your audience in an engaging way.",
     "user_template": "Here's a news article to share:\n\nTitle: {article_title}\n\nContent: {article_text}\n\nWrite a brief, engaging tweet (max 280 characters) to present this article to your followers. Be professional but engaging. Do NOT include hashtags or links - just your commentary."

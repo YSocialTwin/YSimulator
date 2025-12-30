@@ -646,6 +646,295 @@ if hasattr(act, 'topic_ids') and act.topic_ids:
 - **Topic Linking**: Automatically links article topics to post
 - **Fallback**: Rule-based agents share without LLM
 
+## Example: Search Action
+
+The search action demonstrates topic-based content discovery with agent decision-making for engagement.
+
+### Overview
+
+The search action allows agents to:
+1. Sample a topic from their interests (weighted by interaction count)
+2. Query the database for up to 10 recent posts on that topic from other users
+3. Randomly select one post from the results
+4. Decide how to engage (comment, share, or react)
+5. Execute the chosen action
+
+This action is particularly useful for Explorer archetype agents who actively seek out content.
+
+### Implementation Components
+
+#### 1. Database Methods
+
+```python
+# In db_middleware.py
+
+def search_posts_by_topic(self, topic_id: str, agent_id: str, limit: int = 10) -> List[str]:
+    """
+    Search for recent posts on a specific topic from other users.
+    
+    Args:
+        topic_id: Topic/interest UUID to search for
+        agent_id: Agent UUID (to exclude agent's own posts)
+        limit: Maximum number of posts to return (default: 10)
+        
+    Returns:
+        List[str]: List of post UUIDs from other users on this topic
+    """
+    from YSimulator.YServer.classes.models import PostTopic, Post, Round
+    
+    session = Session(self.engine)
+    try:
+        # Query posts with this topic, excluding agent's own posts, ordered by recency
+        posts = (
+            session.query(Post.id)
+            .join(PostTopic, Post.id == PostTopic.post_id)
+            .join(Round, Post.round == Round.id)
+            .filter(PostTopic.topic_id == topic_id)
+            .filter(Post.user_id != agent_id)
+            .order_by(Round.day.desc(), Round.hour.desc())
+            .limit(limit)
+            .all()
+        )
+        return [post.id for post in posts]
+    finally:
+        session.close()
+
+def get_topic_id_by_name(self, topic_name: str) -> Optional[str]:
+    """Get topic/interest ID by name."""
+    from YSimulator.YServer.classes.models import Interest
+    
+    session = Session(self.engine)
+    try:
+        interest = session.query(Interest).filter(
+            Interest.interest == topic_name
+        ).first()
+        return interest.iid if interest else None
+    finally:
+        session.close()
+```
+
+#### 2. LLM Service Method
+
+```python
+# In llm_service.py
+
+def decide_search_action(self, cluster_id: int, post_content: str, agent_attrs: dict = None) -> str:
+    """
+    Decide which action to perform on a searched post.
+    
+    LLM agents use this to decide how to engage with discovered content.
+    
+    Returns one of: "COMMENT", "SHARE", "LIKE", "LOVE", "LAUGH", "ANGRY", "SAD", "IGNORE"
+    """
+    persona = self._build_persona(cluster_id, agent_attrs)
+    
+    # Get prompt templates from configuration
+    search_action_config = self.prompts_config.get("decide_search_action", {})
+    system_template = search_action_config.get("system_template")
+    user_template = search_action_config.get("user_template")
+    
+    # Format and call LLM
+    system_msg = system_template.format(persona=persona)
+    user_msg = user_template.format(post_content=post_content)
+    
+    result = self._call_llm(system_msg, user_msg).strip().upper()
+    
+    # Parse response for valid actions
+    if "COMMENT" in result: return "COMMENT"
+    if "SHARE" in result: return "SHARE"
+    # ... other reactions ...
+    
+    return DEFAULT_FALLBACK_REACTION
+```
+
+#### 3. Client Action Handler
+
+```python
+# In client.py
+
+def _handle_search_action(self, agent, agent_type, pending_llm_reactions, actions):
+    """Handle search action for an agent."""
+    # Log action initiation
+    self.logger.info(
+        f"search action initiated: agent={agent.username}, type={agent_type}",
+        extra={"extra_data": {"agent_id": agent.id, "agent_type": agent_type}}
+    )
+    
+    # 1. Sample topic from agent's interests
+    agent_attrs = self._extract_agent_attrs(agent)
+    selected_topic = agent_attrs.get("topic")
+    
+    if not selected_topic:
+        self.logger.debug(f"search action skipped: no topics for agent {agent.username}")
+        return
+    
+    # 2. Get topic ID
+    topic_id = ray.get(self.server.get_topic_id_by_name.remote(selected_topic))
+    if not topic_id:
+        return
+    
+    # 3. Search for posts
+    found_posts = ray.get(self.server.search_posts_by_topic.remote(
+        topic_id, agent.id, limit=10
+    ))
+    
+    if not found_posts:
+        self.logger.debug(f"search action: no posts found for topic '{selected_topic}'")
+        return
+    
+    # 4. Randomly select one post
+    target_post = random.choice(found_posts)
+    post_data = ray.get(self.server.get_post.remote(target_post))
+    post_content = post_data.get("tweet", "")
+    
+    # 5. Decide engagement
+    if agent_type == "llm":
+        # LLM decides action asynchronously
+        future = generate_llm_search_action_async(
+            self.llm, agent.cluster, post_content, agent_attrs
+        )
+        pending_llm_reactions.append((agent.id, agent.cluster, target_post, future))
+    else:
+        # Rule-based: random selection
+        selected_action = random.choice(["comment", "share", "react"])
+        
+        if selected_action == "comment":
+            action = generate_rule_based_comment(agent.id, agent.cluster, target_post)
+        elif selected_action == "share":
+            action = generate_rule_based_share(agent.id, agent.cluster, target_post)
+        else:
+            reaction_type = random.choice(BASIC_REACTIONS)
+            action = ActionDTO(agent.id, agent.cluster, reaction_type, target_post_id=target_post)
+        
+        actions.append(action)
+```
+
+#### 4. Integration with Simulation Loop
+
+```python
+# In client.py _simulate() method
+
+# In action selection
+action_type, agent_type, target = self.__select_action(agent, recent_posts)
+
+if action_type == "search":
+    self._handle_search_action(agent, agent_type, pending_llm_reactions, actions)
+```
+
+### Configuration
+
+```json
+// In simulation_config.json
+{
+  "agents": {
+    "actions_likelihood": {
+      "post": 0.3,
+      "read": 0.2,
+      "search": 0.15,  // Weight for search action
+      "follow": 0.1
+    }
+  },
+  "agent_archetypes": {
+    "enabled": true,
+    "distribution": {
+      "explorer": 0.33,
+      "validator": 0.33,
+      "broadcaster": 0.34
+    }
+  }
+}
+
+// In llm_prompts.json
+{
+  "decide_search_action": {
+    "system_template": "{persona} You searched for posts on a topic you're interested in and found relevant content. Decide how to engage with it.",
+    "user_template": "You found this post on your topic of interest:\n\n\"{post_content}\"\n\nHow do you want to engage? Reply with ONLY ONE WORD from these options:\n- COMMENT (engage in discussion, share your thoughts)\n- SHARE (reshare with your followers)\n- LIKE (positive, agree)\n- LOVE (strongly positive)\n- LAUGH (funny, humorous)\n- ANGRY (negative, disagree)\n- SAD (disappointing, concerning)\n- IGNORE (not interested, skip)\n\nYour choice:",
+    "note": "Used when agents perform search action to decide engagement with discovered posts"
+  }
+}
+```
+
+### Logging
+
+The search action includes comprehensive logging for debugging and analysis:
+
+```python
+# Action initiation
+self.logger.info(
+    f"search action initiated: agent={agent.username}, type={agent_type}",
+    extra={"extra_data": {"agent_id": agent.id, "agent_type": agent_type, "archetype": agent.archetype}}
+)
+
+# Topic sampling
+self.logger.info(
+    f"search action: topic sampled '{selected_topic}' for agent {agent.username}",
+    extra={"extra_data": {"agent_id": agent.id, "topic": selected_topic}}
+)
+
+# Search results
+self.logger.info(
+    f"search action: found {len(found_posts)} posts on topic '{selected_topic}'",
+    extra={"extra_data": {"agent_id": agent.id, "topic": selected_topic, "posts_found": len(found_posts)}}
+)
+
+# Post selection
+self.logger.info(
+    f"search action: selected post {target_post} on topic '{selected_topic}'",
+    extra={"extra_data": {"agent_id": agent.id, "topic": selected_topic, "target_post_id": target_post}}
+)
+
+# Rule-based action decision
+self.logger.info(
+    f"search action: rule-based agent selected '{selected_action}' action",
+    extra={"extra_data": {"agent_id": agent.id, "selected_action": selected_action}}
+)
+```
+
+### Key Features
+
+- **Topic-based Discovery**: Uses agent interests for content discovery
+- **Weighted Sampling**: Topics sampled by interaction frequency
+- **Database Queries**: Efficient SQL joins with Round for chronological ordering
+- **Async LLM Processing**: Parallel decision-making using Ray
+- **Rule-based Fallback**: Simple random selection for non-LLM agents
+- **Comprehensive Logging**: Detailed logging at each step for analysis
+- **Archetype Alignment**: Explorer archetype focuses on search action
+
+### Testing Search Action
+
+```python
+# Test database query
+def test_search_posts_by_topic():
+    db = DatabaseMiddleware(...)
+    
+    # Create test posts with topics
+    topic_id = db.add_or_get_interest("Technology")
+    post_id = db.add_post({"user_id": "user1", "tweet": "Test", "round": round_id})
+    db.add_post_topic(post_id, topic_id)
+    
+    # Search from different user
+    results = db.search_posts_by_topic(topic_id, "user2", limit=10)
+    assert len(results) > 0
+    assert post_id in results
+
+# Test action flow
+def test_search_action_flow():
+    # Setup agent with interests
+    agent = AgentProfile(
+        id="agent1",
+        interests=[["Technology", "Sports"], [5, 2]]
+    )
+    
+    # Execute search action
+    actions = []
+    pending_reactions = []
+    _handle_search_action(agent, "rule_based", pending_reactions, actions)
+    
+    # Verify action created
+    assert len(actions) > 0
+    assert actions[0].action_type in ["COMMENT", "SHARE", "LIKE", "ANGRY"]
+```
+
 ## Conclusion
 
 Adding new actions to YSimulator follows a consistent pattern:
