@@ -154,6 +154,7 @@ class SimulationClient:
         archetype_config = simulation_config["simulation"].get("agent_archetypes", {})
         self.archetypes_enabled = archetype_config.get("enabled", False)
         self.archetype_distribution = archetype_config.get("distribution", {})
+        self.agent_downcast = archetype_config.get("agent_downcast", False)
 
         # Load recommendation system configuration
         recsys_config = simulation_config["simulation"].get("recsys", {})
@@ -473,7 +474,7 @@ class SimulationClient:
             else:
                 start_index = 1
 
-            archetypes = ["Validator", "Broadcaster", "Explorer"]
+            archetypes = ["validator", "broadcaster", "explorer"]
             activity_profiles = ["Always On", "Morning Active", "Evening Active", "Weekend Warrior"]
             professions = ["Engineer", "Teacher", "Designer", "Writer", "Analyst", "Manager"]
             genders = ["male", "female", "non-binary"]
@@ -960,6 +961,27 @@ class SimulationClient:
                     extra={"extra_data": {"error": str(e)}},
                 )
 
+    def _determine_agent_type(self, agent_profile: AgentProfile) -> str:
+        """
+        Determine the agent type (llm or rule_based) based on agent profile and downcast settings.
+        
+        Args:
+            agent_profile: Agent profile containing behavior settings
+            
+        Returns:
+            str: "llm" or "rule_based"
+        """
+        # Start with the agent's configured type
+        agent_type = "llm" if agent_profile.llm else "rule_based"
+        
+        # Apply agent_downcast logic: if enabled, treat validator and explorer as rule-based
+        if self.agent_downcast and agent_profile.archetype:
+            archetype_lower = agent_profile.archetype.lower()
+            if archetype_lower in ["validator", "explorer"]:
+                agent_type = "rule_based"
+        
+        return agent_type
+
     def __select_action(self, agent_profile: AgentProfile, recent_posts: list) -> tuple:
         """
         Determine which action an agent should perform.
@@ -990,7 +1012,7 @@ class SimulationClient:
         """
         # Page agents can ONLY perform share_link action
         if agent_profile.is_page == 1:
-            agent_type = "llm" if agent_profile.llm else "rule_based"
+            agent_type = self._determine_agent_type(agent_profile)
             return "share_link", agent_type, None
 
         # Define archetype-to-action mappings
@@ -998,19 +1020,19 @@ class SimulationClient:
         # NOTE: Future enhancement - these mappings could be moved to simulation_config.json
         # for easier customization without code changes
         archetype_actions = {
-            "Validator": [
+            "validator": [
                 "share",
                 "read",
                 "share_link",
             ],  # Validators react and share content: they are active content consumers
-            "Broadcaster": [
+            "broadcaster": [
                 "post",
                 "image",
                 "share",
                 "comment",
+                "search"
             ],  # Broadcasters post, comment and share contents and images: they are content producers
-            "Explorer": [
-                "search",
+            "explorer": [
                 "follow",
             ],  # Explorers follow and search to grow network: they are lurkers
         }
@@ -1048,7 +1070,7 @@ class SimulationClient:
         selected_action = random.choices(actions, weights=weights)[0]
 
         # Determine agent type
-        agent_type = "llm" if agent_profile.llm else "rule_based"
+        agent_type = self._determine_agent_type(agent_profile)
 
         # Actions that require a target post
         target_required_actions = ["comment", "read", "share"]

@@ -81,6 +81,7 @@
     },
     "agent_archetypes": {
       "enabled": true,
+      "agent_downcast": true,
       "distribution": {
         "validator": 0.33,
         "broadcaster": 0.33,

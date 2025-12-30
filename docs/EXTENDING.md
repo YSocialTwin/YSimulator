@@ -836,6 +836,7 @@ if action_type == "search":
   },
   "agent_archetypes": {
     "enabled": true,
+    "agent_downcast": true,  // Force validators and explorers to use rule-based behavior
     "distribution": {
       "explorer": 0.33,
       "validator": 0.33,
