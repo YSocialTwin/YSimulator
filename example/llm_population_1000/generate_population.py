@@ -285,7 +285,7 @@ def generate_server_config():
             }
         },
         "min_to_start": 1,
-        "timeout_seconds": 60,
+        "timeout_seconds": 180,
         "redis": {
             "enabled": False,
             "host": "localhost",

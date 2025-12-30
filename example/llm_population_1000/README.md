@@ -60,6 +60,7 @@ Server infrastructure settings:
 - **Database**: SQLite (can be configured for PostgreSQL or MySQL)
 - **Ray**: Distributed computing with namespace isolation
 - **Redis**: Optional caching (disabled by default for this large simulation)
+- **Timeout**: 180 seconds (increased from default 60s to accommodate large network loading)
 - **Logging**: Standard configuration
 
 ## Usage
@@ -183,6 +184,12 @@ The social network evolves through three mechanisms:
 - **Explorers** (~340): Curious, question-asking, learning-oriented
 
 ## Performance Considerations
+
+### Network Loading
+With ~10,000 initial edges, the network.csv loading takes significant time:
+- **Server timeout**: Increased to 180 seconds (vs default 60s) to prevent client disconnect during initialization
+- **Loading time**: Expect 60-120 seconds for the client to load the initial network
+- **First-time setup**: The network is only loaded once; subsequent runs skip this step
 
 ### LLM Requirements
 With 1000 LLM agents, expect:
