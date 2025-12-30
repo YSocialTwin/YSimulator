@@ -493,6 +493,8 @@ class OrchestratorServer:
         Register agent profiles in the database if they don't already exist.
         For page agents (is_page=1), also creates a Website entry.
 
+        This method uses batch insertion for improved performance with large agent populations.
+
         Args:
             agents: List of AgentProfile dataclass instances
 
@@ -500,108 +502,87 @@ class OrchestratorServer:
             dict: Summary of registration results with counts
         """
         start_time = time.time()
-        registered_count = 0
-        skipped_count = 0
-        pages_registered = 0
+
+        # Prepare all user data for batch insertion
+        users_data = []
+        websites_data = []
+        agents_with_interests = []
+
+        for agent_profile in agents:
+            # Prepare user data
+            user_data = {
+                "id": str(agent_profile.id),  # Convert to UUID string
+                "username": agent_profile.username,
+                "email": agent_profile.email,
+                "password": agent_profile.password,
+                "leaning": agent_profile.leaning,
+                "user_type": agent_profile.user_type,
+                "age": agent_profile.age,
+                "oe": agent_profile.oe,
+                "co": agent_profile.co,
+                "ex": agent_profile.ex,
+                "ag": agent_profile.ag,
+                "ne": agent_profile.ne,
+                "recsys_type": agent_profile.recsys_type,
+                "frecsys_type": agent_profile.frecsys_type,
+                "language": agent_profile.language,
+                "owner": agent_profile.owner,
+                "education_level": agent_profile.education_level,
+                "joined_on": self.current_round_id,  # FK to rounds table (UUID string)
+                "gender": agent_profile.gender,
+                "nationality": agent_profile.nationality,
+                "round_actions": agent_profile.round_actions,
+                "toxicity": agent_profile.toxicity,
+                "is_page": agent_profile.is_page,
+                "left_on": agent_profile.left_on,
+                "daily_activity_level": agent_profile.daily_activity_level,
+                "profession": agent_profile.profession,
+                "activity_profile": agent_profile.activity_profile,
+                "archetype": agent_profile.archetype,
+            }
+            users_data.append(user_data)
+
+            # Track agents with interests for later processing
+            if agent_profile.interests:
+                agents_with_interests.append(agent_profile)
+
+            # Prepare website data for page agents
+            if agent_profile.is_page == 1 and agent_profile.feed_url:
+                website_data = {
+                    "id": str(agent_profile.id),  # Website ID = User ID
+                    "name": agent_profile.username,  # Use username as website name
+                    "rss": agent_profile.feed_url,
+                    "category": "page",  # Mark as page
+                    "language": agent_profile.language,
+                    "country": agent_profile.nationality,
+                    "leaning": agent_profile.leaning,
+                }
+                websites_data.append(website_data)
 
         try:
+            # Batch register users
+            registered_count = self.db.register_users_batch(users_data)
+
+            # All agents (new and existing) should be in registered_agents dict
             for agent_profile in agents:
-                # Prepare user data
-                user_data = {
-                    "id": str(agent_profile.id),  # Convert to UUID string
-                    "username": agent_profile.username,
-                    "email": agent_profile.email,
-                    "password": agent_profile.password,
-                    "leaning": agent_profile.leaning,
-                    "user_type": agent_profile.user_type,
-                    "age": agent_profile.age,
-                    "oe": agent_profile.oe,
-                    "co": agent_profile.co,
-                    "ex": agent_profile.ex,
-                    "ag": agent_profile.ag,
-                    "ne": agent_profile.ne,
-                    "recsys_type": agent_profile.recsys_type,
-                    "frecsys_type": agent_profile.frecsys_type,
-                    "language": agent_profile.language,
-                    "owner": agent_profile.owner,
-                    "education_level": agent_profile.education_level,
-                    "joined_on": self.current_round_id,  # FK to rounds table (UUID string)
-                    "gender": agent_profile.gender,
-                    "nationality": agent_profile.nationality,
-                    "round_actions": agent_profile.round_actions,
-                    "toxicity": agent_profile.toxicity,
-                    "is_page": agent_profile.is_page,
-                    "left_on": agent_profile.left_on,
-                    "daily_activity_level": agent_profile.daily_activity_level,
-                    "profession": agent_profile.profession,
-                    "activity_profile": agent_profile.activity_profile,
-                    "archetype": agent_profile.archetype,
-                }
+                self.registered_agents[agent_profile.id] = agent_profile.username
 
-                # Try to register user
-                user_registered = self.db.register_user(user_data)
-                if user_registered:
-                    registered_count += 1
-                    self.registered_agents[agent_profile.id] = agent_profile.username
+            skipped_count = len(agents) - registered_count
 
-                    # Initialize agent interests using InterestManager
-                    if agent_profile.interests:
-                        self.interest_manager.initialize_agent_interests(
-                            agent_id=str(agent_profile.id),
-                            interests=agent_profile.interests,
-                            round_id=self.current_round_id,
-                        )
+            # Initialize interests for newly registered agents
+            # Note: This is still done individually as it involves complex logic
+            # TODO: Consider batching interest initialization in the future
+            for agent_profile in agents_with_interests:
+                self.interest_manager.initialize_agent_interests(
+                    agent_id=str(agent_profile.id),
+                    interests=agent_profile.interests,
+                    round_id=self.current_round_id,
+                )
 
-                    # If this is a page agent, create a Website entry
-                    if agent_profile.is_page == 1 and agent_profile.feed_url:
-                        website_data = {
-                            "id": str(agent_profile.id),  # Website ID = User ID
-                            "name": agent_profile.username,  # Use username as website name
-                            "rss": agent_profile.feed_url,
-                            "category": "page",  # Mark as page
-                            "language": agent_profile.language,
-                            "country": agent_profile.nationality,
-                            "leaning": agent_profile.leaning,
-                        }
-                        if self.db.add_website(website_data):
-                            pages_registered += 1
-                        else:
-                            self.logger.warning(
-                                f"Failed to create website for page {agent_profile.username}",
-                                extra={"extra_data": {"page_id": str(agent_profile.id)}},
-                            )
-                else:
-                    skipped_count += 1
-                    self.registered_agents[agent_profile.id] = agent_profile.username
-
-                    # If page already exists, ensure its Website entry also exists
-                    if agent_profile.is_page == 1 and agent_profile.feed_url:
-                        # Check if website exists
-                        website_data = self.db.get_website_by_rss(agent_profile.feed_url)
-                        if website_data:
-                            pages_registered += 1
-                        else:
-                            # Website doesn't exist, create it now
-                            self.logger.info(
-                                f"Creating missing website for existing page {agent_profile.username}",
-                                extra={"extra_data": {"page_id": str(agent_profile.id)}},
-                            )
-                            website_data = {
-                                "id": str(agent_profile.id),  # Website ID = User ID
-                                "name": agent_profile.username,  # Use username as website name
-                                "rss": agent_profile.feed_url,
-                                "category": "page",  # Mark as page
-                                "language": agent_profile.language,
-                                "country": agent_profile.nationality,
-                                "leaning": agent_profile.leaning,
-                            }
-                            if self.db.add_website(website_data):
-                                pages_registered += 1
-                            else:
-                                self.logger.warning(
-                                    f"Failed to create website for existing page {agent_profile.username}",
-                                    extra={"extra_data": {"page_id": str(agent_profile.id)}},
-                                )
+            # Batch register websites for page agents
+            pages_registered = 0
+            if websites_data:
+                pages_registered = self.db.add_websites_batch(websites_data)
 
             execution_time = (time.time() - start_time) * 1000
 

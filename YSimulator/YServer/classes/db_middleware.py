@@ -269,6 +269,81 @@ class DatabaseMiddleware:
             )
             return False
 
+    def register_users_batch(self, users_data: List[Dict[str, Any]]) -> int:
+        """
+        Register multiple users in the database in a single transaction.
+
+        This method is optimized for bulk inserts (e.g., registering multiple agents at startup)
+        and significantly reduces database write overhead compared to individual inserts.
+
+        Args:
+            users_data: List of dictionaries, each containing user data for User_mgmt model
+
+        Returns:
+            int: Number of users successfully registered (excludes already existing users)
+        """
+        if not users_data:
+            return 0
+
+        try:
+            if self.use_redis:
+                # Store users in Redis
+                registered_count = 0
+                for user_data in users_data:
+                    user_id = user_data["id"]
+                    key = self._redis_key("user_mgmt", user_id)
+
+                    # Check if user already exists
+                    if self.redis_client.exists(key):
+                        continue
+
+                    # Filter out None values for Redis
+                    redis_data = {k: v for k, v in user_data.items() if v is not None}
+
+                    # Store user data
+                    self.redis_client.hset(key, mapping=redis_data)
+                    # Add to user set
+                    self.redis_client.sadd(self._redis_key("user_mgmt", "ids"), user_id)
+                    registered_count += 1
+                return registered_count
+            else:
+                # Use bulk insert for SQL databases
+                session = Session(self.engine)
+                try:
+                    # Get existing user IDs to avoid duplicates
+                    existing_ids = {
+                        row[0]
+                        for row in session.query(User_mgmt.id)
+                        .filter(User_mgmt.id.in_([u["id"] for u in users_data]))
+                        .all()
+                    }
+
+                    # Filter out users that already exist
+                    new_users = [u for u in users_data if u["id"] not in existing_ids]
+
+                    if not new_users:
+                        return 0
+
+                    # Bulk insert new users
+                    session.bulk_insert_mappings(User_mgmt, new_users)
+                    session.commit()
+                    return len(new_users)
+                except Exception as e:
+                    session.rollback()
+                    self.logger.error(
+                        f"Error in batch user registration: {e}",
+                        extra={"extra_data": {"error": str(e), "batch_size": len(users_data)}},
+                    )
+                    raise
+                finally:
+                    session.close()
+        except Exception as e:
+            self.logger.error(
+                f"Error registering users in batch: {e}",
+                extra={"extra_data": {"error": str(e), "batch_size": len(users_data)}},
+            )
+            return 0
+
     def get_user(self, user_id: int) -> Optional[Dict[str, Any]]:
         """
         Get user by ID.
@@ -1255,6 +1330,76 @@ class DatabaseMiddleware:
                 extra={"extra_data": {"error": str(e), "website_data": website_data}},
             )
             return None
+        finally:
+            session.close()
+
+    def add_websites_batch(self, websites_data: List[Dict[str, Any]]) -> int:
+        """
+        Add multiple websites to the database in a single transaction.
+
+        This method is optimized for bulk inserts of website records.
+
+        Args:
+            websites_data: List of dictionaries, each containing website data
+
+        Returns:
+            int: Number of websites successfully added (excludes duplicates)
+        """
+        if not websites_data:
+            return 0
+
+        from YSimulator.YServer.classes.models import Website
+
+        session = Session(self.engine)
+        try:
+            # Get existing website RSS URLs to avoid duplicates
+            rss_urls = [w.get("rss") for w in websites_data if w.get("rss")]
+            existing_rss = {
+                row[0] for row in session.query(Website.rss).filter(Website.rss.in_(rss_urls)).all()
+            }
+
+            # Filter out websites that already exist
+            new_websites = [w for w in websites_data if w.get("rss") not in existing_rss]
+
+            if not new_websites:
+                return 0
+
+            # Ensure all websites have IDs
+            import uuid
+
+            for website in new_websites:
+                if "id" not in website or not website["id"]:
+                    website["id"] = str(uuid.uuid4())
+                if "last_fetched" not in website:
+                    website["last_fetched"] = str(uuid.uuid4())
+
+            # Bulk insert new websites
+            session.bulk_insert_mappings(Website, new_websites)
+            session.commit()
+
+            # Cache in Redis if enabled
+            if self.use_redis:
+                for website in new_websites:
+                    redis_key = self._redis_key("websites", website["id"])
+                    self.redis_client.hset(
+                        redis_key,
+                        mapping={
+                            "id": website["id"],
+                            "name": website.get("name", ""),
+                            "rss": website.get("rss", ""),
+                            "category": website.get("category", ""),
+                            "language": website.get("language", ""),
+                        },
+                    )
+
+            return len(new_websites)
+        except Exception as e:
+            session.rollback()
+            self.logger.error(
+                f"Error in batch website addition: {e}",
+                extra={"extra_data": {"error": str(e), "batch_size": len(websites_data)}},
+            )
+            return 0
         finally:
             session.close()
 
