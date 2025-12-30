@@ -961,6 +961,27 @@ class SimulationClient:
                     extra={"extra_data": {"error": str(e)}},
                 )
 
+    def _determine_agent_type(self, agent_profile: AgentProfile) -> str:
+        """
+        Determine the agent type (llm or rule_based) based on agent profile and downcast settings.
+        
+        Args:
+            agent_profile: Agent profile containing behavior settings
+            
+        Returns:
+            str: "llm" or "rule_based"
+        """
+        # Start with the agent's configured type
+        agent_type = "llm" if agent_profile.llm else "rule_based"
+        
+        # Apply agent_downcast logic: if enabled, treat validator and explorer as rule-based
+        if self.agent_downcast and agent_profile.archetype:
+            archetype_lower = agent_profile.archetype.lower()
+            if archetype_lower in ["validator", "explorer"]:
+                agent_type = "rule_based"
+        
+        return agent_type
+
     def __select_action(self, agent_profile: AgentProfile, recent_posts: list) -> tuple:
         """
         Determine which action an agent should perform.
@@ -991,12 +1012,7 @@ class SimulationClient:
         """
         # Page agents can ONLY perform share_link action
         if agent_profile.is_page == 1:
-            agent_type = "llm" if agent_profile.llm else "rule_based"
-            # Apply agent_downcast logic even for page agents
-            if self.agent_downcast and agent_profile.archetype:
-                archetype_lower = agent_profile.archetype.lower()
-                if archetype_lower in ["validator", "explorer"]:
-                    agent_type = "rule_based"
+            agent_type = self._determine_agent_type(agent_profile)
             return "share_link", agent_type, None
 
         # Define archetype-to-action mappings
@@ -1054,13 +1070,7 @@ class SimulationClient:
         selected_action = random.choices(actions, weights=weights)[0]
 
         # Determine agent type
-        agent_type = "llm" if agent_profile.llm else "rule_based"
-        
-        # Apply agent_downcast logic: if enabled, treat validator and explorer as rule-based
-        if self.agent_downcast and agent_profile.archetype:
-            archetype_lower = agent_profile.archetype.lower()
-            if archetype_lower in ["validator", "explorer"]:
-                agent_type = "rule_based"
+        agent_type = self._determine_agent_type(agent_profile)
 
         # Actions that require a target post
         target_required_actions = ["comment", "read", "share"]
