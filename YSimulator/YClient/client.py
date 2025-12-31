@@ -176,6 +176,12 @@ class SimulationClient:
         self.inactivity_threshold = churn_config.get("inactivity_threshold", 5)
         self.churn_percentage = churn_config.get("churn_percentage", 0.1)
 
+        # Load new agents configuration
+        new_agents_config = agents_config.get("new_agents", {})
+        self.new_agents_enabled = new_agents_config.get("enabled", False)
+        self.probability_new_agents = new_agents_config.get("probability_new_agents", 0.01)
+        self.percentage_new_agents = new_agents_config.get("percentage_new_agents", 0.01)
+
         # Load text annotation configuration
         self.enable_sentiment = simulation_config["simulation"].get("enable_sentiment", False)
         self.enable_toxicity = simulation_config["simulation"].get("enable_toxicity", False)
@@ -904,6 +910,23 @@ class SimulationClient:
                     except Exception as e:
                         self.logger.error(
                             f"Error evaluating churn: {e}",
+                            extra={"extra_data": {"error": str(e)}},
+                        )
+
+                # Evaluate new agents at the end of each day
+                if (is_last_slot or day_changed) and self.new_agents_enabled:
+                    try:
+                        self.logger.info(
+                            f"End of day {current_day}: Evaluating new agents (enabled={self.new_agents_enabled})"
+                        )
+                        new_agents_count = self._evaluate_new_agents(instruction.round_id)
+                        if new_agents_count > 0:
+                            self.logger.info(
+                                f"New agents evaluation: {new_agents_count} agents added to population"
+                            )
+                    except Exception as e:
+                        self.logger.error(
+                            f"Error evaluating new agents: {e}",
                             extra={"extra_data": {"error": str(e)}},
                         )
 
@@ -2679,6 +2702,206 @@ class SimulationClient:
                 self.logger.warning(f"Failed to get follow suggestions for agent {agent.id}: {e}")
 
         return daily_follow_actions
+
+    def _evaluate_new_agents(self, current_round_id: str) -> int:
+        """
+        Evaluate and add new agents at the end of a day.
+        
+        This method:
+        1. Counts non-churned agents
+        2. Calculates x = percentage_new_agents * non_churned_agents
+        3. Adds x new agents, each with probability probability_new_agents
+        4. New agent is a copy of an existing agent with unique name
+        5. Adds to database and agent_population.json
+        6. Sets joined_on to current round
+        
+        Args:
+            current_round_id: Current round ID (UUID string)
+            
+        Returns:
+            int: Number of new agents added
+        """
+        if not self.new_agents_enabled:
+            return 0
+        
+        # Get non-churned agents (agents without left_on set)
+        non_churned_agents = [agent for agent in self.agent_profiles if not hasattr(agent, 'left_on') or agent.left_on is None]
+        
+        if not non_churned_agents:
+            self.logger.warning("No non-churned agents available to use as templates for new agents")
+            return 0
+        
+        # Calculate x = percentage_new_agents * non_churned_agents
+        x = int(len(non_churned_agents) * self.percentage_new_agents)
+        
+        if x == 0:
+            return 0
+        
+        new_agents_added = 0
+        
+        # Add x new agents, each with probability probability_new_agents
+        for i in range(x):
+            # With probability_new_agents, add a new agent
+            if random.random() < self.probability_new_agents:
+                # Select a random existing agent as template
+                template_agent = random.choice(non_churned_agents)
+                
+                # Generate unique ID and name using Faker
+                import uuid
+                from faker import Faker
+                
+                fake = Faker()
+                new_agent_id = str(uuid.uuid4())
+                
+                # Generate name based on gender
+                gender = template_agent.gender
+                if gender and gender.lower() in ['male', 'm']:
+                    new_username = fake.name_male()
+                elif gender and gender.lower() in ['female', 'f']:
+                    new_username = fake.name_female()
+                else:
+                    # If gender is not specified or other, use generic name
+                    new_username = fake.name()
+                
+                # Replace spaces with underscores for username format
+                new_username = new_username.replace(' ', '_').replace('.', '')
+                
+                # Ensure uniqueness by checking existing usernames
+                existing_usernames = {agent.username for agent in self.agent_profiles}
+                base_username = new_username
+                counter = 1
+                while new_username in existing_usernames:
+                    new_username = f"{base_username}_{counter}"
+                    counter += 1
+                
+                # Create new agent profile as copy of template
+                new_agent = AgentProfile(
+                    id=new_agent_id,
+                    username=new_username,
+                    email=f"{new_username}@simulation.local",
+                    password=template_agent.password,
+                    leaning=template_agent.leaning,
+                    user_type=template_agent.user_type,
+                    age=template_agent.age,
+                    oe=template_agent.oe,
+                    co=template_agent.co,
+                    ex=template_agent.ex,
+                    ag=template_agent.ag,
+                    ne=template_agent.ne,
+                    language=template_agent.language,
+                    education_level=template_agent.education_level,
+                    joined_on=current_round_id,  # Set to current round
+                    gender=template_agent.gender,
+                    nationality=template_agent.nationality,
+                    profession=template_agent.profession,
+                    activity_profile=template_agent.activity_profile,
+                    archetype=template_agent.archetype,
+                    cluster=template_agent.cluster,
+                    llm=template_agent.llm,
+                    toxicity=template_agent.toxicity,
+                    daily_activity_level=template_agent.daily_activity_level,
+                    round_actions=template_agent.round_actions,
+                    is_page=0,  # New agents are not pages
+                )
+                
+                # Add to agent_profiles list
+                self.agent_profiles.append(new_agent)
+                
+                # Register with server
+                try:
+                    registration_result = ray.get(self.server.register_agents.remote([new_agent]))
+                    self.logger.info(
+                        f"New agent added: {new_username} (template: {template_agent.username})",
+                        extra={"extra_data": {"new_agent_id": new_agent_id, "template_id": template_agent.id}}
+                    )
+                    new_agents_added += 1
+                    
+                    # Update agent_population.json
+                    self._add_agent_to_population_file(new_agent)
+                    
+                except Exception as e:
+                    self.logger.error(
+                        f"Failed to register new agent {new_username}: {e}",
+                        extra={"extra_data": {"error": str(e)}}
+                    )
+        
+        return new_agents_added
+    
+    def _add_agent_to_population_file(self, agent: AgentProfile):
+        """
+        Add a new agent to the agent_population.json file.
+        
+        Args:
+            agent: AgentProfile to add to the file
+        """
+        # Find agent_population.json file using client-specific naming convention
+        client_specific_file = self.config_path / f"{self.client_id}_agent_population.json"
+        generic_file = self.config_path / "agent_population.json"
+        
+        if client_specific_file.exists():
+            agent_config_file = client_specific_file
+        else:
+            agent_config_file = generic_file
+        
+        if not agent_config_file.exists():
+            self.logger.warning(
+                f"Agent config file not found at {agent_config_file}, skipping agent addition to file"
+            )
+            return
+        
+        try:
+            # Load current agent_population.json
+            with open(agent_config_file, "r") as f:
+                agent_data = json.load(f)
+            
+            # Create agent dict
+            agent_dict = {
+                "id": agent.id,
+                "username": agent.username,
+                "email": agent.email,
+                "password": agent.password,
+                "leaning": agent.leaning,
+                "user_type": agent.user_type,
+                "age": agent.age,
+                "oe": agent.oe,
+                "co": agent.co,
+                "ex": agent.ex,
+                "ag": agent.ag,
+                "ne": agent.ne,
+                "language": agent.language,
+                "education_level": agent.education_level,
+                "joined_on": agent.joined_on,
+                "gender": agent.gender,
+                "nationality": agent.nationality,
+                "profession": agent.profession,
+                "activity_profile": agent.activity_profile,
+                "archetype": agent.archetype,
+                "cluster": agent.cluster,
+                "llm": agent.llm,
+                "toxicity": agent.toxicity,
+                "daily_activity_level": agent.daily_activity_level,
+                "round_actions": agent.round_actions,
+                "is_page": agent.is_page,
+            }
+            
+            # Add to agents list
+            if "agents" not in agent_data:
+                agent_data["agents"] = []
+            agent_data["agents"].append(agent_dict)
+            
+            # Write updated data back to file
+            with open(agent_config_file, "w") as f:
+                json.dump(agent_data, f, indent=2)
+            
+            self.logger.info(
+                f"Added agent {agent.username} to {agent_config_file.name}"
+            )
+        
+        except Exception as e:
+            self.logger.error(
+                f"Error adding agent to population file: {e}",
+                extra={"extra_data": {"error": str(e), "file": str(agent_config_file)}}
+            )
 
     def shutdown(self):
         ray.get(self.server.deregister_client.remote(self.client_id))

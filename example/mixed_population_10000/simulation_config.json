@@ -101,6 +101,11 @@
       "churn_probability": 0.01,
       "inactivity_threshold": 5,
       "churn_percentage": 0.1
+    },
+    "new_agents": {
+      "enabled": true,
+      "probability_new_agents": 0.01,
+      "percentage_new_agents": 0.01
     }
   }
 }
