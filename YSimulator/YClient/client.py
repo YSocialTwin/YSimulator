@@ -2844,6 +2844,7 @@ class SimulationClient:
             return 0
         
         new_agents_added = 0
+        new_agents_to_register = []  # Collect all new agents for batch registration
         
         self.logger.info(f"Attempting to add up to {x} new agents with probability {self.probability_new_agents}")
         
@@ -2881,6 +2882,8 @@ class SimulationClient:
                 
                 # Ensure uniqueness by checking existing usernames
                 existing_usernames = {agent.username for agent in self.agent_profiles}
+                # Also check against agents we're about to create
+                existing_usernames.update(agent.username for agent in new_agents_to_register)
                 base_username = new_username
                 counter = 1
                 while new_username in existing_usernames:
@@ -2918,28 +2921,46 @@ class SimulationClient:
                     left_on=None,  # New agents are not churned
                 )
                 
-                # Add to agent_profiles list
+                # Add to local list and batch registration list
                 self.agent_profiles.append(new_agent)
+                new_agents_to_register.append(new_agent)
                 
-                # Register with server
-                try:
-                    registration_result = ray.get(self.server.register_agents.remote([new_agent]))
-                    self.logger.info(
-                        f"New agent added: {new_username} (template: {template_agent.username})",
-                        extra={"extra_data": {"new_agent_id": new_agent_id, "template_id": template_agent.id}}
-                    )
-                    new_agents_added += 1
-                    
-                    # Update agent_population.json
-                    self._add_agent_to_population_file(new_agent)
-                    
-                except Exception as e:
-                    self.logger.error(
-                        f"Failed to register new agent {new_username}: {e}",
-                        extra={"extra_data": {"error": str(e)}}
-                    )
+                self.logger.debug(
+                    f"Prepared new agent: {new_username} (template: {template_agent.username})",
+                    extra={"extra_data": {"new_agent_id": new_agent_id, "template_id": template_agent.id}}
+                )
             else:
                 self.logger.debug(f"Skipping new agent slot {i+1}/{x} (roll {roll:.4f} >= {self.probability_new_agents})")
+        
+        # Batch register all new agents with server in a single call
+        if new_agents_to_register:
+            try:
+                self.logger.info(f"Batch registering {len(new_agents_to_register)} new agents with server")
+                registration_result = ray.get(self.server.register_agents.remote(new_agents_to_register))
+                new_agents_added = len(new_agents_to_register)
+                
+                self.logger.info(
+                    f"Successfully registered {new_agents_added} new agents in batch",
+                    extra={"extra_data": {
+                        "agent_ids": [agent.id for agent in new_agents_to_register],
+                        "agent_names": [agent.username for agent in new_agents_to_register]
+                    }}
+                )
+                
+                # Update agent_population.json for all new agents
+                for new_agent in new_agents_to_register:
+                    self._add_agent_to_population_file(new_agent)
+                    
+            except Exception as e:
+                self.logger.error(
+                    f"Failed to batch register {len(new_agents_to_register)} new agents: {e}",
+                    extra={"extra_data": {"error": str(e), "num_agents": len(new_agents_to_register)}}
+                )
+                # Remove failed agents from local list
+                for failed_agent in new_agents_to_register:
+                    if failed_agent in self.agent_profiles:
+                        self.agent_profiles.remove(failed_agent)
+                new_agents_added = 0
         
         self.logger.info(f"New agents evaluation complete: added {new_agents_added} out of {x} possible slots")
         return new_agents_added
