@@ -2631,7 +2631,7 @@ class SimulationClient:
         """
         try:
             # Get opinion dynamics config
-            opinion_config = self.sim_config.get("opinion_dynamics", {})
+            opinion_config = self.simulation_config.get("opinion_dynamics", {})
             if not opinion_config:
                 return None
             
