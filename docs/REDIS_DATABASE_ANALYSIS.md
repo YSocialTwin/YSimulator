@@ -50,6 +50,7 @@ Total Methods: 54 (including churn/new agents support)
 ├─ Redis Supported: 25 (46%)
 ├─ Database Only: 25 (46%)
 └─ Special/Utility: 4 (8%)
+Note: Percentages may not sum to exactly 100% due to rounding.
 ```
 
 **Recent Additions:**

@@ -328,14 +328,15 @@ At the end of each simulation day, if new agents is enabled:
 **Example Scenario:**
 ```
 Client Population: 100 agents, 10 churned, 90 non-churned
-Configuration: percentage_new_agents = 0.4, probability_new_agents = 1.0
+Configuration: percentage_new_agents = 0.05, probability_new_agents = 0.5
 
 Day 1 End: New agent evaluation
-  - Calculate slots: int(90 * 0.4) = 36 available slots
-  - For each slot: roll probability (all pass with 1.0)
-  - Create 36 new agents as copies of random existing agents
-  - Generate unique names: "John_Doe", "Jane_Smith_1", etc.
-  - Batch register all 36 agents with server
+  - Calculate slots: int(90 * 0.05) = 4 available slots
+  - For each slot: roll probability (50% chance each)
+  - Expected: ~2 new agents created (probabilistic)
+  - Create new agents as copies of random existing agents
+  - Generate unique names: "John_Doe", "Jane_Smith", etc.
+  - Batch register all new agents with server
   - Update agent_population.json with new agents
 Day 2+: New agents participate in simulation like original agents
 ```
