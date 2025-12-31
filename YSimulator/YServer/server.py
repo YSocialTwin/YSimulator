@@ -6,10 +6,13 @@ managing client registration, agent actions, and simulation state progression.
 """
 
 import functools
+import gzip
 import inspect
 import json
 import logging
+import os
 import random
+import shutil
 import sys
 import time
 import uuid
@@ -122,6 +125,20 @@ def log_server_request(func):
                 print(f"WARNING: Server request logging failed: {log_error}", file=sys.stderr)
     
     return wrapper
+
+
+def compress_rotated_log(source, dest):
+    """
+    Compress a rotated log file using gzip.
+    
+    Args:
+        source: Path to the source log file
+        dest: Path to the destination compressed file
+    """
+    with open(source, 'rb') as f_in:
+        with gzip.open(dest, 'wb') as f_out:
+            shutil.copyfileobj(f_in, f_out)
+    os.remove(source)
 
 
 @ray.remote
@@ -240,7 +257,7 @@ class OrchestratorServer:
         )
 
     def _setup_logging(self):
-        """Set up JSON logging for the server actor."""
+        """Set up JSON logging for the server actor with gzip compression."""
         log_dir = self.config_path / "logs"
         log_dir.mkdir(exist_ok=True)
 
@@ -257,6 +274,10 @@ class OrchestratorServer:
         from logging.handlers import RotatingFileHandler
 
         handler = RotatingFileHandler(log_file, maxBytes=LOG_FILE_MAX_BYTES, backupCount=LOG_FILE_BACKUP_COUNT)
+        
+        # Add compression for rotated files
+        handler.rotator = compress_rotated_log
+        handler.namer = lambda name: name + ".gz"
 
         class JsonFormatter(logging.Formatter):
             def format(self, record):
@@ -285,6 +306,10 @@ class OrchestratorServer:
         
         # Create handler for server requests (raw JSON, one per line)
         server_handler = RotatingFileHandler(server_log_file, maxBytes=LOG_FILE_MAX_BYTES, backupCount=LOG_FILE_BACKUP_COUNT)
+        
+        # Add compression for rotated files
+        server_handler.rotator = compress_rotated_log
+        server_handler.namer = lambda name: name + ".gz"
         
         # Simple formatter that just outputs the message (already JSON)
         class RawFormatter(logging.Formatter):

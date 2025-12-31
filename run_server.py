@@ -6,8 +6,11 @@ the simulation, coordinates clients, and handles agent registration.
 """
 
 import argparse
+import gzip
 import json
 import logging
+import os
+import shutil
 import sys
 import time
 from datetime import datetime
@@ -21,9 +24,23 @@ from YSimulator.YServer.server import OrchestratorServer
 from YSimulator.utils.init_db import initialize_database, database_exists
 
 
+def compress_rotated_log(source, dest):
+    """
+    Compress a rotated log file using gzip.
+    
+    Args:
+        source: Path to the source log file
+        dest: Path to the destination compressed file
+    """
+    with open(source, 'rb') as f_in:
+        with gzip.open(dest, 'wb') as f_out:
+            shutil.copyfileobj(f_in, f_out)
+    os.remove(source)
+
+
 def setup_logging(config_path: Path, server_name: str) -> logging.Logger:
     """
-    Set up rotating JSON logging for the server.
+    Set up rotating JSON logging for the server with gzip compression.
 
     Args:
         config_path: Path to the configuration directory
@@ -43,6 +60,10 @@ def setup_logging(config_path: Path, server_name: str) -> logging.Logger:
 
     # Create rotating file handler (10MB per file, keep 5 backups)
     handler = RotatingFileHandler(log_file, maxBytes=10 * 1024 * 1024, backupCount=5)  # 10MB
+    
+    # Add compression for rotated files
+    handler.rotator = compress_rotated_log
+    handler.namer = lambda name: name + ".gz"
 
     # Create JSON formatter
     class JsonFormatter(logging.Formatter):

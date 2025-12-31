@@ -5,9 +5,12 @@ This module contains the Ray remote actor that runs simulation clients,
 managing agent behaviors and coordinating with the orchestrator server.
 """
 
+import gzip
 import json
 import logging
+import os
 import random
+import shutil
 import time
 from datetime import datetime
 from logging.handlers import RotatingFileHandler
@@ -85,6 +88,20 @@ FOLLOW_RECSYS_CLASS_MAP = {
     "adamic_adar": AdamicAdarFollowRecSys,
     "preferential_attachment": PreferentialAttachmentFollowRecSys,
 }
+
+
+def compress_rotated_log(source, dest):
+    """
+    Compress a rotated log file using gzip.
+    
+    Args:
+        source: Path to the source log file
+        dest: Path to the destination compressed file
+    """
+    with open(source, 'rb') as f_in:
+        with gzip.open(dest, 'wb') as f_out:
+            shutil.copyfileobj(f_in, f_out)
+    os.remove(source)
 
 
 @ray.remote
@@ -231,7 +248,7 @@ class SimulationClient:
         )
 
     def _setup_logging(self):
-        """Set up JSON logging for the client actor."""
+        """Set up JSON logging for the client actor with gzip compression."""
         log_dir = self.config_path / "logs"
         log_dir.mkdir(exist_ok=True)
 
@@ -246,6 +263,10 @@ class SimulationClient:
 
         # Create file handler with JSON formatting
         handler = RotatingFileHandler(log_file, maxBytes=10 * 1024 * 1024, backupCount=5)  # 10MB
+        
+        # Add compression for rotated files
+        handler.rotator = compress_rotated_log
+        handler.namer = lambda name: name + ".gz"
 
         class JsonFormatter(logging.Formatter):
             def format(self, record):
@@ -267,7 +288,7 @@ class SimulationClient:
         self.logger.addHandler(handler)
 
         # Create action logger for individual agent actions
-        action_log_file = log_dir / f"{self.client_id}_actions.log"
+        action_log_file = log_dir / f"{self.client_id}_client.log"
         self.action_logger = logging.getLogger(f"YSimulator.Client.{self.client_id}.Actions")
         self.action_logger.setLevel(logging.INFO)
         self.action_logger.handlers = []
@@ -276,6 +297,10 @@ class SimulationClient:
         action_handler = RotatingFileHandler(
             action_log_file, maxBytes=10 * 1024 * 1024, backupCount=5
         )
+        
+        # Add compression for rotated files
+        action_handler.rotator = compress_rotated_log
+        action_handler.namer = lambda name: name + ".gz"
 
         class ActionFormatter(logging.Formatter):
             def format(self, record):
