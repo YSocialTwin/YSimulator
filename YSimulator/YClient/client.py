@@ -428,10 +428,7 @@ class SimulationClient:
         Create agent profiles from configuration.
         Combines predefined agents with generated agents.
         """
-        import time
-
         agents = []
-        current_time = int(time.time())
 
         # Load predefined agents
         if "agents" in agent_config:
@@ -451,7 +448,7 @@ class SimulationClient:
                     ne=agent_data.get("ne"),
                     language=agent_data.get("language", "en"),
                     education_level=agent_data.get("education_level"),
-                    joined_on=agent_data.get("joined_on", current_time),
+                    joined_on=agent_data.get("joined_on"),  # Should be Round UUID or None
                     gender=agent_data.get("gender"),
                     nationality=agent_data.get("nationality"),
                     profession=agent_data.get("profession", ""),
@@ -519,7 +516,7 @@ class SimulationClient:
                     ne=random.choice(["low", "medium", "high"]),
                     language=defaults.get("language", "en"),
                     education_level=random.choice(education_levels),
-                    joined_on=current_time,
+                    joined_on=None,  # Will be set by server to current round on registration
                     gender=random.choice(genders),
                     nationality=random.choice(nationalities),
                     profession=random.choice(professions),
@@ -922,7 +919,9 @@ class SimulationClient:
                         self.logger.info(
                             f"End of day {current_day}: Evaluating new agents (enabled={self.new_agents_enabled})"
                         )
-                        new_agents_count = self._evaluate_new_agents(instruction.round_id)
+                        # Get current round_id from server
+                        current_round_id = ray.get(self.server.get_current_round_id.remote())
+                        new_agents_count = self._evaluate_new_agents(current_round_id)
                         self.logger.info(
                             f"New agents evaluation complete: {new_agents_count} agents added"
                         )
