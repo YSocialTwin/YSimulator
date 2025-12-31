@@ -142,6 +142,9 @@ class SimulationClient:
         self.llm = llm_handle
         self.news_service = news_service_handle
         self.config_path = Path(config_path)
+        
+        # Store simulation config for logging configuration
+        self.simulation_config = simulation_config if simulation_config else {}
 
         # Load simulation configuration with defaults
         if simulation_config is None:
@@ -249,10 +252,13 @@ class SimulationClient:
 
     def _setup_logging(self):
         """Set up JSON logging for the client actor with gzip compression."""
+        # Get logging configuration
+        logging_config = self.simulation_config.get("logging", {})
+        enable_actor_log = logging_config.get("enable_actor_log", True)
+        enable_client_log = logging_config.get("enable_client_log", True)
+        
         log_dir = self.config_path / "logs"
         log_dir.mkdir(exist_ok=True)
-
-        log_file = log_dir / f"{self.client_id}_actor.log"
 
         # Create logger
         self.logger = logging.getLogger(f"YSimulator.Client.{self.client_id}")
@@ -261,54 +267,57 @@ class SimulationClient:
         # Remove existing handlers
         self.logger.handlers = []
 
-        # Create file handler with JSON formatting
-        handler = RotatingFileHandler(log_file, maxBytes=10 * 1024 * 1024, backupCount=5)  # 10MB
-        
-        # Add compression for rotated files
-        handler.rotator = compress_rotated_log
-        handler.namer = lambda name: name + ".gz"
+        # Create file handler with JSON formatting (actor log)
+        if enable_actor_log:
+            log_file = log_dir / f"{self.client_id}_actor.log"
+            handler = RotatingFileHandler(log_file, maxBytes=10 * 1024 * 1024, backupCount=5)  # 10MB
+            
+            # Add compression for rotated files
+            handler.rotator = compress_rotated_log
+            handler.namer = lambda name: name + ".gz"
 
-        class JsonFormatter(logging.Formatter):
-            def format(self, record):
-                log_data = {
-                    "timestamp": datetime.utcnow().isoformat(),
-                    "level": record.levelname,
-                    "message": record.getMessage(),
-                    "module": record.module,
-                    "function": record.funcName,
-                    "line": record.lineno,
-                }
-                if hasattr(record, "execution_time"):
-                    log_data["execution_time_ms"] = record.execution_time
-                if hasattr(record, "extra_data"):
-                    log_data.update(record.extra_data)
-                return json.dumps(log_data)
+            class JsonFormatter(logging.Formatter):
+                def format(self, record):
+                    log_data = {
+                        "timestamp": datetime.utcnow().isoformat(),
+                        "level": record.levelname,
+                        "message": record.getMessage(),
+                        "module": record.module,
+                        "function": record.funcName,
+                        "line": record.lineno,
+                    }
+                    if hasattr(record, "execution_time"):
+                        log_data["execution_time_ms"] = record.execution_time
+                    if hasattr(record, "extra_data"):
+                        log_data.update(record.extra_data)
+                    return json.dumps(log_data)
 
-        handler.setFormatter(JsonFormatter())
-        self.logger.addHandler(handler)
+            handler.setFormatter(JsonFormatter())
+            self.logger.addHandler(handler)
 
-        # Create action logger for individual agent actions
-        action_log_file = log_dir / f"{self.client_id}_client.log"
+        # Create action logger for individual agent actions (client log)
         self.action_logger = logging.getLogger(f"YSimulator.Client.{self.client_id}.Actions")
         self.action_logger.setLevel(logging.INFO)
         self.action_logger.handlers = []
         self.action_logger.propagate = False  # Don't propagate to parent logger
 
-        action_handler = RotatingFileHandler(
-            action_log_file, maxBytes=10 * 1024 * 1024, backupCount=5
-        )
-        
-        # Add compression for rotated files
-        action_handler.rotator = compress_rotated_log
-        action_handler.namer = lambda name: name + ".gz"
+        if enable_client_log:
+            action_log_file = log_dir / f"{self.client_id}_client.log"
+            action_handler = RotatingFileHandler(
+                action_log_file, maxBytes=10 * 1024 * 1024, backupCount=5
+            )
+            
+            # Add compression for rotated files
+            action_handler.rotator = compress_rotated_log
+            action_handler.namer = lambda name: name + ".gz"
 
-        class ActionFormatter(logging.Formatter):
-            def format(self, record):
-                # Simple format for action logs: one JSON object per line
-                return record.getMessage()
+            class ActionFormatter(logging.Formatter):
+                def format(self, record):
+                    # Simple format for action logs: one JSON object per line
+                    return record.getMessage()
 
-        action_handler.setFormatter(ActionFormatter())
-        self.action_logger.addHandler(action_handler)
+            action_handler.setFormatter(ActionFormatter())
+            self.action_logger.addHandler(action_handler)
 
         # Initialize tracking variables for hourly and daily summaries
         self.hourly_actions = []  # Track actions for current hour

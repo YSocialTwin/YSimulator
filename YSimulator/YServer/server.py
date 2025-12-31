@@ -183,10 +183,13 @@ class OrchestratorServer:
         self.server_name = server_name
         self.config_path = Path(config_path)
         self.timeout_seconds = timeout_seconds
-
-        # Archetype configuration
+        
+        # Store simulation config for logging configuration
         if simulation_config is None:
             simulation_config = {}
+        self.simulation_config = simulation_config
+
+        # Archetype configuration
         self.archetype_config = simulation_config.get("agent_archetypes", {})
         self.archetypes_enabled = self.archetype_config.get("enabled", False)
         self.archetype_distribution = self.archetype_config.get("distribution", {})
@@ -258,10 +261,13 @@ class OrchestratorServer:
 
     def _setup_logging(self):
         """Set up JSON logging for the server actor with gzip compression."""
+        # Get logging configuration
+        logging_config = self.simulation_config.get("logging", {})
+        enable_actor_log = logging_config.get("enable_actor_log", True)
+        enable_request_log = logging_config.get("enable_request_log", True)
+        
         log_dir = self.config_path / "logs"
         log_dir.mkdir(exist_ok=True)
-
-        log_file = log_dir / f"{self.server_name}_actor.log"
 
         # Create logger
         self.logger = logging.getLogger(f"YSimulator.Server.{self.server_name}")
@@ -270,54 +276,62 @@ class OrchestratorServer:
         # Remove existing handlers
         self.logger.handlers = []
 
-        # Create file handler with JSON formatting
-        from logging.handlers import RotatingFileHandler
+        # Create file handler with JSON formatting (actor log)
+        if enable_actor_log:
+            log_file = log_dir / f"{self.server_name}_actor.log"
+            
+            from logging.handlers import RotatingFileHandler
 
-        handler = RotatingFileHandler(log_file, maxBytes=LOG_FILE_MAX_BYTES, backupCount=LOG_FILE_BACKUP_COUNT)
-        
-        # Add compression for rotated files
-        handler.rotator = compress_rotated_log
-        handler.namer = lambda name: name + ".gz"
+            handler = RotatingFileHandler(log_file, maxBytes=LOG_FILE_MAX_BYTES, backupCount=LOG_FILE_BACKUP_COUNT)
+            
+            # Add compression for rotated files
+            handler.rotator = compress_rotated_log
+            handler.namer = lambda name: name + ".gz"
 
-        class JsonFormatter(logging.Formatter):
-            def format(self, record):
-                log_data = {
-                    "timestamp": datetime.now(timezone.utc).isoformat(),
-                    "level": record.levelname,
-                    "message": record.getMessage(),
-                    "module": record.module,
-                    "function": record.funcName,
-                    "line": record.lineno,
-                }
-                if hasattr(record, "execution_time"):
-                    log_data["execution_time_ms"] = record.execution_time
-                if hasattr(record, "extra_data"):
-                    log_data.update(record.extra_data)
-                return json.dumps(log_data)
+            class JsonFormatter(logging.Formatter):
+                def format(self, record):
+                    log_data = {
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                        "level": record.levelname,
+                        "message": record.getMessage(),
+                        "module": record.module,
+                        "function": record.funcName,
+                        "line": record.lineno,
+                    }
+                    if hasattr(record, "execution_time"):
+                        log_data["execution_time_ms"] = record.execution_time
+                    if hasattr(record, "extra_data"):
+                        log_data.update(record.extra_data)
+                    return json.dumps(log_data)
 
-        handler.setFormatter(JsonFormatter())
-        self.logger.addHandler(handler)
+            handler.setFormatter(JsonFormatter())
+            self.logger.addHandler(handler)
 
         # Set up server request logger for _server.log
-        server_log_file = log_dir / "_server.log"
         self.server_request_logger = logging.getLogger(f"YSimulator.Server.{self.server_name}.Requests")
         self.server_request_logger.setLevel(logging.INFO)
         self.server_request_logger.handlers = []
         
-        # Create handler for server requests (raw JSON, one per line)
-        server_handler = RotatingFileHandler(server_log_file, maxBytes=LOG_FILE_MAX_BYTES, backupCount=LOG_FILE_BACKUP_COUNT)
+        if enable_request_log:
+            from logging.handlers import RotatingFileHandler
+            
+            server_log_file = log_dir / "_server.log"
+            
+            # Create handler for server requests (raw JSON, one per line)
+            server_handler = RotatingFileHandler(server_log_file, maxBytes=LOG_FILE_MAX_BYTES, backupCount=LOG_FILE_BACKUP_COUNT)
+            
+            # Add compression for rotated files
+            server_handler.rotator = compress_rotated_log
+            server_handler.namer = lambda name: name + ".gz"
+            
+            # Simple formatter that just outputs the message (already JSON)
+            class RawFormatter(logging.Formatter):
+                def format(self, record):
+                    return record.getMessage()
+            
+            server_handler.setFormatter(RawFormatter())
+            self.server_request_logger.addHandler(server_handler)
         
-        # Add compression for rotated files
-        server_handler.rotator = compress_rotated_log
-        server_handler.namer = lambda name: name + ".gz"
-        
-        # Simple formatter that just outputs the message (already JSON)
-        class RawFormatter(logging.Formatter):
-            def format(self, record):
-                return record.getMessage()
-        
-        server_handler.setFormatter(RawFormatter())
-        self.server_request_logger.addHandler(server_handler)
         # Prevent propagation to avoid duplicate logs
         self.server_request_logger.propagate = False
 
