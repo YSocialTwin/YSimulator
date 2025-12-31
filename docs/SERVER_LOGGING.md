@@ -106,8 +106,8 @@ with open('logs/_server.log', 'r') as f:
 ## Performance Considerations
 
 - Log files use rotating file handlers (10MB per file, 5 backups)
-- Logging is asynchronous and should not significantly impact server performance
-- Failed logging attempts do not break the server (errors are silently caught)
+- Logging is lightweight and has minimal impact on server performance
+- Failed logging attempts do not break the server (errors are logged to stderr)
 - Each request generates exactly one log entry
 
 ## Monitoring and Analysis

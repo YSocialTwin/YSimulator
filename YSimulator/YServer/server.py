@@ -9,6 +9,7 @@ import functools
 import json
 import logging
 import random
+import sys
 import time
 import uuid
 from datetime import datetime, timezone
@@ -109,7 +110,6 @@ def log_server_request(func):
             except Exception as log_error:
                 # Don't let logging errors break the application
                 # Log to stderr as fallback for debugging
-                import sys
                 print(f"WARNING: Server request logging failed: {log_error}", file=sys.stderr)
     
     return wrapper
