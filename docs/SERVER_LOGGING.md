@@ -25,7 +25,7 @@ Each log entry is a single-line JSON object with the following fields:
 ### Field Descriptions
 
 - **request_id**: Unique identifier for the request (format: `timestamp-random_number`)
-- **client_name**: The client ID that made the request. This is extracted from the `client_id` parameter if present in the method signature. If the method doesn't have a `client_id` parameter, this will be "unknown". Note: Methods like `register_agents` or `add_follow_relationships_batch` don't include a `client_id` parameter and will show "unknown" even though they are called by a specific client.
+- **client_name**: The client ID that made the request. All server methods now accept an optional `client_id` parameter which is used to identify the client making the request. When clients pass `client_id`, it will be logged here. If not passed, it will show "unknown".
 - **path**: The method name that was called (e.g., `register_client`, `submit_actions`)
 - **status_code**: HTTP-style status code (200 for success, 500 for errors)
 - **duration**: Execution time in seconds (float)

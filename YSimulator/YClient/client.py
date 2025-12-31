@@ -685,7 +685,7 @@ class SimulationClient:
                 )
                 try:
                     follow_count = ray.get(
-                        self.server.add_follow_relationships_batch.remote(follows_to_create)
+                        self.server.add_follow_relationships_batch.remote(follows_to_create, client_id=self.client_id)
                     )
                     if follow_count != expected_count:
                         self.logger.warning(
@@ -738,7 +738,7 @@ class SimulationClient:
         start_time = time.time()
         print(f"[{self.client_id}] Registering {len(self.agent_profiles)} agents with server...")
 
-        registration_result = ray.get(self.server.register_agents.remote(self.agent_profiles))
+        registration_result = ray.get(self.server.register_agents.remote(self.agent_profiles, client_id=self.client_id))
         reg_time = (time.time() - start_time) * 1000
 
         self.logger.info(
@@ -1443,21 +1443,21 @@ class SimulationClient:
 
         if agent_type == "llm":
             # LLM: Get the post content and ask for a comment
-            post_data = ray.get(self.server.get_post.remote(target_post))
+            post_data = ray.get(self.server.get_post.remote(target_post, client_id=self.client_id))
             if post_data:
                 post_content = post_data.get("tweet", "")
                 author_id = post_data.get("user_id")
                 # Get author username
                 author_name = "Someone"
                 if author_id:
-                    author_user = ray.get(self.server.get_user.remote(author_id))
+                    author_user = ray.get(self.server.get_user.remote(author_id, client_id=self.client_id))
                     if author_user:
                         author_name = author_user.get("username", "Someone")
 
                 # Get thread context (preceding posts/comments in chronological order)
                 thread_context = ray.get(
                     self.server.get_thread_context.remote(
-                        target_post, self.max_length_thread_reading
+                        target_post, self.max_length_thread_reading, client_id=self.client_id
                     )
                 )
 
@@ -1474,7 +1474,7 @@ class SimulationClient:
             self._annotate_action_content(action)
             actions.append(action)
             # Track for secondary follow (rule-based comment)
-            post_data = ray.get(self.server.get_post.remote(target_post))
+            post_data = ray.get(self.server.get_post.remote(target_post, client_id=self.client_id))
             if post_data:
                 rule_based_interactions.append(
                     (
@@ -1506,7 +1506,7 @@ class SimulationClient:
 
         if agent_type == "llm":
             # LLM: Get the post content and ask for a reaction decision
-            post_data = ray.get(self.server.get_post.remote(target_post))
+            post_data = ray.get(self.server.get_post.remote(target_post, client_id=self.client_id))
             if post_data:
                 post_content = post_data.get("tweet", "")
                 # Fire off async LLM call to decide reaction with agent attributes
@@ -1519,7 +1519,7 @@ class SimulationClient:
             if action:  # Only add if not IGNORE
                 actions.append(action)
                 # Track for secondary follow (rule-based read)
-                post_data = ray.get(self.server.get_post.remote(target_post))
+                post_data = ray.get(self.server.get_post.remote(target_post, client_id=self.client_id))
                 if post_data:
                     rule_based_interactions.append(
                         (
@@ -1777,7 +1777,7 @@ class SimulationClient:
         # Search for posts on this topic (up to 10 recent posts from other users)
         try:
             found_posts = ray.get(
-                self.server.search_posts_by_topic.remote(topic_id, agent.id, limit=10)
+                self.server.search_posts_by_topic.remote(topic_id, agent.id, limit=10, client_id=self.client_id)
             )
         except Exception as e:
             self.logger.warning(
@@ -1823,7 +1823,7 @@ class SimulationClient:
 
         # Get the post content
         try:
-            post_data = ray.get(self.server.get_post.remote(target_post))
+            post_data = ray.get(self.server.get_post.remote(target_post, client_id=self.client_id))
             if not post_data:
                 self.logger.warning(
                     f"search action: post {target_post} not found for agent {agent.username}",
@@ -2019,7 +2019,7 @@ class SimulationClient:
             self.logger.debug(
                 f"[REPLY] Checking unreplied mentions for agent {agent.username} (ID: {agent.id})"
             )
-            unreplied_mentions = ray.get(self.server.get_unreplied_mentions.remote(agent.id))
+            unreplied_mentions = ray.get(self.server.get_unreplied_mentions.remote(agent.id, client_id=self.client_id))
 
             if not unreplied_mentions:
                 self.logger.debug(f"[REPLY] No unreplied mentions found for agent {agent.username}")
@@ -2039,7 +2039,7 @@ class SimulationClient:
             )
 
             # Get the post content to reply to
-            post_data = ray.get(self.server.get_post.remote(post_id))
+            post_data = ray.get(self.server.get_post.remote(post_id, client_id=self.client_id))
             if not post_data:
                 self.logger.warning(
                     f"[REPLY] Post {post_id} not found for mention {mention_id} - cannot reply"
@@ -2056,7 +2056,7 @@ class SimulationClient:
             # Get author username
             author_username = "Someone"
             if author_id:
-                author_user = ray.get(self.server.get_user.remote(author_id))
+                author_user = ray.get(self.server.get_user.remote(author_id, client_id=self.client_id))
                 if author_user:
                     author_username = author_user.get("username", "Someone")
 
@@ -2068,7 +2068,7 @@ class SimulationClient:
             if agent_type == "llm":
                 # Get thread context (preceding posts/comments in chronological order)
                 thread_context = ray.get(
-                    self.server.get_thread_context.remote(post_id, self.max_length_thread_reading)
+                    self.server.get_thread_context.remote(post_id, self.max_length_thread_reading, client_id=self.client_id)
                 )
                 self.logger.debug(
                     f"[REPLY] Retrieved thread context: {len(thread_context)} previous posts/comments"
@@ -2487,7 +2487,7 @@ class SimulationClient:
                     )
 
                 # Track for secondary follow (comment action)
-                post_data = ray.get(self.server.get_post.remote(target))
+                post_data = ray.get(self.server.get_post.remote(target, client_id=self.client_id))
                 if post_data:
                     secondary_follow_candidates.append(
                         (a_id, cid, post_data.get("user_id"), post_data.get("tweet", ""), True)
@@ -2520,7 +2520,7 @@ class SimulationClient:
                 actions.append(action)
 
                 # Track for secondary follow (read/reaction action)
-                post_data = ray.get(self.server.get_post.remote(target))
+                post_data = ray.get(self.server.get_post.remote(target, client_id=self.client_id))
                 if post_data:
                     secondary_follow_candidates.append(
                         (a_id, cid, post_data.get("user_id"), post_data.get("tweet", ""), True)
@@ -2953,7 +2953,7 @@ class SimulationClient:
         if new_agents_to_register:
             try:
                 self.logger.info(f"Batch registering {len(new_agents_to_register)} new agents with server")
-                registration_result = ray.get(self.server.register_agents.remote(new_agents_to_register))
+                registration_result = ray.get(self.server.register_agents.remote(new_agents_to_register, client_id=self.client_id))
                 new_agents_added = len(new_agents_to_register)
                 
                 self.logger.info(

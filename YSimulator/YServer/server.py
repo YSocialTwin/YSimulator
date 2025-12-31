@@ -606,7 +606,7 @@ class OrchestratorServer:
         return self.interest_manager.store_article_topics(article_id, topic_names)
 
     @log_server_request
-    def register_agents(self, agents: list) -> dict:
+    def register_agents(self, agents: list, client_id: str = None) -> dict:
         """
         Register agent profiles in the database if they don't already exist.
         For page agents (is_page=1), also creates a Website entry.
@@ -615,6 +615,7 @@ class OrchestratorServer:
 
         Args:
             agents: List of AgentProfile dataclass instances
+            client_id: Optional client identifier for logging purposes
 
         Returns:
             dict: Summary of registration results with counts
@@ -737,7 +738,7 @@ class OrchestratorServer:
             raise
 
     @log_server_request
-    def add_follow_relationship(self, follow_data: dict) -> bool:
+    def add_follow_relationship(self, follow_data: dict, client_id: str = None) -> bool:
         """
         Add a follow relationship to the database.
 
@@ -750,6 +751,7 @@ class OrchestratorServer:
                 - follower_id: UUID of follower
                 - action: 'follow' or 'unfollow'
                 - round: Round ID (can be empty for initial setup)
+            client_id: Optional client identifier for logging purposes
 
         Returns:
             bool: True if successful, False otherwise
@@ -813,7 +815,7 @@ class OrchestratorServer:
             return False
 
     @log_server_request
-    def add_follow_relationships_batch(self, follows_data: list) -> int:
+    def add_follow_relationships_batch(self, follows_data: list, client_id: str = None) -> int:
         """
         Add multiple follow relationships to the database in batch.
 
@@ -828,6 +830,7 @@ class OrchestratorServer:
                 - follower_id: UUID of follower
                 - action: 'follow' or 'unfollow'
                 - round: Round ID (can be empty for initial setup)
+            client_id: Optional client identifier for logging purposes
 
         Returns:
             int: Number of follow relationships successfully added
@@ -908,12 +911,13 @@ class OrchestratorServer:
             return False
 
     @log_server_request
-    def get_unreplied_mentions(self, user_id: str) -> List[Dict[str, Any]]:
+    def get_unreplied_mentions(self, user_id: str, client_id: str = None) -> List[Dict[str, Any]]:
         """
         Get all unreplied mentions for a user.
 
         Args:
             user_id: UUID of the user
+            client_id: Optional client identifier for logging purposes
 
         Returns:
             List[Dict]: List of mention records with keys: id, user_id, post_id, round, answered
@@ -2089,7 +2093,7 @@ class OrchestratorServer:
 
     @log_server_request
     def get_recommended_posts(
-        self, agent_id: str, mode: str = "random", limit: int = 5, followers_ratio: float = 0.6
+        self, agent_id: str, mode: str = "random", limit: int = 5, followers_ratio: float = 0.6, client_id: str = None
     ) -> List[str]:
         """
         Get recommended posts for an agent using the specified recommendation strategy.
@@ -2338,12 +2342,13 @@ class OrchestratorServer:
             return []
 
     @log_server_request
-    def get_post(self, post_id: str) -> Optional[Dict[str, Any]]:
+    def get_post(self, post_id: str, client_id: str = None) -> Optional[Dict[str, Any]]:
         """
         Get a post by its ID.
 
         Args:
             post_id: UUID of the post to retrieve
+            client_id: Optional client identifier for logging purposes
 
         Returns:
             Dictionary with post data or None if not found
@@ -2351,7 +2356,7 @@ class OrchestratorServer:
         return self.db.get_post(post_id)
 
     @log_server_request
-    def get_thread_context(self, post_id: str, max_length: int = 5) -> List[Dict[str, Any]]:
+    def get_thread_context(self, post_id: str, max_length: int = 5, client_id: str = None) -> List[Dict[str, Any]]:
         """
         Get thread context for a post - retrieve up to max_length posts/comments
         that immediately precede the target post in the discussion thread.
@@ -2362,6 +2367,7 @@ class OrchestratorServer:
         Args:
             post_id: UUID of the post to get context for
             max_length: Maximum number of preceding posts/comments to return
+            client_id: Optional client identifier for logging purposes
 
         Returns:
             List of dicts with keys: id, user_id, username, tweet, round
@@ -2370,12 +2376,13 @@ class OrchestratorServer:
         return self.db.get_thread_context(post_id, max_length)
 
     @log_server_request
-    def get_user(self, user_id: str) -> Optional[Dict[str, Any]]:
+    def get_user(self, user_id: str, client_id: str = None) -> Optional[Dict[str, Any]]:
         """
         Get a user by their ID.
 
         Args:
             user_id: UUID of the user to retrieve
+            client_id: Optional client identifier for logging purposes
 
         Returns:
             Dictionary with user data or None if not found
@@ -2383,7 +2390,7 @@ class OrchestratorServer:
         return self.db.get_user(user_id)
 
     @log_server_request
-    def search_posts_by_topic(self, topic_id: str, agent_id: str, limit: int = 10) -> List[str]:
+    def search_posts_by_topic(self, topic_id: str, agent_id: str, limit: int = 10, client_id: str = None) -> List[str]:
         """
         Search for recent posts on a specific topic from other users.
 
@@ -2399,7 +2406,7 @@ class OrchestratorServer:
 
     @log_server_request
     def get_follow_suggestions(
-        self, agent_id: str, mode: str = "random", n_neighbors: int = 10, leaning_bias: int = 1
+        self, agent_id: str, mode: str = "random", n_neighbors: int = 10, leaning_bias: int = 1, client_id: str = None
     ) -> List[str]:
         """
         Get follow suggestions for an agent using the specified recommendation strategy.
