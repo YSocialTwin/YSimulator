@@ -2656,7 +2656,9 @@ class SimulationClient:
             updated_opinions = {}
             for topic_id in topic_ids:
                 # Get agent's current opinion from local cache (from AgentProfile)
-                agent_profile = self.agent_profiles.get(agent_id)
+                agent_profile = next(
+                    (a for a in self.agent_profiles if a.id == agent_id), None
+                )
                 if not agent_profile or not agent_profile.opinions:
                     continue
                 
