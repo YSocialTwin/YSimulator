@@ -2909,3 +2909,167 @@ class DatabaseMiddleware:
             return False
         finally:
             session.close()
+
+    def update_agent_last_active_day(self, agent_id: str, day: int) -> bool:
+        """
+        Update the last_active_day field for an agent.
+        
+        Args:
+            agent_id: Agent ID (UUID string)
+            day: Current simulation day
+            
+        Returns:
+            bool: True if successful, False otherwise
+        """
+        try:
+            if self.use_redis:
+                key = self._redis_key("user_mgmt", agent_id)
+                self.redis_client.hset(key, "last_active_day", day)
+                return True
+            else:
+                session = Session(self.engine)
+                try:
+                    session.query(User_mgmt).filter_by(id=agent_id).update({
+                        "last_active_day": day
+                    })
+                    session.commit()
+                    return True
+                except Exception as e:
+                    session.rollback()
+                    self.logger.error(
+                        f"Error updating last_active_day for agent {agent_id}: {e}",
+                        extra={"extra_data": {"agent_id": agent_id, "error": str(e)}}
+                    )
+                    return False
+                finally:
+                    session.close()
+        except Exception as e:
+            self.logger.error(
+                f"Error updating last_active_day: {e}",
+                extra={"extra_data": {"agent_id": agent_id, "error": str(e)}}
+            )
+            return False
+
+    def get_inactive_agents(self, current_day: int, inactivity_threshold: int) -> List[str]:
+        """
+        Get agents that have been inactive for the specified threshold.
+        
+        Args:
+            current_day: Current simulation day
+            inactivity_threshold: Number of days of inactivity
+            
+        Returns:
+            List of agent IDs (UUID strings)
+        """
+        try:
+            if self.use_redis:
+                inactive_agents = []
+                # Get all user keys
+                pattern = self._redis_key("user_mgmt", "*")
+                for key in self.redis_client.scan_iter(match=pattern):
+                    agent_data = self.redis_client.hgetall(key)
+                    
+                    # Skip if already churned
+                    if agent_data.get("churned") == "1":
+                        continue
+                    
+                    # Check last_active_day
+                    last_active = agent_data.get("last_active_day")
+                    if last_active:
+                        days_inactive = current_day - int(last_active)
+                        if days_inactive >= inactivity_threshold:
+                            inactive_agents.append(agent_data.get("id"))
+                
+                return inactive_agents
+            else:
+                session = Session(self.engine)
+                try:
+                    # Query for inactive agents
+                    inactive_agents = session.query(User_mgmt.id).filter(
+                        User_mgmt.churned == 0,
+                        User_mgmt.last_active_day.isnot(None),
+                        (current_day - User_mgmt.last_active_day) >= inactivity_threshold
+                    ).all()
+                    
+                    return [agent.id for agent in inactive_agents]
+                finally:
+                    session.close()
+        except Exception as e:
+            self.logger.error(
+                f"Error getting inactive agents: {e}",
+                extra={"extra_data": {"error": str(e)}}
+            )
+            return []
+
+    def set_agent_churned(self, agent_id: str, churned: int = 1) -> bool:
+        """
+        Set the churned flag for an agent.
+        
+        Args:
+            agent_id: Agent ID (UUID string)
+            churned: Churned status (1 = churned, 0 = not churned)
+            
+        Returns:
+            bool: True if successful, False otherwise
+        """
+        try:
+            if self.use_redis:
+                key = self._redis_key("user_mgmt", agent_id)
+                self.redis_client.hset(key, "churned", churned)
+                return True
+            else:
+                session = Session(self.engine)
+                try:
+                    session.query(User_mgmt).filter_by(id=agent_id).update({
+                        "churned": churned
+                    })
+                    session.commit()
+                    return True
+                except Exception as e:
+                    session.rollback()
+                    self.logger.error(
+                        f"Error setting churned flag for agent {agent_id}: {e}",
+                        extra={"extra_data": {"agent_id": agent_id, "error": str(e)}}
+                    )
+                    return False
+                finally:
+                    session.close()
+        except Exception as e:
+            self.logger.error(
+                f"Error setting churned flag: {e}",
+                extra={"extra_data": {"agent_id": agent_id, "error": str(e)}}
+            )
+            return False
+
+    def get_churned_agents(self) -> List[str]:
+        """
+        Get all churned agents.
+        
+        Returns:
+            List of agent IDs (UUID strings) that are churned
+        """
+        try:
+            if self.use_redis:
+                churned_agents = []
+                # Get all user keys
+                pattern = self._redis_key("user_mgmt", "*")
+                for key in self.redis_client.scan_iter(match=pattern):
+                    agent_data = self.redis_client.hgetall(key)
+                    if agent_data.get("churned") == "1":
+                        churned_agents.append(agent_data.get("id"))
+                return churned_agents
+            else:
+                session = Session(self.engine)
+                try:
+                    churned_agents = session.query(User_mgmt.id).filter(
+                        User_mgmt.churned == 1
+                    ).all()
+                    return [agent.id for agent in churned_agents]
+                finally:
+                    session.close()
+        except Exception as e:
+            self.logger.error(
+                f"Error getting churned agents: {e}",
+                extra={"extra_data": {"error": str(e)}}
+            )
+            return []

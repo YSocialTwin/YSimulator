@@ -169,6 +169,13 @@ class SimulationClient:
         self.probability_of_daily_follow = agents_config.get("probability_of_daily_follow", 0.0)
         self.max_length_thread_reading = agents_config.get("max_length_thread_reading", 5)
 
+        # Load churn configuration
+        churn_config = agents_config.get("churn", {})
+        self.churn_enabled = churn_config.get("enabled", False)
+        self.churn_probability = churn_config.get("churn_probability", 0.01)
+        self.inactivity_threshold = churn_config.get("inactivity_threshold", 5)
+        self.churn_percentage = churn_config.get("churn_percentage", 0.1)
+
         # Load text annotation configuration
         self.enable_sentiment = simulation_config["simulation"].get("enable_sentiment", False)
         self.enable_toxicity = simulation_config["simulation"].get("enable_toxicity", False)
@@ -876,6 +883,23 @@ class SimulationClient:
                     # Reset for next day
                     active_agents_today = set()
                     current_day = instruction.day
+
+                # Evaluate churn at the end of each day
+                if (is_last_slot or day_changed) and self.churn_enabled:
+                    try:
+                        self.logger.info(
+                            f"End of day {current_day}: Evaluating churn (enabled={self.churn_enabled})"
+                        )
+                        churn_stats = ray.get(self.server.evaluate_churn.remote())
+                        if churn_stats["churned"] > 0:
+                            self.logger.info(
+                                f"Churn evaluation: {churn_stats['churned']} agents churned out of {churn_stats['candidates']} candidates ({churn_stats['inactive_agents']} inactive)"
+                            )
+                    except Exception as e:
+                        self.logger.error(
+                            f"Error evaluating churn: {e}",
+                            extra={"extra_data": {"error": str(e)}},
+                        )
 
                 # At end of day, save updated agent interests from server
                 if is_last_slot or day_changed:
@@ -2086,15 +2110,35 @@ class SimulationClient:
         """
         actions = []
 
+        # Get list of churned agents from server to filter them out
+        churned_agent_ids = set()
+        if self.churn_enabled:
+            try:
+                churned_agent_ids = set(ray.get(self.server.get_churned_agents.remote()))
+                if churned_agent_ids:
+                    self.logger.info(
+                        f"Filtering out {len(churned_agent_ids)} churned agents from selection"
+                    )
+            except Exception as e:
+                self.logger.warning(
+                    f"Error getting churned agents: {e}",
+                    extra={"extra_data": {"error": str(e)}}
+                )
+
         # Get hourly activity probability for this slot (default to 0.04 if not specified)
         hourly_prob = self.hourly_activity.get(slot, 0.04)
 
         # Separate regular agents and page agents
         # Pages are always active during their activity profile hours
+        # Filter out churned agents
         regular_agents = []
         page_agents = []
 
         for agent in self.agent_profiles:
+            # Skip churned agents
+            if agent.id in churned_agent_ids:
+                continue
+            
             profile_name = agent.activity_profile
             active_hours = self.activity_profiles.get(profile_name, list(range(24)))
             if slot in active_hours:
