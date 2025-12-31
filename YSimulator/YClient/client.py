@@ -1433,7 +1433,7 @@ class SimulationClient:
         recsys = recsys_class(n_posts=self.recsys_n_posts)
 
         # Get recommended posts from server
-        recommended_posts = recsys.get_recommendations(self.server, agent.id)
+        recommended_posts = recsys.get_recommendations(self.server, agent.id, client_id=self.client_id)
 
         if not recommended_posts:
             return  # No posts available to comment on
@@ -1496,7 +1496,7 @@ class SimulationClient:
         recsys = recsys_class(n_posts=self.recsys_n_posts)
 
         # Get recommended posts from server
-        recommended_posts = recsys.get_recommendations(self.server, agent.id)
+        recommended_posts = recsys.get_recommendations(self.server, agent.id, client_id=self.client_id)
 
         if not recommended_posts:
             return  # No posts available to read
@@ -1539,7 +1539,7 @@ class SimulationClient:
         frecsys = frecsys_class(n_neighbors=10, leaning_bias=1)
 
         # Get follow suggestions from server
-        suggested_users = frecsys.get_follow_suggestions(self.server, agent.id)
+        suggested_users = frecsys.get_follow_suggestions(self.server, agent.id, client_id=self.client_id)
 
         if not suggested_users:
             return  # No users available to follow
@@ -2688,7 +2688,7 @@ class SimulationClient:
 
             # Get follow suggestions from server
             try:
-                follow_suggestions = frecsys.get_follow_suggestions(self.server, agent.id)
+                follow_suggestions = frecsys.get_follow_suggestions(self.server, agent.id, client_id=self.client_id)
 
                 if follow_suggestions:
                     # Randomly select one candidate to follow

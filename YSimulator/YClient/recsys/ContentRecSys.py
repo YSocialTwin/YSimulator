@@ -52,7 +52,7 @@ class ContentRecSys:
         self.n_posts = n_posts
         self.followers_ratio = followers_ratio
     
-    def get_recommendations(self, server_handle, agent_id: str) -> list:
+    def get_recommendations(self, server_handle, agent_id: str, client_id: str = None) -> list:
         """
         Fetch recommended posts from the server for an agent.
         
@@ -62,6 +62,7 @@ class ContentRecSys:
         Args:
             server_handle: Ray actor handle for the OrchestratorServer
             agent_id (str): UUID of the agent requesting recommendations
+            client_id (str, optional): Client identifier for logging purposes
         
         Returns:
             list: List of post UUIDs recommended for the agent
@@ -72,7 +73,8 @@ class ContentRecSys:
                     agent_id=agent_id,
                     mode=self.mode,
                     limit=self.n_posts,
-                    followers_ratio=self.followers_ratio
+                    followers_ratio=self.followers_ratio,
+                    client_id=client_id
                 )
             )
             return post_ids if post_ids else []

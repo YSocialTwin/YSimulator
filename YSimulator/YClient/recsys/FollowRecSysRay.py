@@ -51,7 +51,7 @@ class FollowRecSysRay:
         self.n_neighbors = n_neighbors
         self.leaning_bias = leaning_bias
     
-    def get_follow_suggestions(self, server_handle, agent_id: str) -> list:
+    def get_follow_suggestions(self, server_handle, agent_id: str, client_id: str = None) -> list:
         """
         Fetch follow suggestions from the server for an agent.
         
@@ -61,6 +61,7 @@ class FollowRecSysRay:
         Args:
             server_handle: Ray actor handle for the OrchestratorServer
             agent_id (str): UUID of the agent requesting follow suggestions
+            client_id (str, optional): Client identifier for logging purposes
         
         Returns:
             list: List of user UUIDs recommended for the agent to follow
@@ -71,7 +72,8 @@ class FollowRecSysRay:
                     agent_id=agent_id,
                     mode=self.mode,
                     n_neighbors=self.n_neighbors,
-                    leaning_bias=self.leaning_bias
+                    leaning_bias=self.leaning_bias,
+                    client_id=client_id
                 )
             )
             return user_ids if user_ids else []
