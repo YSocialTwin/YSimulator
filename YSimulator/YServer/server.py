@@ -25,6 +25,8 @@ from YSimulator.YServer.recsys import content_recsys_db, content_recsys_redis, f
 # Constants
 RECOMMENDATION_TTL_SECONDS = 7 * 24 * 60 * 60  # 7 days in seconds
 NETWORK_EDGE_CHECK_LIMIT = 10  # Number of edges to check when verifying network load
+LOG_FILE_MAX_BYTES = 10 * 1024 * 1024  # 10MB
+LOG_FILE_BACKUP_COUNT = 5  # Keep 5 backup files
 
 
 def log_server_request(func):
@@ -44,8 +46,8 @@ def log_server_request(func):
     """
     @functools.wraps(func)
     def wrapper(self, *args, **kwargs):
-        # Generate request ID with better uniqueness
-        request_id = f"{time.time()}-{uuid.uuid4().int % 10000000000}"
+        # Generate request ID with better uniqueness using UUID hex
+        request_id = f"{time.time()}-{uuid.uuid4().hex[:10]}"
         
         # Extract client_name from arguments
         # Check common parameter names for client identification
@@ -80,16 +82,10 @@ def log_server_request(func):
             # Calculate duration
             duration = time.time() - start_time
             
-            # Get current simulation state
-            try:
-                tid = getattr(self, 'current_round_id', None)
-                day = getattr(self, 'day', None)
-                hour = getattr(self, 'slot', None)
-            except Exception:
-                # Handle case where attributes don't exist
-                tid = None
-                day = None
-                hour = None
+            # Get current simulation state (getattr with defaults never raises exceptions)
+            tid = getattr(self, 'current_round_id', None)
+            day = getattr(self, 'day', None)
+            hour = getattr(self, 'slot', None)
             
             # Log the request
             try:
@@ -251,7 +247,7 @@ class OrchestratorServer:
         # Create file handler with JSON formatting
         from logging.handlers import RotatingFileHandler
 
-        handler = RotatingFileHandler(log_file, maxBytes=10 * 1024 * 1024, backupCount=5)  # 10MB
+        handler = RotatingFileHandler(log_file, maxBytes=LOG_FILE_MAX_BYTES, backupCount=LOG_FILE_BACKUP_COUNT)
 
         class JsonFormatter(logging.Formatter):
             def format(self, record):
@@ -279,7 +275,7 @@ class OrchestratorServer:
         self.server_request_logger.handlers = []
         
         # Create handler for server requests (raw JSON, one per line)
-        server_handler = RotatingFileHandler(server_log_file, maxBytes=10 * 1024 * 1024, backupCount=5)
+        server_handler = RotatingFileHandler(server_log_file, maxBytes=LOG_FILE_MAX_BYTES, backupCount=LOG_FILE_BACKUP_COUNT)
         
         # Simple formatter that just outputs the message (already JSON)
         class RawFormatter(logging.Formatter):
