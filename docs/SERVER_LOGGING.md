@@ -15,7 +15,7 @@ Each log entry is a single-line JSON object with the following fields:
   "path": "register_client",
   "status_code": 200,
   "duration": 0.000128,
-  "time": "2025-12-31T17:29:53.488107",
+  "time": "2025-12-31T17:29:53.488107+00:00",
   "tid": "f87e903f-4d67-4792-9f34-d34e08904628",
   "day": 1,
   "hour": 1
@@ -101,7 +101,6 @@ with open('logs/_server.log', 'r') as f:
         entry = json.loads(line.strip())
         print(f"[{entry['time']}] {entry['client_name']} -> {entry['path']} "
               f"({entry['status_code']}) {entry['duration']:.4f}s")
-```
 ```
 
 ## Performance Considerations
