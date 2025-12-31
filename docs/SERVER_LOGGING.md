@@ -43,8 +43,10 @@ The server request log is saved to:
 ```
 
 For example:
-- Default: `./logs/orchestrator_server.log`
-- Custom: `./logs/my_server_server.log` (if server_name is "my_server")
+- Default (server_name="orchestrator_server"): `./logs/orchestrator_server_server.log`
+- Custom (server_name="my_orchestrator"): `./logs/my_orchestrator_server.log`
+
+**Note**: By default, the server_name is "orchestrator_server", which results in the filename "orchestrator_server_server.log". This is by design - the "_server.log" suffix is always appended to distinguish server request logs from actor logs.
 
 ## Logged Methods
 

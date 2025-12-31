@@ -11,7 +11,7 @@ import logging
 import random
 import time
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -44,8 +44,8 @@ def log_server_request(func):
     """
     @functools.wraps(func)
     def wrapper(self, *args, **kwargs):
-        # Generate request ID
-        request_id = f"{time.time()}-{random.randint(1000000000, 9999999999)}"
+        # Generate request ID with better uniqueness
+        request_id = f"{time.time()}-{uuid.uuid4().int % 10000000000}"
         
         # Extract client_name from arguments
         # Check common parameter names for client identification
@@ -101,7 +101,7 @@ def log_server_request(func):
                         "path": func.__name__,
                         "status_code": status_code,
                         "duration": duration,
-                        "time": datetime.utcnow().isoformat(),
+                        "time": datetime.now(timezone.utc).isoformat(),
                         "tid": tid,
                         "day": day,
                         "hour": hour,
