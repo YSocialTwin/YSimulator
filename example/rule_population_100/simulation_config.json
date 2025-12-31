@@ -22,7 +22,7 @@
     "llm_max_tokens": 300
   },
   "simulation": {
-    "num_days": 3,
+    "num_days": 30,
     "num_slots_per_day": 24,
     "heartbeat_interval": 5,
     "note": "num_days=0 means infinite simulation, set to a positive number to limit duration. heartbeat_interval in seconds (default: 5).",
@@ -98,14 +98,14 @@
     "probability_of_secondary_follow": 0.1,
     "churn": {
       "enabled": true,
-      "churn_probability": 0.01,
+      "churn_probability": 0.1,
       "inactivity_threshold": 5,
-      "churn_percentage": 0.1
+      "churn_percentage": 0.05
     },
     "new_agents": {
       "enabled": true,
-      "probability_new_agents": 0.01,
-      "percentage_new_agents": 0.01
+      "probability_new_agents": 0.1,
+      "percentage_new_agents": 0.05
     }
   }
 }
