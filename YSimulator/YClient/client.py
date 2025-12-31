@@ -2823,10 +2823,10 @@ class SimulationClient:
             return 0
         
         # Get non-churned agents (agents without left_on set)
-        non_churned_agents = [agent for agent in self.agent_profiles if not hasattr(agent, 'left_on') or agent.left_on is None]
+        non_churned_agents = [agent for agent in self.agent_profiles if agent.left_on is None]
         
         self.logger.info(
-            f"Non-churned agents: {len(non_churned_agents)} out of {len(self.agent_profiles)} total"
+            f"Non-churned agents: {len(non_churned_agents)} out of {len(self.agent_profiles)} total (churned: {len(self.agent_profiles) - len(non_churned_agents)})"
         )
         
         if not non_churned_agents:
@@ -2846,10 +2846,17 @@ class SimulationClient:
         
         new_agents_added = 0
         
+        self.logger.info(f"Attempting to add up to {x} new agents with probability {self.probability_new_agents}")
+        
         # Add x new agents, each with probability probability_new_agents
         for i in range(x):
             # With probability_new_agents, add a new agent
-            if random.random() < self.probability_new_agents:
+            roll = random.random()
+            self.logger.debug(f"New agent slot {i+1}/{x}: roll={roll:.4f}, threshold={self.probability_new_agents}")
+            
+            if roll < self.probability_new_agents:
+                self.logger.info(f"Creating new agent {i+1}/{x} (roll {roll:.4f} < {self.probability_new_agents})")
+                
                 # Select a random existing agent as template
                 template_agent = random.choice(non_churned_agents)
                 
@@ -2932,7 +2939,10 @@ class SimulationClient:
                         f"Failed to register new agent {new_username}: {e}",
                         extra={"extra_data": {"error": str(e)}}
                     )
+            else:
+                self.logger.debug(f"Skipping new agent slot {i+1}/{x} (roll {roll:.4f} >= {self.probability_new_agents})")
         
+        self.logger.info(f"New agents evaluation complete: added {new_agents_added} out of {x} possible slots")
         return new_agents_added
     
     def _add_agent_to_population_file(self, agent: AgentProfile):
