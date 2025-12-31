@@ -2709,7 +2709,7 @@ class SimulationClient:
 
         return daily_follow_actions
 
-    def _evaluate_churn(self) -> Dict[str, int]:
+    def _evaluate_churn(self) -> dict[str, int]:
         """
         Evaluate and process churn at the end of a day (client-side).
         
