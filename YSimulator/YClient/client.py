@@ -1197,8 +1197,15 @@ class SimulationClient:
             import random
 
             selected_topic = random.choices(topics, weights=counts, k=1)[0]
+        
+        # Get opinion on the selected topic if available
+        topic_opinion = None
+        topic_opinion_label = None
+        if selected_topic and agent.opinions and selected_topic in agent.opinions:
+            topic_opinion = agent.opinions[selected_topic]
+            topic_opinion_label = self._map_opinion_to_group(topic_opinion)
 
-        return {
+        attrs = {
             "name": agent.username,
             "age": agent.age if agent.age else "unknown",
             "gender": agent.gender if agent.gender else "person",
@@ -1213,6 +1220,13 @@ class SimulationClient:
             "toxicity": agent.toxicity if agent.toxicity and agent.toxicity != "" else "no",
             "topic": selected_topic,  # Include the sampled topic
         }
+        
+        # Add opinion information if available
+        if topic_opinion is not None and topic_opinion_label:
+            attrs["topic_opinion"] = topic_opinion_label
+            attrs["topic_opinion_value"] = topic_opinion
+        
+        return attrs
 
     def _save_updated_agent_population(self, updated_interests: dict):
         """
@@ -1759,6 +1773,12 @@ class SimulationClient:
         # For now, only rule-based agents share
         if agent_type == "rule_based" and target:
             action = generate_rule_based_share(agent.id, agent.cluster, target)
+            # Calculate opinion updates for the share
+            post_data = ray.get(self.server.get_post.remote(target, client_id=self.client_id))
+            if post_data:
+                updated_opinions = self._calculate_opinion_updates(agent.id, target, post_data)
+                if updated_opinions:
+                    action.updated_opinions = updated_opinions
             actions.append(action)
 
     def _handle_search_action(self, agent, agent_type, pending_llm_reactions, actions):
@@ -1930,8 +1950,18 @@ class SimulationClient:
 
             if selected_action == "comment":
                 action = generate_rule_based_comment(agent.id, agent.cluster, target_post)
+                # Calculate opinion updates for the comment
+                if post_data:
+                    updated_opinions = self._calculate_opinion_updates(agent.id, target_post, post_data)
+                    if updated_opinions:
+                        action.updated_opinions = updated_opinions
             elif selected_action == "share":
                 action = generate_rule_based_share(agent.id, agent.cluster, target_post)
+                # Calculate opinion updates for the share
+                if post_data:
+                    updated_opinions = self._calculate_opinion_updates(agent.id, target_post, post_data)
+                    if updated_opinions:
+                        action.updated_opinions = updated_opinions
             else:  # react
                 # Use basic reactions (simple positive/negative responses)
                 reaction_type = random.choice(BASIC_REACTIONS)
@@ -2551,8 +2581,15 @@ class SimulationClient:
                 if res_act.upper() == "SHARE":
                     # For SHARE actions, use cluster-specific share content (similar to rule-based)
                     share_content = f"Sharing from cluster {cid}"
+                    # Calculate opinion updates for the share
+                    post_data = ray.get(self.server.get_post.remote(target, client_id=self.client_id))
+                    updated_opinions = None
+                    if post_data:
+                        updated_opinions = self._calculate_opinion_updates(a_id, target, post_data)
+                    
                     action = ActionDTO(
-                        a_id, cid, res_act.upper(), content=share_content, target_post_id=target
+                        a_id, cid, res_act.upper(), content=share_content, target_post_id=target,
+                        updated_opinions=updated_opinions
                     )
                     self.logger.info(
                         f"search action: LLM agent {a_id} decided to SHARE with content",
@@ -2564,18 +2601,22 @@ class SimulationClient:
                             }
                         },
                     )
+                    # Track for secondary follow (share action)
+                    if post_data:
+                        secondary_follow_candidates.append(
+                            (a_id, cid, post_data.get("user_id"), post_data.get("tweet", ""), True)
+                        )
                 else:
                     # Regular reaction (LIKE, LOVE, LAUGH, ANGRY, SAD)
                     action = ActionDTO(a_id, cid, res_act, target_post_id=target)
+                    # Track for secondary follow (read/reaction action)
+                    post_data = ray.get(self.server.get_post.remote(target, client_id=self.client_id))
+                    if post_data:
+                        secondary_follow_candidates.append(
+                            (a_id, cid, post_data.get("user_id"), post_data.get("tweet", ""), True)
+                        )
 
                 actions.append(action)
-
-                # Track for secondary follow (read/reaction action)
-                post_data = ray.get(self.server.get_post.remote(target, client_id=self.client_id))
-                if post_data:
-                    secondary_follow_candidates.append(
-                        (a_id, cid, post_data.get("user_id"), post_data.get("tweet", ""), True)
-                    )
             else:
                 # IGNORE action - log for search action context
                 self.logger.debug(
@@ -2710,6 +2751,40 @@ class SimulationClient:
                 extra={"extra_data": {"error": str(e), "agent_id": agent_id}}
             )
             return None
+
+    def _map_opinion_to_group(self, opinion_value: float) -> str:
+        """
+        Map a numeric opinion value to a discrete opinion group label.
+        
+        Args:
+            opinion_value: Numeric opinion in [0, 1]
+            
+        Returns:
+            str: Opinion group label from simulation_config opinion_groups
+        """
+        opinion_config = self.simulation_config.get("opinion_dynamics", {})
+        opinion_groups = opinion_config.get("opinion_groups", {})
+        
+        if not opinion_groups:
+            # Default mapping if not configured
+            if opinion_value < 0.2:
+                return "Strongly against"
+            elif opinion_value < 0.4:
+                return "Against"
+            elif opinion_value < 0.6:
+                return "Neutral"
+            elif opinion_value < 0.8:
+                return "In favor"
+            else:
+                return "Strongly in favor"
+        
+        # Find which group the opinion falls into
+        for group_name, (lower, upper) in opinion_groups.items():
+            if lower <= opinion_value <= upper:
+                return group_name
+        
+        # Fallback
+        return "Neutral"
 
     def _process_secondary_follows(
         self, secondary_follow_candidates: list, rule_based_interactions: list, actions: list

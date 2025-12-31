@@ -124,6 +124,9 @@ class LLMService:
         # Get topic if available
         topic = agent_attrs.get("topic") if agent_attrs else None
         
+        # Get opinion on the topic if available
+        topic_opinion = agent_attrs.get("topic_opinion") if agent_attrs else None
+        
         # Get prompt templates from configuration
         system_template = self.prompts_config["generate_post"]["system_template"]
         user_template = self.prompts_config["generate_post"]["user_template"]
@@ -131,8 +134,13 @@ class LLMService:
         # Format templates
         system_msg = system_template.format(persona=persona, toxicity=toxicity)
         
-        # Build topic instruction
-        topic_instruction = f" Topic: {topic}." if topic else ""
+        # Build topic instruction with opinion if available
+        if topic and topic_opinion:
+            topic_instruction = f" Topic: {topic}. Your opinion on this topic is: {topic_opinion}. Express this viewpoint in your post."
+        elif topic:
+            topic_instruction = f" Topic: {topic}."
+        else:
+            topic_instruction = ""
         
         # Format user message with topic instruction
         user_msg = user_template.format(day=day, slot=slot, topic_instruction=topic_instruction)

@@ -1506,6 +1506,22 @@ class OrchestratorServer:
                         post_id = self.db.add_post(post_data)
                         if post_id:
                             new_ids.append(post_id)
+                            
+                            # Store opinion updates if calculated by client
+                            if hasattr(act, 'updated_opinions') and act.updated_opinions:
+                                parent_author_id = original_post.get("user_id")
+                                for topic_id, new_opinion in act.updated_opinions.items():
+                                    self.db.add_agent_opinion(
+                                        agent_id=str(act.agent_id),
+                                        round_id=self.current_round_id,
+                                        topic_id=topic_id,
+                                        opinion=new_opinion,
+                                        id_interacted_with=parent_author_id,
+                                        id_post=act.target_post_id
+                                    )
+                                self.logger.info(
+                                    f"Stored {len(act.updated_opinions)} opinion updates for share by agent {act.agent_id}"
+                                )
                         else:
                             self.logger.warning(
                                 f"Failed to add share for agent {act.agent_id}",
