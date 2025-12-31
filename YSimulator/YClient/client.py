@@ -5,9 +5,12 @@ This module contains the Ray remote actor that runs simulation clients,
 managing agent behaviors and coordinating with the orchestrator server.
 """
 
+import gzip
 import json
 import logging
+import os
 import random
+import shutil
 import time
 from datetime import datetime
 from logging.handlers import RotatingFileHandler
@@ -87,6 +90,20 @@ FOLLOW_RECSYS_CLASS_MAP = {
 }
 
 
+def compress_rotated_log(source, dest):
+    """
+    Compress a rotated log file using gzip.
+    
+    Args:
+        source: Path to the source log file
+        dest: Path to the destination compressed file
+    """
+    with open(source, 'rb') as f_in:
+        with gzip.open(dest, 'wb') as f_out:
+            shutil.copyfileobj(f_in, f_out)
+    os.remove(source)
+
+
 @ray.remote
 class SimulationClient:
     """
@@ -125,6 +142,9 @@ class SimulationClient:
         self.llm = llm_handle
         self.news_service = news_service_handle
         self.config_path = Path(config_path)
+        
+        # Store simulation config for logging configuration
+        self.simulation_config = simulation_config if simulation_config else {}
 
         # Load simulation configuration with defaults
         if simulation_config is None:
@@ -231,11 +251,14 @@ class SimulationClient:
         )
 
     def _setup_logging(self):
-        """Set up JSON logging for the client actor."""
+        """Set up JSON logging for the client actor with gzip compression."""
+        # Get logging configuration
+        logging_config = self.simulation_config.get("logging", {})
+        enable_actor_log = logging_config.get("enable_actor_log", True)
+        enable_client_log = logging_config.get("enable_client_log", True)
+        
         log_dir = self.config_path / "logs"
         log_dir.mkdir(exist_ok=True)
-
-        log_file = log_dir / f"{self.client_id}_actor.log"
 
         # Create logger
         self.logger = logging.getLogger(f"YSimulator.Client.{self.client_id}")
@@ -244,46 +267,57 @@ class SimulationClient:
         # Remove existing handlers
         self.logger.handlers = []
 
-        # Create file handler with JSON formatting
-        handler = RotatingFileHandler(log_file, maxBytes=10 * 1024 * 1024, backupCount=5)  # 10MB
+        # Create file handler with JSON formatting (actor log)
+        if enable_actor_log:
+            log_file = log_dir / f"{self.client_id}_actor.log"
+            handler = RotatingFileHandler(log_file, maxBytes=10 * 1024 * 1024, backupCount=5)  # 10MB
+            
+            # Add compression for rotated files
+            handler.rotator = compress_rotated_log
+            handler.namer = lambda name: name + ".gz"
 
-        class JsonFormatter(logging.Formatter):
-            def format(self, record):
-                log_data = {
-                    "timestamp": datetime.utcnow().isoformat(),
-                    "level": record.levelname,
-                    "message": record.getMessage(),
-                    "module": record.module,
-                    "function": record.funcName,
-                    "line": record.lineno,
-                }
-                if hasattr(record, "execution_time"):
-                    log_data["execution_time_ms"] = record.execution_time
-                if hasattr(record, "extra_data"):
-                    log_data.update(record.extra_data)
-                return json.dumps(log_data)
+            class JsonFormatter(logging.Formatter):
+                def format(self, record):
+                    log_data = {
+                        "timestamp": datetime.utcnow().isoformat(),
+                        "level": record.levelname,
+                        "message": record.getMessage(),
+                        "module": record.module,
+                        "function": record.funcName,
+                        "line": record.lineno,
+                    }
+                    if hasattr(record, "execution_time"):
+                        log_data["execution_time_ms"] = record.execution_time
+                    if hasattr(record, "extra_data"):
+                        log_data.update(record.extra_data)
+                    return json.dumps(log_data)
 
-        handler.setFormatter(JsonFormatter())
-        self.logger.addHandler(handler)
+            handler.setFormatter(JsonFormatter())
+            self.logger.addHandler(handler)
 
-        # Create action logger for individual agent actions
-        action_log_file = log_dir / f"{self.client_id}_actions.log"
+        # Create action logger for individual agent actions (client log)
         self.action_logger = logging.getLogger(f"YSimulator.Client.{self.client_id}.Actions")
         self.action_logger.setLevel(logging.INFO)
         self.action_logger.handlers = []
         self.action_logger.propagate = False  # Don't propagate to parent logger
 
-        action_handler = RotatingFileHandler(
-            action_log_file, maxBytes=10 * 1024 * 1024, backupCount=5
-        )
+        if enable_client_log:
+            action_log_file = log_dir / f"{self.client_id}_client.log"
+            action_handler = RotatingFileHandler(
+                action_log_file, maxBytes=10 * 1024 * 1024, backupCount=5
+            )
+            
+            # Add compression for rotated files
+            action_handler.rotator = compress_rotated_log
+            action_handler.namer = lambda name: name + ".gz"
 
-        class ActionFormatter(logging.Formatter):
-            def format(self, record):
-                # Simple format for action logs: one JSON object per line
-                return record.getMessage()
+            class ActionFormatter(logging.Formatter):
+                def format(self, record):
+                    # Simple format for action logs: one JSON object per line
+                    return record.getMessage()
 
-        action_handler.setFormatter(ActionFormatter())
-        self.action_logger.addHandler(action_handler)
+            action_handler.setFormatter(ActionFormatter())
+            self.action_logger.addHandler(action_handler)
 
         # Initialize tracking variables for hourly and daily summaries
         self.hourly_actions = []  # Track actions for current hour
@@ -685,7 +719,7 @@ class SimulationClient:
                 )
                 try:
                     follow_count = ray.get(
-                        self.server.add_follow_relationships_batch.remote(follows_to_create)
+                        self.server.add_follow_relationships_batch.remote(follows_to_create, client_id=self.client_id)
                     )
                     if follow_count != expected_count:
                         self.logger.warning(
@@ -738,7 +772,7 @@ class SimulationClient:
         start_time = time.time()
         print(f"[{self.client_id}] Registering {len(self.agent_profiles)} agents with server...")
 
-        registration_result = ray.get(self.server.register_agents.remote(self.agent_profiles))
+        registration_result = ray.get(self.server.register_agents.remote(self.agent_profiles, client_id=self.client_id))
         reg_time = (time.time() - start_time) * 1000
 
         self.logger.info(
@@ -1433,7 +1467,7 @@ class SimulationClient:
         recsys = recsys_class(n_posts=self.recsys_n_posts)
 
         # Get recommended posts from server
-        recommended_posts = recsys.get_recommendations(self.server, agent.id)
+        recommended_posts = recsys.get_recommendations(self.server, agent.id, client_id=self.client_id)
 
         if not recommended_posts:
             return  # No posts available to comment on
@@ -1443,21 +1477,21 @@ class SimulationClient:
 
         if agent_type == "llm":
             # LLM: Get the post content and ask for a comment
-            post_data = ray.get(self.server.get_post.remote(target_post))
+            post_data = ray.get(self.server.get_post.remote(target_post, client_id=self.client_id))
             if post_data:
                 post_content = post_data.get("tweet", "")
                 author_id = post_data.get("user_id")
                 # Get author username
                 author_name = "Someone"
                 if author_id:
-                    author_user = ray.get(self.server.get_user.remote(author_id))
+                    author_user = ray.get(self.server.get_user.remote(author_id, client_id=self.client_id))
                     if author_user:
                         author_name = author_user.get("username", "Someone")
 
                 # Get thread context (preceding posts/comments in chronological order)
                 thread_context = ray.get(
                     self.server.get_thread_context.remote(
-                        target_post, self.max_length_thread_reading
+                        target_post, self.max_length_thread_reading, client_id=self.client_id
                     )
                 )
 
@@ -1474,7 +1508,7 @@ class SimulationClient:
             self._annotate_action_content(action)
             actions.append(action)
             # Track for secondary follow (rule-based comment)
-            post_data = ray.get(self.server.get_post.remote(target_post))
+            post_data = ray.get(self.server.get_post.remote(target_post, client_id=self.client_id))
             if post_data:
                 rule_based_interactions.append(
                     (
@@ -1496,7 +1530,7 @@ class SimulationClient:
         recsys = recsys_class(n_posts=self.recsys_n_posts)
 
         # Get recommended posts from server
-        recommended_posts = recsys.get_recommendations(self.server, agent.id)
+        recommended_posts = recsys.get_recommendations(self.server, agent.id, client_id=self.client_id)
 
         if not recommended_posts:
             return  # No posts available to read
@@ -1506,7 +1540,7 @@ class SimulationClient:
 
         if agent_type == "llm":
             # LLM: Get the post content and ask for a reaction decision
-            post_data = ray.get(self.server.get_post.remote(target_post))
+            post_data = ray.get(self.server.get_post.remote(target_post, client_id=self.client_id))
             if post_data:
                 post_content = post_data.get("tweet", "")
                 # Fire off async LLM call to decide reaction with agent attributes
@@ -1519,7 +1553,7 @@ class SimulationClient:
             if action:  # Only add if not IGNORE
                 actions.append(action)
                 # Track for secondary follow (rule-based read)
-                post_data = ray.get(self.server.get_post.remote(target_post))
+                post_data = ray.get(self.server.get_post.remote(target_post, client_id=self.client_id))
                 if post_data:
                     rule_based_interactions.append(
                         (
@@ -1539,7 +1573,7 @@ class SimulationClient:
         frecsys = frecsys_class(n_neighbors=10, leaning_bias=1)
 
         # Get follow suggestions from server
-        suggested_users = frecsys.get_follow_suggestions(self.server, agent.id)
+        suggested_users = frecsys.get_follow_suggestions(self.server, agent.id, client_id=self.client_id)
 
         if not suggested_users:
             return  # No users available to follow
@@ -1777,7 +1811,7 @@ class SimulationClient:
         # Search for posts on this topic (up to 10 recent posts from other users)
         try:
             found_posts = ray.get(
-                self.server.search_posts_by_topic.remote(topic_id, agent.id, limit=10)
+                self.server.search_posts_by_topic.remote(topic_id, agent.id, limit=10, client_id=self.client_id)
             )
         except Exception as e:
             self.logger.warning(
@@ -1823,7 +1857,7 @@ class SimulationClient:
 
         # Get the post content
         try:
-            post_data = ray.get(self.server.get_post.remote(target_post))
+            post_data = ray.get(self.server.get_post.remote(target_post, client_id=self.client_id))
             if not post_data:
                 self.logger.warning(
                     f"search action: post {target_post} not found for agent {agent.username}",
@@ -2019,7 +2053,7 @@ class SimulationClient:
             self.logger.debug(
                 f"[REPLY] Checking unreplied mentions for agent {agent.username} (ID: {agent.id})"
             )
-            unreplied_mentions = ray.get(self.server.get_unreplied_mentions.remote(agent.id))
+            unreplied_mentions = ray.get(self.server.get_unreplied_mentions.remote(agent.id, client_id=self.client_id))
 
             if not unreplied_mentions:
                 self.logger.debug(f"[REPLY] No unreplied mentions found for agent {agent.username}")
@@ -2039,7 +2073,7 @@ class SimulationClient:
             )
 
             # Get the post content to reply to
-            post_data = ray.get(self.server.get_post.remote(post_id))
+            post_data = ray.get(self.server.get_post.remote(post_id, client_id=self.client_id))
             if not post_data:
                 self.logger.warning(
                     f"[REPLY] Post {post_id} not found for mention {mention_id} - cannot reply"
@@ -2056,7 +2090,7 @@ class SimulationClient:
             # Get author username
             author_username = "Someone"
             if author_id:
-                author_user = ray.get(self.server.get_user.remote(author_id))
+                author_user = ray.get(self.server.get_user.remote(author_id, client_id=self.client_id))
                 if author_user:
                     author_username = author_user.get("username", "Someone")
 
@@ -2068,7 +2102,7 @@ class SimulationClient:
             if agent_type == "llm":
                 # Get thread context (preceding posts/comments in chronological order)
                 thread_context = ray.get(
-                    self.server.get_thread_context.remote(post_id, self.max_length_thread_reading)
+                    self.server.get_thread_context.remote(post_id, self.max_length_thread_reading, client_id=self.client_id)
                 )
                 self.logger.debug(
                     f"[REPLY] Retrieved thread context: {len(thread_context)} previous posts/comments"
@@ -2487,7 +2521,7 @@ class SimulationClient:
                     )
 
                 # Track for secondary follow (comment action)
-                post_data = ray.get(self.server.get_post.remote(target))
+                post_data = ray.get(self.server.get_post.remote(target, client_id=self.client_id))
                 if post_data:
                     secondary_follow_candidates.append(
                         (a_id, cid, post_data.get("user_id"), post_data.get("tweet", ""), True)
@@ -2520,7 +2554,7 @@ class SimulationClient:
                 actions.append(action)
 
                 # Track for secondary follow (read/reaction action)
-                post_data = ray.get(self.server.get_post.remote(target))
+                post_data = ray.get(self.server.get_post.remote(target, client_id=self.client_id))
                 if post_data:
                     secondary_follow_candidates.append(
                         (a_id, cid, post_data.get("user_id"), post_data.get("tweet", ""), True)
@@ -2688,7 +2722,7 @@ class SimulationClient:
 
             # Get follow suggestions from server
             try:
-                follow_suggestions = frecsys.get_follow_suggestions(self.server, agent.id)
+                follow_suggestions = frecsys.get_follow_suggestions(self.server, agent.id, client_id=self.client_id)
 
                 if follow_suggestions:
                     # Randomly select one candidate to follow
@@ -2953,7 +2987,7 @@ class SimulationClient:
         if new_agents_to_register:
             try:
                 self.logger.info(f"Batch registering {len(new_agents_to_register)} new agents with server")
-                registration_result = ray.get(self.server.register_agents.remote(new_agents_to_register))
+                registration_result = ray.get(self.server.register_agents.remote(new_agents_to_register, client_id=self.client_id))
                 new_agents_added = len(new_agents_to_register)
                 
                 self.logger.info(

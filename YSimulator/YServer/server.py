@@ -5,12 +5,18 @@ This module contains the Ray remote actor that orchestrates the simulation,
 managing client registration, agent actions, and simulation state progression.
 """
 
+import functools
+import gzip
+import inspect
 import json
 import logging
+import os
 import random
+import shutil
+import sys
 import time
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -24,6 +30,115 @@ from YSimulator.YServer.recsys import content_recsys_db, content_recsys_redis, f
 # Constants
 RECOMMENDATION_TTL_SECONDS = 7 * 24 * 60 * 60  # 7 days in seconds
 NETWORK_EDGE_CHECK_LIMIT = 10  # Number of edges to check when verifying network load
+LOG_FILE_MAX_BYTES = 10 * 1024 * 1024  # 10MB
+LOG_FILE_BACKUP_COUNT = 5  # Keep 5 backup files
+
+
+def log_server_request(func):
+    """
+    Decorator to log server requests to _server.log with detailed information.
+    
+    Logs each method call with:
+    - request_id: unique request identifier
+    - client_name: client making the request (if available)
+    - path: method name
+    - status_code: 200 for success, 500 for error
+    - duration: execution time in seconds
+    - time: current datetime
+    - tid: current round id
+    - day: current simulation day
+    - hour: current simulation slot/hour
+    """
+    @functools.wraps(func)
+    def wrapper(self, *args, **kwargs):
+        # Generate request ID with better uniqueness using UUID hex
+        request_id = f"{time.time()}-{uuid.uuid4().hex[:10]}"
+        
+        # Extract client_name from arguments
+        # Only look for explicit client_id parameter - this represents the actual client making the request
+        client_name = kwargs.get("client_id")
+        
+        # If not in kwargs, check if first positional arg is client_id by checking parameter name
+        if not client_name and args:
+            # Get the function signature to check parameter names
+            import inspect
+            try:
+                sig = inspect.signature(func)
+                param_names = list(sig.parameters.keys())
+                # First param after 'self' (index 0 is 'self', index 1 is first real param)
+                if len(param_names) > 1 and len(args) > 0:
+                    first_param_name = param_names[1]
+                    # Only use first arg as client_name if the parameter is named 'client_id'
+                    if first_param_name == "client_id" and isinstance(args[0], str):
+                        client_name = args[0]
+            except:
+                pass
+        
+        # Default to "unknown" if still not found
+        if not client_name:
+            client_name = "unknown"
+        
+        # Start timing
+        start_time = time.time()
+        status_code = 200
+        error = None
+        
+        try:
+            # Execute the method
+            result = func(self, *args, **kwargs)
+            return result
+        except Exception as e:
+            status_code = 500
+            error = str(e)
+            raise
+        finally:
+            # Calculate duration
+            duration = time.time() - start_time
+            
+            # Get current simulation state (getattr with defaults never raises exceptions)
+            tid = getattr(self, 'current_round_id', None)
+            day = getattr(self, 'day', None)
+            hour = getattr(self, 'slot', None)
+            
+            # Log the request
+            try:
+                server_logger = getattr(self, 'server_request_logger', None)
+                if server_logger:
+                    log_entry = {
+                        "request_id": request_id,
+                        "client_name": client_name,
+                        "path": func.__name__,
+                        "status_code": status_code,
+                        "duration": duration,
+                        "time": datetime.now(timezone.utc).isoformat(),
+                        "tid": tid,
+                        "day": day,
+                        "hour": hour,
+                    }
+                    if error:
+                        log_entry["error"] = error
+                    
+                    server_logger.info(json.dumps(log_entry))
+            except Exception as log_error:
+                # Don't let logging errors break the application
+                # Log to stderr as fallback for debugging
+                print(f"WARNING: Server request logging failed: {log_error}", file=sys.stderr)
+    
+    return wrapper
+
+
+def compress_rotated_log(source, dest):
+    """
+    Compress a rotated log file using gzip.
+    
+    Args:
+        source: Path to the source log file
+        dest: Path to the destination compressed file
+    """
+    with open(source, 'rb') as f_in:
+        with gzip.open(dest, 'wb') as f_out:
+            shutil.copyfileobj(f_in, f_out)
+    os.remove(source)
 
 
 @ray.remote
@@ -68,10 +183,13 @@ class OrchestratorServer:
         self.server_name = server_name
         self.config_path = Path(config_path)
         self.timeout_seconds = timeout_seconds
-
-        # Archetype configuration
+        
+        # Store simulation config for logging configuration
         if simulation_config is None:
             simulation_config = {}
+        self.simulation_config = simulation_config
+
+        # Archetype configuration
         self.archetype_config = simulation_config.get("agent_archetypes", {})
         self.archetypes_enabled = self.archetype_config.get("enabled", False)
         self.archetype_distribution = self.archetype_config.get("distribution", {})
@@ -142,11 +260,14 @@ class OrchestratorServer:
         )
 
     def _setup_logging(self):
-        """Set up JSON logging for the server actor."""
+        """Set up JSON logging for the server actor with gzip compression."""
+        # Get logging configuration
+        logging_config = self.simulation_config.get("logging", {})
+        enable_actor_log = logging_config.get("enable_actor_log", True)
+        enable_request_log = logging_config.get("enable_request_log", True)
+        
         log_dir = self.config_path / "logs"
         log_dir.mkdir(exist_ok=True)
-
-        log_file = log_dir / f"{self.server_name}_actor.log"
 
         # Create logger
         self.logger = logging.getLogger(f"YSimulator.Server.{self.server_name}")
@@ -155,29 +276,64 @@ class OrchestratorServer:
         # Remove existing handlers
         self.logger.handlers = []
 
-        # Create file handler with JSON formatting
-        from logging.handlers import RotatingFileHandler
+        # Create file handler with JSON formatting (actor log)
+        if enable_actor_log:
+            log_file = log_dir / f"{self.server_name}_actor.log"
+            
+            from logging.handlers import RotatingFileHandler
 
-        handler = RotatingFileHandler(log_file, maxBytes=10 * 1024 * 1024, backupCount=5)  # 10MB
+            handler = RotatingFileHandler(log_file, maxBytes=LOG_FILE_MAX_BYTES, backupCount=LOG_FILE_BACKUP_COUNT)
+            
+            # Add compression for rotated files
+            handler.rotator = compress_rotated_log
+            handler.namer = lambda name: name + ".gz"
 
-        class JsonFormatter(logging.Formatter):
-            def format(self, record):
-                log_data = {
-                    "timestamp": datetime.utcnow().isoformat(),
-                    "level": record.levelname,
-                    "message": record.getMessage(),
-                    "module": record.module,
-                    "function": record.funcName,
-                    "line": record.lineno,
-                }
-                if hasattr(record, "execution_time"):
-                    log_data["execution_time_ms"] = record.execution_time
-                if hasattr(record, "extra_data"):
-                    log_data.update(record.extra_data)
-                return json.dumps(log_data)
+            class JsonFormatter(logging.Formatter):
+                def format(self, record):
+                    log_data = {
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                        "level": record.levelname,
+                        "message": record.getMessage(),
+                        "module": record.module,
+                        "function": record.funcName,
+                        "line": record.lineno,
+                    }
+                    if hasattr(record, "execution_time"):
+                        log_data["execution_time_ms"] = record.execution_time
+                    if hasattr(record, "extra_data"):
+                        log_data.update(record.extra_data)
+                    return json.dumps(log_data)
 
-        handler.setFormatter(JsonFormatter())
-        self.logger.addHandler(handler)
+            handler.setFormatter(JsonFormatter())
+            self.logger.addHandler(handler)
+
+        # Set up server request logger for _server.log
+        self.server_request_logger = logging.getLogger(f"YSimulator.Server.{self.server_name}.Requests")
+        self.server_request_logger.setLevel(logging.INFO)
+        self.server_request_logger.handlers = []
+        
+        if enable_request_log:
+            from logging.handlers import RotatingFileHandler
+            
+            server_log_file = log_dir / "_server.log"
+            
+            # Create handler for server requests (raw JSON, one per line)
+            server_handler = RotatingFileHandler(server_log_file, maxBytes=LOG_FILE_MAX_BYTES, backupCount=LOG_FILE_BACKUP_COUNT)
+            
+            # Add compression for rotated files
+            server_handler.rotator = compress_rotated_log
+            server_handler.namer = lambda name: name + ".gz"
+            
+            # Simple formatter that just outputs the message (already JSON)
+            class RawFormatter(logging.Formatter):
+                def format(self, record):
+                    return record.getMessage()
+            
+            server_handler.setFormatter(RawFormatter())
+            self.server_request_logger.addHandler(server_handler)
+        
+        # Prevent propagation to avoid duplicate logs
+        self.server_request_logger.propagate = False
 
     def _validate_and_extract_interests(self, interests):
         """
@@ -488,7 +644,8 @@ class OrchestratorServer:
         """
         return self.interest_manager.store_article_topics(article_id, topic_names)
 
-    def register_agents(self, agents: list) -> dict:
+    @log_server_request
+    def register_agents(self, agents: list, client_id: str = None) -> dict:
         """
         Register agent profiles in the database if they don't already exist.
         For page agents (is_page=1), also creates a Website entry.
@@ -497,6 +654,7 @@ class OrchestratorServer:
 
         Args:
             agents: List of AgentProfile dataclass instances
+            client_id: Optional client identifier for logging purposes
 
         Returns:
             dict: Summary of registration results with counts
@@ -618,7 +776,8 @@ class OrchestratorServer:
             print(f"[Server] ❌ Agent registration error: {e}")
             raise
 
-    def add_follow_relationship(self, follow_data: dict) -> bool:
+    @log_server_request
+    def add_follow_relationship(self, follow_data: dict, client_id: str = None) -> bool:
         """
         Add a follow relationship to the database.
 
@@ -631,6 +790,7 @@ class OrchestratorServer:
                 - follower_id: UUID of follower
                 - action: 'follow' or 'unfollow'
                 - round: Round ID (can be empty for initial setup)
+            client_id: Optional client identifier for logging purposes
 
         Returns:
             bool: True if successful, False otherwise
@@ -693,7 +853,8 @@ class OrchestratorServer:
             # On error, assume network not loaded to be safe
             return False
 
-    def add_follow_relationships_batch(self, follows_data: list) -> int:
+    @log_server_request
+    def add_follow_relationships_batch(self, follows_data: list, client_id: str = None) -> int:
         """
         Add multiple follow relationships to the database in batch.
 
@@ -708,6 +869,7 @@ class OrchestratorServer:
                 - follower_id: UUID of follower
                 - action: 'follow' or 'unfollow'
                 - round: Round ID (can be empty for initial setup)
+            client_id: Optional client identifier for logging purposes
 
         Returns:
             int: Number of follow relationships successfully added
@@ -787,12 +949,14 @@ class OrchestratorServer:
             )
             return False
 
-    def get_unreplied_mentions(self, user_id: str) -> List[Dict[str, Any]]:
+    @log_server_request
+    def get_unreplied_mentions(self, user_id: str, client_id: str = None) -> List[Dict[str, Any]]:
         """
         Get all unreplied mentions for a user.
 
         Args:
             user_id: UUID of the user
+            client_id: Optional client identifier for logging purposes
 
         Returns:
             List[Dict]: List of mention records with keys: id, user_id, post_id, round, answered
@@ -819,6 +983,7 @@ class OrchestratorServer:
         )
         return result
 
+    @log_server_request
     def register_client(self, client_id: str, num_days: int = 0) -> dict:
         """
         Register a new client with the server.
@@ -882,6 +1047,7 @@ class OrchestratorServer:
             "start_slot": self.slot,
         }
 
+    @log_server_request
     def complete_client(self, client_id: str) -> bool:
         """
         Mark a client as completed (finished all planned activities).
@@ -918,6 +1084,7 @@ class OrchestratorServer:
             self._check_barrier_and_advance()
         return True
 
+    @log_server_request
     def heartbeat(self, client_id: str) -> bool:
         """
         Record a heartbeat from a client to indicate it's still alive.
@@ -1007,6 +1174,7 @@ class OrchestratorServer:
         self.completed_clients.add(client_id)
         self.submitted_clients.discard(client_id)
 
+    @log_server_request
     def deregister_client(self, client_id: str) -> bool:
         """
         Remove a client from the server.
@@ -1042,6 +1210,7 @@ class OrchestratorServer:
             self._check_barrier_and_advance()
         return True
 
+    @log_server_request
     def get_instruction(self, client_id: str) -> SimulationInstruction:
         """
         Get the next simulation instruction for a client.
@@ -1073,6 +1242,7 @@ class OrchestratorServer:
             status="PROCEED", day=self.day, slot=self.slot, recent_post_ids=self.recent_posts_cache
         )
 
+    @log_server_request
     def submit_actions(self, client_id: str, actions: list) -> None:
         """
         Submit actions from a client for the current simulation slot.
@@ -1960,8 +2130,9 @@ class OrchestratorServer:
                 extra={"extra_data": {"agent_id": agent_id, "error": str(e)}},
             )
 
+    @log_server_request
     def get_recommended_posts(
-        self, agent_id: str, mode: str = "random", limit: int = 5, followers_ratio: float = 0.6
+        self, agent_id: str, mode: str = "random", limit: int = 5, followers_ratio: float = 0.6, client_id: str = None
     ) -> List[str]:
         """
         Get recommended posts for an agent using the specified recommendation strategy.
@@ -2209,19 +2380,22 @@ class OrchestratorServer:
             )
             return []
 
-    def get_post(self, post_id: str) -> Optional[Dict[str, Any]]:
+    @log_server_request
+    def get_post(self, post_id: str, client_id: str = None) -> Optional[Dict[str, Any]]:
         """
         Get a post by its ID.
 
         Args:
             post_id: UUID of the post to retrieve
+            client_id: Optional client identifier for logging purposes
 
         Returns:
             Dictionary with post data or None if not found
         """
         return self.db.get_post(post_id)
 
-    def get_thread_context(self, post_id: str, max_length: int = 5) -> List[Dict[str, Any]]:
+    @log_server_request
+    def get_thread_context(self, post_id: str, max_length: int = 5, client_id: str = None) -> List[Dict[str, Any]]:
         """
         Get thread context for a post - retrieve up to max_length posts/comments
         that immediately precede the target post in the discussion thread.
@@ -2232,6 +2406,7 @@ class OrchestratorServer:
         Args:
             post_id: UUID of the post to get context for
             max_length: Maximum number of preceding posts/comments to return
+            client_id: Optional client identifier for logging purposes
 
         Returns:
             List of dicts with keys: id, user_id, username, tweet, round
@@ -2239,19 +2414,22 @@ class OrchestratorServer:
         """
         return self.db.get_thread_context(post_id, max_length)
 
-    def get_user(self, user_id: str) -> Optional[Dict[str, Any]]:
+    @log_server_request
+    def get_user(self, user_id: str, client_id: str = None) -> Optional[Dict[str, Any]]:
         """
         Get a user by their ID.
 
         Args:
             user_id: UUID of the user to retrieve
+            client_id: Optional client identifier for logging purposes
 
         Returns:
             Dictionary with user data or None if not found
         """
         return self.db.get_user(user_id)
 
-    def search_posts_by_topic(self, topic_id: str, agent_id: str, limit: int = 10) -> List[str]:
+    @log_server_request
+    def search_posts_by_topic(self, topic_id: str, agent_id: str, limit: int = 10, client_id: str = None) -> List[str]:
         """
         Search for recent posts on a specific topic from other users.
 
@@ -2265,8 +2443,9 @@ class OrchestratorServer:
         """
         return self.db.search_posts_by_topic(topic_id, agent_id, limit)
 
+    @log_server_request
     def get_follow_suggestions(
-        self, agent_id: str, mode: str = "random", n_neighbors: int = 10, leaning_bias: int = 1
+        self, agent_id: str, mode: str = "random", n_neighbors: int = 10, leaning_bias: int = 1, client_id: str = None
     ) -> List[str]:
         """
         Get follow suggestions for an agent using the specified recommendation strategy.

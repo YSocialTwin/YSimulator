@@ -6,8 +6,11 @@ Ray orchestration server and executes agent behaviors.
 """
 
 import argparse
+import gzip
 import json
 import logging
+import os
+import shutil
 import sys
 import time
 from datetime import datetime
@@ -22,55 +25,86 @@ from YSimulator.YClient.news_feeds.news_service import NewsFeedService
 from YSimulator.YClient.client import SimulationClient
 
 
-def setup_logging(config_path: Path, client_name: str) -> logging.Logger:
+def compress_rotated_log(source, dest):
     """
-    Set up rotating JSON logging for the client.
+    Compress a rotated log file using gzip.
+    
+    Args:
+        source: Path to the source log file
+        dest: Path to the destination compressed file
+    """
+    with open(source, 'rb') as f_in:
+        with gzip.open(dest, 'wb') as f_out:
+            shutil.copyfileobj(f_in, f_out)
+    os.remove(source)
+
+
+def setup_logging(config_path: Path, client_name: str, logging_config: dict = None) -> logging.Logger:
+    """
+    Set up rotating JSON logging for the client with gzip compression.
 
     Args:
         config_path: Path to the configuration directory
         client_name: Name of the client instance
+        logging_config: Optional logging configuration dict with keys:
+            - enable_execution_log: bool (default True)
+            - enable_console_log: bool (default True)
 
     Returns:
         Configured logger instance
     """
+    # Default logging configuration
+    if logging_config is None:
+        logging_config = {}
+    
+    enable_execution_log = logging_config.get("enable_execution_log", True)
+    enable_console_log = logging_config.get("enable_console_log", True)
+    
     log_dir = config_path / "logs"
     log_dir.mkdir(exist_ok=True)
-
-    log_file = log_dir / f"{client_name}_client.log"
 
     # Create logger
     logger = logging.getLogger(f"YSimulator.Client.{client_name}")
     logger.setLevel(logging.INFO)
 
-    # Create rotating file handler (10MB per file, keep 5 backups)
-    handler = RotatingFileHandler(log_file, maxBytes=10 * 1024 * 1024, backupCount=5)  # 10MB
+    # Add file handler if enabled
+    if enable_execution_log:
+        log_file = log_dir / f"{client_name}_execution.log"
+        
+        # Create rotating file handler (10MB per file, keep 5 backups)
+        handler = RotatingFileHandler(log_file, maxBytes=10 * 1024 * 1024, backupCount=5)  # 10MB
+        
+        # Add compression for rotated files
+        handler.rotator = compress_rotated_log
+        handler.namer = lambda name: name + ".gz"
 
-    # Create JSON formatter
-    class JsonFormatter(logging.Formatter):
-        def format(self, record):
-            log_data = {
-                "timestamp": datetime.utcnow().isoformat(),
-                "level": record.levelname,
-                "message": record.getMessage(),
-                "module": record.module,
-                "function": record.funcName,
-                "line": record.lineno,
-            }
-            if hasattr(record, "execution_time"):
-                log_data["execution_time_ms"] = record.execution_time
-            if hasattr(record, "extra_data"):
-                log_data.update(record.extra_data)
-            return json.dumps(log_data)
+        # Create JSON formatter
+        class JsonFormatter(logging.Formatter):
+            def format(self, record):
+                log_data = {
+                    "timestamp": datetime.utcnow().isoformat(),
+                    "level": record.levelname,
+                    "message": record.getMessage(),
+                    "module": record.module,
+                    "function": record.funcName,
+                    "line": record.lineno,
+                }
+                if hasattr(record, "execution_time"):
+                    log_data["execution_time_ms"] = record.execution_time
+                if hasattr(record, "extra_data"):
+                    log_data.update(record.extra_data)
+                return json.dumps(log_data)
 
-    handler.setFormatter(JsonFormatter())
-    logger.addHandler(handler)
+        handler.setFormatter(JsonFormatter())
+        logger.addHandler(handler)
 
-    # Also log to console
-    console_handler = logging.StreamHandler()
-    console_handler.setFormatter(
-        logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
-    )
-    logger.addHandler(console_handler)
+    # Add console handler if enabled
+    if enable_console_log:
+        console_handler = logging.StreamHandler()
+        console_handler.setFormatter(
+            logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+        )
+        logger.addHandler(console_handler)
 
     return logger
 
@@ -146,7 +180,8 @@ if __name__ == "__main__":
     prompts_config = configs[str(prompts_config_file)]
 
     # Set up logging in config directory
-    logger = setup_logging(config_dir, client_name)
+    logging_config = sim_config.get("logging", {})
+    logger = setup_logging(config_dir, client_name, logging_config)
 
     load_time = (time.time() - start_time) * 1000
     logger.info(
