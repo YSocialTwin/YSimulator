@@ -39,14 +39,10 @@ Each log entry is a single-line JSON object with the following fields:
 
 The server request log is saved to:
 ```
-<config_path>/logs/<server_name>_server.log
+<config_path>/logs/_server.log
 ```
 
-For example:
-- Default (server_name="orchestrator_server"): `./logs/orchestrator_server_server.log`
-- Custom (server_name="my_orchestrator"): `./logs/my_orchestrator_server.log`
-
-**Note**: By default, the server_name is "orchestrator_server", which results in the filename "orchestrator_server_server.log". This is by design - the "_server.log" suffix is always appended to distinguish server request logs from actor logs.
+This is a fixed filename that all server instances write to, making it easy to locate and parse server request logs.
 
 ## Logged Methods
 
@@ -89,7 +85,7 @@ When running the server, the log file is automatically created:
 python run_server.py --config ./example/demo_small
 
 # Logs are written to:
-# ./example/demo_small/logs/orchestrator_server_server.log
+# ./example/demo_small/logs/_server.log
 ```
 
 ## Parsing Logs
@@ -100,11 +96,12 @@ You can easily parse and analyze the logs using Python:
 import json
 
 # Read and parse log entries
-with open('logs/orchestrator_server_server.log', 'r') as f:
+with open('logs/_server.log', 'r') as f:
     for line in f:
         entry = json.loads(line.strip())
         print(f"[{entry['time']}] {entry['client_name']} -> {entry['path']} "
               f"({entry['status_code']}) {entry['duration']:.4f}s")
+```
 ```
 
 ## Performance Considerations

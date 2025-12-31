@@ -273,7 +273,7 @@ class OrchestratorServer:
         self.logger.addHandler(handler)
 
         # Set up server request logger for _server.log
-        server_log_file = log_dir / f"{self.server_name}_server.log"
+        server_log_file = log_dir / "_server.log"
         self.server_request_logger = logging.getLogger(f"YSimulator.Server.{self.server_name}.Requests")
         self.server_request_logger.setLevel(logging.INFO)
         self.server_request_logger.handlers = []
