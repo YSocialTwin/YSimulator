@@ -46,11 +46,16 @@ The `DatabaseMiddleware` class provides a unified interface that switches betwee
 ### Current State
 
 ```
-Total Methods: 50
-├─ Redis Supported: 21 (42%)
-├─ Database Only: 25 (50%)
+Total Methods: 54 (including churn/new agents support)
+├─ Redis Supported: 25 (46%)
+├─ Database Only: 25 (46%)
 └─ Special/Utility: 4 (8%)
 ```
+
+**Recent Additions:**
+- **Churn System**: Full Redis support for tracking agent activity and churn status
+- **New Agents**: Uses existing `register_user` method with batch operations
+- **Population Dynamics**: Efficient queries for inactive and churned agents
 
 ---
 
@@ -60,12 +65,23 @@ Total Methods: 50
 
 These methods have complete dual implementations:
 
-#### User Management (3/5)
+#### User Management (3/5 + Churn Support)
 | Method | Redis Structure | Notes |
 |--------|----------------|-------|
-| `register_user` | Hash: `ysim:user:{id}` | Full support |
+| `register_user` | Hash: `ysim:user:{id}` | Full support with `last_active_day`, `joined_on`, `left_on` fields |
 | `get_user` | Hash: `ysim:user:{id}` | Full support |
 | `get_user_by_username` | ❌ **DB Only** | Username lookup requires index |
+| `update_agent_last_active_day` | Hash field update | Updates `last_active_day` in user hash |
+| `set_agent_churned` | Hash field update | Sets `left_on` to round ID |
+| `get_inactive_agents` | ✅ Full Support | Queries users where `current_day - last_active_day >= threshold` and `left_on IS NULL` |
+| `get_churned_agents` | ✅ Full Support | Returns users where `left_on IS NOT NULL` |
+
+**Churn & New Agents Features:**
+- `last_active_day` (INTEGER): Tracks last day agent was active, stored in Redis user hash
+- `joined_on` (String/UUID): Round ID when agent joined, stored in Redis user hash
+- `left_on` (String/UUID): Round ID when agent churned (NULL = active), stored in Redis user hash
+- Churn queries efficiently implemented for both Redis (hash field filtering) and SQL (WHERE clauses)
+- New agent registration uses same `register_user` method with batch support
 
 #### Posts & Content (5/5)
 | Method | Redis Structure | Notes |
@@ -394,17 +410,22 @@ Redis equivalent would require:
 
 ### Current Implementation
 
-| Entity | Redis Key Pattern | Structure Type | Indices |
-|--------|------------------|----------------|---------|
-| User | `ysim:user:{id}` | Hash | None |
-| Post | `ysim:post:{id}` | Hash | Recent: `ysim:recent_posts` (List) |
-| Reaction | `ysim:reaction:{id}` | Hash | None |
-| Follow | `ysim:follow:{id}` | Hash | None |
-| Mention | `ysim:mentions:{id}` | Hash | By user: `ysim:mentions:by_user:{user_id}` (Set)<br>By post: `ysim:mentions:by_post:{post_id}` (Set) |
-| Hashtag | `ysim:hashtag:{id}` | Hash | None |
-| Sentiment | `ysim:post_sentiment:{id}` | Hash | By post: `ysim:post_sentiment:by_post:{post_id}` (Set) |
-| Article | `ysim:article:{id}` | Hash | None |
-| Website | `ysim:website:{id}` | Hash | None |
+| Entity | Redis Key Pattern | Structure Type | Indices | Churn Support |
+|--------|------------------|----------------|---------|---------------|
+| User | `ysim:user:{id}` | Hash | None | `last_active_day`, `joined_on`, `left_on` fields |
+| Post | `ysim:post:{id}` | Hash | Recent: `ysim:recent_posts` (List) | N/A |
+| Reaction | `ysim:reaction:{id}` | Hash | None | N/A |
+| Follow | `ysim:follow:{id}` | Hash | None | N/A |
+| Mention | `ysim:mentions:{id}` | Hash | By user: `ysim:mentions:by_user:{user_id}` (Set)<br>By post: `ysim:mentions:by_post:{post_id}` (Set) | N/A |
+| Hashtag | `ysim:hashtag:{id}` | Hash | None | N/A |
+| Sentiment | `ysim:post_sentiment:{id}` | Hash | By post: `ysim:post_sentiment:by_post:{post_id}` (Set) | N/A |
+| Article | `ysim:article:{id}` | Hash | None | N/A |
+| Website | `ysim:website:{id}` | Hash | None | N/A |
+
+**User Hash Fields (Churn System):**
+- `last_active_day` (INTEGER): Last simulation day agent was active
+- `joined_on` (String): Round UUID when agent joined the simulation
+- `left_on` (String or empty): Round UUID when agent churned (empty = active)
 
 ### Missing Structures (Proposed)
 
