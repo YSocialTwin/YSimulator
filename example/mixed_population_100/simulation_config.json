@@ -100,5 +100,11 @@
       "probability_new_agents": 0.01,
       "percentage_new_agents": 0.01
     }
+  },
+  "logging": {
+    "enable_execution_log": true,
+    "enable_actor_log": true,
+    "enable_client_log": true,
+    "enable_console_log": true
   }
 }

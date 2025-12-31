@@ -62,5 +62,11 @@
         }
       }
     }
+  },
+  "logging": {
+    "enable_server_log": true,
+    "enable_actor_log": true,
+    "enable_request_log": true,
+    "enable_console_log": true
   }
 }
