@@ -6,6 +6,7 @@ managing client registration, agent actions, and simulation state progression.
 """
 
 import functools
+import inspect
 import json
 import logging
 import random
@@ -51,16 +52,24 @@ def log_server_request(func):
         request_id = f"{time.time()}-{uuid.uuid4().hex[:10]}"
         
         # Extract client_name from arguments
-        # Check common parameter names for client identification
-        client_name = kwargs.get("client_id") or kwargs.get("agent_id") or kwargs.get("user_id")
+        # Only look for explicit client_id parameter - this represents the actual client making the request
+        client_name = kwargs.get("client_id")
         
-        # If not in kwargs, check if first positional arg looks like an ID
-        if not client_name and args and isinstance(args[0], str):
-            # Only consider it a client name if it contains common patterns
-            potential_client = args[0]
-            # Check for UUID pattern (contains hyphens) or "client" in name
-            if "-" in potential_client or "client" in potential_client.lower():
-                client_name = potential_client
+        # If not in kwargs, check if first positional arg is client_id by checking parameter name
+        if not client_name and args:
+            # Get the function signature to check parameter names
+            import inspect
+            try:
+                sig = inspect.signature(func)
+                param_names = list(sig.parameters.keys())
+                # First param after 'self' (index 0 is 'self', index 1 is first real param)
+                if len(param_names) > 1 and len(args) > 0:
+                    first_param_name = param_names[1]
+                    # Only use first arg as client_name if the parameter is named 'client_id'
+                    if first_param_name == "client_id" and isinstance(args[0], str):
+                        client_name = args[0]
+            except:
+                pass
         
         # Default to "unknown" if still not found
         if not client_name:
