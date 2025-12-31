@@ -1559,18 +1559,35 @@ class OrchestratorServer:
         Returns:
             Dictionary with churn statistics
         """
+        self.logger.info(
+            f"Starting churn evaluation: enabled={self.churn_enabled}, day={self.day}, threshold={self.inactivity_threshold}",
+            extra={"extra_data": {"churn_enabled": self.churn_enabled, "day": self.day, "threshold": self.inactivity_threshold}}
+        )
+        
         if not self.churn_enabled:
+            self.logger.info("Churn disabled, skipping evaluation")
             return {"inactive_agents": 0, "candidates": 0, "churned": 0}
         
         # Get inactive agents
         inactive_agents = self.get_inactive_agents(self.inactivity_threshold)
         
+        self.logger.info(
+            f"Found {len(inactive_agents)} inactive agents (threshold={self.inactivity_threshold} days)",
+            extra={"extra_data": {"inactive_count": len(inactive_agents), "inactive_ids": inactive_agents[:10]}}  # Log first 10
+        )
+        
         if not inactive_agents:
+            self.logger.info("No inactive agents found, skipping churn")
             return {"inactive_agents": 0, "candidates": 0, "churned": 0}
         
         # Select percentage of inactive agents as churn candidates
         num_candidates = max(1, int(len(inactive_agents) * self.churn_percentage))
         churn_candidates = random.sample(inactive_agents, min(num_candidates, len(inactive_agents)))
+        
+        self.logger.info(
+            f"Selected {len(churn_candidates)} churn candidates (percentage={self.churn_percentage})",
+            extra={"extra_data": {"candidates_count": len(churn_candidates), "candidate_ids": churn_candidates[:5]}}
+        )
         
         # Churn agents based on probability
         churned_count = self.churn_agents(churn_candidates, self.churn_probability)

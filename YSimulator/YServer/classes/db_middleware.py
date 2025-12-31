@@ -2967,35 +2967,64 @@ class DatabaseMiddleware:
         Returns:
             List of agent IDs (UUID strings) that are inactive
         """
+        self.logger.info(
+            f"Checking for inactive agents: current_day={current_day}, threshold={inactivity_threshold}"
+        )
+        
         try:
             if self.use_redis:
                 inactive_agents = []
+                total_agents = 0
+                churned_agents = 0
+                agents_with_last_active = 0
                 # Get all user keys
                 pattern = self._redis_key("user_mgmt", "*")
                 for key in self.redis_client.scan_iter(match=pattern):
                     agent_data = self.redis_client.hgetall(key)
+                    total_agents += 1
                     
                     # Skip if already churned (left_on is set)
                     if agent_data.get("left_on"):
+                        churned_agents += 1
                         continue
                     
                     # Check last_active_day
                     last_active = agent_data.get("last_active_day")
                     if last_active:
+                        agents_with_last_active += 1
                         days_inactive = current_day - int(last_active)
                         if days_inactive >= inactivity_threshold:
                             inactive_agents.append(agent_data.get("id"))
+                            self.logger.debug(
+                                f"Agent {agent_data.get('id')} inactive: last_active={last_active}, days_inactive={days_inactive}"
+                            )
                 
+                self.logger.info(
+                    f"Inactive agents check (Redis): total={total_agents}, churned={churned_agents}, with_last_active={agents_with_last_active}, inactive={len(inactive_agents)}"
+                )
                 return inactive_agents
             else:
                 session = Session(self.engine)
                 try:
+                    # First, let's get some debug info
+                    total_count = session.query(User_mgmt).count()
+                    churned_count = session.query(User_mgmt).filter(User_mgmt.left_on.isnot(None)).count()
+                    with_last_active = session.query(User_mgmt).filter(User_mgmt.last_active_day.isnot(None)).count()
+                    
+                    self.logger.info(
+                        f"Database stats: total_agents={total_count}, churned={churned_count}, with_last_active={with_last_active}"
+                    )
+                    
                     # Query for inactive agents
                     inactive_agents = session.query(User_mgmt.id).filter(
                         User_mgmt.left_on.is_(None),  # Not churned
                         User_mgmt.last_active_day.isnot(None),
                         (current_day - User_mgmt.last_active_day) >= inactivity_threshold
                     ).all()
+                    
+                    self.logger.info(
+                        f"Found {len(inactive_agents)} inactive agents (threshold={inactivity_threshold})"
+                    )
                     
                     return [agent.id for agent in inactive_agents]
                 finally:

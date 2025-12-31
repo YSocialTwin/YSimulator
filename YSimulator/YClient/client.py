@@ -901,6 +901,9 @@ class SimulationClient:
                             f"End of day {current_day}: Evaluating churn (enabled={self.churn_enabled})"
                         )
                         churn_stats = ray.get(self.server.evaluate_churn.remote())
+                        self.logger.info(
+                            f"Churn evaluation complete: inactive={churn_stats['inactive_agents']}, candidates={churn_stats['candidates']}, churned={churn_stats['churned']}"
+                        )
                         if churn_stats["churned"] > 0:
                             self.logger.info(
                                 f"Churn evaluation: {churn_stats['churned']} agents churned out of {churn_stats['candidates']} candidates ({churn_stats['inactive_agents']} inactive)"
@@ -920,6 +923,9 @@ class SimulationClient:
                             f"End of day {current_day}: Evaluating new agents (enabled={self.new_agents_enabled})"
                         )
                         new_agents_count = self._evaluate_new_agents(instruction.round_id)
+                        self.logger.info(
+                            f"New agents evaluation complete: {new_agents_count} agents added"
+                        )
                         if new_agents_count > 0:
                             self.logger.info(
                                 f"New agents evaluation: {new_agents_count} agents added to population"
@@ -2721,11 +2727,20 @@ class SimulationClient:
         Returns:
             int: Number of new agents added
         """
+        self.logger.info(
+            f"Starting new agents evaluation: enabled={self.new_agents_enabled}, probability={self.probability_new_agents}, percentage={self.percentage_new_agents}"
+        )
+        
         if not self.new_agents_enabled:
+            self.logger.info("New agents disabled, skipping evaluation")
             return 0
         
         # Get non-churned agents (agents without left_on set)
         non_churned_agents = [agent for agent in self.agent_profiles if not hasattr(agent, 'left_on') or agent.left_on is None]
+        
+        self.logger.info(
+            f"Non-churned agents: {len(non_churned_agents)} out of {len(self.agent_profiles)} total"
+        )
         
         if not non_churned_agents:
             self.logger.warning("No non-churned agents available to use as templates for new agents")
@@ -2734,7 +2749,12 @@ class SimulationClient:
         # Calculate x = percentage_new_agents * non_churned_agents
         x = int(len(non_churned_agents) * self.percentage_new_agents)
         
+        self.logger.info(
+            f"Calculated x={x} new agent slots (percentage={self.percentage_new_agents} * {len(non_churned_agents)})"
+        )
+        
         if x == 0:
+            self.logger.info("x=0, no new agents will be added")
             return 0
         
         new_agents_added = 0
