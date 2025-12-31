@@ -1521,7 +1521,7 @@ class OrchestratorServer:
         Flag agents as churned based on churn probability.
         
         For each agent in the list, with probability churn_probability,
-        set their churned flag to 1.
+        set their left_on field to the current round.
         
         Note: Uses random.random() for stochastic behavior - this is intentional
         to introduce realistic variability in churn patterns across simulations.
@@ -1537,12 +1537,12 @@ class OrchestratorServer:
         for agent_id in agent_ids:
             # Use random for stochastic churn decision
             if random.random() < churn_probability:
-                success = self.db.set_agent_churned(agent_id, churned=1)
+                success = self.db.set_agent_churned(agent_id, self.current_round_id)
                 if success:
                     churned_count += 1
                     self.logger.info(
-                        f"Agent {agent_id} churned",
-                        extra={"extra_data": {"agent_id": agent_id, "day": self.day}}
+                        f"Agent {agent_id} churned at round {self.current_round_id}",
+                        extra={"extra_data": {"agent_id": agent_id, "day": self.day, "round_id": self.current_round_id}}
                     )
         return churned_count
 

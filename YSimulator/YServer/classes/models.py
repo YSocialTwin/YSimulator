@@ -129,7 +129,6 @@ class User_mgmt(Base):
     profession = Column(Text)
     activity_profile = Column(Text)
     archetype = Column(Text, default=None)
-    churned = Column(Integer, nullable=False, default=0)
     last_active_day = Column(Integer)
 
     # Relationships

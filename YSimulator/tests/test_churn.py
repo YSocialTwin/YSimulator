@@ -85,13 +85,13 @@ def test_churn_config_in_all_examples():
 def test_inactive_agent_logic():
     """Test the logic for identifying inactive agents."""
     
-    # Simulate agent data
+    # Simulate agent data - using left_on instead of churned
     agents = [
-        {"id": "agent_1", "last_active_day": 1, "churned": 0},
-        {"id": "agent_2", "last_active_day": 5, "churned": 0},
-        {"id": "agent_3", "last_active_day": 10, "churned": 0},
-        {"id": "agent_4", "last_active_day": None, "churned": 0},  # Never active
-        {"id": "agent_5", "last_active_day": 3, "churned": 1},  # Already churned
+        {"id": "agent_1", "last_active_day": 1, "left_on": None},
+        {"id": "agent_2", "last_active_day": 5, "left_on": None},
+        {"id": "agent_3", "last_active_day": 10, "left_on": None},
+        {"id": "agent_4", "last_active_day": None, "left_on": None},  # Never active
+        {"id": "agent_5", "last_active_day": 3, "left_on": "round_123"},  # Already churned
     ]
     
     current_day = 15
@@ -100,8 +100,8 @@ def test_inactive_agent_logic():
     # Identify inactive agents
     inactive_agents = []
     for agent in agents:
-        # Skip if already churned
-        if agent["churned"] == 1:
+        # Skip if already churned (left_on is set)
+        if agent["left_on"] is not None:
             continue
         
         # Check if inactive
@@ -181,15 +181,11 @@ def test_database_schema_updates():
     with open(schema_file, 'r') as f:
         schema_content = f.read()
     
-    # Check for churned column
-    assert "churned" in schema_content, "Missing 'churned' column in schema"
+    # Check for last_active_day column (not churned - we use left_on instead)
     assert "last_active_day" in schema_content, "Missing 'last_active_day' column in schema"
+    assert "left_on" in schema_content, "Missing 'left_on' column in schema"
     
-    # Check for proper defaults (flexible whitespace matching)
-    assert "churned" in schema_content and "INTEGER" in schema_content and "DEFAULT 0" in schema_content, \
-        "churned column missing or incorrect"
-    
-    print("✓ Database schema includes churn columns")
+    print("✓ Database schema includes last_active_day and left_on columns")
     return True
 
 
@@ -205,9 +201,9 @@ def test_sqlalchemy_model_updates():
     with open(models_file, 'r') as f:
         models_content = f.read()
     
-    # Check for churned and last_active_day in User_mgmt model
-    assert "churned = Column" in models_content, "Missing churned column in User_mgmt model"
+    # Check for last_active_day and left_on in User_mgmt model (not churned)
     assert "last_active_day = Column" in models_content, "Missing last_active_day column in User_mgmt model"
+    assert "left_on = Column" in models_content, "Missing left_on column in User_mgmt model"
     
     print("✓ SQLAlchemy models include churn fields")
     return True

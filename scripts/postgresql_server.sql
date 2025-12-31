@@ -51,7 +51,6 @@ CREATE TABLE user_mgmt (
     daily_activity_level INTEGER DEFAULT 1,
     profession           TEXT,
     activity_profile     TEXT,
-    churned              INTEGER NOT NULL DEFAULT 0,
     last_active_day      INTEGER
 );
 

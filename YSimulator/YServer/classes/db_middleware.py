@@ -2955,12 +2955,17 @@ class DatabaseMiddleware:
         """
         Get agents that have been inactive for the specified threshold.
         
+        Uses last_active_day for efficiency. An agent is considered inactive if:
+        - They have not churned (left_on is None)
+        - They have a last_active_day set
+        - current_day - last_active_day >= inactivity_threshold
+        
         Args:
             current_day: Current simulation day
             inactivity_threshold: Number of days of inactivity
             
         Returns:
-            List of agent IDs (UUID strings)
+            List of agent IDs (UUID strings) that are inactive
         """
         try:
             if self.use_redis:
@@ -2970,9 +2975,8 @@ class DatabaseMiddleware:
                 for key in self.redis_client.scan_iter(match=pattern):
                     agent_data = self.redis_client.hgetall(key)
                     
-                    # Skip if already churned (Redis stores as string)
-                    churned_val = agent_data.get("churned", "0")
-                    if churned_val == "1" or churned_val == 1:
+                    # Skip if already churned (left_on is set)
+                    if agent_data.get("left_on"):
                         continue
                     
                     # Check last_active_day
@@ -2988,7 +2992,7 @@ class DatabaseMiddleware:
                 try:
                     # Query for inactive agents
                     inactive_agents = session.query(User_mgmt.id).filter(
-                        User_mgmt.churned == 0,
+                        User_mgmt.left_on.is_(None),  # Not churned
                         User_mgmt.last_active_day.isnot(None),
                         (current_day - User_mgmt.last_active_day) >= inactivity_threshold
                     ).all()
@@ -3003,13 +3007,13 @@ class DatabaseMiddleware:
             )
             return []
 
-    def set_agent_churned(self, agent_id: str, churned: int = 1) -> bool:
+    def set_agent_churned(self, agent_id: str, round_id: str) -> bool:
         """
-        Set the churned flag for an agent.
+        Mark an agent as churned by setting the left_on field to the current round.
         
         Args:
             agent_id: Agent ID (UUID string)
-            churned: Churned status (1 = churned, 0 = not churned)
+            round_id: Round ID when agent churned (UUID string)
             
         Returns:
             bool: True if successful, False otherwise
@@ -3017,20 +3021,20 @@ class DatabaseMiddleware:
         try:
             if self.use_redis:
                 key = self._redis_key("user_mgmt", agent_id)
-                self.redis_client.hset(key, "churned", churned)
+                self.redis_client.hset(key, "left_on", round_id)
                 return True
             else:
                 session = Session(self.engine)
                 try:
                     session.query(User_mgmt).filter_by(id=agent_id).update({
-                        "churned": churned
+                        "left_on": round_id
                     })
                     session.commit()
                     return True
                 except Exception as e:
                     session.rollback()
                     self.logger.error(
-                        f"Error setting churned flag for agent {agent_id}: {e}",
+                        f"Error setting left_on for agent {agent_id}: {e}",
                         extra={"extra_data": {"agent_id": agent_id, "error": str(e)}}
                     )
                     return False
@@ -3038,14 +3042,14 @@ class DatabaseMiddleware:
                     session.close()
         except Exception as e:
             self.logger.error(
-                f"Error setting churned flag: {e}",
+                f"Error setting left_on: {e}",
                 extra={"extra_data": {"agent_id": agent_id, "error": str(e)}}
             )
             return False
 
     def get_churned_agents(self) -> List[str]:
         """
-        Get all churned agents.
+        Get all churned agents (agents with left_on set).
         
         Returns:
             List of agent IDs (UUID strings) that are churned
@@ -3057,14 +3061,15 @@ class DatabaseMiddleware:
                 pattern = self._redis_key("user_mgmt", "*")
                 for key in self.redis_client.scan_iter(match=pattern):
                     agent_data = self.redis_client.hgetall(key)
-                    if agent_data.get("churned") == "1":
+                    # Agent is churned if left_on is set
+                    if agent_data.get("left_on"):
                         churned_agents.append(agent_data.get("id"))
                 return churned_agents
             else:
                 session = Session(self.engine)
                 try:
                     churned_agents = session.query(User_mgmt.id).filter(
-                        User_mgmt.churned == 1
+                        User_mgmt.left_on.isnot(None)
                     ).all()
                     return [agent.id for agent in churned_agents]
                 finally:
