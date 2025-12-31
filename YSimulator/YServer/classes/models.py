@@ -63,6 +63,7 @@ class Interest(Base):
     article_topics = relationship("ArticleTopic", back_populates="topic", cascade="all, delete-orphan")
     post_topics = relationship("PostTopic", back_populates="topic", cascade="all, delete-orphan")
     post_sentiments = relationship("PostSentiment", back_populates="topic", cascade="all, delete-orphan")
+    agent_opinions = relationship("Agent_Opinion", back_populates="topic", cascade="all, delete-orphan")
 
 
 class Round(Base):
@@ -355,6 +356,7 @@ class Post(Base):
     post_topics = relationship("PostTopic", back_populates="post", cascade="all, delete-orphan")
     post_toxicity = relationship("PostToxicity", back_populates="post", cascade="all, delete-orphan")
     reactions = relationship("Reaction", back_populates="post", cascade="all, delete-orphan")
+    agent_opinions = relationship("Agent_Opinion", back_populates="post", cascade="all, delete-orphan")
 
 
 Index("idx_post_user_id", Post.user_id)
@@ -527,7 +529,7 @@ class Agent_Opinion(Base):
     Fields:
         id: Primary key
         agent_id: ID of the agent forming the opinion
-        tid: Transaction/interaction ID for this opinion event
+        tid: Transaction/interaction ID for this opinion event (Round ID)
         topic_id: ID of the topic being discussed (FK to interests)
         id_interacted_with: ID of the user/agent being interacted with
         id_post: ID of the post that triggered this opinion (FK to post)
@@ -537,8 +539,12 @@ class Agent_Opinion(Base):
     __tablename__ = "agent_opinion"
     id = Column(String(36), primary_key=True)
     agent_id = Column(String(36), nullable=False)
-    tid = Column(String(36), nullable=False)
+    tid = Column(String(36), nullable=False)  # Round ID
     topic_id = Column(String(36), ForeignKey("interests.iid"), nullable=False)
     id_interacted_with = Column(String(36))
     id_post = Column(String(36), ForeignKey("post.id"))
     opinion = Column(Float, nullable=False)
+
+    # Relationships
+    topic = relationship("Interest", back_populates="agent_opinions")
+    post = relationship("Post")

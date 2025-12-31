@@ -22,7 +22,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 
-from YSimulator.YServer.classes.models import Base, Follow, Post, Reaction, Round, User_mgmt
+from YSimulator.YServer.classes.models import Base, Follow, Post, Reaction, Round, User_mgmt, Agent_Opinion
 
 # Constants
 DEFAULT_USERNAME = "Someone"  # Default username when user data is not found
@@ -1821,6 +1821,64 @@ class DatabaseMiddleware:
                 f"Error adding user interest: {e}",
                 extra={
                     "extra_data": {"error": str(e), "user_id": user_id, "interest_id": interest_id}
+                },
+            )
+            return False
+        finally:
+            session.close()
+
+    def add_agent_opinion(
+        self,
+        agent_id: str,
+        round_id: str,
+        topic_id: str,
+        opinion: float,
+        id_interacted_with: Optional[str] = None,
+        id_post: Optional[str] = None,
+    ) -> bool:
+        """
+        Add an agent opinion record to the database.
+
+        Args:
+            agent_id: Agent UUID
+            round_id: Round UUID
+            topic_id: Topic UUID (from interests table)
+            opinion: Opinion value (float in [0, 1])
+            id_interacted_with: Optional UUID of agent interacted with
+            id_post: Optional UUID of post interacted with
+
+        Returns:
+            bool: True if successful, False otherwise
+        """
+        import uuid
+
+        session = Session(self.engine)
+        try:
+            # Create agent opinion record
+            opinion_id = str(uuid.uuid4())
+            agent_opinion = Agent_Opinion(
+                id=opinion_id,
+                agent_id=agent_id,
+                tid=round_id,
+                topic_id=topic_id,
+                opinion=opinion,
+                id_interacted_with=id_interacted_with,
+                id_post=id_post,
+            )
+            session.add(agent_opinion)
+            session.commit()
+            return True
+        except Exception as e:
+            session.rollback()
+            self.logger.error(
+                f"Error adding agent opinion: {e}",
+                extra={
+                    "extra_data": {
+                        "error": str(e),
+                        "agent_id": agent_id,
+                        "topic_id": topic_id,
+                        "round_id": round_id,
+                    }
                 },
             )
             return False

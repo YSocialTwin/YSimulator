@@ -496,6 +496,7 @@ class SimulationClient:
                     is_page=agent_data.get("is_page", 0),
                     feed_url=agent_data.get("feed_url"),  # RSS feed for page agents
                     interests=agent_data.get("interests"),  # Interest topics and counts
+                    opinions=agent_data.get("opinions"),  # Opinion values for topics
                 )
                 agents.append(profile)
 

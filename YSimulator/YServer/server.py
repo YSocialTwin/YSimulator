@@ -737,6 +737,23 @@ class OrchestratorServer:
                         interests=agent_profile.interests,
                         round_id=self.current_round_id,
                     )
+                
+                # Initialize opinions for newly registered agents
+                if agent_profile and agent_profile.opinions:
+                    # Get interest IDs for the agent's topics
+                    for topic_name, opinion_value in agent_profile.opinions.items():
+                        # Get or create the interest/topic in the database
+                        topic_id = self.db.add_or_get_interest(topic_name)
+                        if topic_id:
+                            # Store initial opinion with no interaction references
+                            self.db.add_agent_opinion(
+                                agent_id=agent_id,
+                                round_id=self.current_round_id,
+                                topic_id=topic_id,
+                                opinion=opinion_value,
+                                id_interacted_with=None,
+                                id_post=None,
+                            )
 
             # Batch register websites for page agents
             pages_registered = 0
