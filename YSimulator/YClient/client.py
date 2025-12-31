@@ -2764,24 +2764,41 @@ class SimulationClient:
         
         # Churn agents based on probability
         churned_count = 0
+        agents_to_churn = []  # Collect agents to churn for batch operation
+        
         for agent_id in churn_candidates:
             # Use random for stochastic churn decision
             if random.random() < self.churn_probability:
-                try:
-                    success = ray.get(self.server.set_agent_churned.remote(agent_id, current_round_id))
-                    if success:
-                        churned_count += 1
-                        self.logger.info(
-                            f"Agent {agent_id} churned at round {current_round_id}",
-                            extra={"extra_data": {"agent_id": agent_id, "day": current_day, "round_id": current_round_id}}
-                        )
-                        # Update local agent profile if it exists
-                        for agent in self.agent_profiles:
-                            if agent.id == agent_id:
-                                agent.left_on = current_round_id
-                                break
-                except Exception as e:
-                    self.logger.error(f"Failed to churn agent {agent_id}: {e}")
+                agents_to_churn.append(agent_id)
+        
+        # Batch churn all selected agents in a single server call
+        if agents_to_churn:
+            try:
+                self.logger.info(f"Batch churning {len(agents_to_churn)} agents at round {current_round_id}")
+                churned_count = ray.get(self.server.set_agents_churned_batch.remote(agents_to_churn, current_round_id))
+                
+                self.logger.info(
+                    f"Successfully churned {churned_count} agents in batch",
+                    extra={"extra_data": {
+                        "churned_agent_ids": agents_to_churn,
+                        "day": current_day,
+                        "round_id": current_round_id
+                    }}
+                )
+                
+                # Update local agent profiles for all churned agents
+                for agent_id in agents_to_churn:
+                    for agent in self.agent_profiles:
+                        if agent.id == agent_id:
+                            agent.left_on = current_round_id
+                            break
+                            
+            except Exception as e:
+                self.logger.error(
+                    f"Failed to batch churn {len(agents_to_churn)} agents: {e}",
+                    extra={"extra_data": {"error": str(e), "num_agents": len(agents_to_churn)}}
+                )
+                churned_count = 0
         
         result = {
             "inactive_agents": len(inactive_agents),

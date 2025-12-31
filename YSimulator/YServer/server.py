@@ -1536,6 +1536,23 @@ class OrchestratorServer:
             bool: True if successful
         """
         return self.db.set_agent_churned(agent_id, round_id)
+    
+    def set_agents_churned_batch(self, agent_ids: List[str], round_id: str) -> int:
+        """
+        Mark multiple agents as churned in a batch operation (simple database wrapper for client use).
+        
+        Args:
+            agent_ids: List of agent IDs to churn
+            round_id: Round ID when agents churned
+            
+        Returns:
+            int: Number of agents successfully churned
+        """
+        churned_count = 0
+        for agent_id in agent_ids:
+            if self.db.set_agent_churned(agent_id, round_id):
+                churned_count += 1
+        return churned_count
 
     def get_churned_agents(self) -> List[str]:
         """
