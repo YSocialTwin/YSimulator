@@ -383,93 +383,6 @@ class OrchestratorServer:
         """
         return self.interest_manager.get_topic_name_from_id(topic_id)
 
-    def _update_agent_opinions_on_comment(
-        self, 
-        agent_id: str, 
-        parent_post_id: str,
-        parent_post_author_id: str,
-        topic_ids: List[str]
-    ) -> None:
-        """
-        Update agent opinions when they comment on a post.
-        
-        Uses the bounded confidence model to update opinions based on interaction
-        with the post author's opinions on the discussed topics.
-        
-        Args:
-            agent_id: UUID of the agent making the comment
-            parent_post_id: UUID of the post being commented on
-            parent_post_author_id: UUID of the author of the parent post
-            topic_ids: List of topic UUIDs associated with the post
-        """
-        # Get opinion dynamics parameters from simulation config
-        opinion_config = self.simulation_config.get("opinion_dynamics", {})
-        if not opinion_config:
-            # Opinion dynamics not configured, skip
-            return
-        
-        model_name = opinion_config.get("model_name", "bounded_confidence")
-        params = opinion_config.get("parameters", {})
-        
-        # Import the opinion dynamics module
-        from YSimulator.YClient.opinion_dynamics.confidence_bound import bounded_confidence
-        
-        # Process each topic
-        for topic_id in topic_ids:
-            try:
-                # Get the agent's current opinion on this topic
-                agent_opinion = self.db.get_latest_agent_opinion(agent_id, topic_id)
-                
-                # Get the parent post author's latest opinion on this topic
-                author_opinion = self.db.get_latest_agent_opinion(
-                    parent_post_author_id, topic_id
-                )
-                
-                # Skip if we can't get author's opinion
-                if author_opinion is None:
-                    self.logger.debug(
-                        f"No opinion found for author {parent_post_author_id} on topic {topic_id}"
-                    )
-                    continue
-                
-                # Calculate new opinion using bounded confidence model
-                new_opinion = bounded_confidence(
-                    x=agent_opinion,  # Can be None for cold start
-                    y=author_opinion,
-                    epsilon=params.get("epsilon", 0.25),
-                    mu=params.get("mu", 0.5),
-                    theta=params.get("theta", 0.0),
-                    cold_start=params.get("cold_start", "neutral")
-                )
-                
-                # Store the updated opinion
-                self.db.add_agent_opinion(
-                    agent_id=agent_id,
-                    round_id=self.current_round_id,
-                    topic_id=topic_id,
-                    opinion=new_opinion,
-                    id_interacted_with=parent_post_author_id,
-                    id_post=parent_post_id
-                )
-                
-                self.logger.info(
-                    f"Updated opinion: agent={agent_id}, topic={topic_id}, "
-                    f"old={agent_opinion}, author={author_opinion}, new={new_opinion}"
-                )
-                
-            except Exception as e:
-                self.logger.error(
-                    f"Error updating opinion for agent {agent_id} on topic {topic_id}: {e}",
-                    extra={
-                        "extra_data": {
-                            "error": str(e),
-                            "agent_id": agent_id,
-                            "topic_id": topic_id,
-                            "parent_post_id": parent_post_id
-                        }
-                    }
-                )
-
     def _reaction_to_sentiment(self, reaction_type: str) -> Optional[Dict[str, float]]:
         """
         Map a reaction type to sentiment values.
@@ -1542,16 +1455,21 @@ class OrchestratorServer:
                                         act.agent_id, topic_name, increment=1
                                     )
                             
-                            # Update agent opinions based on interaction with post author
-                            if topic_ids and parent_post:
+                            # Store opinion updates if calculated by client
+                            if hasattr(act, 'updated_opinions') and act.updated_opinions:
                                 parent_author_id = parent_post.get("user_id")
-                                if parent_author_id:
-                                    self._update_agent_opinions_on_comment(
+                                for topic_id, new_opinion in act.updated_opinions.items():
+                                    self.db.add_agent_opinion(
                                         agent_id=str(act.agent_id),
-                                        parent_post_id=parent_post_id,
-                                        parent_post_author_id=parent_author_id,
-                                        topic_ids=topic_ids
+                                        round_id=self.current_round_id,
+                                        topic_id=topic_id,
+                                        opinion=new_opinion,
+                                        id_interacted_with=parent_author_id,
+                                        id_post=parent_post_id
                                     )
+                                self.logger.info(
+                                    f"Stored {len(act.updated_opinions)} opinion updates for agent {act.agent_id}"
+                                )
                         else:
                             self.logger.warning(
                                 f"Failed to add comment for agent {act.agent_id}",
@@ -2557,6 +2475,51 @@ class OrchestratorServer:
             List[str]: List of post UUIDs from other users on this topic
         """
         return self.db.search_posts_by_topic(topic_id, agent_id, limit)
+
+    @log_server_request
+    def get_post_topics(self, post_id: str, client_id: str = None) -> List[str]:
+        """
+        Get topic IDs associated with a post.
+        
+        Args:
+            post_id: UUID of the post
+            client_id: Optional client identifier for logging
+            
+        Returns:
+            List of topic UUIDs
+        """
+        return self.db.get_post_topics(post_id)
+    
+    @log_server_request
+    def get_topic_name_from_id(self, topic_id: str, client_id: str = None) -> Optional[str]:
+        """
+        Get topic name from topic UUID.
+        
+        Args:
+            topic_id: Topic UUID (iid)
+            client_id: Optional client identifier for logging
+            
+        Returns:
+            Topic name or None if not found
+        """
+        return self._get_topic_name_from_id(topic_id)
+    
+    @log_server_request
+    def get_latest_agent_opinion(
+        self, agent_id: str, topic_id: str, client_id: str = None
+    ) -> Optional[float]:
+        """
+        Get the latest opinion value for an agent on a topic.
+        
+        Args:
+            agent_id: Agent UUID
+            topic_id: Topic UUID
+            client_id: Optional client identifier for logging
+            
+        Returns:
+            Latest opinion value or None if not found
+        """
+        return self.db.get_latest_agent_opinion(agent_id, topic_id)
 
     @log_server_request
     def get_follow_suggestions(

@@ -1507,10 +1507,15 @@ class SimulationClient:
             action = generate_rule_based_comment(agent.id, agent.cluster, target_post)
             # Annotate rule-based comment
             self._annotate_action_content(action)
-            actions.append(action)
-            # Track for secondary follow (rule-based comment)
+            
+            # Calculate opinion updates for rule-based comment
             post_data = ray.get(self.server.get_post.remote(target_post, client_id=self.client_id))
             if post_data:
+                updated_opinions = self._calculate_opinion_updates(agent.id, target_post, post_data)
+                if updated_opinions:
+                    action.updated_opinions = updated_opinions
+                
+                # Track for secondary follow (rule-based comment)
                 rule_based_interactions.append(
                     (
                         agent.id,
@@ -1520,6 +1525,8 @@ class SimulationClient:
                         False,
                     )
                 )
+            
+            actions.append(action)
 
     def _handle_read_action(
         self, agent, agent_type, pending_llm_reactions, actions, rule_based_interactions
@@ -2501,6 +2508,13 @@ class SimulationClient:
                 self.logger.info(
                     f"LLM comment annotated for agent {a_id}: has_sentiment={bool(annotations.get('sentiment'))}, has_toxicity={bool(annotations.get('toxicity'))}, has_emotions={bool(annotations.get('emotions'))}, hashtags={len(annotations.get('hashtags', []))}, mentions={len(annotations.get('mentions', []))}"
                 )
+                
+                # Calculate opinion updates before creating action
+                post_data = ray.get(self.server.get_post.remote(target, client_id=self.client_id))
+                updated_opinions = None
+                if post_data:
+                    updated_opinions = self._calculate_opinion_updates(a_id, target, post_data)
+                
                 action = ActionDTO(
                     a_id,
                     cid,
@@ -2508,6 +2522,7 @@ class SimulationClient:
                     content=res_act,
                     target_post_id=target,
                     annotations=annotations,
+                    updated_opinions=updated_opinions,
                 )
                 actions.append(action)
 
@@ -2522,7 +2537,6 @@ class SimulationClient:
                     )
 
                 # Track for secondary follow (comment action)
-                post_data = ray.get(self.server.get_post.remote(target, client_id=self.client_id))
                 if post_data:
                     secondary_follow_candidates.append(
                         (a_id, cid, post_data.get("user_id"), post_data.get("tweet", ""), True)
@@ -2595,6 +2609,103 @@ class SimulationClient:
             # LLM returns user_id to follow or None to skip
             if target_user:
                 actions.append(ActionDTO(a_id, cid, "FOLLOW", target_user_id=target_user))
+
+    def _calculate_opinion_updates(
+        self, agent_id: str, parent_post_id: str, parent_post_data: dict
+    ) -> Optional[dict]:
+        """
+        Calculate opinion updates when an agent comments on a post.
+        
+        Uses the bounded confidence model to update opinions based on interaction
+        with the post author's opinions on the discussed topics.
+        
+        Args:
+            agent_id: UUID of the agent making the comment
+            parent_post_id: UUID of the post being commented on
+            parent_post_data: Dictionary containing post data including user_id
+            
+        Returns:
+            dict: Mapping of topic_id to new opinion value, or None if no updates
+        """
+        try:
+            # Get opinion dynamics config
+            opinion_config = self.sim_config.get("opinion_dynamics", {})
+            if not opinion_config:
+                return None
+            
+            params = opinion_config.get("parameters", {})
+            
+            # Get the parent post author
+            parent_author_id = parent_post_data.get("user_id")
+            if not parent_author_id:
+                return None
+            
+            # Get the post topics from server
+            topic_ids = ray.get(
+                self.server.get_post_topics.remote(parent_post_id, client_id=self.client_id)
+            )
+            if not topic_ids:
+                return None
+            
+            # Import opinion dynamics module
+            from YSimulator.YClient.opinion_dynamics.confidence_bound import bounded_confidence
+            
+            # Calculate updated opinions for each topic
+            updated_opinions = {}
+            for topic_id in topic_ids:
+                # Get agent's current opinion from local cache (from AgentProfile)
+                agent_profile = self.agent_profiles.get(agent_id)
+                if not agent_profile or not agent_profile.opinions:
+                    continue
+                
+                # Get topic name to look up opinion
+                topic_name = ray.get(
+                    self.server.get_topic_name_from_id.remote(topic_id, client_id=self.client_id)
+                )
+                if not topic_name:
+                    continue
+                
+                agent_opinion = agent_profile.opinions.get(topic_name)
+                
+                # Get author's latest opinion from server
+                author_opinion = ray.get(
+                    self.server.get_latest_agent_opinion.remote(
+                        parent_author_id, topic_id, client_id=self.client_id
+                    )
+                )
+                
+                if author_opinion is None:
+                    continue
+                
+                # Calculate new opinion using bounded confidence
+                new_opinion = bounded_confidence(
+                    x=agent_opinion,
+                    y=author_opinion,
+                    epsilon=params.get("epsilon", 0.25),
+                    mu=params.get("mu", 0.5),
+                    theta=params.get("theta", 0.0),
+                    cold_start=params.get("cold_start", "neutral")
+                )
+                
+                updated_opinions[topic_id] = new_opinion
+                
+                # Update local cache
+                if agent_profile.opinions:
+                    agent_profile.opinions[topic_name] = new_opinion
+                
+                self.logger.info(
+                    f"Opinion update calculated: agent={agent_id}, topic={topic_name}, "
+                    f"old={agent_opinion}, author={author_opinion}, new={new_opinion}"
+                )
+            
+            return updated_opinions if updated_opinions else None
+            
+        except Exception as e:
+            self.logger.error(
+                f"Error calculating opinion updates for agent {agent_id}: {e}",
+                extra={"extra_data": {"error": str(e), "agent_id": agent_id}}
+            )
+            return None
 
     def _process_secondary_follows(
         self, secondary_follow_candidates: list, rule_based_interactions: list, actions: list

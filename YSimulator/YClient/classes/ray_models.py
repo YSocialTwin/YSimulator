@@ -63,6 +63,8 @@ class ActionDTO:
     topic: Optional[str] = None  # Topic name for posts
     # Text annotations (populated by client before submission)
     annotations: Optional[dict] = None  # Dict with 'hashtags', 'mentions', 'sentiment', 'toxicity'
+    # Updated opinions for comment actions: {topic_id: opinion_value}
+    updated_opinions: Optional[dict] = None
 
 
 @dataclass
