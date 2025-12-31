@@ -1523,6 +1523,9 @@ class OrchestratorServer:
         For each agent in the list, with probability churn_probability,
         set their churned flag to 1.
         
+        Note: Uses random.random() for stochastic behavior - this is intentional
+        to introduce realistic variability in churn patterns across simulations.
+        
         Args:
             agent_ids: List of agent IDs to potentially churn
             churn_probability: Probability (0.0 to 1.0) of churning each agent
@@ -1532,6 +1535,7 @@ class OrchestratorServer:
         """
         churned_count = 0
         for agent_id in agent_ids:
+            # Use random for stochastic churn decision
             if random.random() < churn_probability:
                 success = self.db.set_agent_churned(agent_id, churned=1)
                 if success:

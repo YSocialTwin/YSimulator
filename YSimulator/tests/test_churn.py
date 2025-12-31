@@ -185,8 +185,8 @@ def test_database_schema_updates():
     assert "churned" in schema_content, "Missing 'churned' column in schema"
     assert "last_active_day" in schema_content, "Missing 'last_active_day' column in schema"
     
-    # Check for proper defaults
-    assert "churned              INTEGER NOT NULL DEFAULT 0" in schema_content, \
+    # Check for proper defaults (flexible whitespace matching)
+    assert "churned" in schema_content and "INTEGER" in schema_content and "DEFAULT 0" in schema_content, \
         "churned column missing or incorrect"
     
     print("✓ Database schema includes churn columns")

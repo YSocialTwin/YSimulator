@@ -182,6 +182,10 @@ class SimulationClient:
         self.perspective_api_key = simulation_config["simulation"].get("perspective_api_key", None)
         self.enable_emotions = simulation_config["simulation"].get("emotion_annotation", False)
 
+        # Cache for churned agents (refreshed after churn evaluation)
+        self._churned_agents_cache = set()
+        self._churned_agents_cache_valid = False
+
         # Create agents from configuration
         self.agent_profiles = []
         if agent_config:
@@ -895,6 +899,8 @@ class SimulationClient:
                             self.logger.info(
                                 f"Churn evaluation: {churn_stats['churned']} agents churned out of {churn_stats['candidates']} candidates ({churn_stats['inactive_agents']} inactive)"
                             )
+                            # Invalidate churned agents cache after new churns
+                            self._churned_agents_cache_valid = False
                     except Exception as e:
                         self.logger.error(
                             f"Error evaluating churn: {e}",
@@ -2111,14 +2117,22 @@ class SimulationClient:
         actions = []
 
         # Get list of churned agents from server to filter them out
+        # Use cache to avoid expensive server calls on every simulation
         churned_agent_ids = set()
         if self.churn_enabled:
             try:
-                churned_agent_ids = set(ray.get(self.server.get_churned_agents.remote()))
-                if churned_agent_ids:
-                    self.logger.info(
-                        f"Filtering out {len(churned_agent_ids)} churned agents from selection"
-                    )
+                # Refresh cache if invalid or empty
+                if not self._churned_agents_cache_valid:
+                    churned_agent_ids = set(ray.get(self.server.get_churned_agents.remote()))
+                    self._churned_agents_cache = churned_agent_ids
+                    self._churned_agents_cache_valid = True
+                    if churned_agent_ids:
+                        self.logger.info(
+                            f"Refreshed churned agents cache: {len(churned_agent_ids)} churned agents"
+                        )
+                else:
+                    # Use cached value
+                    churned_agent_ids = self._churned_agents_cache
             except Exception as e:
                 self.logger.warning(
                     f"Error getting churned agents: {e}",

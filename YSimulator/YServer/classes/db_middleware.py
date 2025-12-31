@@ -20,6 +20,7 @@ except ImportError:
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 
 from YSimulator.YServer.classes.models import Base, Follow, Post, Reaction, Round, User_mgmt
 
@@ -2969,8 +2970,9 @@ class DatabaseMiddleware:
                 for key in self.redis_client.scan_iter(match=pattern):
                     agent_data = self.redis_client.hgetall(key)
                     
-                    # Skip if already churned
-                    if agent_data.get("churned") == "1":
+                    # Skip if already churned (Redis stores as string)
+                    churned_val = agent_data.get("churned", "0")
+                    if churned_val == "1" or churned_val == 1:
                         continue
                     
                     # Check last_active_day
