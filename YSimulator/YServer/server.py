@@ -538,7 +538,7 @@ class OrchestratorServer:
                 "language": agent_profile.language,
                 "owner": agent_profile.owner,
                 "education_level": agent_profile.education_level,
-                "joined_on": self.current_round_id,  # FK to rounds table (UUID string)
+                "joined_on": agent_profile.joined_on if agent_profile.joined_on else self.current_round_id,  # Use agent's joined_on or current round
                 "gender": agent_profile.gender,
                 "nationality": agent_profile.nationality,
                 "round_actions": agent_profile.round_actions,
@@ -549,6 +549,7 @@ class OrchestratorServer:
                 "profession": agent_profile.profession,
                 "activity_profile": agent_profile.activity_profile,
                 "archetype": agent_profile.archetype,
+                "last_active_day": self.day,  # Initialize last_active_day to current day
             }
             users_data.append(user_data)
 

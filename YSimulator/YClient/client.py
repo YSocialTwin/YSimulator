@@ -2802,6 +2802,7 @@ class SimulationClient:
                     daily_activity_level=template_agent.daily_activity_level,
                     round_actions=template_agent.round_actions,
                     is_page=0,  # New agents are not pages
+                    left_on=None,  # New agents are not churned
                 )
                 
                 # Add to agent_profiles list
