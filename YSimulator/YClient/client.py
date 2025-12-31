@@ -15,6 +15,8 @@ import time
 from datetime import datetime
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
+from typing import Optional
+
 
 import ray
 
