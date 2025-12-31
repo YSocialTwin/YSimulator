@@ -145,11 +145,6 @@ if __name__ == "__main__":
     posts_config = config.get("posts", {})
     if posts_config:
         simulation_config["posts"] = posts_config
-    
-    # Add agents configuration to simulation_config (includes churn and new_agents)
-    agents_config = config.get("agents", {})
-    if agents_config:
-        simulation_config["agents"] = agents_config
 
     # Set up logging in config directory
     logger = setup_logging(config_dir, server_name)

@@ -900,7 +900,7 @@ class SimulationClient:
                         self.logger.info(
                             f"End of day {current_day}: Evaluating churn (enabled={self.churn_enabled})"
                         )
-                        churn_stats = ray.get(self.server.evaluate_churn.remote())
+                        churn_stats = self._evaluate_churn()
                         self.logger.info(
                             f"Churn evaluation complete: inactive={churn_stats['inactive_agents']}, candidates={churn_stats['candidates']}, churned={churn_stats['churned']}"
                         )
@@ -2708,6 +2708,93 @@ class SimulationClient:
                 self.logger.warning(f"Failed to get follow suggestions for agent {agent.id}: {e}")
 
         return daily_follow_actions
+
+    def _evaluate_churn(self) -> Dict[str, int]:
+        """
+        Evaluate and process churn at the end of a day (client-side).
+        
+        This method:
+        1. Gets current day and round from server
+        2. Identifies inactive agents based on inactivity_threshold
+        3. Selects a percentage of them based on churn_percentage
+        4. Flags them as churned based on churn_probability
+        
+        Returns:
+            Dictionary with churn statistics
+        """
+        self.logger.info(
+            f"Starting churn evaluation (client-side): enabled={self.churn_enabled}, threshold={self.inactivity_threshold}"
+        )
+        
+        if not self.churn_enabled:
+            self.logger.info("Churn disabled, skipping evaluation")
+            return {"inactive_agents": 0, "candidates": 0, "churned": 0}
+        
+        # Get current day and round ID from server
+        try:
+            current_day = ray.get(self.server.get_current_day.remote())
+            current_round_id = ray.get(self.server.get_current_round_id.remote())
+        except Exception as e:
+            self.logger.error(f"Failed to get current day/round from server: {e}")
+            return {"inactive_agents": 0, "candidates": 0, "churned": 0}
+        
+        # Get inactive agents from server database
+        try:
+            inactive_agents = ray.get(
+                self.server.get_inactive_agents.remote(current_day, self.inactivity_threshold)
+            )
+        except Exception as e:
+            self.logger.error(f"Failed to get inactive agents: {e}")
+            return {"inactive_agents": 0, "candidates": 0, "churned": 0}
+        
+        self.logger.info(
+            f"Found {len(inactive_agents)} inactive agents (threshold={self.inactivity_threshold} days)"
+        )
+        
+        if not inactive_agents:
+            self.logger.info("No inactive agents found, skipping churn")
+            return {"inactive_agents": 0, "candidates": 0, "churned": 0}
+        
+        # Select percentage of inactive agents as churn candidates
+        num_candidates = max(1, int(len(inactive_agents) * self.churn_percentage))
+        churn_candidates = random.sample(inactive_agents, min(num_candidates, len(inactive_agents)))
+        
+        self.logger.info(
+            f"Selected {len(churn_candidates)} churn candidates (percentage={self.churn_percentage})"
+        )
+        
+        # Churn agents based on probability
+        churned_count = 0
+        for agent_id in churn_candidates:
+            # Use random for stochastic churn decision
+            if random.random() < self.churn_probability:
+                try:
+                    success = ray.get(self.server.set_agent_churned.remote(agent_id, current_round_id))
+                    if success:
+                        churned_count += 1
+                        self.logger.info(
+                            f"Agent {agent_id} churned at round {current_round_id}",
+                            extra={"extra_data": {"agent_id": agent_id, "day": current_day, "round_id": current_round_id}}
+                        )
+                        # Update local agent profile if it exists
+                        for agent in self.agent_profiles:
+                            if agent.id == agent_id:
+                                agent.left_on = current_round_id
+                                break
+                except Exception as e:
+                    self.logger.error(f"Failed to churn agent {agent_id}: {e}")
+        
+        result = {
+            "inactive_agents": len(inactive_agents),
+            "candidates": len(churn_candidates),
+            "churned": churned_count
+        }
+        
+        self.logger.info(
+            f"Churn evaluation completed: {result}"
+        )
+        
+        return result
 
     def _evaluate_new_agents(self, current_round_id: str) -> int:
         """

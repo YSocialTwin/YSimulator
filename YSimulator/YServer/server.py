@@ -91,13 +91,6 @@ class OrchestratorServer:
         # Store attention_window for interest decay (sliding window)
         self.attention_window = simulation_config.get("agents", {}).get("attention_window", 336)
 
-        # Churn configuration
-        churn_config = simulation_config.get("agents", {}).get("churn", {})
-        self.churn_enabled = churn_config.get("enabled", False)
-        self.churn_probability = churn_config.get("churn_probability", 0.01)
-        self.inactivity_threshold = churn_config.get("inactivity_threshold", 5)
-        self.churn_percentage = churn_config.get("churn_percentage", 0.1)
-
         # Client tracking
         self.registered_clients = set()  # All registered clients
         self.completed_clients = set()  # Clients that finished their simulation
@@ -1500,114 +1493,53 @@ class OrchestratorServer:
         # Check if EVERYONE is done
         self._check_barrier_and_advance()
 
-    def get_inactive_agents(self, inactivity_threshold: int) -> List[str]:
+    def get_current_day(self) -> int:
         """
-        Identify agents that have been inactive for the specified number of days.
+        Get the current simulation day.
         
-        An agent is considered inactive if:
-        - They have a last_active_day value
-        - current_day - last_active_day >= inactivity_threshold
-        - They are not already churned
+        Returns:
+            int: Current day number
+        """
+        return self.day
+    
+    def get_current_round_id(self) -> str:
+        """
+        Get the current round ID.
+        
+        Returns:
+            str: Current round ID (UUID)
+        """
+        return self.current_round_id
+    
+    def get_inactive_agents(self, current_day: int, inactivity_threshold: int) -> List[str]:
+        """
+        Get list of inactive agents from database (simple database wrapper for client use).
         
         Args:
+            current_day: Current simulation day
             inactivity_threshold: Number of days of inactivity to consider
             
         Returns:
             List of agent IDs (strings) that are inactive
         """
-        return self.db.get_inactive_agents(self.day, inactivity_threshold)
-
-    def churn_agents(self, agent_ids: List[str], churn_probability: float) -> int:
+        return self.db.get_inactive_agents(current_day, inactivity_threshold)
+    
+    def set_agent_churned(self, agent_id: str, round_id: str) -> bool:
         """
-        Flag agents as churned based on churn probability.
-        
-        For each agent in the list, with probability churn_probability,
-        set their left_on field to the current round.
-        
-        Note: Uses random.random() for stochastic behavior - this is intentional
-        to introduce realistic variability in churn patterns across simulations.
+        Mark an agent as churned (simple database wrapper for client use).
         
         Args:
-            agent_ids: List of agent IDs to potentially churn
-            churn_probability: Probability (0.0 to 1.0) of churning each agent
+            agent_id: Agent ID to churn
+            round_id: Round ID when agent churned
             
         Returns:
-            Number of agents that were churned
+            bool: True if successful
         """
-        churned_count = 0
-        for agent_id in agent_ids:
-            # Use random for stochastic churn decision
-            if random.random() < churn_probability:
-                success = self.db.set_agent_churned(agent_id, self.current_round_id)
-                if success:
-                    churned_count += 1
-                    self.logger.info(
-                        f"Agent {agent_id} churned at round {self.current_round_id}",
-                        extra={"extra_data": {"agent_id": agent_id, "day": self.day, "round_id": self.current_round_id}}
-                    )
-        return churned_count
-
-    def evaluate_churn(self) -> Dict[str, int]:
-        """
-        Evaluate and process churn at the end of a day.
-        
-        This method:
-        1. Identifies inactive agents based on inactivity_threshold
-        2. Selects a percentage of them based on churn_percentage
-        3. Flags them as churned based on churn_probability
-        
-        Returns:
-            Dictionary with churn statistics
-        """
-        self.logger.info(
-            f"Starting churn evaluation: enabled={self.churn_enabled}, day={self.day}, threshold={self.inactivity_threshold}",
-            extra={"extra_data": {"churn_enabled": self.churn_enabled, "day": self.day, "threshold": self.inactivity_threshold}}
-        )
-        
-        if not self.churn_enabled:
-            self.logger.info("Churn disabled, skipping evaluation")
-            return {"inactive_agents": 0, "candidates": 0, "churned": 0}
-        
-        # Get inactive agents
-        inactive_agents = self.get_inactive_agents(self.inactivity_threshold)
-        
-        self.logger.info(
-            f"Found {len(inactive_agents)} inactive agents (threshold={self.inactivity_threshold} days)",
-            extra={"extra_data": {"inactive_count": len(inactive_agents), "inactive_ids": inactive_agents[:10]}}  # Log first 10
-        )
-        
-        if not inactive_agents:
-            self.logger.info("No inactive agents found, skipping churn")
-            return {"inactive_agents": 0, "candidates": 0, "churned": 0}
-        
-        # Select percentage of inactive agents as churn candidates
-        num_candidates = max(1, int(len(inactive_agents) * self.churn_percentage))
-        churn_candidates = random.sample(inactive_agents, min(num_candidates, len(inactive_agents)))
-        
-        self.logger.info(
-            f"Selected {len(churn_candidates)} churn candidates (percentage={self.churn_percentage})",
-            extra={"extra_data": {"candidates_count": len(churn_candidates), "candidate_ids": churn_candidates[:5]}}
-        )
-        
-        # Churn agents based on probability
-        churned_count = self.churn_agents(churn_candidates, self.churn_probability)
-        
-        result = {
-            "inactive_agents": len(inactive_agents),
-            "candidates": len(churn_candidates),
-            "churned": churned_count
-        }
-        
-        self.logger.info(
-            f"Churn evaluation completed: {result}",
-            extra={"extra_data": {**result, "day": self.day}}
-        )
-        
-        return result
+        return self.db.set_agent_churned(agent_id, round_id)
 
     def get_churned_agents(self) -> List[str]:
         """
-        Get list of all churned agents.
+        Get list of all churned agents (simple database wrapper for client use).
         
         Returns:
             List of agent IDs (UUID strings) that are churned
