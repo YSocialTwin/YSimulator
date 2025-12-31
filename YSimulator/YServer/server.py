@@ -47,17 +47,21 @@ def log_server_request(func):
         # Generate request ID
         request_id = f"{time.time()}-{random.randint(1000000000, 9999999999)}"
         
-        # Extract client_name from arguments (first arg is usually client_id for client-facing methods)
-        client_name = None
-        if args and isinstance(args[0], str):
-            # Check if it looks like a client_id (common patterns: "client_X", UUIDs, etc.)
+        # Extract client_name from arguments
+        # Check common parameter names for client identification
+        client_name = kwargs.get("client_id") or kwargs.get("agent_id") or kwargs.get("user_id")
+        
+        # If not in kwargs, check if first positional arg looks like an ID
+        if not client_name and args and isinstance(args[0], str):
+            # Only consider it a client name if it contains common patterns
             potential_client = args[0]
-            if "client" in potential_client.lower() or "-" in potential_client:
+            # Check for UUID pattern (contains hyphens) or "client" in name
+            if "-" in potential_client or "client" in potential_client.lower():
                 client_name = potential_client
         
-        # If not found in args, check kwargs
+        # Default to "unknown" if still not found
         if not client_name:
-            client_name = kwargs.get("client_id") or kwargs.get("agent_id") or "unknown"
+            client_name = "unknown"
         
         # Start timing
         start_time = time.time()
@@ -81,7 +85,8 @@ def log_server_request(func):
                 tid = getattr(self, 'current_round_id', None)
                 day = getattr(self, 'day', None)
                 hour = getattr(self, 'slot', None)
-            except:
+            except Exception:
+                # Handle case where attributes don't exist
                 tid = None
                 day = None
                 hour = None
@@ -107,7 +112,9 @@ def log_server_request(func):
                     server_logger.info(json.dumps(log_entry))
             except Exception as log_error:
                 # Don't let logging errors break the application
-                pass
+                # Log to stderr as fallback for debugging
+                import sys
+                print(f"WARNING: Server request logging failed: {log_error}", file=sys.stderr)
     
     return wrapper
 
