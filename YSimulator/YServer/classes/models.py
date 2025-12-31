@@ -539,6 +539,6 @@ class Agent_Opinion(Base):
     agent_id = Column(String(36), nullable=False)
     tid = Column(String(36), nullable=False)
     topic_id = Column(String(36), ForeignKey("interests.iid"), nullable=False)
-    id_interacted_with = Column(String(36), nullable=False)
-    id_post = Column(String(36), ForeignKey("post.id"), nullable=False)
+    id_interacted_with = Column(String(36))
+    id_post = Column(String(36), ForeignKey("post.id"))
     opinion = Column(Float, nullable=False)
