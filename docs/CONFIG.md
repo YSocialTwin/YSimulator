@@ -1,217 +1,625 @@
-# Configuration Guide
+# YSimulator Configuration Guide
 
-This guide explains the JSON configuration files used by YSimulator.
+## Introduction
 
-## Quick Start
+This guide explains how to configure YSimulator through JSON configuration files. YSimulator is designed to be highly customizable without requiring code changes - all simulation parameters, agent behaviors, and system settings are controlled through configuration files.
 
-### Running the Server
+### What You'll Learn
 
+- How to structure your configuration directory
+- What each configuration file controls
+- How to customize simulation behavior
+- Advanced features like multi-client synchronization, agent churn, and dynamic network formation
+
+### Quick Navigation
+
+- [Getting Started](#getting-started) - Run your first simulation
+- [Configuration Files](#configuration-files-overview) - Overview of all config files
+- [Server Configuration](#server-configuration) - Database, Ray, and server settings
+- [Client Configuration](#client-configuration) - Simulation and agent behavior
+- [Advanced Features](#advanced-features) - Churn, new agents, archetypes, and network dynamics
+- [Multi-Client Setup](#multi-client-synchronization) - Running distributed simulations
+- [Logging](#logging-configuration) - Log files and rotation
+
+---
+
+## Getting Started
+
+### Quick Start
+
+1. **Run the server:**
 ```bash
 python run_server.py --config path/to/config_directory
 ```
 
-The configuration directory must contain `server_config.json`.
-
-### Running the Client
-
+2. **Run the client** (in another terminal):
 ```bash
 python run_client.py --config path/to/config_directory
 ```
 
-The configuration directory must contain:
-- `simulation_config.json`
-- `agent_population.json`
-- `llm_prompts.json`
-
 ### Default Behavior
 
-If no `--config` argument is provided, both server and client will look for configuration files in the current directory.
+If no `--config` argument is provided, both server and client look for configuration files in the current directory.
 
-Example configurations are provided in the `example_conf/` directory:
+### Example Configurations
+
+Example configurations are provided in the `example/` directory:
 
 ```bash
-# Run server with example config
-python run_server.py --config example_conf
+# Run with rule-based population
+python run_server.py --config example/rule_population_100
+python run_client.py --config example/rule_population_100
 
-# Run client with example config
-python run_client.py --config example_conf
+# Run with mixed population
+python run_server.py --config example/mixed_population_1000
+python run_client.py --config example/mixed_population_1000
 ```
 
-## File Structure
+---
+
+## Configuration Directory Structure
 
 All configuration files, database, and logs are kept in the same directory:
 
 ```
 config_directory/
-├── server_config.json                    # Server configuration
-├── simulation_config.json                # Client simulation configuration
-├── agent_population.json                 # Agent profiles (generic)
+├── server_config.json                    # Server configuration (required for server)
+├── simulation_config.json                # Client simulation configuration (required for client)
+├── agent_population.json                 # Agent profiles (required for client)
+├── llm_prompts.json                      # LLM prompts and personas (required for client)
+├── network.csv                           # Social network topology (optional)
 ├── {client_name}_agent_population.json   # Client-specific agent profiles (optional)
-├── llm_prompts.json                      # LLM prompts and personas (generic)
 ├── {client_name}_llm_prompts.json        # Client-specific LLM prompts (optional)
-├── network.csv                           # Social network topology (generic, optional)
 ├── {client_name}_network.csv             # Client-specific network (optional)
 ├── simulation.db                         # Database (auto-created)
 ├── ray_config.temp                       # Ray address (auto-created)
 └── logs/                                 # Log files (auto-created)
-    ├── {server_name}_server.log
-    ├── {server_name}_actor.log
-    ├── {client_name}_client.log
-    └── {client_name}_actor.log
+    ├── _server.log                       # Server request log
+    ├── {server_name}_server.log          # Server execution log
+    ├── {server_name}_actor.log           # Server actor log
+    ├── {client_name}_execution.log       # Client execution log
+    ├── {client_id}_actor.log             # Client actor log
+    └── {client_id}_client.log            # Client action log
 ```
 
-## Client-Specific Configuration
+### Client-Specific Configuration
 
 Clients can use client-specific configuration files by prefixing the file name with `{client_name}_`. The client name is defined in `simulation_config.json` under the `client_name` field.
 
-When a client starts, it will:
+**Resolution order:**
 1. Load `simulation_config.json` to get the client name
 2. Look for `{client_name}_agent_population.json`, `{client_name}_llm_prompts.json`, and `{client_name}_network.csv`
-3. Fall back to generic files (`agent_population.json`, `llm_prompts.json`, `network.csv`) if client-specific files don't exist
+3. Fall back to generic files if client-specific files don't exist
 
-This allows multiple clients to run with different configurations in multi-client scenarios.
+This enables multiple clients with different configurations in multi-client scenarios.
 
-**Example:**
+---
 
-For a client named "client_1":
-- `client_1_agent_population.json` - Client-specific agent profiles
-- `client_1_llm_prompts.json` - Client-specific LLM prompts
-- `client_1_network.csv` - Client-specific social network
+## Configuration Files Overview
 
-If these files don't exist, the client will use the generic files.
+YSimulator uses five main configuration files:
 
-## Dynamic Social Network Features
+| File | Purpose | Required By | Can Be Client-Specific |
+|------|---------|-------------|------------------------|
+| `server_config.json` | Server, database, Ray settings | Server | No |
+| `simulation_config.json` | Simulation parameters, agent behavior | Client | No |
+| `agent_population.json` | Agent profiles and generation | Client | Yes |
+| `llm_prompts.json` | LLM personas and prompt templates | Client | Yes |
+| `network.csv` | Initial social network topology | Client | Yes (optional) |
 
-YSimulator includes advanced social network features that allow agents to form and break relationships during simulation:
+---
 
-### 1. Dynamic Follow Actions
+## Server Configuration
 
-Agents can discover and follow other users during simulation using recommendation algorithms. This is configured per-agent using the `frecsys_type` field in agent profiles.
+### File: `server_config.json`
 
-**Available Recommendation Strategies:**
+Controls Ray server parameters, database backend, and server behavior.
 
-- `random`: Random user selection from non-following users
-- `common_neighbors`: Friend-of-friend recommendations (users with mutual connections)
-- `jaccard`: Jaccard similarity of follow sets
-- `adamic_adar`: Adamic/Adar index scoring (weighted by common neighbor connectivity)
-- `preferential_attachment`: Popular users with many followers (rich-get-richer)
-
-**Implementation Details:**
-
-- Server uses efficient query-based approaches (no in-memory graph construction)
-- SQL backend: JOIN queries, subqueries, and aggregations
-- Redis backend: Key-value operations with minimal iterations
-- Supports political leaning bias for homophily
-- Follow action available to Explorer archetype by default
-
-**Agent Configuration:**
-
-In `agent_population.json`, specify the follow recommendation strategy:
+#### Complete Example
 
 ```json
 {
-  "id": 1,
-  "username": "explorer_001",
-  "archetype": "Explorer",
-  "frecsys_type": "common_neighbors"
-}
-```
-
-If not specified, defaults to `"random"`.
-
-### 2. Daily Follow Evaluation
-
-At the end of each simulation day, agents that were active during the day can establish new follow relationships. This is controlled by the `probability_of_daily_follow` configuration parameter.
-
-**Configuration:**
-
-In `simulation_config.json`, add under the `agents` section:
-
-```json
-{
-  "agents": {
-    "probability_of_daily_follow": 0.1
+  "server_name": "orchestrator_server",
+  "namespace": "social_sim",
+  "address": "auto",
+  "port": null,
+  "database": {
+    "type": "sqlite",
+    "sqlite": {
+      "filename": "simulation.db"
+    },
+    "postgresql": {
+      "host": "localhost",
+      "port": 5432,
+      "database": "ysimulator",
+      "username": "postgres",
+      "password": "password"
+    },
+    "mysql": {
+      "host": "localhost",
+      "port": 3306,
+      "database": "ysimulator",
+      "username": "root",
+      "password": "password"
+    }
+  },
+  "min_to_start": 1,
+  "timeout_seconds": 60,
+  "redis": {
+    "enabled": false,
+    "host": "localhost",
+    "port": 6379,
+    "db": 0,
+    "password": null,
+    "sliding_window_days": 2
+  },
+  "posts": {
+    "visibility_rounds": 36
+  },
+  "simulation": {
+    "agent_archetypes": {
+      "enabled": true,
+      "distribution": {
+        "validator": 0.33,
+        "broadcaster": 0.33,
+        "explorer": 0.34
+      },
+      "transitions": {
+        "validator": {"validator": 0.85, "broadcaster": 0.1, "explorer": 0.05},
+        "broadcaster": {"validator": 0.1, "broadcaster": 0.8, "explorer": 0.1},
+        "explorer": {"validator": 0.05, "broadcaster": 0.1, "explorer": 0.85}
+      }
+    }
+  },
+  "logging": {
+    "enable_server_log": true,
+    "enable_actor_log": true,
+    "enable_request_log": true,
+    "enable_console_log": true
   }
 }
 ```
 
-**Behavior:**
+#### Core Parameters
 
-At the end of each day (last time slot), for each agent that was active during the day:
+**Basic Settings:**
+- `server_name` (string): Unique name for this server instance (used in logs)
+- `namespace` (string): Ray namespace for actor isolation (must match client)
+- `address` (string): Server address ("auto" for automatic local setup)
+- `port` (number|null): Reserved for future use
 
-- With probability `daily_follow`, the agent evaluates new follow candidates
-- Uses the agent's `frecsys_type` recommendation strategy to get top-10 suggestions
-- Randomly selects one candidate from suggestions to follow
-- Creates a FOLLOW action in the Follow table
+**Synchronization:**
+- `min_to_start` (number, default: 1): Minimum clients before simulation begins
+- `timeout_seconds` (number, default: 60): Seconds before marking client as stale
 
-**Implementation:**
+**Content Visibility:**
+- `posts.visibility_rounds` (number, default: 36): Time slots posts remain visible
 
-- Tracks all agents active during each simulation day
-- Evaluates daily follows at transition to next day (slot 23 → day+1)
-- Uses agent-specific follow recommendation strategies
-- No political leaning bias applied (neutral selection)
-- Independent of other follow mechanisms (action-based, secondary)
+#### Database Configuration
 
-**Use Cases:**
+YSimulator supports three SQL database backends via SQLAlchemy:
 
-- Model gradual network growth over time
-- Simulate daily social discovery behaviors
-- Create realistic follow patterns independent of content
-- Study long-term network evolution
+**1. SQLite (Default)**
+```json
+{
+  "database": {
+    "type": "sqlite",
+    "sqlite": {
+      "filename": "simulation.db"
+    }
+  }
+}
+```
+- **Best for**: Development, testing, single-machine deployments
+- **Setup**: No additional setup required
+- **Connection**: `sqlite:///path/to/simulation.db`
 
-### 3. Secondary Follow Behavior
+**2. PostgreSQL**
+```json
+{
+  "database": {
+    "type": "postgresql",
+    "postgresql": {
+      "host": "localhost",
+      "port": 5432,
+      "database": "ysimulator",
+      "username": "postgres",
+      "password": "password"
+    }
+  }
+}
+```
+- **Best for**: Production, multi-client, concurrent access
+- **Setup**: Install PostgreSQL, create database, install `psycopg2-binary`
+- **Connection**: `postgresql://username:password@host:port/database`
 
-After reading or commenting on posts, agents can establish or break social ties with content authors. This is controlled by the `probability_of_secondary_follow` configuration parameter.
+**3. MySQL**
+```json
+{
+  "database": {
+    "type": "mysql",
+    "mysql": {
+      "host": "localhost",
+      "port": 3306,
+      "database": "ysimulator",
+      "username": "root",
+      "password": "password"
+    }
+  }
+}
+```
+- **Best for**: Production with existing MySQL infrastructure
+- **Setup**: Install MySQL, create database, install `pymysql`
+- **Connection**: `mysql+pymysql://username:password@host:port/database`
 
-**Configuration:**
+**Database Setup Steps:**
+1. Install and run the database server (PostgreSQL/MySQL)
+2. Create the database: `CREATE DATABASE ysimulator;`
+3. Create a user with appropriate permissions
+4. Install the required Python driver
+5. Configure connection details in `server_config.json`
 
-In `simulation_config.json`, add under the `agents` section:
+Database tables are automatically created by SQLAlchemy when the server starts.
+
+#### Redis Configuration
+
+Redis provides an optional in-memory cache with sliding window for better performance:
 
 ```json
 {
-  "agents": {
-    "probability_of_secondary_follow": 0.3
+  "redis": {
+    "enabled": true,
+    "host": "localhost",
+    "port": 6379,
+    "db": 0,
+    "password": null,
+    "sliding_window_days": 2
   }
 }
 ```
 
-**Behavior:**
+**Parameters:**
+- `enabled` (boolean): Enable Redis caching
+- `host` (string): Redis server hostname
+- `port` (number): Redis server port
+- `db` (number): Redis database number (0-15)
+- `password` (string|null): Authentication password
+- `sliding_window_days` (number): Days of data to keep in Redis
 
-With probability `secondary_follow`, after a read or comment action:
+**How It Works:**
+- Recent data (within sliding window) stays in Redis for fast access
+- At end of each day, data is consolidated to SQL for persistence
+- Old data automatically pruned from Redis to manage memory
+- If Redis fails, system automatically falls back to SQL
 
-- **Rule-based agents**: Randomly decide to follow, unfollow, or make no change (equal probabilities)
-- **LLM agents**: Heuristic decision based on current follow status:
-  - If not following: 30% chance to follow the author
-  - If already following: 10% chance to unfollow the author
-  - Otherwise: No change
+**Benefits:**
+- Fast access to recent data
+- Long-term persistence in SQL
+- Memory efficiency through automatic pruning
+- Data safety with SQL backup
 
-**Implementation:**
+#### Logging Configuration
 
-- Tracks all read/comment interactions with post authors
-- Evaluates secondary follow after main action pipeline completes
-- Checks current follow status before making decision
-- Creates FOLLOW or UNFOLLOW actions in Follow table
-- Both actions include round timestamp for temporal analysis
+Control which log files are generated. See [LOGGING_CONFIG.md](LOGGING_CONFIG.md) for details.
 
-**Use Cases:**
+```json
+{
+  "logging": {
+    "enable_server_log": true,
+    "enable_actor_log": true,
+    "enable_request_log": true,
+    "enable_console_log": true
+  }
+}
+```
 
-- Model organic network growth through content interactions
-- Simulate unfollowing based on content disagreement
-- Create realistic social network evolution
-- Study relationship formation patterns
+---
 
-## Agent Population Dynamics
+## Client Configuration
 
-YSimulator includes advanced agent lifecycle management features that model realistic population changes during long-running simulations:
+### File: `simulation_config.json`
 
-### 1. Agent Churn
+Controls simulation parameters, agent behavior, and LLM settings.
 
-Agents can become inactive ("churned") based on prolonged inactivity, simulating real-world attrition in social media platforms.
+#### Complete Example
+
+```json
+{
+  "client_name": "client_1",
+  "namespace": "social_sim",
+  "server": {
+    "address": null,
+    "port": null
+  },
+  "llm": {
+    "address": "localhost",
+    "port": 11434,
+    "model": "llama3.2",
+    "temperature": 0.7,
+    "llm_api_key": "NULL",
+    "llm_max_tokens": -1
+  },
+  "llm_v": {
+    "address": "localhost",
+    "port": 11434,
+    "model": "minicpm-v",
+    "temperature": 0.5,
+    "llm_api_key": "NULL",
+    "llm_max_tokens": 300
+  },
+  "simulation": {
+    "num_days": 0,
+    "num_slots_per_day": 24,
+    "heartbeat_interval": 5,
+    "percentage_new_agents_iteration": 0.0,
+    "percentage_removed_agents_iteration": 0.0,
+    "discussion_topics": ["war", "politics", "sport", "books", "movies"],
+    "activity_profiles": {
+      "Always On": "0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23",
+      "Morning Active": "6,7,8,9,10,11,12",
+      "Evening Active": "17,18,19,20,21,22,23",
+      "Weekend Warrior": "0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23"
+    },
+    "hourly_activity": {
+      "0": 0.023, "1": 0.021, "2": 0.02, "3": 0.02,
+      "4": 0.018, "5": 0.017, "6": 0.017, "7": 0.018,
+      "8": 0.02, "9": 0.02, "10": 0.021, "11": 0.022,
+      "12": 0.024, "13": 0.027, "14": 0.03, "15": 0.032,
+      "16": 0.032, "17": 0.032, "18": 0.032, "19": 0.031,
+      "20": 0.03, "21": 0.029, "22": 0.027, "23": 0.025
+    },
+    "actions_likelihood": {
+      "post": 3.0,
+      "image": 0.0,
+      "news": 0.0,
+      "comment": 5.0,
+      "read": 2.0,
+      "share": 1.0,
+      "search": 5.0,
+      "cast": 0.0,
+      "share_link": 0.0,
+      "follow": 0.1
+    },
+    "agent_archetypes": {
+      "enabled": true,
+      "agent_downcast": true,
+      "distribution": {
+        "validator": 0.33,
+        "broadcaster": 0.33,
+        "explorer": 0.34
+      }
+    },
+    "emotion_annotation": false
+  },
+  "agents": {
+    "reading_from_follower_ratio": 0.6,
+    "max_length_thread_reading": 5,
+    "attention_window": 336,
+    "probability_of_daily_follow": 0.1,
+    "probability_of_secondary_follow": 0.1,
+    "churn": {
+      "enabled": true,
+      "churn_probability": 0.1,
+      "inactivity_threshold": 5,
+      "churn_percentage": 0.05
+    },
+    "new_agents": {
+      "enabled": true,
+      "probability_new_agents": 0.1,
+      "percentage_new_agents": 0.05
+    }
+  },
+  "logging": {
+    "enable_execution_log": true,
+    "enable_actor_log": true,
+    "enable_client_log": true,
+    "enable_console_log": true
+  }
+}
+```
+
+#### Core Parameters
+
+**Basic Settings:**
+- `client_name` (string): Unique name for this client instance
+- `namespace` (string): Ray namespace (must match server)
+- `server.address` (string|null): Server address (null to use ray_config.temp)
+- `server.port` (number|null): Server port
+
+**Simulation Timing:**
+- `simulation.num_days` (number): Days to simulate (0 = infinite)
+- `simulation.num_slots_per_day` (number): Time slots per day (typically 24)
+- `simulation.heartbeat_interval` (number, default: 5): Seconds between heartbeat signals
+
+**Content Topics:**
+- `simulation.discussion_topics` (array): Topics for content generation
+
+**Activity Patterns:**
+- `simulation.activity_profiles` (object): Named activity patterns (hour ranges)
+- `simulation.hourly_activity` (object): Probability distribution across hours
+
+#### LLM Configuration
+
+**Text LLM (`llm`):**
+```json
+{
+  "llm": {
+    "address": "localhost",
+    "port": 11434,
+    "model": "llama3.2",
+    "temperature": 0.7,
+    "llm_api_key": "NULL",
+    "llm_max_tokens": -1
+  }
+}
+```
+- Used for text generation (posts, comments, reactions)
+- Connects to Ollama or compatible API
+
+**Vision LLM (`llm_v`):**
+```json
+{
+  "llm_v": {
+    "address": "localhost",
+    "port": 11434,
+    "model": "minicpm-v",
+    "temperature": 0.5,
+    "llm_api_key": "NULL",
+    "llm_max_tokens": 300
+  }
+}
+```
+- Used for image description and commentary
+- Optional - if not configured, image actions are skipped
+- Requires vision-capable model like minicpm-v
+
+#### Action Likelihood Configuration
+
+Controls relative probabilities of different agent actions:
+
+```json
+{
+  "simulation": {
+    "actions_likelihood": {
+      "post": 3.0,
+      "image": 0.0,
+      "news": 0.0,
+      "comment": 5.0,
+      "read": 2.0,
+      "share": 1.0,
+      "search": 5.0,
+      "cast": 0.0,
+      "share_link": 0.0,
+      "follow": 0.1
+    }
+  }
+}
+```
+
+**Available Actions:**
+- `post`: Create original text post
+- `image`: Share image with commentary (requires llm_v)
+- `news`: Share news from RSS feeds (page agents only)
+- `comment`: Comment on posts
+- `read`: Read and possibly react to posts
+- `share`: Share/repost content
+- `search`: Search for posts by topic interest
+- `cast`: Reserved for future use
+- `share_link`: Share external links
+- `follow`: Follow another user
+
+**Notes:**
+- Values are relative probabilities (don't need to sum to 1.0)
+- Set to 0 to disable an action type
+- Image action requires llm_v configuration
+- Search action primarily used by Explorer archetype
+
+#### Agent Behavior Configuration
+
+The `agents` section controls detailed behavior parameters:
+
+```json
+{
+  "agents": {
+    "reading_from_follower_ratio": 0.6,
+    "max_length_thread_reading": 5,
+    "attention_window": 336,
+    "probability_of_daily_follow": 0.1,
+    "probability_of_secondary_follow": 0.1
+  }
+}
+```
+
+**Parameters:**
+- `reading_from_follower_ratio` (0.0-1.0): Proportion of posts from followed users in recommendations
+- `max_length_thread_reading` (number): Maximum comment thread depth to read
+- `attention_window` (number): Time slots of content visibility (default: 336 = 14 days × 24 slots)
+- `probability_of_daily_follow` (0.0-1.0): Chance of evaluating new follows at end of each day
+- `probability_of_secondary_follow` (0.0-1.0): Chance of follow/unfollow after content interactions
+
+#### Logging Configuration
+
+Control which log files are generated. See [LOGGING_CONFIG.md](LOGGING_CONFIG.md) for details.
+
+```json
+{
+  "logging": {
+    "enable_execution_log": true,
+    "enable_actor_log": true,
+    "enable_client_log": true,
+    "enable_console_log": true
+  }
+}
+```
+
+---
+
+## Advanced Features
+
+### Agent Archetypes
+
+Agent archetypes enable differentiated behaviors based on social media user types.
+
+#### Configuration
+
+```json
+{
+  "simulation": {
+    "agent_archetypes": {
+      "enabled": true,
+      "agent_downcast": true,
+      "distribution": {
+        "validator": 0.33,
+        "broadcaster": 0.33,
+        "explorer": 0.34
+      }
+    }
+  }
+}
+```
+
+**Parameters:**
+- `enabled` (boolean): Enable archetype-based behavior
+- `agent_downcast` (boolean): Force validators/explorers to use rule-based behavior (cost optimization)
+- `distribution` (object): Proportion of each archetype (should sum to ~1.0)
+
+#### Archetype Behaviors
+
+**1. Validator (Skeptical Content Consumers)**
+- **Available actions**: share, read, share_link
+- **Behavior**: Reactive users who evaluate and share but rarely create
+- **Personality**: Skeptical, brief, authentic
+
+**2. Broadcaster (Content Producers)**
+- **Available actions**: post, image, share, comment
+- **Behavior**: Active creators who post frequently and engage
+- **Personality**: High energy, viral-seeking, controversial
+
+**3. Broadcaster (Network Builders)**
+- **Available actions**: search, follow
+- **Behavior**: Focus on discovering content and building network
+- **Personality**: Curious, asking questions
+
+#### Agent Downcast Feature
+
+The `agent_downcast` option reduces LLM costs while maintaining behavioral diversity:
+
+- **Effect**: Validators and explorers use rule-based actions (faster, cheaper)
+- **Unaffected**: Broadcasters maintain their LLM setting
+- **Rationale**: Validators/explorers perform simpler actions (react, share, search), while broadcasters benefit from LLM-generated creative content
+- **Cost Savings**: Significant reduction in LLM API calls
+
+---
+
+### Agent Population Dynamics
+
+YSimulator models realistic population changes through churn and new agent features.
+
+#### Agent Churn
+
+Agents become inactive based on prolonged inactivity, simulating platform attrition.
 
 **Configuration:**
-
-In `simulation_config.json`, add under the `agents` section:
-
 ```json
 {
   "agents": {
@@ -226,56 +634,39 @@ In `simulation_config.json`, add under the `agents` section:
 ```
 
 **Parameters:**
-- `enabled`: Enable/disable churn evaluation (true/false, default: false)
-- `churn_probability`: Probability (0.0-1.0) that an inactive agent will churn
-- `inactivity_threshold`: Number of days without activity before agent is considered inactive
-- `churn_percentage`: Percentage (0.0-1.0) of inactive agents to evaluate for churn each day
+- `enabled` (boolean): Enable/disable churn evaluation
+- `churn_probability` (0.0-1.0): Probability that inactive agent will churn
+- `inactivity_threshold` (number): Days without activity before considered inactive
+- `churn_percentage` (0.0-1.0): Percentage of inactive agents to evaluate each day
 
-**Behavior:**
-
-At the end of each simulation day, if churn is enabled:
-
-1. **Identify Inactive Agents**: Query agents who haven't been active in the last `inactivity_threshold` days
-2. **Select Candidates**: Randomly select `churn_percentage` of inactive agents as churn candidates
-3. **Apply Probability**: For each candidate, apply `churn_probability` to determine if they churn
-4. **Mark as Churned**: Churned agents have their `left_on` field set to the current round ID
-5. **Exclude from Selection**: Churned agents are excluded from future activity selection
+**How It Works:**
+1. At end of each day, identify agents inactive for `inactivity_threshold` days
+2. Randomly select `churn_percentage` of inactive agents as candidates
+3. For each candidate, apply `churn_probability` to determine if they churn
+4. Mark churned agents with `left_on` field set to current round ID
+5. Exclude churned agents from future activity selection
 
 **Database Fields:**
-- `last_active_day`: Tracks the last simulation day the agent was active (updated on every action)
-- `left_on`: References the Round ID when the agent churned (NULL = active, set = churned)
-
-**Performance:**
-- Uses batch operations for efficient database updates
-- All churned agents in a day are processed in a single server call
-- Example: Churning 80 agents requires 1 server call (not 80 individual calls)
+- `last_active_day`: Tracks last simulation day agent was active
+- `left_on`: Round ID when agent churned (NULL = active, set = churned)
 
 **Example Scenario:**
 ```
 Day 1-5: Agent "user_123" is active
-Day 6-10: Agent "user_123" is inactive (no actions)
+Day 6-10: Agent "user_123" is inactive
 Day 11: Churn evaluation
-  - Agent identified as inactive (5+ days without activity)
+  - Identified as inactive (5+ days)
   - Selected as candidate (within churn_percentage)
-  - Probability check passes (roll < churn_probability)
-  - Agent marked as churned (left_on = current_round_id)
-Day 12+: Agent no longer selected for simulation activities
+  - Probability check passes
+  - Marked as churned (left_on = current_round_id)
+Day 12+: Agent no longer selected for activities
 ```
 
-**Redis Support:**
-The churn system works with both SQL and Redis backends:
-- `last_active_day` stored in both SQL and Redis for query efficiency
-- `left_on` field updated in both backends
-- Inactive agent queries optimized for both storage systems
+#### New Agents
 
-### 2. New Agents
-
-New agents can be dynamically added to the simulation to model population growth, representing new users joining the platform.
+New agents can be dynamically added to model platform growth.
 
 **Configuration:**
-
-In `simulation_config.json`, add under the `agents` section:
-
 ```json
 {
   "agents": {
@@ -289,75 +680,50 @@ In `simulation_config.json`, add under the `agents` section:
 ```
 
 **Parameters:**
-- `enabled`: Enable/disable new agent creation (true/false, default: false)
-- `probability_new_agents`: Probability (0.0-1.0) that each new agent slot will be filled
-- `percentage_new_agents`: Percentage (0.0-1.0) of non-churned agents to calculate available slots
+- `enabled` (boolean): Enable/disable new agent creation
+- `probability_new_agents` (0.0-1.0): Probability each slot will be filled
+- `percentage_new_agents` (0.0-1.0): Percentage of non-churned agents for slot calculation
 
-**Behavior:**
-
-At the end of each simulation day, if new agents is enabled:
-
-1. **Count Non-Churned Agents**: Calculate the number of active (non-churned) agents for this client
-2. **Calculate Slots**: Compute `x = int(non_churned_agents * percentage_new_agents)` available slots
-3. **Apply Probability**: For each slot, roll `probability_new_agents` to decide if a new agent is created
-4. **Copy Template**: Randomly select an existing non-churned agent as a template
-5. **Generate Profile**: Create new agent with unique name and ID but same attributes as template
-6. **Register**: Register all new agents with server in a batch operation
-7. **Update Files**: Add new agents to `agent_population.json` for persistence
+**How It Works:**
+1. At end of each day, count non-churned agents for this client
+2. Calculate slots: `int(non_churned_agents * percentage_new_agents)`
+3. For each slot, roll `probability_new_agents` to decide if new agent is created
+4. Randomly select existing non-churned agent as template
+5. Generate new agent with unique name but same attributes
+6. Batch register all new agents with server
+7. Add new agents to `agent_population.json` for persistence
 
 **Name Generation:**
-- Uses the Faker library to generate realistic names
-- Names are gender-aligned based on template agent's gender:
-  - Male gender → `fake.name_male()`
-  - Female gender → `fake.name_female()`
-  - Other/unspecified → `fake.name()`
-- Spaces and periods replaced with underscores for valid usernames
-- Uniqueness ensured by checking existing usernames and appending counter if needed
+- Uses Faker library for realistic names
+- Gender-aligned based on template agent's gender
+- Spaces and periods replaced with underscores
+- Uniqueness ensured by checking existing usernames
 
 **Database Fields:**
-- `joined_on`: Set to current Round ID when agent is created
-- `left_on`: Explicitly set to NULL (new agents are not churned)
+- `joined_on`: Set to current Round ID when created
+- `left_on`: Explicitly set to NULL (new agents not churned)
 - `last_active_day`: Initialized when agent first becomes active
-- All other fields copied from template agent
-
-**Performance:**
-- Uses batch operations for efficient registration
-- All new agents created in a day are registered in a single server call
-- Example: Adding 36 new agents requires 1 server call (not 36 individual calls)
+- All other fields copied from template
 
 **Example Scenario:**
 ```
-Client Population: 100 agents, 10 churned, 90 non-churned
-Configuration: percentage_new_agents = 0.05, probability_new_agents = 0.5
+Population: 100 agents, 10 churned, 90 non-churned
+Config: percentage_new_agents = 0.05, probability_new_agents = 0.5
 
-Day 1 End: New agent evaluation
-  - Calculate slots: int(90 * 0.05) = 4 available slots
-  - For each slot: roll probability (50% chance each)
-  - Expected: ~2 new agents created (probabilistic)
-  - Create new agents as copies of random existing agents
-  - Generate unique names: "John_Doe", "Jane_Smith", etc.
-  - Batch register all new agents with server
-  - Update agent_population.json with new agents
-Day 2+: New agents participate in simulation like original agents
+Day 1 End:
+  - Calculate slots: int(90 * 0.05) = 4 slots
+  - Roll probability for each slot (50% each)
+  - Expected: ~2 new agents (probabilistic)
+  - Create as copies of random existing agents
+  - Generate unique names: "John_Doe", "Jane_Smith"
+  - Batch register with server
+  - Update agent_population.json
+Day 2+: New agents participate like original agents
 ```
 
-**Client-Specific Calculation:**
-The percentage of new agents is calculated per-client based on that client's non-churned population:
-- **Client 1**: 100 agents, 10 churned → new agents = int(90 * 0.4) = 36 slots
-- **Client 2**: 20 agents, 2 churned → new agents = int(18 * 0.4) = 7 slots
-- Each client independently calculates and creates new agents
+#### Combined Churn and New Agents
 
-**Redis Support:**
-New agent system works seamlessly with both SQL and Redis backends:
-- New agent profiles stored in both backends
-- `joined_on` field properly set in both systems
-- Batch registration optimized for both storage types
-
-### 3. Combined Churn and New Agents
-
-Churn and new agents features can be used together to model realistic population dynamics:
-
-**Configuration Example:**
+Use both features together for realistic population dynamics:
 
 ```json
 {
@@ -378,209 +744,127 @@ Churn and new agents features can be used together to model realistic population
 ```
 
 **Population Dynamics:**
-- **Attrition**: Inactive agents gradually churn (leave the platform)
-- **Growth**: New agents join to maintain or grow the population
-- **Balance**: Configure rates to achieve desired population trends:
-  - High churn + low new agents = declining population
-  - Low churn + high new agents = growing population
-  - Balanced rates = stable population with turnover
+- **Attrition**: Inactive agents gradually churn
+- **Growth**: New agents join to maintain/grow population
+- **Balance**: Configure rates for desired trends
+  - High churn + low new = declining population
+  - Low churn + high new = growing population
+  - Balanced rates = stable with turnover
 
 **Performance Optimizations:**
-Both features use batch operations for maximum efficiency:
-- **Before optimization**: ~116 server calls per day (80 churn + 36 new agents)
-- **After optimization**: 2 server calls per day (1 churn batch + 1 new agents batch)
-- **Performance gain**: Up to 98% reduction in server communication
+- Both features use batch operations
+- Before: ~116 server calls per day (80 churn + 36 new)
+- After: 2 server calls per day (1 churn batch + 1 new batch)
+- Performance gain: Up to 98% reduction
 
-**Use Cases:**
-- **Long-term simulations**: Model realistic population changes over months/years
-- **Platform growth studies**: Simulate user acquisition and retention dynamics
-- **Churn analysis**: Study impact of inactivity on platform health
-- **Network evolution**: Observe how social networks change with member turnover
-- **Content ecosystem**: Analyze content patterns with changing demographics
+---
 
-### 4. Implementation Details
+### Dynamic Social Network
 
-**Architecture:**
-- **Server Role**: Provides database wrapper methods for tracking and persistence
-  - `get_current_day()`: Returns current simulation day
-  - `get_current_round_id()`: Returns current Round UUID
-  - `get_inactive_agents(day, threshold)`: Returns inactive agent IDs
-  - `set_agents_churned_batch(ids, round_id)`: Marks multiple agents as churned
-  - `get_churned_agents()`: Returns all churned agent IDs
-  - `register_agents(profiles)`: Registers new agents in batch
+YSimulator enables agents to form and break relationships during simulation.
 
-- **Client Role**: Orchestrates all churn and new agent logic
-  - Loads configuration from `simulation_config.json`
-  - Evaluates churn candidates and applies probability
-  - Calculates new agent slots and creates profiles
-  - Updates local agent profiles and population files
-  - Caches churned agent list for performance
+#### Dynamic Follow Actions
 
-**Logging:**
-Comprehensive logging at all stages for debugging and monitoring:
-- Churn evaluation: inactive counts, candidates selected, agents churned
-- New agent creation: slots calculated, probability rolls, agents created
-- Batch operations: number of agents processed, success/failure status
-- Database operations: query statistics, update counts, timing information
+Agents discover and follow other users using recommendation algorithms.
 
-**Error Handling:**
-- Failed batch operations are logged and can be retried
-- Individual agent failures don't block entire batch
-- Database consistency maintained through transactions
-- Local state rolled back on server operation failures
+**Configuration:**
 
-## Configuration Files
-
-### 1. `server_config.json` - Server Configuration
-
-Controls the Ray server parameters and database backend:
+In `agent_population.json`, specify follow recommendation strategy per agent:
 
 ```json
 {
-  "server_name": "orchestrator_server",  // Name for this server instance
-  "namespace": "social_sim",              // Ray namespace for the cluster
-  "address": "auto",                      // "auto" for local, or specific address
-  "port": null,                           // Port number (null for default)
-  "database": {                           // Database configuration
-    "type": "sqlite",                     // Database type: sqlite, postgresql, or mysql
-    "sqlite": {                           // SQLite-specific configuration
-      "filename": "simulation.db"         // Database filename (created in config directory)
-    },
-    "postgresql": {                       // PostgreSQL-specific configuration
-      "host": "localhost",                // PostgreSQL server host
-      "port": 5432,                       // PostgreSQL server port
-      "database": "ysimulator",           // Database name
-      "username": "postgres",             // Database username
-      "password": "password"              // Database password
-    },
-    "mysql": {                            // MySQL-specific configuration
-      "host": "localhost",                // MySQL server host
-      "port": 3306,                       // MySQL server port
-      "database": "ysimulator",           // Database name
-      "username": "root",                 // Database username
-      "password": "password"              // Database password
-    }
-  },
-  "min_to_start": 1,                      // Minimum clients before simulation starts
-  "timeout_seconds": 60,                  // Seconds before considering a client stale (default: 60)
-  "redis": {                              // Redis configuration (optional)
-    "enabled": false,                     // Set to true to use Redis
-    "host": "localhost",                  // Redis server host
-    "port": 6379,                         // Redis server port
-    "db": 0,                              // Redis database number
-    "password": null,                     // Redis password (null if no auth)
-    "sliding_window_days": 2              // Days of data to keep in Redis cache
+  "id": 1,
+  "username": "explorer_001",
+  "archetype": "Explorer",
+  "frecsys_type": "common_neighbors"
+}
+```
+
+**Available Strategies:**
+- `random`: Random user selection from non-following users
+- `common_neighbors`: Friend-of-friend recommendations
+- `jaccard`: Jaccard similarity of follow sets
+- `adamic_adar`: Adamic/Adar index scoring
+- `preferential_attachment`: Popular users (rich-get-richer)
+
+**Implementation:**
+- Server uses efficient query-based approaches
+- SQL: JOIN queries, subqueries, aggregations
+- Redis: Key-value operations
+- Supports political leaning bias for homophily
+- Follow action available to Explorer archetype by default
+
+#### Daily Follow Evaluation
+
+At end of each day, active agents can establish new follow relationships.
+
+**Configuration:**
+```json
+{
+  "agents": {
+    "probability_of_daily_follow": 0.1
   }
 }
 ```
 
-**Parameters:**
-- `server_name`: Unique name for this server instance (used in logs)
-- `namespace`: The Ray namespace used for actor isolation
-- `address`: Server address ("auto" for automatic local setup, or a specific address)
-- `port`: Reserved for future use. Ray port is currently managed through Ray's internal mechanisms or environment variables
-- `database`: Database configuration object
-  - `type`: Database backend type - `"sqlite"`, `"postgresql"`, or `"mysql"`
-  - `sqlite`: SQLite-specific settings (used when type is "sqlite")
-    - `filename`: Database filename (stored in config directory)
-  - `postgresql`: PostgreSQL-specific settings (used when type is "postgresql")
-    - `host`: PostgreSQL server hostname or IP address
-    - `port`: PostgreSQL server port (default: 5432)
-    - `database`: Database name (required)
-    - `username`: Database username (required)
-    - `password`: Database password (optional, can be null for trusted connections)
-  - `mysql`: MySQL-specific settings (used when type is "mysql")
-    - `host`: MySQL server hostname or IP address
-    - `port`: MySQL server port (default: 3306)
-    - `database`: Database name (required)
-    - `username`: Database username (required)
-    - `password`: Database password (optional, can be null for trusted connections)
-- `min_to_start`: Minimum number of connected clients before simulation begins (default: 1)
-- `timeout_seconds`: Seconds before considering a client stale/inactive and automatically removing it to prevent deadlocks (default: 60)
-- `redis`: Redis configuration object (optional)
-  - `enabled`: Set to `true` to use Redis, `false` to use SQL database only (default: false)
-  - `host`: Redis server hostname or IP address (required if enabled)
-  - `port`: Redis server port number  
-  - `db`: Redis database number (0-15)
-  - `password`: Redis authentication password (set to `null` if no password required)
-  - `sliding_window_days`: Number of simulation days to keep in Redis cache (default: 2)
+**Behavior:**
 
-**Database Backend:**
+At end of each day (last time slot), for each agent active during the day:
+- With probability `daily_follow`, agent evaluates new follow candidates
+- Uses agent's `frecsys_type` strategy to get top-10 suggestions
+- Randomly selects one candidate from suggestions to follow
+- Creates FOLLOW action in Follow table
 
-The server supports three SQL database backends via SQLAlchemy:
+**Use Cases:**
+- Model gradual network growth over time
+- Simulate daily social discovery behaviors
+- Create realistic follow patterns independent of content
+- Study long-term network evolution
 
-1. **SQLite** (default): 
-   - File-based database stored in the configuration directory
-   - No additional setup required
-   - Best for: Single-machine deployments, development, testing
-   - Connection string: `sqlite:///path/to/simulation.db`
+#### Secondary Follow Behavior
 
-2. **PostgreSQL**:
-   - Robust, production-ready database server
-   - Requires PostgreSQL server to be running and accessible
-   - Best for: Production deployments, multi-client simulations, concurrent access
-   - Requires Python package: `pip install psycopg2-binary`
-   - Connection string: `postgresql://username:password@host:port/database`
+After reading or commenting, agents can establish or break social ties with content authors.
 
-3. **MySQL**:
-   - Popular open-source database server
-   - Requires MySQL server to be running and accessible
-   - Best for: Production deployments with existing MySQL infrastructure
-   - Requires Python package: `pip install pymysql`
-   - Connection string: `mysql+pymysql://username:password@host:port/database`
+**Configuration:**
+```json
+{
+  "agents": {
+    "probability_of_secondary_follow": 0.3
+  }
+}
+```
 
-**Choosing a Database:**
-- **SQLite**: Simple file-based storage, no server needed. Good for development and single-machine deployments.
-- **PostgreSQL**: Enterprise-grade features, excellent for production with high concurrency and complex queries.
-- **MySQL**: Wide adoption, good performance, excellent for production with existing MySQL infrastructure.
+**Behavior:**
 
-**Database Setup:**
-For PostgreSQL or MySQL, you must:
-1. Install and run the database server
-2. Create the database: `CREATE DATABASE ysimulator;`
-3. Create a user with appropriate permissions
-4. Install the required Python driver (psycopg2-binary for PostgreSQL, pymysql for MySQL)
-5. Configure the connection details in `server_config.json`
+With probability `secondary_follow`, after read or comment action:
 
-The database tables will be automatically created by SQLAlchemy when the server starts.
+- **Rule-based agents**: Randomly decide to follow, unfollow, or no change (equal probabilities)
+- **LLM agents**: Heuristic decision based on current follow status
+  - Not following: 30% chance to follow author
+  - Already following: 10% chance to unfollow author
+  - Otherwise: No change
 
-**Example Configurations:**
-The `example_conf/` directory provides example server configurations for each database type:
-- `server_config.json` - Default SQLite configuration
-- `server_config.postgresql.json` - PostgreSQL configuration example
-- `server_config.mysql.json` - MySQL configuration example
+**Implementation:**
+- Tracks all read/comment interactions with post authors
+- Evaluates after main action pipeline completes
+- Checks current follow status before deciding
+- Creates FOLLOW or UNFOLLOW actions with round timestamp
 
-To use a specific database type, copy the appropriate example file to your configuration directory and rename it to `server_config.json`, then update the connection parameters.
+**Use Cases:**
+- Model organic network growth through content interactions
+- Simulate unfollowing based on content disagreement
+- Create realistic social network evolution
+- Study relationship formation patterns
 
-The server supports two database backends:
-- **SQL Database** (SQLite/PostgreSQL/MySQL): Persistent storage for all simulation data
-- **Redis** (optional): In-memory cache for better performance with sliding window
+---
 
-**Redis Sliding Window:**
-When Redis is enabled, the system maintains a sliding window of recent data in Redis for fast access:
-- At the end of each simulation day, all data is consolidated to the SQL database for persistence
-- Data older than `sliding_window_days` is removed from Redis to manage memory
-- Recent data (within the sliding window) remains in Redis for fast queries
-- Example: With `sliding_window_days: 2`, Redis keeps the current day and previous day's data
+## Agent Population Configuration
 
-This approach provides:
-- **Fast access** to recent data via Redis
-- **Long-term persistence** of all data in SQL database
-- **Memory efficiency** by automatically pruning old data from Redis
-- **Data safety** with everything backed up to SQL database
+### File: `agent_population.json`
 
-**ID System:**
-- **User IDs**: Integer values from configuration (agent profiles)
-- **Post IDs**: UUIDs (universally unique identifiers) for cross-system compatibility
-- **Interaction IDs**: UUIDs for global uniqueness
+Defines agent profiles and automatic generation rules.
 
-If Redis connection fails or is disabled, the system automatically uses the SQL database for all operations.
-
-**Note**: For SQLite, the database file is created in the same directory as the configuration file. For PostgreSQL and MySQL, the database must already exist on the server.
-
-### 2. `agent_population.json` - Agent Population Configuration
-
-Defines the agent population with detailed profiles based on the User_mgmt model:
+#### Structure
 
 ```json
 {
@@ -602,7 +886,13 @@ Defines the agent population with detailed profiles based on the User_mgmt model
       "activity_profile": "Evening Active",
       "archetype": "Validator",
       "cluster": 0,
-      "llm": true
+      "llm": true,
+      "daily_activity_level": 3,
+      "toxicity": "no",
+      "leaning": "neutral",
+      "language": "en",
+      "recsys_type": "rchrono_followers",
+      "frecsys_type": "common_neighbors"
     }
   ],
   "generation_config": {
@@ -610,298 +900,98 @@ Defines the agent population with detailed profiles based on the User_mgmt model
     "cluster_distribution": {
       "weights": [0.4, 0.3, 0.3]
     },
-    "llm_enabled_probability": 0.1
+    "llm_enabled_probability": 0.1,
+    "age_range": [18, 65],
+    "default_settings": {
+      "education_level": "college",
+      "toxicity": "no",
+      "leaning": "neutral",
+      "language": "en"
+    }
   }
 }
 ```
 
-**Agent Fields** (based on User_mgmt model):
-- `id`: Unique agent identifier (required)
-- `username`: Agent username (required)
-- `email`: Agent email address
-- `age`: Age in years
-- **Big Five Personality Traits**:
-  - `oe`: Openness to Experience (low/medium/high)
-  - `co`: Conscientiousness (low/medium/high)
-  - `ex`: Extraversion (low/medium/high)
-  - `ag`: Agreeableness (low/medium/high)
-  - `ne`: Neuroticism (low/medium/high)
-- `education_level`: Education level (high_school/college/graduate/phd)
-- `gender`: Gender identity (male/female/non-binary)
-- `nationality`: Nationality code (US/UK/CA/AU/EU)
-- `profession`: Job title or profession
-- `activity_profile`: Activity pattern (Always On/Morning Active/Evening Active/Weekend Warrior)
-- `archetype`: Social media archetype (Validator/Broadcaster/Explorer)
-- `cluster`: Behavioral cluster (0=Validator, 1=Broadcaster, 2=Explorer)
-- `llm`: Whether to use LLM for this agent (true/false)
-- `daily_activity_level`: Activity frequency (1-4)
-- `toxicity`: Toxicity setting (yes/no)
-- `leaning`: Political leaning (neutral/left/right)
-- `language`: Language code (en/es/fr/de)
-- `recsys_type`: Content recommendation strategy (random/rchrono/rchrono_popularity/rchrono_followers/etc.)
-- `frecsys_type`: Follow recommendation strategy (random/common_neighbors/jaccard/adamic_adar/preferential_attachment)
+#### Agent Fields
 
-**Generation Config**:
-- `num_additional_agents`: Number of agents to generate automatically
-- `cluster_distribution.weights`: Distribution weights for clusters [0, 1, 2]
-- `llm_enabled_probability`: Probability that generated agents use LLM
-- `age_range`: Min and max age for generated agents [min, max]
-- `default_settings`: Default values for generated agents
+**Identity:**
+- `id` (number, required): Unique agent identifier
+- `username` (string, required): Agent username
+- `email` (string): Email address
 
-**Notes**:
-- Predefined agents in the `agents` array are created first
-- Additional agents are generated using the `generation_config` settings
-- All agents are registered in the `user_mgmt` database table at simulation start
-- Existing agents (by ID) are not re-registered
+**Demographics:**
+- `age` (number): Age in years
+- `education_level` (string): high_school, college, graduate, phd
+- `gender` (string): male, female, non-binary
+- `nationality` (string): Country code (US, UK, CA, AU, EU)
+- `profession` (string): Job title or profession
+- `language` (string): Language code (en, es, fr, de)
 
-### 3. `simulation_config.json` - Simulation Configuration
+**Big Five Personality Traits:**
+- `oe` (string): Openness to Experience (low/medium/high)
+- `co` (string): Conscientiousness (low/medium/high)
+- `ex` (string): Extraversion (low/medium/high)
+- `ag` (string): Agreeableness (low/medium/high)
+- `ne` (string): Neuroticism (low/medium/high)
 
-Main configuration for client simulation parameters:
+**Behavior:**
+- `activity_profile` (string): Activity pattern name
+- `archetype` (string): Validator, Broadcaster, or Explorer
+- `cluster` (number): Behavioral cluster (0=Validator, 1=Broadcaster, 2=Explorer)
+- `llm` (boolean): Whether to use LLM for this agent
+- `daily_activity_level` (number): Activity frequency (1-4)
+- `toxicity` (string): yes/no
+- `leaning` (string): Political leaning (neutral/left/right)
+
+**Recommendation:**
+- `recsys_type` (string): Content recommendation strategy
+- `frecsys_type` (string): Follow recommendation strategy
+
+#### Generation Config
+
+Controls automatic agent generation:
 
 ```json
 {
-  "client_name": "client_1",         // Name for this client instance
-  "namespace": "social_sim",
-  "server": {
-    "address": null,
-    "port": null
-  },
-  "llm": {
-    "address": "localhost",
-    "port": 11434,
-    "model": "llama3.2",
-    "temperature": 0.7
-  },
-  "llm_v": {
-    "address": "localhost",
-    "port": 11434,
-    "model": "minicpm-v",
-    "temperature": 0.5
-  },
-  "simulation": {
-    "num_days": 0,
-    "num_slots_per_day": 24,
-    "agent_archetypes": {
-      "enabled": true,
-      "agent_downcast": true,
-      "distribution": {
-        "validator": 0.33,
-        "broadcaster": 0.33,
-        "explorer": 0.34
-      }
-    }
-  },
-  "agents": {
-    "reading_from_follower_ratio": 0.6,
-    "max_length_thread_reading": 5,
-    "attention_window": 336,
-    "probability_of_daily_follow": 0.0,
-    "probability_of_secondary_follow": 0.0,
-    "actions_likelihood": {
-      "post": 0.3,
-      "image": 0.1,
-      "like": 0.2,
-      "comment": 0.15,
-      "share": 0.1
+  "generation_config": {
+    "num_additional_agents": 47,
+    "cluster_distribution": {
+      "weights": [0.4, 0.3, 0.3]
+    },
+    "llm_enabled_probability": 0.1,
+    "age_range": [18, 65],
+    "default_settings": {
+      "education_level": "college",
+      "toxicity": "no",
+      "leaning": "neutral",
+      "language": "en"
     }
   }
 }
 ```
 
 **Parameters:**
-- `client_name`: Unique name for this client instance (used in logs, not from command line)
-- `namespace`: Ray namespace (must match server)
-- `server.address`: Server address (null to use ray_config.temp file)
-- `server.port`: Server port (null for default)
-- `llm.address`: LLM server address (e.g., "localhost" for Ollama)
-- `llm.port`: LLM server port (e.g., 11434 for Ollama)
-- `llm.model`: LLM model name (e.g., "llama3.2")
-- `llm.temperature`: LLM temperature for generation (0.0-1.0)
-- `llm_v.address`: **Vision LLM** server address (optional, for image description)
-- `llm_v.port`: **Vision LLM** server port (optional)
-- `llm_v.model`: **Vision LLM** model name (e.g., "minicpm-v" for image understanding)
-- `llm_v.temperature`: **Vision LLM** temperature for generation (0.0-1.0)
-- `simulation.num_days`: Number of days to simulate (0 = infinite, continues until manually stopped)
-- `simulation.num_slots_per_day`: Time slots per day (typically 24)
-- `simulation.agent_archetypes`: **Agent archetype configuration** (optional)
-  - `enabled`: Enable archetype-based behavior (true/false, default: false)
-  - `agent_downcast`: Force validator and explorer agents to use rule-based behavior regardless of LLM setting (true/false, default: false)
-  - `distribution`: Distribution of agents across archetypes (must sum to ~1.0)
-    - `validator`: Proportion of validator agents (0.0-1.0)
-    - `broadcaster`: Proportion of broadcaster agents (0.0-1.0)
-    - `explorer`: Proportion of explorer agents (0.0-1.0)
-- `agents.probability_of_daily_follow`: Probability (0.0-1.0) of evaluating new follows at end of each day for active agents (default: 0.0)
-- `agents.probability_of_secondary_follow`: Probability (0.0-1.0) of evaluating follow/unfollow after read/comment actions (default: 0.0)
-- `agents.actions_likelihood`: **Action probabilities** - Dictionary mapping action types to their likelihood (optional)
+- `num_additional_agents`: Number of agents to generate automatically
+- `cluster_distribution.weights`: Distribution for clusters [0, 1, 2]
+- `llm_enabled_probability`: Probability generated agents use LLM
+- `age_range`: Min and max age [min, max]
+- `default_settings`: Default values for generated agents
 
-**Agent Behavior Configuration:**
+**Process:**
+1. Predefined agents in `agents` array created first
+2. Additional agents generated using `generation_config`
+3. All agents registered in `user_mgmt` database table at simulation start
+4. Existing agents (by ID) not re-registered
 
-The `agents` section controls agent behavior parameters:
+---
 
-```json
-{
-  "agents": {
-    "reading_from_follower_ratio": 0.6,
-    "max_length_thread_reading": 5,
-    "attention_window": 336,
-    "probability_of_daily_follow": 0.0,
-    "probability_of_secondary_follow": 0.0,
-    "churn": {
-      "enabled": false,
-      "churn_probability": 0.01,
-      "inactivity_threshold": 5,
-      "churn_percentage": 0.1
-    },
-    "new_agents": {
-      "enabled": false,
-      "probability_new_agents": 0.01,
-      "percentage_new_agents": 0.01
-    },
-    "actions_likelihood": {
-      "post": 0.3,
-      "image": 0.1,
-      "like": 0.2,
-      "comment": 0.15,
-      "share": 0.1
-    }
-  }
-}
-```
+## LLM Prompts Configuration
 
-- `reading_from_follower_ratio`: Proportion of posts from followed users in recommendations (0.0-1.0)
-- `max_length_thread_reading`: Maximum comment thread depth to read
-- `attention_window`: Time slots of content visibility (default: 336 = 14 days × 24 slots)
-- `probability_of_daily_follow`: Probability of evaluating new follows at end of each day for active agents (0.0-1.0, default: 0.0)
-- `probability_of_secondary_follow`: Probability of follow/unfollow evaluation after content interactions (0.0-1.0, default: 0.0)
-- `churn`: Agent churn configuration (see Agent Population Dynamics section)
-  - `enabled`: Enable/disable churn evaluation (default: false)
-  - `churn_probability`: Probability that inactive agent will churn (0.0-1.0)
-  - `inactivity_threshold`: Days without activity before considered inactive
-  - `churn_percentage`: Percentage of inactive agents to evaluate (0.0-1.0)
-- `new_agents`: New agent creation configuration (see Agent Population Dynamics section)
-  - `enabled`: Enable/disable new agent creation (default: false)
-  - `probability_new_agents`: Probability each slot will be filled (0.0-1.0)
-  - `percentage_new_agents`: Percentage of non-churned agents for slot calculation (0.0-1.0)
-- `actions_likelihood`: Dictionary of action types and their relative probabilities (optional)
-  - `post`: Create a new post
-  - `image`: Share an image with commentary (requires llm_v configuration and images in database)
-  - `like`: React to a post
-  - `comment`: Comment on a post
-  - `share`: Share a post
+### File: `llm_prompts.json`
 
-**Vision LLM Configuration (llm_v):**
+Defines personas and prompt templates for LLM interactions.
 
-The `llm_v` section configures a vision-capable language model for image understanding:
-
-- **Purpose**: Describes images extracted from RSS feeds and generates image commentary
-- **Requirements**: A vision-capable LLM like minicpm-v running on Ollama
-- **Optional**: If not configured, image extraction will be skipped
-- **Image Action**: Requires llm_v to be configured for agents to share images
-
-**Action Likelihood System:**
-
-The `actions_likelihood` dictionary allows fine-grained control over agent behavior:
-
-- **Values**: Relative probabilities (not required to sum to 1.0)
-- **Optional**: If not provided, default probabilities are used
-- **Image Action**: Requires:
-  - `llm_v` configuration in simulation_config.json
-  - Images in the database (extracted from RSS feeds by page agents)
-  - `describe_image` and `generate_image_commentary` prompts in llm_prompts.json
-- **Search Action**: Allows agents to discover content by topic interest:
-  - Agents sample topics from their interests (weighted by interaction count)
-  - Queries database for up to 10 recent posts on the selected topic
-  - LLM agents use `decide_search_action` prompt to choose engagement
-  - Rule-based agents randomly select action (comment/share/react)
-  - Primarily used by Explorer archetype agents
-  - Requires `decide_search_action` prompts in llm_prompts.json
-
-**Agent Archetypes System:**
-
-The `agent_archetypes` section enables differentiated agent behaviors based on social media user types:
-
-```json
-{
-  "simulation": {
-    "agent_archetypes": {
-      "enabled": true,
-      "agent_downcast": true,
-      "distribution": {
-        "validator": 0.33,
-        "broadcaster": 0.33,
-        "explorer": 0.34
-      }
-    }
-  }
-}
-```
-
-- **enabled**: When `true`, agents are assigned specific action sets based on their archetype
-- **agent_downcast**: When `true`, forces validator and explorer agents to use rule-based behavior even if their `llm` field is `true`. Broadcaster agents are unaffected and maintain their configured LLM setting. This is useful for reducing LLM API costs while maintaining realistic behavior patterns.
-- **distribution**: Defines the proportion of each archetype during agent sampling (values should sum to approximately 1.0)
-
-**Archetype Behaviors:**
-
-Each archetype has a distinct action profile that reflects real social media user patterns:
-
-1. **Validator** (Skeptical Content Consumers):
-   - Available actions: `share`, `read`, `share_link`
-   - Behavior: Reactive users who evaluate and share content but rarely create original posts
-   - Personality: Skeptical, brief, authentic (from persona in llm_prompts.json)
-
-2. **Broadcaster** (Content Producers):
-   - Available actions: `post`, `image`, `share`, `comment`
-   - Behavior: Active content creators who post frequently and engage with others
-   - Personality: High energy, viral-seeking, controversial (from persona in llm_prompts.json)
-
-3. **Explorer** (Network Builders):
-   - Available actions: `search`, `follow`
-   - Behavior: Users focused on discovering content and building their network
-   - Personality: Curious, asking questions (from persona in llm_prompts.json)
-
-**Agent Downcast Feature:**
-
-The `agent_downcast` option provides cost-efficient simulation by selectively overriding LLM usage:
-
-- **Use Case**: Reduce LLM API costs while maintaining behavioral diversity
-- **Effect**: Validator and explorer archetypes use rule-based actions (faster, cheaper)
-- **Unaffected**: Broadcaster archetypes maintain their LLM setting (creative content generation)
-- **Rationale**: Validators and explorers perform simpler actions (react, share, search) that don't require sophisticated language generation, while broadcasters benefit from LLM-generated original content
-- **Case-Insensitive**: Archetype matching is case-insensitive (Validator, validator, VALIDATOR all work)
-
-**Example Configuration:**
-
-```json
-// Full LLM population with archetype behaviors
-{
-  "agent_archetypes": {
-    "enabled": true,
-    "agent_downcast": false,  // All agents use LLM as configured
-    "distribution": {
-      "validator": 0.33,
-      "broadcaster": 0.33,
-      "explorer": 0.34
-    }
-  }
-}
-
-// Cost-optimized mixed population
-{
-  "agent_archetypes": {
-    "enabled": true,
-    "agent_downcast": true,  // Only broadcasters use LLM
-    "distribution": {
-      "validator": 0.33,
-      "broadcaster": 0.33,
-      "explorer": 0.34
-    }
-  }
-}
-```
-
-### 4. `llm_prompts.json` - LLM Prompt Templates
-
-Defines personas and prompt templates for LLM interactions:
+#### Structure
 
 ```json
 {
@@ -933,65 +1023,49 @@ Defines personas and prompt templates for LLM interactions:
 }
 ```
 
-**Parameters:**
-- `personas`: Dictionary mapping cluster IDs to persona descriptions
-- `generate_post.system_template`: System prompt template for post generation
-  - Available variables: `{persona}`
-- `generate_post.user_template`: User prompt template for post generation
-  - Available variables: `{day}`, `{slot}`
-- `decide_reaction.system_template`: System prompt template for reaction decisions
-  - Available variables: `{cluster_id}`
-- `decide_reaction.user_template`: User prompt template for reaction decisions
-  - Available variables: `{post_content}`
-- `decide_search_action.system_template`: System prompt for search action engagement
-  - Available variables: `{persona}`
-- `decide_search_action.user_template`: User prompt for deciding how to engage with searched post
-  - Available variables: `{post_content}`
-- `describe_image.system_template`: System prompt for vision LLM image description
-- `describe_image.user_template`: User prompt template for image description
-  - Available variables: `{url}` - Image URL
-- `generate_image_commentary.system_template`: System prompt for image post generation
-  - Available variables: `{persona}`, `{toxicity}`
-- `generate_image_commentary.user_template`: User prompt for creating image posts
-  - Available variables: `{image_description}`, `{topics_instruction}`
+#### Prompt Templates
 
-**Search Action Prompts:**
+Each prompt has `system_template` and `user_template` with variable placeholders.
 
-The `decide_search_action` prompt is used when agents actively search for posts on topics they're interested in:
-- **Input**: Post content found via topic search
-- **Output**: Action decision (COMMENT, SHARE, or reaction type)
-- **Context**: Agent's persona and the fact they searched for this topic
-- **Usage**: Primarily by Explorer archetype agents
+**Available Variables:**
+- `{persona}`: Agent's persona from personas dictionary
+- `{cluster_id}`: Agent's cluster ID (0, 1, or 2)
+- `{day}`: Current simulation day
+- `{slot}`: Current time slot
+- `{post_content}`: Content of a post
+- `{toxicity}`: Agent's toxicity level
+- `{image_description}`: Description of an image
+- `{topics_instruction}`: Topics to mention
+- `{url}`: Image URL
 
-**Image-Related Prompts:**
+#### Prompt Types
 
-The `describe_image` prompt is used by the vision LLM (llm_v) to generate descriptions of images extracted from RSS feeds:
-- **Input**: Image URL from RSS feed entry
-- **Output**: Text description stored in the images table
-- **Requirements**: llm_v configuration with a vision-capable model (e.g., minicpm-v)
+**1. generate_post**: Create original text posts
+**2. decide_reaction**: Decide how to react to posts
+**3. decide_search_action**: Engage with searched posts
+**4. describe_image**: Generate image descriptions (vision LLM)
+**5. generate_image_commentary**: Create posts about images
 
-The `generate_image_commentary` prompt creates social media posts for the image sharing action:
-- **Input**: Image description, agent persona, agent toxicity level, and related topics
-- **Output**: Social media post text (max 280 characters)
-- **Usage**: LLM agents use this to create personalized commentary when sharing images
-- **Rule-based agents**: Share images with the text "IMAGE" instead of using this prompt
+---
 
-### 5. `network.csv` - Social Network Topology (Optional)
+## Social Network Topology
 
-Defines the initial social network structure by specifying follow relationships between agents.
+### File: `network.csv` (Optional)
 
-**Format:**
+Defines initial social network structure through follow relationships.
 
-Each row in the CSV represents a directed edge (follow relationship):
+#### Format
+
+CSV with two columns (no header):
 ```csv
 follower_username,user_username
 ```
 
 Where:
-- `follower_username`: Username of the agent who follows
-- `user_username`: Username of the agent being followed
+- `follower_username`: Username of agent who follows
+- `user_username`: Username of agent being followed
 
-**Example:**
+#### Example
 
 ```csv
 validator_001,TechNewsPage
@@ -1002,339 +1076,371 @@ broadcaster_001,explorer_001
 explorer_001,validator_001
 ```
 
-This creates a network where:
-- All three agents follow TechNewsPage
-- validator_001 follows broadcaster_001
-- broadcaster_001 follows explorer_001
-- explorer_001 follows validator_001
+#### Behavior
 
-**Behavior:**
+1. **Automatic Loading**: If file exists, loaded when client connects
+2. **Client-Specific**: Looks for `{client_name}_network.csv` first, falls back to `network.csv`
+3. **Multi-Client Safe**: Checks for existing edges before loading
+4. **Agent Validation**: Only creates edges for agents in `agent_population.json`
+5. **Database Storage**: Stored in `follow` table with empty round (initial network)
+6. **Recommendation Impact**: Influences content recommendations like `rchrono_followers`
 
-1. **Automatic Loading**: If `network.csv` (or `{client_name}_network.csv`) exists in the configuration directory, it is automatically loaded when the client connects.
+#### Notes
 
-2. **Client-Specific Files**: The client first looks for `{client_name}_network.csv`. If not found, it falls back to `network.csv`. This allows different clients to have different social networks.
+- File is optional - agents start with no relationships if absent
+- Usernames must exactly match (case-sensitive)
+- No header row
+- Empty lines ignored
+- Dynamic follow relationships can still form during simulation
 
-3. **Multi-Client Safe**: The system checks if any edges from the CSV already exist in the database before loading. This ensures the network is only loaded once, even in multi-client scenarios.
+---
 
-4. **Agent Validation**: Only edges between agents defined in `agent_population.json` (or `{client_name}_agent_population.json`) are created. Invalid usernames are logged and skipped.
+## Multi-Client Synchronization
 
-5. **Database Storage**: Follow relationships are stored in the `follow` table with:
-   - `action`: Set to "follow"
-   - `round`: Empty string (initial network has no associated simulation round)
+The server handles multiple concurrent clients with different durations and potential failures.
 
-6. **Recommendation Systems**: Once loaded, the network influences content recommendation systems like `rchrono_followers` which prioritize posts from followed users.
+### How It Works
 
-**Notes:**
+1. **Barrier Synchronization**: Server waits for all **active** clients before advancing slot
+2. **Graceful Completion**: Finished clients notify server and no longer block progression
+3. **Heartbeat Mechanism**: Clients send periodic heartbeats (every 5 seconds)
+4. **Timeout Detection**: Clients not sending heartbeats for `timeout_seconds` automatically removed
 
-- The file is optional. If not present, agents start with no follow relationships.
-- Client-specific files (e.g., `client_1_network.csv`) take precedence over generic files.
-- Usernames must exactly match those in `agent_population.json` (case-sensitive).
-- The CSV should not have a header row.
-- Empty lines are ignored.
-- Follow relationships can still be created dynamically during simulation through agent actions.
+### Client States
 
-## Usage
+- **Active**: Registered and participating
+- **Completed**: Finished activities, no longer blocks others
+- **Stale**: Haven't sent heartbeat within timeout, automatically removed
 
-To use YSimulator with a custom configuration directory:
+### Heartbeat-Based Liveness
 
-1. **Create a configuration directory** with all required files:
-   ```bash
-   mkdir my_simulation
-   cp example_conf/*.json my_simulation/
-   ```
+- **Processing time doesn't matter**: Long-running slots OK as long as heartbeats arrive
+- **Heartbeat interval**: Clients send every `heartbeat_interval` seconds (default: 5s)
+- **Timeout detection**: Only clients **stopping heartbeats** for > `timeout_seconds` marked stale
+- **Recommendation**: Set `timeout_seconds` to 10-12x `heartbeat_interval`
 
-2. **Edit configurations** as needed:
-   ```bash
-   nano my_simulation/server_config.json
-   nano my_simulation/simulation_config.json
-   ```
+**Example**: If `heartbeat_interval = 5` and `timeout_seconds = 60`, a client processing for 10 minutes is fine as long as heartbeats arrive every 5 seconds.
 
-3. **Run the server** pointing to the directory:
-   ```bash
-   python run_server.py --config my_simulation
-   ```
+### Client-Side Simulation Steps
 
-4. **Run the client** in another terminal:
-   ```bash
-   python run_client.py --config my_simulation
-   ```
+**Design**: Client handles its own progression, server provides coordination.
 
-All generated files (database, logs, temporary files) will be created in the same configuration directory.
+**Registration Flow:**
+1. Client registers with server, specifying `num_days` (informational)
+2. Server responds with current `start_day` and `start_slot`
+3. Client tracks progress locally from starting point
+4. Client exits when `current_day >= start_day + num_days`
 
-### Default Configuration
+**On Restart:**
+- Client re-registers and receives current server time as new starting point
+- Runs for full configured duration from new starting point
 
-If no `--config` argument is provided, the server and client will look for configuration files in the current directory:
-
-```bash
-# Server looks for ./server_config.json
-python run_server.py
-
-# Client looks for ./simulation_config.json, ./agent_population.json, ./llm_prompts.json
-python run_client.py
+**Example:**
+```
+Server at day 10
+Client joins with num_days = 3
+Server returns: start_day = 10, start_slot = 5
+Client runs while current_day < 13 (days 10, 11, 12)
+If client restarts at day 20:
+  - Server returns: start_day = 20
+  - Client runs days 20-23 (full 3 days from new start)
 ```
 
-### Customizing Configuration
+### Example Scenario
 
-1. Edit the JSON files in your configuration directory
-2. No code changes required
-3. Restart server/client to apply changes
+```
+Initial: 3 clients (A, B, C) start at Day 1
+Day 1-4: All submit, server advances
+Day 5: Client A finishes (started day 1, num_days=5)
+  → A exits and calls complete_client()
+  → Server marks A as completed
+  → Only B and C block advancement
+Day 6-7: B and C continue without A
+Day 7: Client B finishes
+Day 8: New Client D joins (server at day 8, configured for 3 days)
+  → D receives start_day=8
+  → D runs until day 11
+Day 10: Client C finishes
+Day 11: Client D finishes → Simulation complete
+```
 
-## Logging
+### Configuration
 
-Both server and client generate rotating JSON logs in the `logs/` directory (created in the same location as the configuration file).
+**Server (`server_config.json`):**
+```json
+{
+  "timeout_seconds": 60
+}
+```
+
+**Client (`simulation_config.json`):**
+```json
+{
+  "simulation": {
+    "heartbeat_interval": 5
+  }
+}
+```
+
+**Recommendations:**
+- `heartbeat_interval`: 3-10 seconds
+- `timeout_seconds`: 10-12x heartbeat_interval minimum
+- High-latency networks: Increase both proportionally
+- Development/debugging: 300-600s timeout to avoid interruptions
+
+---
+
+## Logging Configuration
+
+Both server and client generate rotating JSON logs. Log file generation is configurable.
 
 ### Log Files
 
-- **Server logs**: `logs/{server_name}_server.log` - Main server process
-- **Server actor logs**: `logs/{server_name}_actor.log` - Orchestrator actor
-- **Client logs**: `logs/{client_name}_client.log` - Main client process
-- **Client actor logs**: `logs/{client_name}_actor.log` - Simulation actor
+**Server:**
+- `logs/{server_name}_server.log` - Main server process
+- `logs/{server_name}_actor.log` - Orchestrator actor
+- `logs/_server.log` - Request tracking
+
+**Client:**
+- `logs/{client_name}_execution.log` - Main client process
+- `logs/{client_id}_actor.log` - Simulation actor
+- `logs/{client_id}_client.log` - Agent actions
+
+### Log Configuration
+
+Control which logs are generated in `server_config.json` and `simulation_config.json`:
+
+**Server:**
+```json
+{
+  "logging": {
+    "enable_server_log": true,
+    "enable_actor_log": true,
+    "enable_request_log": true,
+    "enable_console_log": true
+  }
+}
+```
+
+**Client:**
+```json
+{
+  "logging": {
+    "enable_execution_log": true,
+    "enable_actor_log": true,
+    "enable_client_log": true,
+    "enable_console_log": true
+  }
+}
+```
+
+All options default to `true`. Set to `false` to disable specific logs.
 
 ### Log Format
 
-Logs are in JSON format with the following structure:
-
+JSON format with structure:
 ```json
 {
-  "timestamp": "2025-12-18T10:47:47.123Z",
+  "timestamp": "2025-12-31T20:00:00.000Z",
   "level": "INFO",
   "message": "Agent registration complete",
   "module": "server",
   "function": "register_agents",
   "line": 150,
   "registered": 50,
-  "skipped": 0,
   "execution_time_ms": 125.5
 }
 ```
 
 ### Log Rotation
 
-- Maximum log file size: 10MB
-- Number of backup files: 5
-- Old logs are automatically rotated to `.log.1`, `.log.2`, etc.
+- **Maximum size**: 10MB per file
+- **Backups**: 5 files kept
+- **Compression**: Rotated files gzip-compressed with `.gz` extension
+- **Format**: JSON, one entry per line
 
-## Code Formatting
+**For detailed logging documentation**, see:
+- [LOGGING_CONFIG.md](LOGGING_CONFIG.md) - Complete logging configuration guide
+- [SERVER_LOGGING.md](SERVER_LOGGING.md) - Server request log format and analysis
+- [ACTION_LOGGING.md](ACTION_LOGGING.md) - Client action log format and summaries
 
-This project uses automatic code formatting with:
-- **black**: Code formatter
-- **isort**: Import sorter
+---
 
-A pre-commit hook automatically formats Python files before each commit. Install formatting tools:
+## Configuration Examples
+
+### Example 1: Development Setup (SQLite, Full Logging)
+
+**server_config.json:**
+```json
+{
+  "server_name": "dev_server",
+  "database": {
+    "type": "sqlite",
+    "sqlite": {"filename": "dev.db"}
+  },
+  "min_to_start": 1,
+  "logging": {
+    "enable_server_log": true,
+    "enable_actor_log": true,
+    "enable_request_log": true
+  }
+}
+```
+
+**simulation_config.json:**
+```json
+{
+  "client_name": "dev_client",
+  "simulation": {
+    "num_days": 2,
+    "num_slots_per_day": 24
+  },
+  "logging": {
+    "enable_execution_log": true,
+    "enable_actor_log": true,
+    "enable_client_log": true
+  }
+}
+```
+
+### Example 2: Production Setup (PostgreSQL, Minimal Logging)
+
+**server_config.json:**
+```json
+{
+  "server_name": "prod_server",
+  "database": {
+    "type": "postgresql",
+    "postgresql": {
+      "host": "db.example.com",
+      "port": 5432,
+      "database": "ysimulator_prod",
+      "username": "ysim_user",
+      "password": "secure_password"
+    }
+  },
+  "min_to_start": 5,
+  "timeout_seconds": 120,
+  "logging": {
+    "enable_server_log": true,
+    "enable_actor_log": false,
+    "enable_request_log": false
+  }
+}
+```
+
+### Example 3: Large-Scale Simulation (Redis, Churn, New Agents)
+
+**server_config.json:**
+```json
+{
+  "database": {"type": "postgresql", ...},
+  "redis": {
+    "enabled": true,
+    "host": "redis.example.com",
+    "sliding_window_days": 2
+  }
+}
+```
+
+**simulation_config.json:**
+```json
+{
+  "simulation": {
+    "num_days": 30,
+    "agent_archetypes": {
+      "enabled": true,
+      "agent_downcast": true
+    }
+  },
+  "agents": {
+    "churn": {
+      "enabled": true,
+      "churn_probability": 0.05,
+      "inactivity_threshold": 7,
+      "churn_percentage": 0.1
+    },
+    "new_agents": {
+      "enabled": true,
+      "probability_new_agents": 0.1,
+      "percentage_new_agents": 0.05
+    }
+  }
+}
+```
+
+### Example 4: Multi-Client Distributed Simulation
+
+**Server** (run once):
+```bash
+python run_server.py --config shared_config
+```
+
+**Client 1** (10 days, 1000 agents):
+```bash
+python run_client.py --config shared_config
+# simulation_config.json: client_name="client_1", num_days=10
+```
+
+**Client 2** (5 days, 500 agents):
+```bash
+python run_client.py --config shared_config
+# simulation_config.json: client_name="client_2", num_days=5
+# Uses client_2_agent_population.json
+```
+
+---
+
+## Related Documentation
+
+- **[LOGGING_CONFIG.md](LOGGING_CONFIG.md)** - Comprehensive logging configuration guide
+- **[SERVER_LOGGING.md](SERVER_LOGGING.md)** - Server request log format and analysis  
+- **[ACTION_LOGGING.md](ACTION_LOGGING.md)** - Client action log format and summaries
+- **[ARCHITECTURE.md](ARCHITECTURE.md)** - System architecture overview
+- **[EXTENDING.md](EXTENDING.md)** - Guide to extending YSimulator
+
+---
+
+## Quick Reference
+
+### Required Configuration Files
+
+| Role | Files Required |
+|------|----------------|
+| Server | `server_config.json` |
+| Client | `simulation_config.json`, `agent_population.json`, `llm_prompts.json` |
+
+### Optional Configuration Files
+
+| File | Purpose |
+|------|---------|
+| `network.csv` | Initial social network topology |
+| `{client_name}_agent_population.json` | Client-specific agent profiles |
+| `{client_name}_llm_prompts.json` | Client-specific LLM prompts |
+| `{client_name}_network.csv` | Client-specific network |
+
+### Default Values
+
+| Parameter | Default | Range |
+|-----------|---------|-------|
+| `num_days` | 0 (infinite) | 0+ |
+| `num_slots_per_day` | 24 | 1+ |
+| `heartbeat_interval` | 5 seconds | 1-60 |
+| `timeout_seconds` | 60 seconds | 10-600 |
+| `min_to_start` | 1 client | 1+ |
+| `attention_window` | 336 slots | 1+ |
+| All logging options | true | true/false |
+
+### Command Line Reference
 
 ```bash
-pip install black isort
+# Run server
+python run_server.py --config path/to/config
+
+# Run client
+python run_client.py --config path/to/config
+
+# Use current directory (default)
+python run_server.py
+python run_client.py
 ```
-
-The formatting is enforced automatically on commit.
-
-## Examples
-
-### Example 1: Change Database Location
-
-Edit `server_config.json`:
-```json
-{
-  "database_file": "/data/my_simulation.db"
-}
-```
-
-### Example 2: Increase Agent Population
-
-Edit `agent_population.json`:
-```json
-{
-  "agents": [...],
-  "generation_config": {
-    "num_additional_agents": 200
-  }
-}
-```
-
-### Example 3: Add Custom Agent with Specific Personality
-
-Edit `agent_population.json`:
-```json
-{
-  "agents": [
-    {
-      "id": 1,
-      "username": "critical_thinker",
-      "age": 45,
-      "oe": "high",
-      "co": "high",
-      "ex": "low",
-      "ag": "medium",
-      "ne": "low",
-      "education_level": "phd",
-      "profession": "Professor",
-      "archetype": "Validator",
-      "cluster": 0,
-      "llm": true
-    }
-  ]
-}
-```
-
-### Example 4: Run for Limited Time
-
-Edit `simulation_config.json`:
-```json
-{
-  "simulation": {
-    "num_days": 7,
-    "num_slots_per_day": 24
-  }
-}
-```
-
-### Example 5: Use Different LLM Model
-
-Edit `simulation_config.json`:
-```json
-{
-  "llm": {
-    "model": "llama3.1",
-    "temperature": 0.8
-  }
-}
-```
-
-### Example 6: Customize Personas
-
-Edit `llm_prompts.json`:
-```json
-{
-  "personas": {
-    "0": "You are a critical thinker who questions everything.",
-    "1": "You are an enthusiastic content creator.",
-    "2": "You are a curious researcher."
-  }
-}
-```
-
-## Multi-Client Synchronization
-
-The server implements robust synchronization mechanisms to handle multiple concurrent clients with different simulation durations and potential failures.
-
-### How It Works
-
-1. **Barrier Synchronization**: The server waits for all **active** clients to submit their actions before advancing the simulation slot
-2. **Graceful Completion**: When a client finishes its planned activities, it notifies the server and no longer blocks progression
-3. **Heartbeat Mechanism**: Clients send periodic heartbeats (every 5 seconds) to signal they're alive
-4. **Timeout Detection**: If a client doesn't send a heartbeat for `timeout_seconds` (default: 60s), it's automatically removed
-
-### Client States
-
-- **Active**: Registered and still participating in simulation
-- **Completed**: Finished all planned activities, notified server, no longer blocks others
-- **Stale**: Haven't sent heartbeat within timeout period, automatically removed
-
-### Heartbeat-Based Liveness Detection
-
-The system uses **heartbeat-only** detection to determine if clients are alive:
-
-- **Processing Time Doesn't Matter**: Even if a client takes hours to process a slot (e.g., due to many agents or slow LLM), it won't be marked as stale as long as heartbeats arrive
-- **Heartbeat Interval**: Clients send heartbeats every `heartbeat_interval` seconds (configurable in `simulation_config.json`, default: 5s)
-- **Timeout Detection**: Only clients that **stop sending heartbeats** for more than `timeout_seconds` are marked as stale
-- **Recommendation**: Set `timeout_seconds` to at least 10-12x the `heartbeat_interval` to account for network delays
-
-Example: If `heartbeat_interval = 5` and `timeout_seconds = 60`, a client processing a slot for 10 minutes is fine as long as it sends heartbeats every 5 seconds. Only if heartbeats stop arriving for 60 seconds will it be considered stale.
-
-### Client-Side Simulation Step Management
-
-**Design Philosophy**: The client handles its own simulation progression, while the server provides coordination.
-
-**Registration Flow:**
-1. Client registers with server, specifying `num_days` (informational only)
-2. Server responds with current `start_day` and `start_slot` as the starting point
-3. Client tracks progress locally from this starting point
-4. Client exits when `current_day >= start_day + num_days`
-
-**On Client Restart:**
-- Client re-registers and receives the **current server time** as new starting point
-- Client runs for its full configured duration from that new starting point
-- **Example**: 
-  - Server at day 10
-  - Client joins with `num_days = 3`
-  - Server returns: `start_day = 10, start_slot = 5`
-  - Client tracks: will run while `current_day < 10 + 3` (i.e., days 10, 11, 12)
-  - Client exits when server advances to day 13
-  - If client restarts when server is at day 20:
-    - Server returns: `start_day = 20, start_slot = 1`
-    - Client runs days 20-23 (full 3-day duration from new start)
-
-**Benefits:**
-- Simpler server logic - no per-client completion state tracking
-- Client autonomy - each client manages its own simulation timeline
-- Easier to understand - day counting happens where simulation runs
-- Better separation of concerns - server coordinates, client simulates
-
-### Example Scenario
-
-```
-Initial: 3 clients start (A, B, C) at Day 1
-Day 1 Slot 1: A, B, C all submit → Server advances to Slot 2
-Day 1 Slot 2: A, B, C all submit → Server advances to Day 2 Slot 1
-...
-Day 5: Client A reaches its personal max (started day 1, num_days=5)
-  → A exits its simulation loop
-  → A calls complete_client()
-  → Server marks A as "completed"
-  → Only B and C now block advancement
-Day 6-7: B and C continue without waiting for A
-Day 7: Client B reaches its max
-  → B exits and calls complete_client()
-  → Only C now blocks advancement
-Day 8: New Client D joins (server at day 8, configured for 3 days)
-  → D receives start_day=8 from server
-  → D will run until day 11 (local check: day < 8 + 3)
-  → D participates alongside C
-Day 10: Client C finishes, only D active
-Day 11: Client D finishes (day 11 >= 8 + 3)
-  → Simulation complete
-```
-
-### Handling Crashed Clients
-
-If Client B crashes on Day 6 without notifying the server:
-1. Client B stops sending heartbeats
-2. After 60 seconds (timeout_seconds), server detects B is stale
-3. Server automatically marks B as completed
-4. Clients C and D continue without being blocked
-
-Note: The crashed client's processing time is irrelevant. Even if it was legitimately processing for 10 minutes, as long as heartbeats arrived, it wouldn't be marked as stale.
-
-### Configuration
-
-**Server Configuration** (`server_config.json`):
-```json
-{
-  "timeout_seconds": 60  // Time without heartbeat before marking client as stale
-}
-```
-
-**Client Configuration** (`simulation_config.json`):
-```json
-{
-  "simulation": {
-    "heartbeat_interval": 5  // Seconds between heartbeat signals
-  }
-}
-```
-
-**Recommendations:**
-- **heartbeat_interval**: 3-10 seconds (lower = faster failure detection, higher = less network overhead)
-- **timeout_seconds**: 10-12x heartbeat_interval minimum
-  - Example: heartbeat_interval=5s → timeout_seconds=60s minimum
-- **High-latency networks**: Increase both values proportionally
-- **Development/debugging**: Set timeout_seconds to 300-600s to avoid interruptions
-
-### Best Practices
-
-1. **Varied Simulation Durations**: Clients can have different `num_days` settings
-2. **Dynamic Joining**: New clients can join mid-simulation and run for their full duration
-3. **Restart Behavior**: Restarting a client doesn't cause immediate completion - it runs for full duration from current server time
-4. **Graceful Shutdown**: Always let the client run() method complete to ensure proper cleanup
-5. **Monitor Logs**: Check for timeout warnings indicating clients that stopped sending heartbeats
-6. **Adjust Timeouts**: If you see false stale detections, increase `timeout_seconds` or decrease `heartbeat_interval`
