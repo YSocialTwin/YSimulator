@@ -1885,6 +1885,50 @@ class DatabaseMiddleware:
         finally:
             session.close()
 
+    def get_latest_agent_opinion(
+        self, agent_id: str, topic_id: str
+    ) -> Optional[float]:
+        """
+        Get the latest opinion value for an agent on a topic.
+
+        Args:
+            agent_id: Agent UUID
+            topic_id: Topic UUID (from interests table)
+
+        Returns:
+            float: Latest opinion value, or None if not found
+        """
+        session = Session(self.engine)
+        try:
+            # Get the most recent opinion for this agent-topic pair
+            opinion_record = (
+                session.query(Agent_Opinion)
+                .filter(
+                    Agent_Opinion.agent_id == agent_id,
+                    Agent_Opinion.topic_id == topic_id
+                )
+                .order_by(Agent_Opinion.tid.desc())
+                .first()
+            )
+            
+            if opinion_record:
+                return opinion_record.opinion
+            return None
+        except Exception as e:
+            self.logger.error(
+                f"Error getting agent opinion: {e}",
+                extra={
+                    "extra_data": {
+                        "error": str(e),
+                        "agent_id": agent_id,
+                        "topic_id": topic_id,
+                    }
+                },
+            )
+            return None
+        finally:
+            session.close()
+
     def add_post_topic(self, post_id: str, topic_id: str) -> bool:
         """
         Add a post topic association to the database.
