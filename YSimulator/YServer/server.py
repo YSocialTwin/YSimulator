@@ -531,7 +531,7 @@ class OrchestratorServer:
                 "language": agent_profile.language,
                 "owner": agent_profile.owner,
                 "education_level": agent_profile.education_level,
-                "joined_on": self.current_round_id,  # FK to rounds table (UUID string)
+                "joined_on": agent_profile.joined_on if agent_profile.joined_on else self.current_round_id,  # Use agent's joined_on or current round
                 "gender": agent_profile.gender,
                 "nationality": agent_profile.nationality,
                 "round_actions": agent_profile.round_actions,
@@ -542,6 +542,7 @@ class OrchestratorServer:
                 "profession": agent_profile.profession,
                 "activity_profile": agent_profile.activity_profile,
                 "archetype": agent_profile.archetype,
+                "last_active_day": self.day,  # Initialize last_active_day to current day
             }
             users_data.append(user_data)
 
@@ -1457,6 +1458,12 @@ class OrchestratorServer:
                 self.recent_posts_cache.extend(new_ids)
                 self.recent_posts_cache = self.recent_posts_cache[-50:]  # Keep last 50
 
+            # Update last_active_day for agents who performed actions
+            if actions:
+                active_agent_ids = set(act.agent_id for act in actions)
+                for agent_id in active_agent_ids:
+                    self.db.update_agent_last_active_day(agent_id, self.day)
+
             execution_time = (time.time() - start_time) * 1000
 
             self.logger.info(
@@ -1485,6 +1492,76 @@ class OrchestratorServer:
 
         # Check if EVERYONE is done
         self._check_barrier_and_advance()
+
+    def get_current_day(self) -> int:
+        """
+        Get the current simulation day.
+        
+        Returns:
+            int: Current day number
+        """
+        return self.day
+    
+    def get_current_round_id(self) -> str:
+        """
+        Get the current round ID.
+        
+        Returns:
+            str: Current round ID (UUID)
+        """
+        return self.current_round_id
+    
+    def get_inactive_agents(self, current_day: int, inactivity_threshold: int) -> List[str]:
+        """
+        Get list of inactive agents from database (simple database wrapper for client use).
+        
+        Args:
+            current_day: Current simulation day
+            inactivity_threshold: Number of days of inactivity to consider
+            
+        Returns:
+            List of agent IDs (strings) that are inactive
+        """
+        return self.db.get_inactive_agents(current_day, inactivity_threshold)
+    
+    def set_agent_churned(self, agent_id: str, round_id: str) -> bool:
+        """
+        Mark an agent as churned (simple database wrapper for client use).
+        
+        Args:
+            agent_id: Agent ID to churn
+            round_id: Round ID when agent churned
+            
+        Returns:
+            bool: True if successful
+        """
+        return self.db.set_agent_churned(agent_id, round_id)
+    
+    def set_agents_churned_batch(self, agent_ids: List[str], round_id: str) -> int:
+        """
+        Mark multiple agents as churned in a batch operation (simple database wrapper for client use).
+        
+        Args:
+            agent_ids: List of agent IDs to churn
+            round_id: Round ID when agents churned
+            
+        Returns:
+            int: Number of agents successfully churned
+        """
+        churned_count = 0
+        for agent_id in agent_ids:
+            if self.db.set_agent_churned(agent_id, round_id):
+                churned_count += 1
+        return churned_count
+
+    def get_churned_agents(self) -> List[str]:
+        """
+        Get list of all churned agents (simple database wrapper for client use).
+        
+        Returns:
+            List of agent IDs (UUID strings) that are churned
+        """
+        return self.db.get_churned_agents()
 
     def add_website(self, website_data: dict) -> Optional[str]:
         """

@@ -200,6 +200,235 @@ With probability `secondary_follow`, after a read or comment action:
 - Create realistic social network evolution
 - Study relationship formation patterns
 
+## Agent Population Dynamics
+
+YSimulator includes advanced agent lifecycle management features that model realistic population changes during long-running simulations:
+
+### 1. Agent Churn
+
+Agents can become inactive ("churned") based on prolonged inactivity, simulating real-world attrition in social media platforms.
+
+**Configuration:**
+
+In `simulation_config.json`, add under the `agents` section:
+
+```json
+{
+  "agents": {
+    "churn": {
+      "enabled": true,
+      "churn_probability": 0.01,
+      "inactivity_threshold": 5,
+      "churn_percentage": 0.1
+    }
+  }
+}
+```
+
+**Parameters:**
+- `enabled`: Enable/disable churn evaluation (true/false, default: false)
+- `churn_probability`: Probability (0.0-1.0) that an inactive agent will churn
+- `inactivity_threshold`: Number of days without activity before agent is considered inactive
+- `churn_percentage`: Percentage (0.0-1.0) of inactive agents to evaluate for churn each day
+
+**Behavior:**
+
+At the end of each simulation day, if churn is enabled:
+
+1. **Identify Inactive Agents**: Query agents who haven't been active in the last `inactivity_threshold` days
+2. **Select Candidates**: Randomly select `churn_percentage` of inactive agents as churn candidates
+3. **Apply Probability**: For each candidate, apply `churn_probability` to determine if they churn
+4. **Mark as Churned**: Churned agents have their `left_on` field set to the current round ID
+5. **Exclude from Selection**: Churned agents are excluded from future activity selection
+
+**Database Fields:**
+- `last_active_day`: Tracks the last simulation day the agent was active (updated on every action)
+- `left_on`: References the Round ID when the agent churned (NULL = active, set = churned)
+
+**Performance:**
+- Uses batch operations for efficient database updates
+- All churned agents in a day are processed in a single server call
+- Example: Churning 80 agents requires 1 server call (not 80 individual calls)
+
+**Example Scenario:**
+```
+Day 1-5: Agent "user_123" is active
+Day 6-10: Agent "user_123" is inactive (no actions)
+Day 11: Churn evaluation
+  - Agent identified as inactive (5+ days without activity)
+  - Selected as candidate (within churn_percentage)
+  - Probability check passes (roll < churn_probability)
+  - Agent marked as churned (left_on = current_round_id)
+Day 12+: Agent no longer selected for simulation activities
+```
+
+**Redis Support:**
+The churn system works with both SQL and Redis backends:
+- `last_active_day` stored in both SQL and Redis for query efficiency
+- `left_on` field updated in both backends
+- Inactive agent queries optimized for both storage systems
+
+### 2. New Agents
+
+New agents can be dynamically added to the simulation to model population growth, representing new users joining the platform.
+
+**Configuration:**
+
+In `simulation_config.json`, add under the `agents` section:
+
+```json
+{
+  "agents": {
+    "new_agents": {
+      "enabled": true,
+      "probability_new_agents": 0.01,
+      "percentage_new_agents": 0.01
+    }
+  }
+}
+```
+
+**Parameters:**
+- `enabled`: Enable/disable new agent creation (true/false, default: false)
+- `probability_new_agents`: Probability (0.0-1.0) that each new agent slot will be filled
+- `percentage_new_agents`: Percentage (0.0-1.0) of non-churned agents to calculate available slots
+
+**Behavior:**
+
+At the end of each simulation day, if new agents is enabled:
+
+1. **Count Non-Churned Agents**: Calculate the number of active (non-churned) agents for this client
+2. **Calculate Slots**: Compute `x = int(non_churned_agents * percentage_new_agents)` available slots
+3. **Apply Probability**: For each slot, roll `probability_new_agents` to decide if a new agent is created
+4. **Copy Template**: Randomly select an existing non-churned agent as a template
+5. **Generate Profile**: Create new agent with unique name and ID but same attributes as template
+6. **Register**: Register all new agents with server in a batch operation
+7. **Update Files**: Add new agents to `agent_population.json` for persistence
+
+**Name Generation:**
+- Uses the Faker library to generate realistic names
+- Names are gender-aligned based on template agent's gender:
+  - Male gender → `fake.name_male()`
+  - Female gender → `fake.name_female()`
+  - Other/unspecified → `fake.name()`
+- Spaces and periods replaced with underscores for valid usernames
+- Uniqueness ensured by checking existing usernames and appending counter if needed
+
+**Database Fields:**
+- `joined_on`: Set to current Round ID when agent is created
+- `left_on`: Explicitly set to NULL (new agents are not churned)
+- `last_active_day`: Initialized when agent first becomes active
+- All other fields copied from template agent
+
+**Performance:**
+- Uses batch operations for efficient registration
+- All new agents created in a day are registered in a single server call
+- Example: Adding 36 new agents requires 1 server call (not 36 individual calls)
+
+**Example Scenario:**
+```
+Client Population: 100 agents, 10 churned, 90 non-churned
+Configuration: percentage_new_agents = 0.05, probability_new_agents = 0.5
+
+Day 1 End: New agent evaluation
+  - Calculate slots: int(90 * 0.05) = 4 available slots
+  - For each slot: roll probability (50% chance each)
+  - Expected: ~2 new agents created (probabilistic)
+  - Create new agents as copies of random existing agents
+  - Generate unique names: "John_Doe", "Jane_Smith", etc.
+  - Batch register all new agents with server
+  - Update agent_population.json with new agents
+Day 2+: New agents participate in simulation like original agents
+```
+
+**Client-Specific Calculation:**
+The percentage of new agents is calculated per-client based on that client's non-churned population:
+- **Client 1**: 100 agents, 10 churned → new agents = int(90 * 0.4) = 36 slots
+- **Client 2**: 20 agents, 2 churned → new agents = int(18 * 0.4) = 7 slots
+- Each client independently calculates and creates new agents
+
+**Redis Support:**
+New agent system works seamlessly with both SQL and Redis backends:
+- New agent profiles stored in both backends
+- `joined_on` field properly set in both systems
+- Batch registration optimized for both storage types
+
+### 3. Combined Churn and New Agents
+
+Churn and new agents features can be used together to model realistic population dynamics:
+
+**Configuration Example:**
+
+```json
+{
+  "agents": {
+    "churn": {
+      "enabled": true,
+      "churn_probability": 0.05,
+      "inactivity_threshold": 7,
+      "churn_percentage": 0.2
+    },
+    "new_agents": {
+      "enabled": true,
+      "probability_new_agents": 0.1,
+      "percentage_new_agents": 0.05
+    }
+  }
+}
+```
+
+**Population Dynamics:**
+- **Attrition**: Inactive agents gradually churn (leave the platform)
+- **Growth**: New agents join to maintain or grow the population
+- **Balance**: Configure rates to achieve desired population trends:
+  - High churn + low new agents = declining population
+  - Low churn + high new agents = growing population
+  - Balanced rates = stable population with turnover
+
+**Performance Optimizations:**
+Both features use batch operations for maximum efficiency:
+- **Before optimization**: ~116 server calls per day (80 churn + 36 new agents)
+- **After optimization**: 2 server calls per day (1 churn batch + 1 new agents batch)
+- **Performance gain**: Up to 98% reduction in server communication
+
+**Use Cases:**
+- **Long-term simulations**: Model realistic population changes over months/years
+- **Platform growth studies**: Simulate user acquisition and retention dynamics
+- **Churn analysis**: Study impact of inactivity on platform health
+- **Network evolution**: Observe how social networks change with member turnover
+- **Content ecosystem**: Analyze content patterns with changing demographics
+
+### 4. Implementation Details
+
+**Architecture:**
+- **Server Role**: Provides database wrapper methods for tracking and persistence
+  - `get_current_day()`: Returns current simulation day
+  - `get_current_round_id()`: Returns current Round UUID
+  - `get_inactive_agents(day, threshold)`: Returns inactive agent IDs
+  - `set_agents_churned_batch(ids, round_id)`: Marks multiple agents as churned
+  - `get_churned_agents()`: Returns all churned agent IDs
+  - `register_agents(profiles)`: Registers new agents in batch
+
+- **Client Role**: Orchestrates all churn and new agent logic
+  - Loads configuration from `simulation_config.json`
+  - Evaluates churn candidates and applies probability
+  - Calculates new agent slots and creates profiles
+  - Updates local agent profiles and population files
+  - Caches churned agent list for performance
+
+**Logging:**
+Comprehensive logging at all stages for debugging and monitoring:
+- Churn evaluation: inactive counts, candidates selected, agents churned
+- New agent creation: slots calculated, probability rolls, agents created
+- Batch operations: number of agents processed, success/failure status
+- Database operations: query statistics, update counts, timing information
+
+**Error Handling:**
+- Failed batch operations are logged and can be retried
+- Individual agent failures don't block entire batch
+- Database consistency maintained through transactions
+- Local state rolled back on server operation failures
+
 ## Configuration Files
 
 ### 1. `server_config.json` - Server Configuration
@@ -517,6 +746,17 @@ The `agents` section controls agent behavior parameters:
     "attention_window": 336,
     "probability_of_daily_follow": 0.0,
     "probability_of_secondary_follow": 0.0,
+    "churn": {
+      "enabled": false,
+      "churn_probability": 0.01,
+      "inactivity_threshold": 5,
+      "churn_percentage": 0.1
+    },
+    "new_agents": {
+      "enabled": false,
+      "probability_new_agents": 0.01,
+      "percentage_new_agents": 0.01
+    },
     "actions_likelihood": {
       "post": 0.3,
       "image": 0.1,
@@ -533,6 +773,15 @@ The `agents` section controls agent behavior parameters:
 - `attention_window`: Time slots of content visibility (default: 336 = 14 days × 24 slots)
 - `probability_of_daily_follow`: Probability of evaluating new follows at end of each day for active agents (0.0-1.0, default: 0.0)
 - `probability_of_secondary_follow`: Probability of follow/unfollow evaluation after content interactions (0.0-1.0, default: 0.0)
+- `churn`: Agent churn configuration (see Agent Population Dynamics section)
+  - `enabled`: Enable/disable churn evaluation (default: false)
+  - `churn_probability`: Probability that inactive agent will churn (0.0-1.0)
+  - `inactivity_threshold`: Days without activity before considered inactive
+  - `churn_percentage`: Percentage of inactive agents to evaluate (0.0-1.0)
+- `new_agents`: New agent creation configuration (see Agent Population Dynamics section)
+  - `enabled`: Enable/disable new agent creation (default: false)
+  - `probability_new_agents`: Probability each slot will be filled (0.0-1.0)
+  - `percentage_new_agents`: Percentage of non-churned agents for slot calculation (0.0-1.0)
 - `actions_likelihood`: Dictionary of action types and their relative probabilities (optional)
   - `post`: Create a new post
   - `image`: Share an image with commentary (requires llm_v configuration and images in database)

@@ -129,6 +129,7 @@ class User_mgmt(Base):
     profession = Column(Text)
     activity_profile = Column(Text)
     archetype = Column(Text, default=None)
+    last_active_day = Column(Integer)
 
     # Relationships
     follows_as_user = relationship(

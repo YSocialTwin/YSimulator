@@ -26,13 +26,13 @@ class AgentProfile:
     language: str = "en"
     owner: Optional[str] = None
     education_level: Optional[str] = None
-    joined_on: int = 0
+    joined_on: Optional[str] = None  # Round ID (UUID string) when agent joined
     gender: Optional[str] = None
     nationality: Optional[str] = None
     round_actions: int = 3
     toxicity: str = "no"
     is_page: int = 0
-    left_on: Optional[int] = None
+    left_on: Optional[str] = None  # Round ID (UUID string) when agent left/churned
     daily_activity_level: int = 1
     profession: str = ""
     activity_profile: str = "Always On"

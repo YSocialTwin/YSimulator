@@ -169,11 +169,28 @@ class SimulationClient:
         self.probability_of_daily_follow = agents_config.get("probability_of_daily_follow", 0.0)
         self.max_length_thread_reading = agents_config.get("max_length_thread_reading", 5)
 
+        # Load churn configuration
+        churn_config = agents_config.get("churn", {})
+        self.churn_enabled = churn_config.get("enabled", False)
+        self.churn_probability = churn_config.get("churn_probability", 0.01)
+        self.inactivity_threshold = churn_config.get("inactivity_threshold", 5)
+        self.churn_percentage = churn_config.get("churn_percentage", 0.1)
+
+        # Load new agents configuration
+        new_agents_config = agents_config.get("new_agents", {})
+        self.new_agents_enabled = new_agents_config.get("enabled", False)
+        self.probability_new_agents = new_agents_config.get("probability_new_agents", 0.01)
+        self.percentage_new_agents = new_agents_config.get("percentage_new_agents", 0.01)
+
         # Load text annotation configuration
         self.enable_sentiment = simulation_config["simulation"].get("enable_sentiment", False)
         self.enable_toxicity = simulation_config["simulation"].get("enable_toxicity", False)
         self.perspective_api_key = simulation_config["simulation"].get("perspective_api_key", None)
         self.enable_emotions = simulation_config["simulation"].get("emotion_annotation", False)
+
+        # Cache for churned agents (refreshed after churn evaluation)
+        self._churned_agents_cache = set()
+        self._churned_agents_cache_valid = False
 
         # Create agents from configuration
         self.agent_profiles = []
@@ -411,10 +428,7 @@ class SimulationClient:
         Create agent profiles from configuration.
         Combines predefined agents with generated agents.
         """
-        import time
-
         agents = []
-        current_time = int(time.time())
 
         # Load predefined agents
         if "agents" in agent_config:
@@ -434,7 +448,7 @@ class SimulationClient:
                     ne=agent_data.get("ne"),
                     language=agent_data.get("language", "en"),
                     education_level=agent_data.get("education_level"),
-                    joined_on=agent_data.get("joined_on", current_time),
+                    joined_on=agent_data.get("joined_on"),  # Should be Round UUID or None
                     gender=agent_data.get("gender"),
                     nationality=agent_data.get("nationality"),
                     profession=agent_data.get("profession", ""),
@@ -502,7 +516,7 @@ class SimulationClient:
                     ne=random.choice(["low", "medium", "high"]),
                     language=defaults.get("language", "en"),
                     education_level=random.choice(education_levels),
-                    joined_on=current_time,
+                    joined_on=None,  # Will be set by server to current round on registration
                     gender=random.choice(genders),
                     nationality=random.choice(nationalities),
                     profession=random.choice(professions),
@@ -876,6 +890,50 @@ class SimulationClient:
                     # Reset for next day
                     active_agents_today = set()
                     current_day = instruction.day
+
+                # Evaluate churn at the end of each day
+                if (is_last_slot or day_changed) and self.churn_enabled:
+                    try:
+                        self.logger.info(
+                            f"End of day {current_day}: Evaluating churn (enabled={self.churn_enabled})"
+                        )
+                        churn_stats = self._evaluate_churn()
+                        self.logger.info(
+                            f"Churn evaluation complete: inactive={churn_stats['inactive_agents']}, candidates={churn_stats['candidates']}, churned={churn_stats['churned']}"
+                        )
+                        if churn_stats["churned"] > 0:
+                            self.logger.info(
+                                f"Churn evaluation: {churn_stats['churned']} agents churned out of {churn_stats['candidates']} candidates ({churn_stats['inactive_agents']} inactive)"
+                            )
+                            # Invalidate churned agents cache after new churns
+                            self._churned_agents_cache_valid = False
+                    except Exception as e:
+                        self.logger.error(
+                            f"Error evaluating churn: {e}",
+                            extra={"extra_data": {"error": str(e)}},
+                        )
+
+                # Evaluate new agents at the end of each day
+                if (is_last_slot or day_changed) and self.new_agents_enabled:
+                    try:
+                        self.logger.info(
+                            f"End of day {current_day}: Evaluating new agents (enabled={self.new_agents_enabled})"
+                        )
+                        # Get current round_id from server
+                        current_round_id = ray.get(self.server.get_current_round_id.remote())
+                        new_agents_count = self._evaluate_new_agents(current_round_id)
+                        self.logger.info(
+                            f"New agents evaluation complete: {new_agents_count} agents added"
+                        )
+                        if new_agents_count > 0:
+                            self.logger.info(
+                                f"New agents evaluation: {new_agents_count} agents added to population"
+                            )
+                    except Exception as e:
+                        self.logger.error(
+                            f"Error evaluating new agents: {e}",
+                            extra={"extra_data": {"error": str(e)}},
+                        )
 
                 # At end of day, save updated agent interests from server
                 if is_last_slot or day_changed:
@@ -2086,15 +2144,43 @@ class SimulationClient:
         """
         actions = []
 
+        # Get list of churned agents from server to filter them out
+        # Use cache to avoid expensive server calls on every simulation
+        churned_agent_ids = set()
+        if self.churn_enabled:
+            try:
+                # Refresh cache if invalid or empty
+                if not self._churned_agents_cache_valid:
+                    churned_agent_ids = set(ray.get(self.server.get_churned_agents.remote()))
+                    self._churned_agents_cache = churned_agent_ids
+                    self._churned_agents_cache_valid = True
+                    if churned_agent_ids:
+                        self.logger.info(
+                            f"Refreshed churned agents cache: {len(churned_agent_ids)} churned agents"
+                        )
+                else:
+                    # Use cached value
+                    churned_agent_ids = self._churned_agents_cache
+            except Exception as e:
+                self.logger.warning(
+                    f"Error getting churned agents: {e}",
+                    extra={"extra_data": {"error": str(e)}}
+                )
+
         # Get hourly activity probability for this slot (default to 0.04 if not specified)
         hourly_prob = self.hourly_activity.get(slot, 0.04)
 
         # Separate regular agents and page agents
         # Pages are always active during their activity profile hours
+        # Filter out churned agents
         regular_agents = []
         page_agents = []
 
         for agent in self.agent_profiles:
+            # Skip churned agents
+            if agent.id in churned_agent_ids:
+                continue
+            
             profile_name = agent.activity_profile
             active_hours = self.activity_profiles.get(profile_name, list(range(24)))
             if slot in active_hours:
@@ -2621,6 +2707,356 @@ class SimulationClient:
                 self.logger.warning(f"Failed to get follow suggestions for agent {agent.id}: {e}")
 
         return daily_follow_actions
+
+    def _evaluate_churn(self) -> dict[str, int]:
+        """
+        Evaluate and process churn at the end of a day (client-side).
+        
+        This method:
+        1. Gets current day and round from server
+        2. Identifies inactive agents based on inactivity_threshold
+        3. Selects a percentage of them based on churn_percentage
+        4. Flags them as churned based on churn_probability
+        
+        Returns:
+            Dictionary with churn statistics
+        """
+        self.logger.info(
+            f"Starting churn evaluation (client-side): enabled={self.churn_enabled}, threshold={self.inactivity_threshold}"
+        )
+        
+        if not self.churn_enabled:
+            self.logger.info("Churn disabled, skipping evaluation")
+            return {"inactive_agents": 0, "candidates": 0, "churned": 0}
+        
+        # Get current day and round ID from server
+        try:
+            current_day = ray.get(self.server.get_current_day.remote())
+            current_round_id = ray.get(self.server.get_current_round_id.remote())
+        except Exception as e:
+            self.logger.error(f"Failed to get current day/round from server: {e}")
+            return {"inactive_agents": 0, "candidates": 0, "churned": 0}
+        
+        # Get inactive agents from server database
+        try:
+            inactive_agents = ray.get(
+                self.server.get_inactive_agents.remote(current_day, self.inactivity_threshold)
+            )
+        except Exception as e:
+            self.logger.error(f"Failed to get inactive agents: {e}")
+            return {"inactive_agents": 0, "candidates": 0, "churned": 0}
+        
+        self.logger.info(
+            f"Found {len(inactive_agents)} inactive agents (threshold={self.inactivity_threshold} days)"
+        )
+        
+        if not inactive_agents:
+            self.logger.info("No inactive agents found, skipping churn")
+            return {"inactive_agents": 0, "candidates": 0, "churned": 0}
+        
+        # Select percentage of inactive agents as churn candidates
+        num_candidates = max(1, int(len(inactive_agents) * self.churn_percentage))
+        churn_candidates = random.sample(inactive_agents, min(num_candidates, len(inactive_agents)))
+        
+        self.logger.info(
+            f"Selected {len(churn_candidates)} churn candidates (percentage={self.churn_percentage})"
+        )
+        
+        # Churn agents based on probability
+        churned_count = 0
+        agents_to_churn = []  # Collect agents to churn for batch operation
+        
+        for agent_id in churn_candidates:
+            # Use random for stochastic churn decision
+            if random.random() < self.churn_probability:
+                agents_to_churn.append(agent_id)
+        
+        # Batch churn all selected agents in a single server call
+        if agents_to_churn:
+            try:
+                self.logger.info(f"Batch churning {len(agents_to_churn)} agents at round {current_round_id}")
+                churned_count = ray.get(self.server.set_agents_churned_batch.remote(agents_to_churn, current_round_id))
+                
+                self.logger.info(
+                    f"Successfully churned {churned_count} agents in batch",
+                    extra={"extra_data": {
+                        "churned_agent_ids": agents_to_churn,
+                        "day": current_day,
+                        "round_id": current_round_id
+                    }}
+                )
+                
+                # Update local agent profiles for all churned agents
+                for agent_id in agents_to_churn:
+                    for agent in self.agent_profiles:
+                        if agent.id == agent_id:
+                            agent.left_on = current_round_id
+                            break
+                            
+            except Exception as e:
+                self.logger.error(
+                    f"Failed to batch churn {len(agents_to_churn)} agents: {e}",
+                    extra={"extra_data": {"error": str(e), "num_agents": len(agents_to_churn)}}
+                )
+                churned_count = 0
+        
+        result = {
+            "inactive_agents": len(inactive_agents),
+            "candidates": len(churn_candidates),
+            "churned": churned_count
+        }
+        
+        self.logger.info(
+            f"Churn evaluation completed: {result}"
+        )
+        
+        return result
+
+    def _evaluate_new_agents(self, current_round_id: str) -> int:
+        """
+        Evaluate and add new agents at the end of a day.
+        
+        This method:
+        1. Counts non-churned agents
+        2. Calculates x = percentage_new_agents * non_churned_agents
+        3. Adds x new agents, each with probability probability_new_agents
+        4. New agent is a copy of an existing agent with unique name
+        5. Adds to database and agent_population.json
+        6. Sets joined_on to current round
+        
+        Args:
+            current_round_id: Current round ID (UUID string)
+            
+        Returns:
+            int: Number of new agents added
+        """
+        self.logger.info(
+            f"Starting new agents evaluation: enabled={self.new_agents_enabled}, probability={self.probability_new_agents}, percentage={self.percentage_new_agents}"
+        )
+        
+        if not self.new_agents_enabled:
+            self.logger.info("New agents disabled, skipping evaluation")
+            return 0
+        
+        # Get non-churned agents (agents without left_on set)
+        non_churned_agents = [agent for agent in self.agent_profiles if agent.left_on is None]
+        
+        self.logger.info(
+            f"Non-churned agents: {len(non_churned_agents)} out of {len(self.agent_profiles)} total (churned: {len(self.agent_profiles) - len(non_churned_agents)})"
+        )
+        
+        if not non_churned_agents:
+            self.logger.warning("No non-churned agents available to use as templates for new agents")
+            return 0
+        
+        # Calculate x = percentage_new_agents * non_churned_agents
+        x = int(len(non_churned_agents) * self.percentage_new_agents)
+        
+        self.logger.info(
+            f"Calculated x={x} new agent slots (percentage={self.percentage_new_agents} * {len(non_churned_agents)})"
+        )
+        
+        if x == 0:
+            self.logger.info("x=0, no new agents will be added")
+            return 0
+        
+        new_agents_added = 0
+        new_agents_to_register = []  # Collect all new agents for batch registration
+        
+        self.logger.info(f"Attempting to add up to {x} new agents with probability {self.probability_new_agents}")
+        
+        # Add x new agents, each with probability probability_new_agents
+        for i in range(x):
+            # With probability_new_agents, add a new agent
+            roll = random.random()
+            self.logger.debug(f"New agent slot {i+1}/{x}: roll={roll:.4f}, threshold={self.probability_new_agents}")
+            
+            if roll < self.probability_new_agents:
+                self.logger.info(f"Creating new agent {i+1}/{x} (roll {roll:.4f} < {self.probability_new_agents})")
+                
+                # Select a random existing agent as template
+                template_agent = random.choice(non_churned_agents)
+                
+                # Generate unique ID and name using Faker
+                import uuid
+                from faker import Faker
+                
+                fake = Faker()
+                new_agent_id = str(uuid.uuid4())
+                
+                # Generate name based on gender
+                gender = template_agent.gender
+                if gender and gender.lower() in ['male', 'm']:
+                    new_username = fake.name_male()
+                elif gender and gender.lower() in ['female', 'f']:
+                    new_username = fake.name_female()
+                else:
+                    # If gender is not specified or other, use generic name
+                    new_username = fake.name()
+                
+                # Replace spaces with underscores for username format
+                new_username = new_username.replace(' ', '_').replace('.', '')
+                
+                # Ensure uniqueness by checking existing usernames
+                existing_usernames = {agent.username for agent in self.agent_profiles}
+                # Also check against agents we're about to create
+                existing_usernames.update(agent.username for agent in new_agents_to_register)
+                base_username = new_username
+                counter = 1
+                while new_username in existing_usernames:
+                    new_username = f"{base_username}_{counter}"
+                    counter += 1
+                
+                # Create new agent profile as copy of template
+                new_agent = AgentProfile(
+                    id=new_agent_id,
+                    username=new_username,
+                    email=f"{new_username}@simulation.local",
+                    password=template_agent.password,
+                    leaning=template_agent.leaning,
+                    user_type=template_agent.user_type,
+                    age=template_agent.age,
+                    oe=template_agent.oe,
+                    co=template_agent.co,
+                    ex=template_agent.ex,
+                    ag=template_agent.ag,
+                    ne=template_agent.ne,
+                    language=template_agent.language,
+                    education_level=template_agent.education_level,
+                    joined_on=current_round_id,  # Set to current round
+                    gender=template_agent.gender,
+                    nationality=template_agent.nationality,
+                    profession=template_agent.profession,
+                    activity_profile=template_agent.activity_profile,
+                    archetype=template_agent.archetype,
+                    cluster=template_agent.cluster,
+                    llm=template_agent.llm,
+                    toxicity=template_agent.toxicity,
+                    daily_activity_level=template_agent.daily_activity_level,
+                    round_actions=template_agent.round_actions,
+                    is_page=0,  # New agents are not pages
+                    left_on=None,  # New agents are not churned
+                )
+                
+                # Add to local list and batch registration list
+                self.agent_profiles.append(new_agent)
+                new_agents_to_register.append(new_agent)
+                
+                self.logger.debug(
+                    f"Prepared new agent: {new_username} (template: {template_agent.username})",
+                    extra={"extra_data": {"new_agent_id": new_agent_id, "template_id": template_agent.id}}
+                )
+            else:
+                self.logger.debug(f"Skipping new agent slot {i+1}/{x} (roll {roll:.4f} >= {self.probability_new_agents})")
+        
+        # Batch register all new agents with server in a single call
+        if new_agents_to_register:
+            try:
+                self.logger.info(f"Batch registering {len(new_agents_to_register)} new agents with server")
+                registration_result = ray.get(self.server.register_agents.remote(new_agents_to_register))
+                new_agents_added = len(new_agents_to_register)
+                
+                self.logger.info(
+                    f"Successfully registered {new_agents_added} new agents in batch",
+                    extra={"extra_data": {
+                        "agent_ids": [agent.id for agent in new_agents_to_register],
+                        "agent_names": [agent.username for agent in new_agents_to_register]
+                    }}
+                )
+                
+                # Update agent_population.json for all new agents
+                for new_agent in new_agents_to_register:
+                    self._add_agent_to_population_file(new_agent)
+                    
+            except Exception as e:
+                self.logger.error(
+                    f"Failed to batch register {len(new_agents_to_register)} new agents: {e}",
+                    extra={"extra_data": {"error": str(e), "num_agents": len(new_agents_to_register)}}
+                )
+                # Remove failed agents from local list
+                for failed_agent in new_agents_to_register:
+                    if failed_agent in self.agent_profiles:
+                        self.agent_profiles.remove(failed_agent)
+                new_agents_added = 0
+        
+        self.logger.info(f"New agents evaluation complete: added {new_agents_added} out of {x} possible slots")
+        return new_agents_added
+    
+    def _add_agent_to_population_file(self, agent: AgentProfile):
+        """
+        Add a new agent to the agent_population.json file.
+        
+        Args:
+            agent: AgentProfile to add to the file
+        """
+        # Find agent_population.json file using client-specific naming convention
+        client_specific_file = self.config_path / f"{self.client_id}_agent_population.json"
+        generic_file = self.config_path / "agent_population.json"
+        
+        if client_specific_file.exists():
+            agent_config_file = client_specific_file
+        else:
+            agent_config_file = generic_file
+        
+        if not agent_config_file.exists():
+            self.logger.warning(
+                f"Agent config file not found at {agent_config_file}, skipping agent addition to file"
+            )
+            return
+        
+        try:
+            # Load current agent_population.json
+            with open(agent_config_file, "r") as f:
+                agent_data = json.load(f)
+            
+            # Create agent dict
+            agent_dict = {
+                "id": agent.id,
+                "username": agent.username,
+                "email": agent.email,
+                "password": agent.password,
+                "leaning": agent.leaning,
+                "user_type": agent.user_type,
+                "age": agent.age,
+                "oe": agent.oe,
+                "co": agent.co,
+                "ex": agent.ex,
+                "ag": agent.ag,
+                "ne": agent.ne,
+                "language": agent.language,
+                "education_level": agent.education_level,
+                "joined_on": agent.joined_on,
+                "gender": agent.gender,
+                "nationality": agent.nationality,
+                "profession": agent.profession,
+                "activity_profile": agent.activity_profile,
+                "archetype": agent.archetype,
+                "cluster": agent.cluster,
+                "llm": agent.llm,
+                "toxicity": agent.toxicity,
+                "daily_activity_level": agent.daily_activity_level,
+                "round_actions": agent.round_actions,
+                "is_page": agent.is_page,
+            }
+            
+            # Add to agents list
+            if "agents" not in agent_data:
+                agent_data["agents"] = []
+            agent_data["agents"].append(agent_dict)
+            
+            # Write updated data back to file
+            with open(agent_config_file, "w") as f:
+                json.dump(agent_data, f, indent=2)
+            
+            self.logger.info(
+                f"Added agent {agent.username} to {agent_config_file.name}"
+            )
+        
+        except Exception as e:
+            self.logger.error(
+                f"Error adding agent to population file: {e}",
+                extra={"extra_data": {"error": str(e), "file": str(agent_config_file)}}
+            )
 
     def shutdown(self):
         ray.get(self.server.deregister_client.remote(self.client_id))
