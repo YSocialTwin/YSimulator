@@ -5,6 +5,7 @@ This module contains the Ray remote actor that orchestrates the simulation,
 managing client registration, agent actions, and simulation state progression.
 """
 
+import functools
 import json
 import logging
 import random
@@ -24,6 +25,91 @@ from YSimulator.YServer.recsys import content_recsys_db, content_recsys_redis, f
 # Constants
 RECOMMENDATION_TTL_SECONDS = 7 * 24 * 60 * 60  # 7 days in seconds
 NETWORK_EDGE_CHECK_LIMIT = 10  # Number of edges to check when verifying network load
+
+
+def log_server_request(func):
+    """
+    Decorator to log server requests to _server.log with detailed information.
+    
+    Logs each method call with:
+    - request_id: unique request identifier
+    - client_name: client making the request (if available)
+    - path: method name
+    - status_code: 200 for success, 500 for error
+    - duration: execution time in seconds
+    - time: current datetime
+    - tid: current round id
+    - day: current simulation day
+    - hour: current simulation slot/hour
+    """
+    @functools.wraps(func)
+    def wrapper(self, *args, **kwargs):
+        # Generate request ID
+        request_id = f"{time.time()}-{random.randint(1000000000, 9999999999)}"
+        
+        # Extract client_name from arguments (first arg is usually client_id for client-facing methods)
+        client_name = None
+        if args and isinstance(args[0], str):
+            # Check if it looks like a client_id (common patterns: "client_X", UUIDs, etc.)
+            potential_client = args[0]
+            if "client" in potential_client.lower() or "-" in potential_client:
+                client_name = potential_client
+        
+        # If not found in args, check kwargs
+        if not client_name:
+            client_name = kwargs.get("client_id") or kwargs.get("agent_id") or "unknown"
+        
+        # Start timing
+        start_time = time.time()
+        status_code = 200
+        error = None
+        
+        try:
+            # Execute the method
+            result = func(self, *args, **kwargs)
+            return result
+        except Exception as e:
+            status_code = 500
+            error = str(e)
+            raise
+        finally:
+            # Calculate duration
+            duration = time.time() - start_time
+            
+            # Get current simulation state
+            try:
+                tid = getattr(self, 'current_round_id', None)
+                day = getattr(self, 'day', None)
+                hour = getattr(self, 'slot', None)
+            except:
+                tid = None
+                day = None
+                hour = None
+            
+            # Log the request
+            try:
+                server_logger = getattr(self, 'server_request_logger', None)
+                if server_logger:
+                    log_entry = {
+                        "request_id": request_id,
+                        "client_name": client_name,
+                        "path": func.__name__,
+                        "status_code": status_code,
+                        "duration": duration,
+                        "time": datetime.utcnow().isoformat(),
+                        "tid": tid,
+                        "day": day,
+                        "hour": hour,
+                    }
+                    if error:
+                        log_entry["error"] = error
+                    
+                    server_logger.info(json.dumps(log_entry))
+            except Exception as log_error:
+                # Don't let logging errors break the application
+                pass
+    
+    return wrapper
 
 
 @ray.remote
@@ -178,6 +264,25 @@ class OrchestratorServer:
 
         handler.setFormatter(JsonFormatter())
         self.logger.addHandler(handler)
+
+        # Set up server request logger for _server.log
+        server_log_file = log_dir / f"{self.server_name}_server.log"
+        self.server_request_logger = logging.getLogger(f"YSimulator.Server.{self.server_name}.Requests")
+        self.server_request_logger.setLevel(logging.INFO)
+        self.server_request_logger.handlers = []
+        
+        # Create handler for server requests (raw JSON, one per line)
+        server_handler = RotatingFileHandler(server_log_file, maxBytes=10 * 1024 * 1024, backupCount=5)
+        
+        # Simple formatter that just outputs the message (already JSON)
+        class RawFormatter(logging.Formatter):
+            def format(self, record):
+                return record.getMessage()
+        
+        server_handler.setFormatter(RawFormatter())
+        self.server_request_logger.addHandler(server_handler)
+        # Prevent propagation to avoid duplicate logs
+        self.server_request_logger.propagate = False
 
     def _validate_and_extract_interests(self, interests):
         """
@@ -488,6 +593,7 @@ class OrchestratorServer:
         """
         return self.interest_manager.store_article_topics(article_id, topic_names)
 
+    @log_server_request
     def register_agents(self, agents: list) -> dict:
         """
         Register agent profiles in the database if they don't already exist.
@@ -618,6 +724,7 @@ class OrchestratorServer:
             print(f"[Server] ❌ Agent registration error: {e}")
             raise
 
+    @log_server_request
     def add_follow_relationship(self, follow_data: dict) -> bool:
         """
         Add a follow relationship to the database.
@@ -693,6 +800,7 @@ class OrchestratorServer:
             # On error, assume network not loaded to be safe
             return False
 
+    @log_server_request
     def add_follow_relationships_batch(self, follows_data: list) -> int:
         """
         Add multiple follow relationships to the database in batch.
@@ -787,6 +895,7 @@ class OrchestratorServer:
             )
             return False
 
+    @log_server_request
     def get_unreplied_mentions(self, user_id: str) -> List[Dict[str, Any]]:
         """
         Get all unreplied mentions for a user.
@@ -819,6 +928,7 @@ class OrchestratorServer:
         )
         return result
 
+    @log_server_request
     def register_client(self, client_id: str, num_days: int = 0) -> dict:
         """
         Register a new client with the server.
@@ -882,6 +992,7 @@ class OrchestratorServer:
             "start_slot": self.slot,
         }
 
+    @log_server_request
     def complete_client(self, client_id: str) -> bool:
         """
         Mark a client as completed (finished all planned activities).
@@ -918,6 +1029,7 @@ class OrchestratorServer:
             self._check_barrier_and_advance()
         return True
 
+    @log_server_request
     def heartbeat(self, client_id: str) -> bool:
         """
         Record a heartbeat from a client to indicate it's still alive.
@@ -1007,6 +1119,7 @@ class OrchestratorServer:
         self.completed_clients.add(client_id)
         self.submitted_clients.discard(client_id)
 
+    @log_server_request
     def deregister_client(self, client_id: str) -> bool:
         """
         Remove a client from the server.
@@ -1042,6 +1155,7 @@ class OrchestratorServer:
             self._check_barrier_and_advance()
         return True
 
+    @log_server_request
     def get_instruction(self, client_id: str) -> SimulationInstruction:
         """
         Get the next simulation instruction for a client.
@@ -1073,6 +1187,7 @@ class OrchestratorServer:
             status="PROCEED", day=self.day, slot=self.slot, recent_post_ids=self.recent_posts_cache
         )
 
+    @log_server_request
     def submit_actions(self, client_id: str, actions: list) -> None:
         """
         Submit actions from a client for the current simulation slot.
@@ -1960,6 +2075,7 @@ class OrchestratorServer:
                 extra={"extra_data": {"agent_id": agent_id, "error": str(e)}},
             )
 
+    @log_server_request
     def get_recommended_posts(
         self, agent_id: str, mode: str = "random", limit: int = 5, followers_ratio: float = 0.6
     ) -> List[str]:
@@ -2209,6 +2325,7 @@ class OrchestratorServer:
             )
             return []
 
+    @log_server_request
     def get_post(self, post_id: str) -> Optional[Dict[str, Any]]:
         """
         Get a post by its ID.
@@ -2221,6 +2338,7 @@ class OrchestratorServer:
         """
         return self.db.get_post(post_id)
 
+    @log_server_request
     def get_thread_context(self, post_id: str, max_length: int = 5) -> List[Dict[str, Any]]:
         """
         Get thread context for a post - retrieve up to max_length posts/comments
@@ -2239,6 +2357,7 @@ class OrchestratorServer:
         """
         return self.db.get_thread_context(post_id, max_length)
 
+    @log_server_request
     def get_user(self, user_id: str) -> Optional[Dict[str, Any]]:
         """
         Get a user by their ID.
@@ -2251,6 +2370,7 @@ class OrchestratorServer:
         """
         return self.db.get_user(user_id)
 
+    @log_server_request
     def search_posts_by_topic(self, topic_id: str, agent_id: str, limit: int = 10) -> List[str]:
         """
         Search for recent posts on a specific topic from other users.
@@ -2265,6 +2385,7 @@ class OrchestratorServer:
         """
         return self.db.search_posts_by_topic(topic_id, agent_id, limit)
 
+    @log_server_request
     def get_follow_suggestions(
         self, agent_id: str, mode: str = "random", n_neighbors: int = 10, leaning_bias: int = 1
     ) -> List[str]:
