@@ -1,8 +1,7 @@
 
 def bounded_confidence(x: float, y: float, epsilon: float = 0.25,
                        mu: float = 0.5, theta: float = 0.0,
-                       cold_start: str = "neutral", text: str = None, group_classes: dict = None,topic: str = None,
-                       base_url: str = None, llm_config: dict = None, **kwargs) -> float | str:
+                       cold_start: str = "neutral") -> float | str:
     """
     Calculate the confidence bound for a given score x and total count y.
 
