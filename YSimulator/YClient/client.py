@@ -2803,8 +2803,12 @@ class SimulationClient:
                     )
                 )
                 
+                # If author has no opinion, assume neutral (0.5)
                 if author_opinion is None:
-                    continue
+                    author_opinion = 0.5
+                    self.logger.debug(
+                        f"Author {parent_author_id} has no opinion on topic {topic_name}, using neutral value (0.5)"
+                    )
                 
                 # Calculate new opinion using bounded confidence
                 new_opinion = bounded_confidence(
