@@ -2863,8 +2863,9 @@ class SimulationClient:
         """
         Calculate opinion updates when an agent comments on a post.
         
-        Uses the bounded confidence model to update opinions based on interaction
-        with the post author's opinions on the discussed topics.
+        Supports two opinion dynamics models based on simulation_config:
+        - "bounded_confidence": Classic bounded confidence model (all agents)
+        - "llm_evaluation": LLM-based evaluation (LLM agents only)
         
         Args:
             agent_id: UUID of the agent making the comment
@@ -2884,7 +2885,22 @@ class SimulationClient:
             if not opinion_config:
                 return None
             
+            # Get model name and parameters
+            model_name = opinion_config.get("model_name", "bounded_confidence")
             params = opinion_config.get("parameters", {})
+            
+            # Validate model selection
+            if model_name == "llm_evaluation":
+                # Check if this is an LLM agent
+                agent_profile = next(
+                    (a for a in self.agent_profiles if a.id == agent_id), None
+                )
+                if not agent_profile or not agent_profile.llm:
+                    self.logger.error(
+                        f"llm_evaluation model can only be used with LLM agents. "
+                        f"Agent {agent_id} is not an LLM agent. Skipping opinion update."
+                    )
+                    return None
             
             # Get the parent post author
             parent_author_id = parent_post_data.get("user_id")
@@ -2898,8 +2914,8 @@ class SimulationClient:
             if not topic_ids:
                 return None
             
-            # Import opinion dynamics module
-            from YSimulator.YClient.opinion_dynamics.confidence_bound import bounded_confidence
+            # Get post content (needed for LLM evaluation)
+            post_content = parent_post_data.get("tweet", "")
             
             # Calculate updated opinions for each topic
             updated_opinions = {}
@@ -2936,23 +2952,65 @@ class SimulationClient:
                     )
                     continue
                 
-                # Calculate new opinion using bounded confidence
-                # x = agent's opinion (can be None for cold start)
-                # y = author's opinion (must be a float)
-                new_opinion = bounded_confidence(
-                    x=agent_opinion,
-                    y=author_opinion,
-                    epsilon=params.get("epsilon", 0.25),
-                    mu=params.get("mu", 0.5),
-                    theta=params.get("theta", 0.0),
-                    cold_start=params.get("cold_start", "neutral")
-                )
+                # Calculate new opinion based on selected model
+                if model_name == "llm_evaluation":
+                    # Use LLM-based evaluation
+                    from YSimulator.YClient.opinion_dynamics.llm_evaluation import llm_evaluation
+                    
+                    # Get evaluation scope and prepare neighbors' opinions if needed
+                    evaluation_scope = params.get("evaluation_scope", "interlocutor_only")
+                    peers_opinions = None
+                    
+                    if evaluation_scope == "neighbors":
+                        # Get neighbors' opinions from server
+                        neighbor_opinion_values = ray.get(
+                            self.server.get_neighbors_opinions.remote(
+                                agent_id, topic_id, client_id=self.client_id
+                            )
+                        )
+                        
+                        if neighbor_opinion_values:
+                            # Convert to opinion labels and count occurrences
+                            from YSimulator.YClient.opinion_dynamics.utils import get_opinion_group
+                            from collections import Counter
+                            
+                            opinion_groups = opinion_config.get("opinion_groups", {})
+                            neighbor_labels = [
+                                get_opinion_group(val, opinion_groups) 
+                                for val in neighbor_opinion_values
+                            ]
+                            peers_opinions = list(Counter(neighbor_labels).items())
+                    
+                    # Calculate new opinion using LLM evaluation
+                    new_opinion = llm_evaluation(
+                        x=agent_opinion,
+                        y=author_opinion,
+                        text=post_content,
+                        topic=topic_name,
+                        evaluation_scope=evaluation_scope,
+                        cold_start=params.get("cold_start", "neutral"),
+                        group_classes=opinion_config.get("opinion_groups", {}),
+                        peers_opinions=peers_opinions,
+                        llm_service=self.llm
+                    )
+                else:
+                    # Use bounded confidence model (default)
+                    from YSimulator.YClient.opinion_dynamics.confidence_bound import bounded_confidence
+                    
+                    new_opinion = bounded_confidence(
+                        x=agent_opinion,
+                        y=author_opinion,
+                        epsilon=params.get("epsilon", 0.25),
+                        mu=params.get("mu", 0.5),
+                        theta=params.get("theta", 0.0),
+                        cold_start=params.get("cold_start", "neutral")
+                    )
                 
                 updated_opinions[topic_id] = new_opinion
                 
                 self.logger.info(
-                    f"Opinion update calculated: agent={agent_id}, topic={topic_name}, "
-                    f"old={agent_opinion}, author={author_opinion}, new={new_opinion}"
+                    f"Opinion update calculated (model={model_name}): agent={agent_id}, "
+                    f"topic={topic_name}, old={agent_opinion}, author={author_opinion}, new={new_opinion}"
                 )
             
             return updated_opinions if updated_opinions else None
@@ -2962,6 +3020,8 @@ class SimulationClient:
                 f"Error calculating opinion updates for agent {agent_id}: {e}",
                 extra={"extra_data": {"error": str(e), "agent_id": agent_id}}
             )
+            import traceback
+            traceback.print_exc()
             return None
 
     def _map_opinion_to_group(self, opinion_value: float) -> str:

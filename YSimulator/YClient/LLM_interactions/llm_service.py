@@ -788,3 +788,68 @@ class LLMService:
             # If generation fails, return fallback
             print(f"[LLMService] ERROR: Failed to generate image commentary: {e}")
             return "IMAGE"
+    
+    def evaluate_opinion(self, agent_opinion: str, author_opinion: str, post_text: str, 
+                        topic: str, peers_opinions: list = None) -> str:
+        """
+        Evaluate how an agent's opinion should change after reading a post.
+        
+        Uses LLM to determine if the agent agrees, disagrees, or remains neutral
+        about the expressed opinion in the post.
+        
+        Args:
+            agent_opinion: Agent's current opinion label (e.g., "Neutral", "In favor")
+            author_opinion: Post author's opinion label
+            post_text: Content of the post being evaluated
+            topic: Topic name being discussed
+            peers_opinions: Optional list of (opinion_label, count) tuples for neighbors
+            
+        Returns:
+            str: LLM response - "AGREE", "DISAGREE", or "NEUTRAL"
+        """
+        # Build the evaluation prompt
+        prompt_text = (
+            f"Read the following text on the topic '{topic.upper()}': '{post_text}'.\n"
+            f"The author has opinion '{author_opinion}' on the topic.\n"
+            f"Your initial opinion is '{agent_opinion}'"
+        )
+        
+        # Add peers' opinions if provided (evaluation_scope="neighbors")
+        if peers_opinions and len(peers_opinions) > 0:
+            prompt_text += "\n\nThe following are the opinions of your friends:\n"
+            for op, count in peers_opinions:
+                prompt_text += f"Opinion: '{op}' ({count})\n"
+        
+        prompt_text += (
+            "\nWhat do you think about the expressed opinion? "
+            "Answer with a single word among the options: AGREE|DISAGREE|NEUTRAL."
+        )
+        
+        # Get prompts from configuration with defaults
+        system_template = self.prompts_config.get("evaluate_opinion", {}).get(
+            "system_template",
+            "You are evaluating opinions on various topics. Consider the content and opinions presented."
+        )
+        
+        prompt = ChatPromptTemplate.from_messages([
+            ("system", system_template),
+            ("user", prompt_text)
+        ])
+        
+        try:
+            chain = prompt | self.llm | StrOutputParser()
+            response = chain.invoke({}).strip().upper()
+            
+            # Parse response - look for valid reactions
+            if "AGREE" in response:
+                return "AGREE"
+            elif "DISAGREE" in response:
+                return "DISAGREE"
+            elif "NEUTRAL" in response:
+                return "NEUTRAL"
+            
+            # Default to neutral if unclear
+            return "NEUTRAL"
+        except Exception as e:
+            print(f"[LLMService] ERROR: Failed to evaluate opinion: {e}")
+            return "NEUTRAL"

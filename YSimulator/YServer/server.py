@@ -2674,6 +2674,61 @@ class OrchestratorServer:
         )
 
     @log_server_request
+    def get_neighbors_opinions(
+        self, agent_id: str, topic_id: str, client_id: str = None
+    ) -> List[float]:
+        """
+        Get the opinions of an agent's neighbors (followees) on a specific topic.
+        
+        This method retrieves the latest opinions of all users that the agent follows
+        on the specified topic. Used for LLM-based opinion dynamics with evaluation_scope="neighbors".
+        
+        Args:
+            agent_id: Agent UUID
+            topic_id: Topic UUID
+            client_id: Optional client identifier for logging
+            
+        Returns:
+            List of opinion values (floats in [0, 1]) from the agent's neighbors
+        """
+        try:
+            # Query the Follow table to get users that agent_id follows
+            # In the Follow table: follower_id is the agent, user_id is who they follow
+            if self.db.use_redis:
+                # For Redis implementation, we would need to scan follow keys
+                # For now, return empty list as Redis path needs more implementation
+                return []
+            else:
+                # SQL implementation
+                from YSimulator.YServer.classes.models import Follow
+                with self.db.Session() as session:
+                    # Get list of user_ids that agent follows (where agent is the follower and action='follow')
+                    followees_query = session.query(Follow.user_id).filter(
+                        Follow.follower_id == agent_id,
+                        Follow.action == 'follow'
+                    ).all()
+                    
+                    followee_ids = [row[0] for row in followees_query]
+                    
+                    if not followee_ids:
+                        return []
+                    
+                    # Get opinions of each followee on this topic
+                    opinions = []
+                    for followee_id in followee_ids:
+                        opinion = self.db.get_latest_agent_opinion(followee_id, topic_id)
+                        if opinion is not None:
+                            opinions.append(opinion)
+                    
+                    return opinions
+        except Exception as e:
+            self.logger.error(
+                f"Error getting neighbors opinions: {e}",
+                extra={"extra_data": {"error": str(e), "agent_id": agent_id, "topic_id": topic_id}}
+            )
+            return []
+
+    @log_server_request
     def get_follow_suggestions(
         self, agent_id: str, mode: str = "random", n_neighbors: int = 10, leaning_bias: int = 1, client_id: str = None
     ) -> List[str]:
