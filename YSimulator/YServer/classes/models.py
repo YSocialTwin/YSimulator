@@ -63,6 +63,7 @@ class Interest(Base):
     article_topics = relationship("ArticleTopic", back_populates="topic", cascade="all, delete-orphan")
     post_topics = relationship("PostTopic", back_populates="topic", cascade="all, delete-orphan")
     post_sentiments = relationship("PostSentiment", back_populates="topic", cascade="all, delete-orphan")
+    agent_opinions = relationship("Agent_Opinion", back_populates="topic", cascade="all, delete-orphan")
 
 
 class Round(Base):
@@ -355,6 +356,7 @@ class Post(Base):
     post_topics = relationship("PostTopic", back_populates="post", cascade="all, delete-orphan")
     post_toxicity = relationship("PostToxicity", back_populates="post", cascade="all, delete-orphan")
     reactions = relationship("Reaction", back_populates="post", cascade="all, delete-orphan")
+    agent_opinions = relationship("Agent_Opinion", back_populates="post", cascade="all, delete-orphan")
 
 
 Index("idx_post_user_id", Post.user_id)
@@ -514,3 +516,35 @@ class Reaction(Base):
 Index("idx_reactions_post_id", Reaction.post_id)
 Index("idx_reactions_user_id", Reaction.user_id)
 Index("idx_reactions_round", Reaction.round)
+
+
+class Agent_Opinion(Base):
+    """
+    Agent opinion tracking for interactions.
+
+    Stores opinions that agents form about topics, posts, and other agents
+    during their interactions in the simulation. The opinion is stored as
+    a float value representing the agent's sentiment or stance.
+
+    Fields:
+        id: Primary key
+        agent_id: ID of the agent forming the opinion
+        tid: Transaction/interaction ID for this opinion event (Round ID)
+        topic_id: ID of the topic being discussed (FK to interests)
+        id_interacted_with: ID of the user/agent being interacted with
+        id_post: ID of the post that triggered this opinion (FK to post)
+        opinion: Numerical opinion value (float) indicating sentiment/stance
+    """
+
+    __tablename__ = "agent_opinion"
+    id = Column(String(36), primary_key=True)
+    agent_id = Column(String(36), nullable=False)
+    tid = Column(String(36), nullable=False)  # Round ID
+    topic_id = Column(String(36), ForeignKey("interests.iid"), nullable=False)
+    id_interacted_with = Column(String(36))
+    id_post = Column(String(36), ForeignKey("post.id"))
+    opinion = Column(Float, nullable=False)
+
+    # Relationships
+    topic = relationship("Interest", back_populates="agent_opinions")
+    post = relationship("Post")

@@ -45,6 +45,9 @@ class AgentProfile:
     # Interests field: [["Topic1", "Topic2"], [count1, count2]]
     # First list contains topic names, second list contains interaction counts
     interests: Optional[Tuple[List[str], List[int]]] = None
+    # Opinions field: {"Topic1": 0.5, "Topic2": 0.8}
+    # Maps topic names to opinion values in [0, 1]
+    opinions: Optional[dict] = None
 
 
 @dataclass
@@ -60,6 +63,8 @@ class ActionDTO:
     topic: Optional[str] = None  # Topic name for posts
     # Text annotations (populated by client before submission)
     annotations: Optional[dict] = None  # Dict with 'hashtags', 'mentions', 'sentiment', 'toxicity'
+    # Updated opinions for comment actions: {topic_id: opinion_value}
+    updated_opinions: Optional[dict] = None
 
 
 @dataclass

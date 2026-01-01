@@ -22,7 +22,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 
-from YSimulator.YServer.classes.models import Base, Follow, Post, Reaction, Round, User_mgmt
+from YSimulator.YServer.classes.models import Base, Follow, Post, Reaction, Round, User_mgmt, Agent_Opinion
 
 # Constants
 DEFAULT_USERNAME = "Someone"  # Default username when user data is not found
@@ -1788,6 +1788,33 @@ class DatabaseMiddleware:
         finally:
             session.close()
 
+    def get_topic_name_from_id(self, topic_id: str) -> Optional[str]:
+        """
+        Get topic name from topic UUID.
+        
+        Args:
+            topic_id: Topic UUID (iid)
+            
+        Returns:
+            str: Topic name or None if not found
+        """
+        from YSimulator.YServer.classes.models import Interest
+        
+        session = Session(self.engine)
+        try:
+            interest = session.query(Interest).filter(Interest.iid == topic_id).first()
+            if interest:
+                return interest.interest
+            return None
+        except Exception as e:
+            self.logger.error(
+                f"Error getting topic name from ID: {e}",
+                extra={"extra_data": {"error": str(e), "topic_id": topic_id}},
+            )
+            return None
+        finally:
+            session.close()
+
     def add_user_interest(self, user_id: str, interest_id: str, round_id: str) -> bool:
         """
         Add a user interest association to the database.
@@ -1824,6 +1851,108 @@ class DatabaseMiddleware:
                 },
             )
             return False
+        finally:
+            session.close()
+
+    def add_agent_opinion(
+        self,
+        agent_id: str,
+        round_id: str,
+        topic_id: str,
+        opinion: float,
+        id_interacted_with: Optional[str] = None,
+        id_post: Optional[str] = None,
+    ) -> bool:
+        """
+        Add an agent opinion record to the database.
+
+        Args:
+            agent_id: Agent UUID
+            round_id: Round UUID
+            topic_id: Topic UUID (from interests table)
+            opinion: Opinion value (float in [0, 1])
+            id_interacted_with: Optional UUID of agent interacted with
+            id_post: Optional UUID of post interacted with
+
+        Returns:
+            bool: True if successful, False otherwise
+        """
+        import uuid
+
+        session = Session(self.engine)
+        try:
+            # Create agent opinion record
+            opinion_id = str(uuid.uuid4())
+            agent_opinion = Agent_Opinion(
+                id=opinion_id,
+                agent_id=agent_id,
+                tid=round_id,
+                topic_id=topic_id,
+                opinion=opinion,
+                id_interacted_with=id_interacted_with,
+                id_post=id_post,
+            )
+            session.add(agent_opinion)
+            session.commit()
+            return True
+        except Exception as e:
+            session.rollback()
+            self.logger.error(
+                f"Error adding agent opinion: {e}",
+                extra={
+                    "extra_data": {
+                        "error": str(e),
+                        "agent_id": agent_id,
+                        "topic_id": topic_id,
+                        "round_id": round_id,
+                    }
+                },
+            )
+            return False
+        finally:
+            session.close()
+
+    def get_latest_agent_opinion(
+        self, agent_id: str, topic_id: str
+    ) -> Optional[float]:
+        """
+        Get the latest opinion value for an agent on a topic.
+
+        Args:
+            agent_id: Agent UUID
+            topic_id: Topic UUID (from interests table)
+
+        Returns:
+            float: Latest opinion value, or None if not found
+        """
+        session = Session(self.engine)
+        try:
+            # Get the most recent opinion for this agent-topic pair
+            opinion_record = (
+                session.query(Agent_Opinion)
+                .filter(
+                    Agent_Opinion.agent_id == agent_id,
+                    Agent_Opinion.topic_id == topic_id
+                )
+                .order_by(Agent_Opinion.tid.desc())
+                .first()
+            )
+            
+            if opinion_record:
+                return opinion_record.opinion
+            return None
+        except Exception as e:
+            self.logger.error(
+                f"Error getting agent opinion: {e}",
+                extra={
+                    "extra_data": {
+                        "error": str(e),
+                        "agent_id": agent_id,
+                        "topic_id": topic_id,
+                    }
+                },
+            )
+            return None
         finally:
             session.close()
 

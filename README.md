@@ -9,6 +9,7 @@ A distributed social media simulation system using Ray for orchestration and LLM
 - **Configurable Parameters**: JSON-based configuration for all simulation parameters
 - **LLM Integration**: Support for Ollama-based language models for realistic agent behaviors
 - **Agent Profiles**: User_mgmt-based agent system with Big Five personality traits
+- **Opinion Dynamics**: Bounded confidence model for realistic opinion evolution and polarization
 - **Multi-Client Synchronization**: Robust barrier-based coordination with heartbeat liveness detection
 - **Client-Side Step Management**: Clients independently manage their simulation timelines
 - **Flexible Simulation**: Configurable duration, agent population, and LLM parameters
@@ -21,6 +22,7 @@ Comprehensive documentation is available in the [`docs/`](docs/) directory:
 
 - **[Configuration Guide](docs/CONFIG.md)** - Complete guide to all configuration options
 - **[Architecture Overview](docs/ARCHITECTURE.md)** - System design and component details
+- **[Opinion Dynamics](docs/OPINION_DYNAMICS.md)** - Bounded confidence model, opinion evolution, and implementation details
 - **[Extension Guide](docs/EXTENDING.md)** - How to add new agent actions and features
 - **[System Diagrams](docs/DIAGRAMS.md)** - Visual architecture and interaction diagrams
 - **[Code Formatting](docs/FORMATTING.md)** - Development guidelines and tooling

@@ -15,6 +15,8 @@ import time
 from datetime import datetime
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
+from typing import Optional
+
 
 import ray
 
@@ -496,6 +498,7 @@ class SimulationClient:
                     is_page=agent_data.get("is_page", 0),
                     feed_url=agent_data.get("feed_url"),  # RSS feed for page agents
                     interests=agent_data.get("interests"),  # Interest topics and counts
+                    opinions=agent_data.get("opinions"),  # Opinion values for topics
                 )
                 agents.append(profile)
 
@@ -1194,8 +1197,15 @@ class SimulationClient:
             import random
 
             selected_topic = random.choices(topics, weights=counts, k=1)[0]
+        
+        # Get opinion on the selected topic if available (only if opinion dynamics is enabled)
+        topic_opinion = None
+        topic_opinion_label = None
+        if self._is_opinion_dynamics_enabled() and selected_topic and agent.opinions and selected_topic in agent.opinions:
+            topic_opinion = agent.opinions[selected_topic]
+            topic_opinion_label = self._map_opinion_to_group(topic_opinion)
 
-        return {
+        attrs = {
             "name": agent.username,
             "age": agent.age if agent.age else "unknown",
             "gender": agent.gender if agent.gender else "person",
@@ -1210,6 +1220,13 @@ class SimulationClient:
             "toxicity": agent.toxicity if agent.toxicity and agent.toxicity != "" else "no",
             "topic": selected_topic,  # Include the sampled topic
         }
+        
+        # Add opinion information if available and opinion dynamics is enabled
+        if topic_opinion is not None and topic_opinion_label:
+            attrs["topic_opinion"] = topic_opinion_label
+            attrs["topic_opinion_value"] = topic_opinion
+        
+        return attrs
 
     def _save_updated_agent_population(self, updated_interests: dict):
         """
@@ -1495,8 +1512,18 @@ class SimulationClient:
                     )
                 )
 
-                # Fire off async LLM call to generate comment with agent attributes, author name, and thread context
+                # Get agent attributes including opinions on post topics
                 agent_attrs = self._extract_agent_attrs(agent)
+                
+                # Get opinions for the topics in this post
+                opinion_info = self._get_opinions_for_post(agent.id, target_post)
+                if opinion_info["topics"]:
+                    # Add opinion information to agent attrs
+                    agent_attrs["post_topics"] = opinion_info["topics"]
+                    agent_attrs["post_opinions"] = opinion_info["opinions"]
+                    agent_attrs["post_opinion_values"] = opinion_info["opinion_values"]
+                
+                # Fire off async LLM call to generate comment with agent attributes, author name, and thread context
                 future = self.llm.generate_comment.remote(
                     agent.cluster, post_content, agent_attrs, author_name, thread_context
                 )
@@ -1506,10 +1533,15 @@ class SimulationClient:
             action = generate_rule_based_comment(agent.id, agent.cluster, target_post)
             # Annotate rule-based comment
             self._annotate_action_content(action)
-            actions.append(action)
-            # Track for secondary follow (rule-based comment)
+            
+            # Calculate opinion updates for rule-based comment
             post_data = ray.get(self.server.get_post.remote(target_post, client_id=self.client_id))
             if post_data:
+                updated_opinions = self._calculate_opinion_updates(agent.id, target_post, post_data)
+                if updated_opinions:
+                    action.updated_opinions = updated_opinions
+                
+                # Track for secondary follow (rule-based comment)
                 rule_based_interactions.append(
                     (
                         agent.id,
@@ -1519,6 +1551,8 @@ class SimulationClient:
                         False,
                     )
                 )
+            
+            actions.append(action)
 
     def _handle_read_action(
         self, agent, agent_type, pending_llm_reactions, actions, rule_based_interactions
@@ -1543,17 +1577,82 @@ class SimulationClient:
             post_data = ray.get(self.server.get_post.remote(target_post, client_id=self.client_id))
             if post_data:
                 post_content = post_data.get("tweet", "")
-                # Fire off async LLM call to decide reaction with agent attributes
+                # Get agent attributes
                 agent_attrs = self._extract_agent_attrs(agent)
+                
+                # Get opinions for the topics in this post
+                opinion_info = self._get_opinions_for_post(agent.id, target_post)
+                if opinion_info["topics"]:
+                    # Add opinion information to agent attrs
+                    agent_attrs["post_topics"] = opinion_info["topics"]
+                    agent_attrs["post_opinions"] = opinion_info["opinions"]
+                    agent_attrs["post_opinion_values"] = opinion_info["opinion_values"]
+                
+                # Fire off async LLM call to decide reaction with agent attributes
                 future = generate_llm_read_async(self.llm, agent.cluster, post_content, agent_attrs)
                 pending_llm_reactions.append((agent.id, agent.cluster, target_post, future))
         else:
             # Rule-based: Randomly choose LIKE, DISLIKE (ANGRY), or IGNORE
-            action = generate_rule_based_read(agent.id, agent.cluster, target_post)
-            if action:  # Only add if not IGNORE
-                actions.append(action)
-                # Track for secondary follow (rule-based read)
-                post_data = ray.get(self.server.get_post.remote(target_post, client_id=self.client_id))
+            # Consider opinion when choosing reaction
+            post_data = ray.get(self.server.get_post.remote(target_post, client_id=self.client_id))
+            if post_data:
+                # Get opinions for the topics in this post
+                opinion_info = self._get_opinions_for_post(agent.id, target_post)
+                
+                # Generate reaction based on opinion if available
+                if opinion_info["topics"] and opinion_info["opinion_values"]:
+                    # Calculate average opinion
+                    avg_opinion = sum(opinion_info["opinion_values"].values()) / len(opinion_info["opinion_values"])
+                    
+                    # Choose reaction based on opinion
+                    # Higher opinion -> more likely to LIKE, lower -> more likely to express negative reaction
+                    if avg_opinion > 0.6:
+                        # Positive opinion - mostly LIKE
+                        reaction_type = random.choices(
+                            ["LIKE", "LOVE", "IGNORE"],
+                            weights=[0.6, 0.3, 0.1]
+                        )[0]
+                    elif avg_opinion < 0.4:
+                        # Negative opinion - more likely to express disagreement or ignore
+                        reaction_type = random.choices(
+                            ["ANGRY", "SAD", "IGNORE"],
+                            weights=[0.4, 0.2, 0.4]
+                        )[0]
+                    else:
+                        # Neutral - balanced reactions
+                        reaction_type = random.choices(
+                            ["LIKE", "IGNORE", "ANGRY"],
+                            weights=[0.4, 0.4, 0.2]
+                        )[0]
+                    
+                    if reaction_type != "IGNORE":
+                        action = ActionDTO(agent.id, agent.cluster, reaction_type, target_post_id=target_post)
+                        actions.append(action)
+                        # Track for secondary follow
+                        rule_based_interactions.append(
+                            (
+                                agent.id,
+                                agent.cluster,
+                                post_data.get("user_id"),
+                                post_data.get("tweet", ""),
+                                False,
+                            )
+                        )
+                else:
+                    # No opinion information, use default rule-based behavior
+                    action = generate_rule_based_read(agent.id, agent.cluster, target_post)
+                    if action:  # Only add if not IGNORE
+                        actions.append(action)
+                        # Track for secondary follow (rule-based read)
+                        rule_based_interactions.append(
+                            (
+                                agent.id,
+                                agent.cluster,
+                                post_data.get("user_id"),
+                                post_data.get("tweet", ""),
+                                False,
+                            )
+                        )
                 if post_data:
                     rule_based_interactions.append(
                         (
@@ -1667,10 +1766,70 @@ class SimulationClient:
                                         self.logger.info(
                                             f"Stored {len(topic_ids)} topics for article {article_id}"
                                         )
+                                        
+                                        # CLIENT-SIDE: Infer and store opinions for LLM page agent on article topics
+                                        if self._is_opinion_dynamics_enabled():
+                                            article_content = f"{article.get('title', '')} {article.get('summary', '')}"
+                                            for topic_name in topic_names[:2]:
+                                                try:
+                                                    opinion_value = self._infer_page_agent_opinion(
+                                                        agent.id, article_content, topic_name
+                                                    )
+                                                    # Get topic ID
+                                                    topic_id = ray.get(
+                                                        self.server.get_topic_id_by_name.remote(topic_name)
+                                                    )
+                                                    if topic_id:
+                                                        # Store opinion in database
+                                                        ray.get(
+                                                            self.server.add_agent_opinion.remote(
+                                                                agent.id, topic_id, opinion_value, None, None
+                                                            )
+                                                        )
+                                                        self.logger.info(
+                                                            f"Stored opinion {opinion_value:.3f} for LLM page {agent.username} on topic '{topic_name}'"
+                                                        )
+                                                except Exception as e:
+                                                    self.logger.warning(
+                                                        f"Failed to infer/store opinion for topic '{topic_name}': {e}"
+                                                    )
                             else:
                                 self.logger.info(
                                     f"Article {article_id} already has {len(existing_topics)} topics"
                                 )
+                                # CLIENT-SIDE: Ensure opinions exist for existing article topics
+                                if self._is_opinion_dynamics_enabled():
+                                    article_content = f"{article.get('title', '')} {article.get('summary', '')}"
+                                    # existing_topics is List[str] of topic IDs
+                                    for topic_id in existing_topics:
+                                        try:
+                                            # Get topic name from ID
+                                            topic_name = ray.get(
+                                                self.server.get_topic_name_from_id.remote(topic_id)
+                                            )
+                                            if not topic_name:
+                                                continue
+                                            
+                                            # Check if opinion already exists
+                                            existing_opinion = ray.get(
+                                                self.server.get_latest_agent_opinion.remote(agent.id, topic_id)
+                                            )
+                                            if existing_opinion is None:
+                                                opinion_value = self._infer_page_agent_opinion(
+                                                    agent.id, article_content, topic_name
+                                                )
+                                                ray.get(
+                                                    self.server.add_agent_opinion.remote(
+                                                        agent.id, topic_id, opinion_value, None, None
+                                                    )
+                                                )
+                                                self.logger.info(
+                                                    f"Stored opinion {opinion_value:.3f} for LLM page {agent.username} on existing topic '{topic_name}'"
+                                                )
+                                        except Exception as e:
+                                            self.logger.warning(
+                                                f"Failed to ensure opinion for existing topic: {e}"
+                                            )
                         except Exception as e:
                             self.logger.warning(
                                 f"Failed to extract/store topics for article {article_id}: {e}"
@@ -1718,12 +1877,72 @@ class SimulationClient:
                                     )
                                     if topic_ids:
                                         self.logger.info(
-                                            f"Stored {len(topic_ids)} topics for article {article_id}"
-                                        )
+                                            f"Stored {len(topic_ids)} topics for article {article_id}")
+                                        
+                                        # CLIENT-SIDE: Infer and store opinions for rule-based page agent on article topics
+                                        if self._is_opinion_dynamics_enabled():
+                                            article_content = f"{article.get('title', '')} {article.get('summary', '')}"
+                                            for topic_name in topic_names[:2]:
+                                                try:
+                                                    opinion_value = self._infer_page_agent_opinion(
+                                                        agent.id, article_content, topic_name
+                                                    )
+                                                    # Get topic ID
+                                                    topic_id = ray.get(
+                                                        self.server.get_topic_id_by_name.remote(topic_name)
+                                                    )
+                                                    if topic_id:
+                                                        # Store opinion in database
+                                                        ray.get(
+                                                            self.server.add_agent_opinion.remote(
+                                                                agent.id, topic_id, opinion_value, None, None
+                                                            )
+                                                        )
+                                                        self.logger.info(
+                                                            f"Stored opinion {opinion_value:.3f} for rule-based page {agent.username} on topic '{topic_name}'"
+                                                        )
+                                                except Exception as e:
+                                                    self.logger.warning(
+                                                        f"Failed to infer/store opinion for topic '{topic_name}': {e}"
+                                                    )
+
                             else:
                                 self.logger.info(
                                     f"Article {article_id} already has {len(existing_topics)} topics"
                                 )
+                                # CLIENT-SIDE: Ensure opinions exist for existing article topics
+                                if self._is_opinion_dynamics_enabled():
+                                    article_content = f"{article.get('title', '')} {article.get('summary', '')}"
+                                    # existing_topics is List[str] of topic IDs
+                                    for topic_id in existing_topics:
+                                        try:
+                                            # Get topic name from ID
+                                            topic_name = ray.get(
+                                                self.server.get_topic_name_from_id.remote(topic_id)
+                                            )
+                                            if not topic_name:
+                                                continue
+                                            
+                                            # Check if opinion already exists
+                                            existing_opinion = ray.get(
+                                                self.server.get_latest_agent_opinion.remote(agent.id, topic_id)
+                                            )
+                                            if existing_opinion is None:
+                                                opinion_value = self._infer_page_agent_opinion(
+                                                    agent.id, article_content, topic_name
+                                                )
+                                                ray.get(
+                                                    self.server.add_agent_opinion.remote(
+                                                        agent.id, topic_id, opinion_value, None, None
+                                                    )
+                                                )
+                                                self.logger.info(
+                                                    f"Stored opinion {opinion_value:.3f} for rule-based page {agent.username} on existing topic '{topic_name}'"
+                                                )
+                                        except Exception as e:
+                                            self.logger.warning(
+                                                f"Failed to ensure opinion for existing topic: {e}"
+                                            )
                         except Exception as e:
                             self.logger.warning(
                                 f"Failed to extract/store topics for article {article_id}: {e}"
@@ -1749,6 +1968,12 @@ class SimulationClient:
         # For now, only rule-based agents share
         if agent_type == "rule_based" and target:
             action = generate_rule_based_share(agent.id, agent.cluster, target)
+            # Calculate opinion updates for the share
+            post_data = ray.get(self.server.get_post.remote(target, client_id=self.client_id))
+            if post_data:
+                updated_opinions = self._calculate_opinion_updates(agent.id, target, post_data)
+                if updated_opinions:
+                    action.updated_opinions = updated_opinions
             actions.append(action)
 
     def _handle_search_action(self, agent, agent_type, pending_llm_reactions, actions):
@@ -1898,6 +2123,15 @@ class SimulationClient:
                 f"search action: LLM deciding engagement for agent {agent.username}",
                 extra={"extra_data": {"agent_id": agent.id, "target_post_id": target_post}},
             )
+            
+            # Get opinions for the topics in this post
+            opinion_info = self._get_opinions_for_post(agent.id, target_post)
+            if opinion_info["topics"]:
+                # Add opinion information to agent attrs
+                agent_attrs["post_topics"] = opinion_info["topics"]
+                agent_attrs["post_opinions"] = opinion_info["opinions"]
+                agent_attrs["post_opinion_values"] = opinion_info["opinion_values"]
+            
             future = generate_llm_search_action_async(
                 self.llm, agent.cluster, post_content, agent_attrs
             )
@@ -1920,8 +2154,18 @@ class SimulationClient:
 
             if selected_action == "comment":
                 action = generate_rule_based_comment(agent.id, agent.cluster, target_post)
+                # Calculate opinion updates for the comment
+                if post_data:
+                    updated_opinions = self._calculate_opinion_updates(agent.id, target_post, post_data)
+                    if updated_opinions:
+                        action.updated_opinions = updated_opinions
             elif selected_action == "share":
                 action = generate_rule_based_share(agent.id, agent.cluster, target_post)
+                # Calculate opinion updates for the share
+                if post_data:
+                    updated_opinions = self._calculate_opinion_updates(agent.id, target_post, post_data)
+                    if updated_opinions:
+                        action.updated_opinions = updated_opinions
             else:  # react
                 # Use basic reactions (simple positive/negative responses)
                 reaction_type = random.choice(BASIC_REACTIONS)
@@ -2500,6 +2744,13 @@ class SimulationClient:
                 self.logger.info(
                     f"LLM comment annotated for agent {a_id}: has_sentiment={bool(annotations.get('sentiment'))}, has_toxicity={bool(annotations.get('toxicity'))}, has_emotions={bool(annotations.get('emotions'))}, hashtags={len(annotations.get('hashtags', []))}, mentions={len(annotations.get('mentions', []))}"
                 )
+                
+                # Calculate opinion updates before creating action
+                post_data = ray.get(self.server.get_post.remote(target, client_id=self.client_id))
+                updated_opinions = None
+                if post_data:
+                    updated_opinions = self._calculate_opinion_updates(a_id, target, post_data)
+                
                 action = ActionDTO(
                     a_id,
                     cid,
@@ -2507,6 +2758,7 @@ class SimulationClient:
                     content=res_act,
                     target_post_id=target,
                     annotations=annotations,
+                    updated_opinions=updated_opinions,
                 )
                 actions.append(action)
 
@@ -2521,7 +2773,6 @@ class SimulationClient:
                     )
 
                 # Track for secondary follow (comment action)
-                post_data = ray.get(self.server.get_post.remote(target, client_id=self.client_id))
                 if post_data:
                     secondary_follow_candidates.append(
                         (a_id, cid, post_data.get("user_id"), post_data.get("tweet", ""), True)
@@ -2534,8 +2785,15 @@ class SimulationClient:
                 if res_act.upper() == "SHARE":
                     # For SHARE actions, use cluster-specific share content (similar to rule-based)
                     share_content = f"Sharing from cluster {cid}"
+                    # Calculate opinion updates for the share
+                    post_data = ray.get(self.server.get_post.remote(target, client_id=self.client_id))
+                    updated_opinions = None
+                    if post_data:
+                        updated_opinions = self._calculate_opinion_updates(a_id, target, post_data)
+                    
                     action = ActionDTO(
-                        a_id, cid, res_act.upper(), content=share_content, target_post_id=target
+                        a_id, cid, res_act.upper(), content=share_content, target_post_id=target,
+                        updated_opinions=updated_opinions
                     )
                     self.logger.info(
                         f"search action: LLM agent {a_id} decided to SHARE with content",
@@ -2547,18 +2805,22 @@ class SimulationClient:
                             }
                         },
                     )
+                    # Track for secondary follow (share action)
+                    if post_data:
+                        secondary_follow_candidates.append(
+                            (a_id, cid, post_data.get("user_id"), post_data.get("tweet", ""), True)
+                        )
                 else:
                     # Regular reaction (LIKE, LOVE, LAUGH, ANGRY, SAD)
                     action = ActionDTO(a_id, cid, res_act, target_post_id=target)
+                    # Track for secondary follow (read/reaction action)
+                    post_data = ray.get(self.server.get_post.remote(target, client_id=self.client_id))
+                    if post_data:
+                        secondary_follow_candidates.append(
+                            (a_id, cid, post_data.get("user_id"), post_data.get("tweet", ""), True)
+                        )
 
                 actions.append(action)
-
-                # Track for secondary follow (read/reaction action)
-                post_data = ray.get(self.server.get_post.remote(target, client_id=self.client_id))
-                if post_data:
-                    secondary_follow_candidates.append(
-                        (a_id, cid, post_data.get("user_id"), post_data.get("tweet", ""), True)
-                    )
             else:
                 # IGNORE action - log for search action context
                 self.logger.debug(
@@ -2594,6 +2856,286 @@ class SimulationClient:
             # LLM returns user_id to follow or None to skip
             if target_user:
                 actions.append(ActionDTO(a_id, cid, "FOLLOW", target_user_id=target_user))
+
+    def _calculate_opinion_updates(
+        self, agent_id: str, parent_post_id: str, parent_post_data: dict
+    ) -> Optional[dict]:
+        """
+        Calculate opinion updates when an agent comments on a post.
+        
+        Uses the bounded confidence model to update opinions based on interaction
+        with the post author's opinions on the discussed topics.
+        
+        Args:
+            agent_id: UUID of the agent making the comment
+            parent_post_id: UUID of the post being commented on
+            parent_post_data: Dictionary containing post data including user_id
+            
+        Returns:
+            dict: Mapping of topic_id to new opinion value, or None if no updates
+        """
+        try:
+            # Check if opinion dynamics is enabled
+            if not self._is_opinion_dynamics_enabled():
+                return None
+            
+            # Get opinion dynamics config
+            opinion_config = self.simulation_config.get("opinion_dynamics", {})
+            if not opinion_config:
+                return None
+            
+            params = opinion_config.get("parameters", {})
+            
+            # Get the parent post author
+            parent_author_id = parent_post_data.get("user_id")
+            if not parent_author_id:
+                return None
+            
+            # Get the post topics from server
+            topic_ids = ray.get(
+                self.server.get_post_topics.remote(parent_post_id, client_id=self.client_id)
+            )
+            if not topic_ids:
+                return None
+            
+            # Import opinion dynamics module
+            from YSimulator.YClient.opinion_dynamics.confidence_bound import bounded_confidence
+            
+            # Calculate updated opinions for each topic
+            updated_opinions = {}
+            for topic_id in topic_ids:
+                # Get topic name
+                topic_name = ray.get(
+                    self.server.get_topic_name_from_id.remote(topic_id, client_id=self.client_id)
+                )
+                if not topic_name:
+                    continue
+                
+                # Get agent's LATEST opinion from database (not cached profile)
+                # This ensures we use the most recent opinion after interactions
+                agent_opinion = ray.get(
+                    self.server.get_latest_agent_opinion.remote(
+                        agent_id, topic_id, client_id=self.client_id
+                    )
+                )
+                
+                # Get author's latest opinion from server
+                author_opinion = ray.get(
+                    self.server.get_latest_agent_opinion.remote(
+                        parent_author_id, topic_id, client_id=self.client_id
+                    )
+                )
+                
+                # Author must have an opinion on their own post's topics
+                if author_opinion is None:
+                    self.logger.error(
+                        f"Data inconsistency: Author {parent_author_id} has no recorded opinion on topic "
+                        f"'{topic_name}' (topic_id: {topic_id}) in their own post {parent_post_id}. "
+                        f"This indicates the author posted about a topic they don't have in agent_opinion table. "
+                        f"Skipping opinion update for this topic."
+                    )
+                    continue
+                
+                # Calculate new opinion using bounded confidence
+                # x = agent's opinion (can be None for cold start)
+                # y = author's opinion (must be a float)
+                new_opinion = bounded_confidence(
+                    x=agent_opinion,
+                    y=author_opinion,
+                    epsilon=params.get("epsilon", 0.25),
+                    mu=params.get("mu", 0.5),
+                    theta=params.get("theta", 0.0),
+                    cold_start=params.get("cold_start", "neutral")
+                )
+                
+                updated_opinions[topic_id] = new_opinion
+                
+                self.logger.info(
+                    f"Opinion update calculated: agent={agent_id}, topic={topic_name}, "
+                    f"old={agent_opinion}, author={author_opinion}, new={new_opinion}"
+                )
+            
+            return updated_opinions if updated_opinions else None
+            
+        except Exception as e:
+            self.logger.error(
+                f"Error calculating opinion updates for agent {agent_id}: {e}",
+                extra={"extra_data": {"error": str(e), "agent_id": agent_id}}
+            )
+            return None
+
+    def _map_opinion_to_group(self, opinion_value: float) -> str:
+        """
+        Map a numeric opinion value to a discrete opinion group label.
+        
+        Args:
+            opinion_value: Numeric opinion in [0, 1]
+            
+        Returns:
+            str: Opinion group label from simulation_config opinion_groups
+        """
+        opinion_config = self.simulation_config.get("opinion_dynamics", {})
+        opinion_groups = opinion_config.get("opinion_groups", {})
+        
+        if not opinion_groups:
+            # Default mapping if not configured
+            if opinion_value < 0.2:
+                return "Strongly against"
+            elif opinion_value < 0.4:
+                return "Against"
+            elif opinion_value < 0.6:
+                return "Neutral"
+            elif opinion_value < 0.8:
+                return "In favor"
+            else:
+                return "Strongly in favor"
+        
+        # Find which group the opinion falls into
+        for group_name, (lower, upper) in opinion_groups.items():
+            if lower <= opinion_value <= upper:
+                return group_name
+        
+        # Fallback
+        return "Neutral"
+
+    def _is_opinion_dynamics_enabled(self) -> bool:
+        """
+        Check if opinion dynamics is enabled in the simulation configuration.
+        
+        Returns:
+            bool: True if opinion dynamics is enabled, False otherwise
+        """
+        opinion_config = self.simulation_config.get("opinion_dynamics", {})
+        return opinion_config.get("enabled", False)
+    
+    def _infer_page_agent_opinion(self, agent_id: str, article_content: str, topic_name: str) -> float:
+        """
+        Infer opinion for a page agent on a topic from article content.
+        
+        This method is called CLIENT-SIDE before submitting article posts.
+        - LLM page agents: Use LLM service to infer opinion from article
+        - Rule-based page agents: Generate random opinion
+        
+        Args:
+            agent_id: Agent UUID
+            article_content: Article text to analyze
+            topic_name: Topic to infer opinion about
+            
+        Returns:
+            float: Opinion value in [0, 1] range
+        """
+        try:
+            # Get agent profile to determine if LLM or rule-based
+            agent_profile = next(
+                (a for a in self.agent_profiles if a.id == agent_id), None
+            )
+            if not agent_profile:
+                self.logger.warning(f"Agent profile not found for {agent_id}, using random opinion")
+                return random.random()
+            
+            # Check if this is an LLM agent
+            if agent_profile.llm:
+                # LLM page agent: infer opinion from article content using LLM service
+                opinion_config = self.simulation_config.get("opinion_dynamics", {})
+                opinion_groups = opinion_config.get("opinion_groups", {})
+                
+                if not opinion_groups:
+                    self.logger.warning("No opinion_groups configured, using random opinion")
+                    return random.random()
+                
+                # Call LLM service to infer opinion
+                opinion_value = ray.get(
+                    self.llm.infer_article_opinion.remote(
+                        article_content, topic_name, opinion_groups
+                    )
+                )
+                self.logger.info(
+                    f"LLM page agent {agent_id}: inferred opinion {opinion_value} "
+                    f"on topic '{topic_name}' from article content"
+                )
+                return opinion_value
+            else:
+                # Rule-based page agent: random opinion
+                opinion_value = random.random()
+                self.logger.info(
+                    f"Rule-based page agent {agent_id}: assigned random opinion {opinion_value} "
+                    f"on topic '{topic_name}'"
+                )
+                return opinion_value
+                
+        except Exception as e:
+            self.logger.error(
+                f"Error inferring opinion for page agent {agent_id}: {e}. Using random value."
+            )
+            return random.random()
+
+    def _get_opinions_for_post(self, agent_id: str, post_id: str) -> dict:
+        """
+        Get agent's opinions on the topics discussed in a post.
+        
+        Args:
+            agent_id: UUID of the agent
+            post_id: UUID of the post
+            
+        Returns:
+            dict: {
+                "topics": List of topic names,
+                "opinions": Dict mapping topic names to opinion labels,
+                "opinion_values": Dict mapping topic names to numeric values
+            }
+        """
+        try:
+            # Check if opinion dynamics is enabled
+            if not self._is_opinion_dynamics_enabled():
+                return {"topics": [], "opinions": {}, "opinion_values": {}}
+            
+            # Get agent profile
+            agent_profile = next(
+                (a for a in self.agent_profiles if a.id == agent_id), None
+            )
+            if not agent_profile or not agent_profile.opinions:
+                return {"topics": [], "opinions": {}, "opinion_values": {}}
+            
+            # Get post topics
+            topic_ids = ray.get(
+                self.server.get_post_topics.remote(post_id, client_id=self.client_id)
+            )
+            if not topic_ids:
+                return {"topics": [], "opinions": {}, "opinion_values": {}}
+            
+            # For each topic, get the agent's opinion
+            topics = []
+            opinions = {}
+            opinion_values = {}
+            
+            for topic_id in topic_ids:
+                # Get topic name
+                topic_name = ray.get(
+                    self.server.get_topic_name_from_id.remote(topic_id, client_id=self.client_id)
+                )
+                if not topic_name:
+                    continue
+                
+                # Get agent's opinion on this topic
+                if topic_name in agent_profile.opinions:
+                    opinion_value = agent_profile.opinions[topic_name]
+                    opinion_label = self._map_opinion_to_group(opinion_value)
+                    
+                    topics.append(topic_name)
+                    opinions[topic_name] = opinion_label
+                    opinion_values[topic_name] = opinion_value
+            
+            return {
+                "topics": topics,
+                "opinions": opinions,
+                "opinion_values": opinion_values
+            }
+        except Exception as e:
+            self.logger.error(
+                f"Error getting opinions for post {post_id}: {e}",
+                extra={"extra_data": {"error": str(e), "agent_id": agent_id, "post_id": post_id}}
+            )
+            return {"topics": [], "opinions": {}, "opinion_values": {}}
 
     def _process_secondary_follows(
         self, secondary_follow_candidates: list, rule_based_interactions: list, actions: list

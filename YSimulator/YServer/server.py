@@ -197,6 +197,9 @@ class OrchestratorServer:
 
         # Track last archetype transition day (start at 0, so first transition at day 7)
         self.last_archetype_transition_day = 0
+        
+        # Cache agent profiles for opinion lookup (only when opinion dynamics enabled)
+        self.agent_profiles_cache = {}
 
         # Simulation timing configuration
         self.num_slots_per_day = simulation_config.get("simulation", {}).get(
@@ -382,6 +385,87 @@ class OrchestratorServer:
             str: Topic name or None if not found
         """
         return self.interest_manager.get_topic_name_from_id(topic_id)
+    
+    def _ensure_agent_opinion_exists(self, agent_id: str, topic_id: str, topic_name: str, article_content: str = None):
+        """
+        Ensure an agent has an opinion recorded for a topic.
+        
+        This is a safety fallback that creates opinions if they don't exist.
+        For page agents, the client should have already inferred opinions via LLM
+        before submitting the POST action. This method just provides defaults.
+        
+        For regular agents: Use cached profile opinion or neutral (0.5) as fallback.
+        For page agents: Use neutral (0.5) as placeholder (client should set opinion first).
+        
+        Only executes when opinion dynamics is enabled in simulation config.
+        
+        NOTE: Server does NOT call LLM service. All LLM interactions happen on client side.
+        
+        Args:
+            agent_id: Agent UUID
+            topic_id: Topic UUID (from interests table)
+            topic_name: Topic name for looking up in cached profile
+            article_content: Unused (kept for backwards compatibility)
+        """
+        # Only enforce this constraint when opinion dynamics is enabled
+        opinion_config = self.simulation_config.get("opinion_dynamics", {})
+        if not opinion_config.get("enabled", False):
+            return  # Opinion dynamics disabled, no need to ensure opinions exist
+        
+        # Check if agent already has an opinion on this topic
+        existing_opinion = self.db.get_latest_agent_opinion(agent_id, topic_id)
+        if existing_opinion is not None:
+            return  # Opinion already exists
+        
+        # Agent doesn't have opinion - need to create one as fallback
+        cached_profile = self.agent_profiles_cache.get(agent_id)
+        is_page_agent = cached_profile and cached_profile.is_page == 1
+        
+        opinion_value = None
+        
+        if is_page_agent:
+            # Page agent: Client should have already set opinion via LLM/random
+            # This is just a fallback - use neutral placeholder
+            opinion_value = 0.5
+            self.logger.warning(
+                f"Page agent {agent_id}: no opinion found for topic '{topic_name}'. "
+                f"Using neutral fallback (0.5). Client should have set opinion first."
+            )
+        else:
+            # Regular agent: try to get from cached profile
+            if cached_profile and cached_profile.opinions:
+                # Try exact match first
+                opinion_value = cached_profile.opinions.get(topic_name)
+                # If not found, try case-insensitive match
+                if opinion_value is None:
+                    for key, value in cached_profile.opinions.items():
+                        if key.lower() == topic_name.lower():
+                            opinion_value = value
+                            break
+                
+                if opinion_value is not None:
+                    self.logger.info(
+                        f"Regular agent {agent_id}: using initial opinion {opinion_value} from profile for topic '{topic_name}'"
+                    )
+            
+            # Default to neutral opinion if not found in profile
+            if opinion_value is None:
+                opinion_value = 0.5
+                self.logger.info(
+                    f"Regular agent {agent_id}: creating default neutral opinion {opinion_value} for topic '{topic_name}'"
+                )
+        
+        # Store the opinion
+        self.db.add_agent_opinion(
+            agent_id=agent_id,
+            round_id=self.current_round_id,
+            topic_id=topic_id,
+            opinion=opinion_value,
+            id_interacted_with=None,
+            id_post=None,
+        )
+    
+
 
     def _reaction_to_sentiment(self, reaction_type: str) -> Optional[Dict[str, float]]:
         """
@@ -722,8 +806,16 @@ class OrchestratorServer:
             registered_count, newly_registered_ids = self.db.register_users_batch(users_data)
 
             # All agents (new and existing) should be in registered_agents dict
-            for agent_profile in agents:
-                self.registered_agents[agent_profile.id] = agent_profile.username
+            # Also cache agent profiles for opinion lookups (when opinion dynamics enabled)
+            opinion_config = self.simulation_config.get("opinion_dynamics", {})
+            if opinion_config.get("enabled", False):
+                for agent_profile in agents:
+                    self.registered_agents[agent_profile.id] = agent_profile.username
+                    # Cache full profile for opinion lookups
+                    self.agent_profiles_cache[agent_profile.id] = agent_profile
+            else:
+                for agent_profile in agents:
+                    self.registered_agents[agent_profile.id] = agent_profile.username
 
             skipped_count = len(agents) - registered_count
 
@@ -737,6 +829,23 @@ class OrchestratorServer:
                         interests=agent_profile.interests,
                         round_id=self.current_round_id,
                     )
+                
+                # Initialize opinions for newly registered agents
+                if agent_profile and agent_profile.opinions:
+                    # Get interest IDs for the agent's topics
+                    for topic_name, opinion_value in agent_profile.opinions.items():
+                        # Get or create the interest/topic in the database
+                        topic_id = self.db.add_or_get_interest(topic_name)
+                        if topic_id:
+                            # Store initial opinion with no interaction references
+                            self.db.add_agent_opinion(
+                                agent_id=agent_id,
+                                round_id=self.current_round_id,
+                                topic_id=topic_id,
+                                opinion=opinion_value,
+                                id_interacted_with=None,
+                                id_post=None,
+                            )
 
             # Batch register websites for page agents
             pages_registered = 0
@@ -1288,11 +1397,20 @@ class OrchestratorServer:
                                 # Note: We need the LLM service handle - we'll get it from the client context
                                 # For now, check if article already has topics
                                 existing_topic_ids = self.db.get_article_topics(article_id)
+                                
+                                # Get article content for opinion inference
+                                article_content = article_data.get("content") or article_data.get("summary") or article_data.get("title", "")
 
                                 if existing_topic_ids:
                                     # Article already has topics, link them to the post
                                     for topic_id in existing_topic_ids:
                                         self.db.add_post_topic(post_id, topic_id)
+                                        # Ensure author has opinion on each topic
+                                        topic_name = self.db.get_topic_name_from_id(topic_id)
+                                        if topic_name:
+                                            self._ensure_agent_opinion_exists(
+                                                act.agent_id, topic_id, topic_name, article_content=article_content
+                                            )
                                     self.logger.info(
                                         f"Linked {len(existing_topic_ids)} existing article topics to post {post_id}"
                                     )
@@ -1303,6 +1421,12 @@ class OrchestratorServer:
                             # Image posts have pre-fetched topic IDs from article
                             for topic_id in act.topic_ids:
                                 self.db.add_post_topic(post_id, topic_id)
+                                # Ensure author has opinion on each topic
+                                topic_name = self.db.get_topic_name_from_id(topic_id)
+                                if topic_name:
+                                    self._ensure_agent_opinion_exists(
+                                        act.agent_id, topic_id, topic_name
+                                    )
                             self.logger.info(
                                 f"Linked {len(act.topic_ids)} article topics to image post {post_id}"
                             )
@@ -1318,6 +1442,11 @@ class OrchestratorServer:
                                 # Increment the agent's interest counter for this topic
                                 self._update_agent_interest_counter(
                                     act.agent_id, act.topic, increment=1
+                                )
+                                
+                                # Ensure author has an opinion on the topic they're posting about
+                                self._ensure_agent_opinion_exists(
+                                    act.agent_id, topic_id, act.topic
                                 )
 
                         # Process annotations AFTER topics are assigned
@@ -1437,6 +1566,22 @@ class OrchestratorServer:
                                     self._update_agent_interest_counter(
                                         act.agent_id, topic_name, increment=1
                                     )
+                            
+                            # Store opinion updates if calculated by client
+                            if hasattr(act, 'updated_opinions') and act.updated_opinions:
+                                parent_author_id = parent_post.get("user_id")
+                                for topic_id, new_opinion in act.updated_opinions.items():
+                                    self.db.add_agent_opinion(
+                                        agent_id=str(act.agent_id),
+                                        round_id=self.current_round_id,
+                                        topic_id=topic_id,
+                                        opinion=new_opinion,
+                                        id_interacted_with=parent_author_id,
+                                        id_post=parent_post_id
+                                    )
+                                self.logger.info(
+                                    f"Stored {len(act.updated_opinions)} opinion updates for agent {act.agent_id}"
+                                )
                         else:
                             self.logger.warning(
                                 f"Failed to add comment for agent {act.agent_id}",
@@ -1473,6 +1618,22 @@ class OrchestratorServer:
                         post_id = self.db.add_post(post_data)
                         if post_id:
                             new_ids.append(post_id)
+                            
+                            # Store opinion updates if calculated by client
+                            if hasattr(act, 'updated_opinions') and act.updated_opinions:
+                                parent_author_id = original_post.get("user_id")
+                                for topic_id, new_opinion in act.updated_opinions.items():
+                                    self.db.add_agent_opinion(
+                                        agent_id=str(act.agent_id),
+                                        round_id=self.current_round_id,
+                                        topic_id=topic_id,
+                                        opinion=new_opinion,
+                                        id_interacted_with=parent_author_id,
+                                        id_post=act.target_post_id
+                                    )
+                                self.logger.info(
+                                    f"Stored {len(act.updated_opinions)} opinion updates for share by agent {act.agent_id}"
+                                )
                         else:
                             self.logger.warning(
                                 f"Failed to add share for agent {act.agent_id}",
@@ -2442,6 +2603,75 @@ class OrchestratorServer:
             List[str]: List of post UUIDs from other users on this topic
         """
         return self.db.search_posts_by_topic(topic_id, agent_id, limit)
+
+    @log_server_request
+    def get_post_topics(self, post_id: str, client_id: str = None) -> List[str]:
+        """
+        Get topic IDs associated with a post.
+        
+        Args:
+            post_id: UUID of the post
+            client_id: Optional client identifier for logging
+            
+        Returns:
+            List of topic UUIDs
+        """
+        return self.db.get_post_topics(post_id)
+    
+    @log_server_request
+    def get_topic_name_from_id(self, topic_id: str, client_id: str = None) -> Optional[str]:
+        """
+        Get topic name from topic UUID.
+        
+        Args:
+            topic_id: Topic UUID (iid)
+            client_id: Optional client identifier for logging
+            
+        Returns:
+            Topic name or None if not found
+        """
+        return self._get_topic_name_from_id(topic_id)
+    
+    @log_server_request
+    def get_latest_agent_opinion(
+        self, agent_id: str, topic_id: str, client_id: str = None
+    ) -> Optional[float]:
+        """
+        Get the latest opinion value for an agent on a topic.
+        
+        Args:
+            agent_id: Agent UUID
+            topic_id: Topic UUID
+            client_id: Optional client identifier for logging
+            
+        Returns:
+            Latest opinion value or None if not found
+        """
+        return self.db.get_latest_agent_opinion(agent_id, topic_id)
+
+    @log_server_request
+    def add_agent_opinion(
+        self, agent_id: str, topic_id: str, opinion: float, 
+        id_interacted_with: Optional[str] = None, id_post: Optional[str] = None,
+        client_id: str = None
+    ) -> bool:
+        """
+        Add an agent opinion record to the database.
+        
+        Args:
+            agent_id: Agent UUID
+            topic_id: Topic UUID
+            opinion: Opinion value in [0, 1]
+            id_interacted_with: Optional UUID of agent interacted with
+            id_post: Optional UUID of post interacted with
+            client_id: Optional client identifier for logging
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        return self.db.add_agent_opinion(
+            agent_id, self.current_round_id, topic_id, opinion, id_interacted_with, id_post
+        )
 
     @log_server_request
     def get_follow_suggestions(
