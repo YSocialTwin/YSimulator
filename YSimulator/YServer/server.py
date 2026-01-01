@@ -2670,7 +2670,7 @@ class OrchestratorServer:
             True if successful, False otherwise
         """
         return self.db.add_agent_opinion(
-            agent_id, topic_id, opinion, id_interacted_with, id_post
+            agent_id, self.current_round_id, topic_id, opinion, id_interacted_with, id_post
         )
 
     @log_server_request
