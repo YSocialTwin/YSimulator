@@ -2725,15 +2725,18 @@ class OrchestratorServer:
             if self.db.use_redis:
                 # Redis implementation: hybrid approach
                 # Step 1: Get followees from Redis follow keys
-                follow_pattern = self.db._redis_key("follow", "*")
+                follow_pattern = self.db.get_redis_key_pattern("follow", "*")
                 follow_keys = self.db.redis_client.keys(follow_pattern)
+
+                # Encode agent_id once for efficiency
+                agent_id_bytes = agent_id.encode()
 
                 followee_ids = set()
                 for key in follow_keys:
                     follow_data = self.db.redis_client.hgetall(key)
                     # Check if this is a follow relationship for the agent
                     if (
-                        follow_data.get(b"follower_id") == agent_id.encode()
+                        follow_data.get(b"follower_id") == agent_id_bytes
                         and follow_data.get(b"action") == b"follow"
                     ):
                         user_id = follow_data.get(b"user_id")

@@ -19,9 +19,10 @@ def test_redis_opinion_key_format():
     expected_key = f"ysim:user:{user_id}:opinion:{topic_id}"
 
     # Verify key format matches specification
-    assert expected_key == f"ysim:user:{user_id}:opinion:{topic_id}"
     assert expected_key.startswith("ysim:user:")
     assert ":opinion:" in expected_key
+    assert expected_key.endswith(topic_id)
+    assert user_id in expected_key
 
     print(f"  ✓ Opinion key format correct: {expected_key}")
 

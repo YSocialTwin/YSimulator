@@ -230,6 +230,22 @@ class DatabaseMiddleware:
             return f"ysim:{table}:{id}"
         return f"ysim:{table}"
 
+    def get_redis_key_pattern(self, table: str, pattern: str = "*") -> str:
+        """
+        Generate a Redis key pattern for scanning.
+
+        This is a public method for generating Redis key patterns that can be used
+        with redis.keys() or redis.scan() operations.
+
+        Args:
+            table: Table name (e.g., "follow", "post")
+            pattern: Pattern to match (default: "*")
+
+        Returns:
+            str: Redis key pattern (e.g., "ysim:follow:*")
+        """
+        return self._redis_key(table, pattern)
+
     def register_user(self, user_data: Dict[str, Any]) -> bool:
         """
         Register a user in the database.
