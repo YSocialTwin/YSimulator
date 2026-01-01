@@ -117,9 +117,11 @@
   "opinion_dynamics": {
     "enabled": true,
     "model_name": "llm_evaluation",
+    "note": "Uses LLM-based opinion evaluation with natural language reasoning. Requires LLM agents.",
     "parameters": {
       "evaluation_scope": "neighbors",
-      "cold_start": "neutral"
+      "cold_start": "neutral",
+      "note": "evaluation_scope='neighbors' considers opinions of followed users. cold_start='neutral' initializes new opinions at 0.5."
     },
     "opinion_groups": {
       "Strongly against": [

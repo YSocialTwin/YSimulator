@@ -115,6 +115,7 @@
     "enable_console_log": true
   },
   "opinion_dynamics": {
-    "enabled": false
+    "enabled": false,
+    "note": "Opinion dynamics disabled for this example. No opinion evolution occurs during simulation."
   }
 }
