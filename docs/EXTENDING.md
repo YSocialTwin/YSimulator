@@ -948,3 +948,10 @@ Adding new actions to YSimulator follows a consistent pattern:
 Follow the patterns established in existing actions (posts, interactions) and refer to this guide when adding new capabilities.
 
 For questions or improvements to this guide, please open an issue on GitHub.
+
+## Related Documentation
+
+- **[Configuration Guide](CONFIG.md)** - Configure simulation parameters and agent behaviors
+- **[Architecture Overview](ARCHITECTURE.md)** - Understand the system architecture
+- **[Opinion Dynamics](OPINION_DYNAMICS.md)** - Add opinion-based behaviors to new actions
+- **[Action Logging](ACTION_LOGGING.md)** - Ensure new actions are properly logged

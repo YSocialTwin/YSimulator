@@ -10,6 +10,12 @@ The opinion dynamics module allows agents to:
 - Form new opinions when encountering new topics
 - Express opinions in content generation and reactions
 
+**Related Documentation:**
+- **[Configuration Guide (CONFIG.md)](CONFIG.md)** - Opinion dynamics configuration in `simulation_config.json`
+- **[Redis Integration (RECSYS_REDIS_SUPPORT.md)](RECSYS_REDIS_SUPPORT.md)** - Redis support status for opinion dynamics
+- **[Architecture Overview (ARCHITECTURE.md)](ARCHITECTURE.md)** - System architecture and component interactions
+- **[Example Configurations](../example/)** - Example directories with different opinion dynamics setups
+
 ## Supported Models
 
 YSimulator supports two opinion dynamics models:
