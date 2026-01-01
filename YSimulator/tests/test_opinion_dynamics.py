@@ -1,5 +1,18 @@
 """
 Tests for opinion dynamics models.
+
+This module tests the two opinion dynamics models implemented in YSimulator:
+
+1. Bounded Confidence Model (confidence_bound.py):
+   - Classic opinion dynamics model based on confidence bounds
+   - Agents update opinions based on proximity to others' opinions (epsilon threshold)
+   - Supports both "neutral" and "inherited" cold start strategies
+
+2. LLM Evaluation Model (llm_evaluation.py):
+   - LLM-based opinion evaluation for natural language reasoning
+   - Uses discrete opinion classes and shifts between them based on agreement/disagreement
+   - Supports evaluating based on interlocutor only or including neighbors' opinions
+   - Tests the shift_class function and boundary clamping behavior
 """
 import pytest
 from YSimulator.YClient.opinion_dynamics.confidence_bound import bounded_confidence

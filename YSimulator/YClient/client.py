@@ -3020,8 +3020,6 @@ class SimulationClient:
                 f"Error calculating opinion updates for agent {agent_id}: {e}",
                 extra={"extra_data": {"error": str(e), "agent_id": agent_id}}
             )
-            import traceback
-            traceback.print_exc()
             return None
 
     def _map_opinion_to_group(self, opinion_value: float) -> str:
