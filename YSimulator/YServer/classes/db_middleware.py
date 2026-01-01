@@ -876,7 +876,8 @@ class DatabaseMiddleware:
                 post_ids = self.redis_client.lrange(
                     self._redis_key("posts", "recent"), 0, limit - 1
                 )
-                return [str(pid) for pid in post_ids]
+                # Properly decode bytes
+                return [pid.decode() if isinstance(pid, bytes) else str(pid) for pid in post_ids]
             else:
                 session = Session(self.engine)
                 try:
@@ -3161,41 +3162,47 @@ class DatabaseMiddleware:
 
                 # Get the first sentiment
                 sentiment_id = list(sentiment_ids)[0]
-                key = self._redis_key("post_sentiment", sentiment_id)
+                # Decode sentiment_id if bytes
+                sentiment_id_str = (
+                    sentiment_id.decode() if isinstance(sentiment_id, bytes) else sentiment_id
+                )
+                key = self._redis_key("post_sentiment", sentiment_id_str)
                 sentiment_data = self.redis_client.hgetall(key)
 
                 if sentiment_data:
+                    # Decode all keys and values from bytes
+                    decoded_data = {
+                        k.decode() if isinstance(k, bytes) else k: (
+                            v.decode() if isinstance(v, bytes) else v
+                        )
+                        for k, v in sentiment_data.items()
+                    }
+
                     # Convert string values back to appropriate types
                     return {
-                        "id": sentiment_data.get("id"),
-                        "post_id": sentiment_data.get("post_id"),
-                        "user_id": sentiment_data.get("user_id"),
-                        "topic_id": sentiment_data.get("topic_id"),
-                        "round": int(sentiment_data.get("round", 0)),
+                        "id": decoded_data.get("id"),
+                        "post_id": decoded_data.get("post_id"),
+                        "user_id": decoded_data.get("user_id"),
+                        "topic_id": decoded_data.get("topic_id"),
+                        "round": int(decoded_data.get("round", 0)),
                         "neg": (
-                            float(sentiment_data.get("neg", 0.0))
-                            if sentiment_data.get("neg")
-                            else None
+                            float(decoded_data.get("neg", 0.0)) if decoded_data.get("neg") else None
                         ),
                         "pos": (
-                            float(sentiment_data.get("pos", 0.0))
-                            if sentiment_data.get("pos")
-                            else None
+                            float(decoded_data.get("pos", 0.0)) if decoded_data.get("pos") else None
                         ),
                         "neu": (
-                            float(sentiment_data.get("neu", 0.0))
-                            if sentiment_data.get("neu")
-                            else None
+                            float(decoded_data.get("neu", 0.0)) if decoded_data.get("neu") else None
                         ),
                         "compound": (
-                            float(sentiment_data.get("compound", 0.0))
-                            if sentiment_data.get("compound")
+                            float(decoded_data.get("compound", 0.0))
+                            if decoded_data.get("compound")
                             else None
                         ),
-                        "sentiment_parent": sentiment_data.get("sentiment_parent", ""),
-                        "is_post": int(sentiment_data.get("is_post", 0)),
-                        "is_comment": int(sentiment_data.get("is_comment", 0)),
-                        "is_reaction": int(sentiment_data.get("is_reaction", 0)),
+                        "sentiment_parent": decoded_data.get("sentiment_parent", ""),
+                        "is_post": int(decoded_data.get("is_post", 0)),
+                        "is_comment": int(decoded_data.get("is_comment", 0)),
+                        "is_reaction": int(decoded_data.get("is_reaction", 0)),
                     }
                 return None
             else:
