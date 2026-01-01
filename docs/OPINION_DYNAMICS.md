@@ -105,8 +105,8 @@ Opinion dynamics is controlled via the `opinion_dynamics` section in `simulation
 | `enabled` | boolean | Master switch for opinion dynamics | `true` |
 | `model_name` | string | Opinion update model to use | `"bounded_confidence"` |
 | `epsilon` | float | Confidence bound threshold | `0.25` |
-| `mu` | float | Opinion update rate | `0.5` |
-| `theta` | float | Polarization parameter | `0.0` |
+| `mu` | float | Convergence rate when within bound (0-1) | `0.5` |
+| `theta` | float | Polarization rate when outside bound | `0.0` |
 | `cold_start` | string | Strategy for agents with no prior opinion | `"neutral"` |
 
 ### Initial Agent Opinions
@@ -144,10 +144,10 @@ Given two agents with opinions **x** (current agent) and **y** (other agent):
 
 If `|y - x| ≤ ε`:
 ```
-x_new = x + μ × |x - y|
+x_new = x + μ × (y - x)
 ```
 
-The agent moves toward the other agent's opinion at rate **μ**.
+The agent moves toward the other agent's opinion at rate **μ**, converging their positions.
 
 #### Case 2: Opinion Difference Exceeds Confidence Bound
 
@@ -179,13 +179,15 @@ x = y
 - **Small ε (0.1-0.3)**: Agents only influenced by very similar opinions → **opinion clustering**
 - **Large ε (0.5-1.0)**: Agents influenced by diverse opinions → **consensus formation**
 
-**Mu (μ)** - Update Rate:
-- **Small μ (0.1-0.3)**: Slow opinion evolution
-- **Large μ (0.7-0.9)**: Rapid opinion changes
+**Mu (μ)** - Convergence Rate:
+- **Small μ (0.1-0.3)**: Slow convergence toward similar opinions
+- **Large μ (0.7-0.9)**: Rapid convergence toward similar opinions
+- Controls the strength of opinion update when within confidence bound
 
-**Theta (θ)** - Polarization:
+**Theta (θ)** - Polarization Rate:
 - **θ = 0**: No polarization (default)
-- **θ > 0**: Opinions polarize when interacting with dissimilar agents
+- **θ > 0**: Opinions polarize away from dissimilar agents by θ units per interaction
+- Only active when opinion difference exceeds epsilon
 
 **Cold Start Strategy**:
 - **"neutral"**: New agents start with neutral opinion (0.5)
@@ -227,17 +229,15 @@ def bounded_confidence(x: float, y: float, epsilon: float = 0.25,
 Opinions are stored in the `agent_opinion` table:
 
 ```python
-class Agent_Opinion(db.Model):
-    id = db.Column(db.String(36), primary_key=True)  # UUID
-    agent_id = db.Column(db.String(36), nullable=False)  # Agent UUID
-    tid = db.Column(db.String(36), nullable=False)  # Round ID
-    topic_id = db.Column(db.String(36), 
-                        db.ForeignKey("interests.iid"), 
-                        nullable=False)  # Topic reference
-    id_interacted_with = db.Column(db.String(36))  # Other agent ID
-    id_post = db.Column(db.String(36), 
-                        db.ForeignKey("post.id"))  # Post reference
-    opinion = db.Column(db.REAL, nullable=False)  # Opinion value [0,1]
+# SQLAlchemy model (simplified for documentation)
+class Agent_Opinion:
+    id: String(36)           # Primary key, UUID
+    agent_id: String(36)     # Agent UUID (NOT NULL)
+    tid: String(36)          # Round ID (NOT NULL)
+    topic_id: String(36)     # Topic reference (NOT NULL, FK to interests.iid)
+    id_interacted_with: String(36)  # Other agent ID (optional)
+    id_post: String(36)      # Post reference (optional, FK to post.id)
+    opinion: Float           # Opinion value in [0,1] (NOT NULL)
 ```
 
 ### Opinion Records
