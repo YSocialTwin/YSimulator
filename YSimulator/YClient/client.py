@@ -1198,10 +1198,10 @@ class SimulationClient:
 
             selected_topic = random.choices(topics, weights=counts, k=1)[0]
         
-        # Get opinion on the selected topic if available
+        # Get opinion on the selected topic if available (only if opinion dynamics is enabled)
         topic_opinion = None
         topic_opinion_label = None
-        if selected_topic and agent.opinions and selected_topic in agent.opinions:
+        if self._is_opinion_dynamics_enabled() and selected_topic and agent.opinions and selected_topic in agent.opinions:
             topic_opinion = agent.opinions[selected_topic]
             topic_opinion_label = self._map_opinion_to_group(topic_opinion)
 
@@ -1221,7 +1221,7 @@ class SimulationClient:
             "topic": selected_topic,  # Include the sampled topic
         }
         
-        # Add opinion information if available
+        # Add opinion information if available and opinion dynamics is enabled
         if topic_opinion is not None and topic_opinion_label:
             attrs["topic_opinion"] = topic_opinion_label
             attrs["topic_opinion_value"] = topic_opinion
@@ -2755,6 +2755,10 @@ class SimulationClient:
             dict: Mapping of topic_id to new opinion value, or None if no updates
         """
         try:
+            # Check if opinion dynamics is enabled
+            if not self._is_opinion_dynamics_enabled():
+                return None
+            
             # Get opinion dynamics config
             opinion_config = self.simulation_config.get("opinion_dynamics", {})
             if not opinion_config:
@@ -2874,6 +2878,16 @@ class SimulationClient:
         # Fallback
         return "Neutral"
 
+    def _is_opinion_dynamics_enabled(self) -> bool:
+        """
+        Check if opinion dynamics is enabled in the simulation configuration.
+        
+        Returns:
+            bool: True if opinion dynamics is enabled, False otherwise
+        """
+        opinion_config = self.simulation_config.get("opinion_dynamics", {})
+        return opinion_config.get("enabled", False)
+
     def _get_opinions_for_post(self, agent_id: str, post_id: str) -> dict:
         """
         Get agent's opinions on the topics discussed in a post.
@@ -2890,6 +2904,10 @@ class SimulationClient:
             }
         """
         try:
+            # Check if opinion dynamics is enabled
+            if not self._is_opinion_dynamics_enabled():
+                return {"topics": [], "opinions": {}, "opinion_values": {}}
+            
             # Get agent profile
             agent_profile = next(
                 (a for a in self.agent_profiles if a.id == agent_id), None

@@ -738,8 +738,9 @@ class OrchestratorServer:
                         round_id=self.current_round_id,
                     )
                 
-                # Initialize opinions for newly registered agents
-                if agent_profile and agent_profile.opinions:
+                # Initialize opinions for newly registered agents (only if opinion dynamics is enabled)
+                opinion_config = self.simulation_config.get("opinion_dynamics", {})
+                if opinion_config.get("enabled", False) and agent_profile and agent_profile.opinions:
                     # Get interest IDs for the agent's topics
                     for topic_name, opinion_value in agent_profile.opinions.items():
                         # Get or create the interest/topic in the database

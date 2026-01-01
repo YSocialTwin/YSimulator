@@ -108,6 +108,7 @@
     "enable_console_log": true
   },
   "opinion_dynamics": {
+    "enabled": true,
     "model_name": "bounded_confidence",
     "parameters": {
       "epsilon": 0.25,
