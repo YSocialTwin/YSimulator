@@ -390,21 +390,22 @@ class OrchestratorServer:
         """
         Ensure an agent has an opinion recorded for a topic.
         
-        For regular agents: Use cached profile opinion or neutral (0.5) as fallback.
-        For page agents posting articles on new topics:
-          - Rule-based: Generate random opinion [0,1]
-          - LLM-based: Infer opinion from article content
+        This is a safety fallback that creates opinions if they don't exist.
+        For page agents, the client should have already inferred opinions via LLM
+        before submitting the POST action. This method just provides defaults.
         
-        This is called when an agent posts about a topic to ensure they have an opinion
-        on it in the database, which is required for opinion dynamics calculations.
+        For regular agents: Use cached profile opinion or neutral (0.5) as fallback.
+        For page agents: Use neutral (0.5) as placeholder (client should set opinion first).
         
         Only executes when opinion dynamics is enabled in simulation config.
+        
+        NOTE: Server does NOT call LLM service. All LLM interactions happen on client side.
         
         Args:
             agent_id: Agent UUID
             topic_id: Topic UUID (from interests table)
             topic_name: Topic name for looking up in cached profile
-            article_content: Optional article text for LLM opinion inference
+            article_content: Unused (kept for backwards compatibility)
         """
         # Only enforce this constraint when opinion dynamics is enabled
         opinion_config = self.simulation_config.get("opinion_dynamics", {})
@@ -416,29 +417,20 @@ class OrchestratorServer:
         if existing_opinion is not None:
             return  # Opinion already exists
         
-        # Agent doesn't have opinion - need to create one
-        # Check if this is a page agent
+        # Agent doesn't have opinion - need to create one as fallback
         cached_profile = self.agent_profiles_cache.get(agent_id)
         is_page_agent = cached_profile and cached_profile.is_page == 1
-        is_llm_agent = cached_profile and cached_profile.llm
         
         opinion_value = None
         
         if is_page_agent:
-            # Page agent posting about a new topic
-            if is_llm_agent and article_content:
-                # LLM page agent: infer opinion from article content
-                opinion_value = self._infer_opinion_from_article(article_content, topic_name)
-                self.logger.info(
-                    f"LLM page agent {agent_id}: inferred opinion {opinion_value} on topic '{topic_name}' from article content"
-                )
-            else:
-                # Rule-based page agent: assign random opinion
-                import random
-                opinion_value = random.random()
-                self.logger.info(
-                    f"Rule-based page agent {agent_id}: assigned random opinion {opinion_value} on topic '{topic_name}'"
-                )
+            # Page agent: Client should have already set opinion via LLM/random
+            # This is just a fallback - use neutral placeholder
+            opinion_value = 0.5
+            self.logger.warning(
+                f"Page agent {agent_id}: no opinion found for topic '{topic_name}'. "
+                f"Using neutral fallback (0.5). Client should have set opinion first."
+            )
         else:
             # Regular agent: try to get from cached profile
             if cached_profile and cached_profile.opinions:
@@ -473,57 +465,7 @@ class OrchestratorServer:
             id_post=None,
         )
     
-    def _infer_opinion_from_article(self, article_content: str, topic_name: str) -> float:
-        """
-        Use LLM to infer opinion on a topic from article content.
-        
-        Uses the infer_article_opinion method from llm_service.py which selects
-        from discrete opinion categories defined in simulation_config.json.
-        
-        Args:
-            article_content: Article text to analyze
-            topic_name: Topic to infer opinion about
-        
-        Returns:
-            float: Opinion value in [0, 1] range
-        """
-        try:
-            # Get opinion groups from simulation config
-            opinion_config = self.simulation_config.get("opinion_dynamics", {})
-            opinion_groups = opinion_config.get("opinion_groups", {})
-            
-            if not opinion_groups:
-                # No opinion groups configured, use random
-                self.logger.warning(
-                    f"No opinion_groups configured in simulation_config.json. Using random value."
-                )
-                import random
-                return random.random()
-            
-            # Check if LLM service is available
-            if not hasattr(self, 'llm_service') or self.llm_service is None:
-                self.logger.warning(
-                    f"LLM service not available for opinion inference. Using random value."
-                )
-                import random
-                return random.random()
-            
-            # Call LLM service to infer opinion using discrete categories
-            import ray
-            opinion_value = ray.get(
-                self.llm_service.infer_article_opinion.remote(
-                    article_content, topic_name, opinion_groups
-                )
-            )
-            
-            return opinion_value
-                
-        except Exception as e:
-            self.logger.error(
-                f"Error inferring opinion from article: {e}. Using random value."
-            )
-            import random
-            return random.random()
+
 
     def _reaction_to_sentiment(self, reaction_type: str) -> Optional[Dict[str, float]]:
         """

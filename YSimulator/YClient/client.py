@@ -2887,6 +2887,67 @@ class SimulationClient:
         """
         opinion_config = self.simulation_config.get("opinion_dynamics", {})
         return opinion_config.get("enabled", False)
+    
+    def _infer_page_agent_opinion(self, agent_id: str, article_content: str, topic_name: str) -> float:
+        """
+        Infer opinion for a page agent on a topic from article content.
+        
+        This method is called CLIENT-SIDE before submitting article posts.
+        - LLM page agents: Use LLM service to infer opinion from article
+        - Rule-based page agents: Generate random opinion
+        
+        Args:
+            agent_id: Agent UUID
+            article_content: Article text to analyze
+            topic_name: Topic to infer opinion about
+            
+        Returns:
+            float: Opinion value in [0, 1] range
+        """
+        try:
+            # Get agent profile to determine if LLM or rule-based
+            agent_profile = next(
+                (a for a in self.agent_profiles if a.id == agent_id), None
+            )
+            if not agent_profile:
+                self.logger.warning(f"Agent profile not found for {agent_id}, using random opinion")
+                return random.random()
+            
+            # Check if this is an LLM agent
+            if agent_profile.llm:
+                # LLM page agent: infer opinion from article content using LLM service
+                opinion_config = self.simulation_config.get("opinion_dynamics", {})
+                opinion_groups = opinion_config.get("opinion_groups", {})
+                
+                if not opinion_groups:
+                    self.logger.warning("No opinion_groups configured, using random opinion")
+                    return random.random()
+                
+                # Call LLM service to infer opinion
+                opinion_value = ray.get(
+                    self.llm.infer_article_opinion.remote(
+                        article_content, topic_name, opinion_groups
+                    )
+                )
+                self.logger.info(
+                    f"LLM page agent {agent_id}: inferred opinion {opinion_value} "
+                    f"on topic '{topic_name}' from article content"
+                )
+                return opinion_value
+            else:
+                # Rule-based page agent: random opinion
+                opinion_value = random.random()
+                self.logger.info(
+                    f"Rule-based page agent {agent_id}: assigned random opinion {opinion_value} "
+                    f"on topic '{topic_name}'"
+                )
+                return opinion_value
+                
+        except Exception as e:
+            self.logger.error(
+                f"Error inferring opinion for page agent {agent_id}: {e}. Using random value."
+            )
+            return random.random()
 
     def _get_opinions_for_post(self, agent_id: str, post_id: str) -> dict:
         """
