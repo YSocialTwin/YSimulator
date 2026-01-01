@@ -6,6 +6,16 @@
 
 ---
 
+## 📚 Documentation Navigation
+
+- **[← Documentation Index](INDEX.md)** - Complete documentation guide
+- **[Configuration Guide](CONFIG.md)** - Configure recommendation strategies
+- **[Redis Integration](RECSYS_REDIS_SUPPORT.md)** - Redis support details
+- **[Database & Storage](REDIS_DATABASE_ANALYSIS.md)** - Performance and data structures
+- **[Architecture Overview](ARCHITECTURE.md)** - System architecture
+
+---
+
 ## Table of Contents
 
 1. [Overview](#overview)
