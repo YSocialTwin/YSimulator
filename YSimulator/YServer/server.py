@@ -477,6 +477,9 @@ class OrchestratorServer:
         """
         Use LLM to infer opinion on a topic from article content.
         
+        Uses the infer_article_opinion method from llm_service.py which selects
+        from discrete opinion categories defined in simulation_config.json.
+        
         Args:
             article_content: Article text to analyze
             topic_name: Topic to infer opinion about
@@ -485,40 +488,35 @@ class OrchestratorServer:
             float: Opinion value in [0, 1] range
         """
         try:
-            # Import LLM service
-            from YSimulator.YClient.LLM_interactions.llm_service import LLMService
+            # Get opinion groups from simulation config
+            opinion_config = self.simulation_config.get("opinion_dynamics", {})
+            opinion_groups = opinion_config.get("opinion_groups", {})
             
-            # Create prompt for opinion inference
-            prompt = f"""Analyze this article and determine its stance on the topic "{topic_name}".
-
-Article:
-{article_content[:1000]}  
-
-Rate the article's stance from 0 to 1, where:
-- 0.0 = Strongly against {topic_name}
-- 0.5 = Neutral on {topic_name}
-- 1.0 = Strongly in favor of {topic_name}
-
-Respond with ONLY a single number between 0 and 1."""
-            
-            # Get LLM response
-            llm_service = LLMService()
-            response = llm_service.generate_generic_response(prompt)
-            
-            # Parse numeric value from response
-            import re
-            match = re.search(r'0?\.\d+|[01]\.?\d*', response)
-            if match:
-                opinion_value = float(match.group())
-                # Clamp to [0, 1] range
-                opinion_value = max(0.0, min(1.0, opinion_value))
-                return opinion_value
-            else:
+            if not opinion_groups:
+                # No opinion groups configured, use random
                 self.logger.warning(
-                    f"Could not parse opinion from LLM response: {response}. Using random value."
+                    f"No opinion_groups configured in simulation_config.json. Using random value."
                 )
                 import random
                 return random.random()
+            
+            # Check if LLM service is available
+            if not hasattr(self, 'llm_service') or self.llm_service is None:
+                self.logger.warning(
+                    f"LLM service not available for opinion inference. Using random value."
+                )
+                import random
+                return random.random()
+            
+            # Call LLM service to infer opinion using discrete categories
+            import ray
+            opinion_value = ray.get(
+                self.llm_service.infer_article_opinion.remote(
+                    article_content, topic_name, opinion_groups
+                )
+            )
+            
+            return opinion_value
                 
         except Exception as e:
             self.logger.error(

@@ -659,6 +659,75 @@ class LLMService:
             traceback.print_exc()
             return None
     
+    def infer_article_opinion(self, article_content: str, topic_name: str, opinion_groups: dict) -> float:
+        """
+        Infer opinion on a topic from article content using discrete opinion categories.
+        
+        Uses LLM to classify the article's stance on a topic using predefined opinion groups,
+        then maps the selected category to a numeric value in [0, 1] range.
+        
+        Args:
+            article_content: Article text to analyze (first 1000 chars)
+            topic_name: Topic to infer opinion about
+            opinion_groups: Dict mapping opinion labels to [min, max] ranges
+                          e.g., {"Strongly against": [0.0, 0.2], "Neutral": [0.4, 0.6], ...}
+            
+        Returns:
+            float: Opinion value in [0, 1] range (midpoint of selected category range)
+        """
+        try:
+            # Get prompts from configuration
+            config = self.prompts_config.get("infer_article_opinion", {})
+            system_template = config.get("system_template",
+                "You are an opinion classification assistant. Analyze articles and determine their stance on topics.")
+            user_template = config.get("user_template",
+                "Analyze this article and determine its stance on the topic '{topic}'.\n\n" +
+                "Article excerpt:\n{article_text}\n\n" +
+                "What is the article's stance? Choose ONLY ONE from these options:\n{opinion_options}\n\n" +
+                "Your choice (ONE WORD ONLY):")
+            
+            # Format opinion options for prompt
+            opinion_options = "\n".join([f"- {label}" for label in opinion_groups.keys()])
+            
+            # Truncate article content
+            article_excerpt = article_content[:1000] if len(article_content) > 1000 else article_content
+            
+            # Build prompt
+            prompt = ChatPromptTemplate.from_messages([
+                ("system", system_template),
+                ("user", user_template)
+            ])
+            
+            chain = prompt | self.llm | StrOutputParser()
+            response = chain.invoke({
+                "topic": topic_name,
+                "article_text": article_excerpt,
+                "opinion_options": opinion_options
+            }).strip()
+            
+            # Find which opinion group the LLM selected
+            response_lower = response.lower()
+            selected_group = None
+            for label in opinion_groups.keys():
+                if label.lower() in response_lower:
+                    selected_group = label
+                    break
+            
+            if selected_group and selected_group in opinion_groups:
+                # Map to numeric value using midpoint of range
+                range_values = opinion_groups[selected_group]
+                opinion_value = (range_values[0] + range_values[1]) / 2.0
+                return opinion_value
+            else:
+                # LLM response didn't match any category, use random
+                import random
+                return random.random()
+                
+        except Exception as e:
+            # If extraction fails, return random value
+            import random
+            return random.random()
+    
     def generate_image_commentary(self, image_description: str, topics: List[str] = None, 
                                    agent_attrs: dict = None, cluster_id: int = 0) -> str:
         """

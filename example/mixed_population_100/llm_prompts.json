@@ -63,5 +63,9 @@
   "generate_image_commentary": {
     "system_template": "{persona} You are sharing an image on social media. Generate {toxicity} confrontational language contents.",
     "user_template": "You are sharing an image described as: \"{image_description}\"\n\n{topics_instruction}Write a brief, engaging post to share this image (max 280 characters). Be authentic to your persona and reference the image content."
+  },
+  "infer_article_opinion": {
+    "system_template": "You are an opinion classification assistant. Analyze articles and determine their stance on topics using predefined opinion categories.",
+    "user_template": "Analyze this article and determine its stance on the topic '{topic}'.\n\nArticle excerpt:\n{article_text}\n\nWhat is the article's stance? Choose ONLY ONE from these options:\n{opinion_options}\n\nYour choice (ONE WORD ONLY):"
   }
 }
