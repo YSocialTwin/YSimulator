@@ -2700,8 +2700,11 @@ class OrchestratorServer:
                 return []
             else:
                 # SQL implementation
+                from sqlalchemy.orm import Session
                 from YSimulator.YServer.classes.models import Follow
-                with self.db.Session() as session:
+                
+                session = Session(self.db.engine)
+                try:
                     # Get list of user_ids that agent follows (where agent is the follower and action='follow')
                     followees_query = session.query(Follow.user_id).filter(
                         Follow.follower_id == agent_id,
@@ -2721,6 +2724,8 @@ class OrchestratorServer:
                             opinions.append(opinion)
                     
                     return opinions
+                finally:
+                    session.close()
         except Exception as e:
             self.logger.error(
                 f"Error getting neighbors opinions: {e}",
