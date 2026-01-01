@@ -247,6 +247,22 @@ class LLMService:
         # Get toxicity level (default to "no" if not provided)
         toxicity = agent_attrs.get("toxicity", "no") if agent_attrs else "no"
         
+        # Get opinions on the post's topics if available
+        opinion_instruction = ""
+        if agent_attrs and "post_topics" in agent_attrs and agent_attrs["post_topics"]:
+            topics = agent_attrs["post_topics"]
+            opinions = agent_attrs.get("post_opinions", {})
+            
+            if topics and opinions:
+                opinion_parts = []
+                for topic in topics:
+                    if topic in opinions:
+                        opinion_parts.append(f"{topic}: {opinions[topic]}")
+                
+                if opinion_parts:
+                    opinion_str = ", ".join(opinion_parts)
+                    opinion_instruction = f" Your opinions on the discussed topics: {opinion_str}. Express your viewpoint accordingly."
+        
         # Get prompt templates from configuration
         system_template = self.prompts_config["generate_comment"]["system_template"]
         user_template = self.prompts_config["generate_comment"]["user_template"]
@@ -270,6 +286,10 @@ class LLMService:
             post_content=post_content,
             thread_context_instruction=thread_context_instruction
         )
+        
+        # Add opinion instruction if available
+        if opinion_instruction:
+            user_msg += opinion_instruction
         
         prompt = ChatPromptTemplate.from_messages([
             ("system", system_msg),
@@ -306,6 +326,22 @@ class LLMService:
         # Build persona using attributes or fallback
         persona = self._build_persona(cluster_id, agent_attrs)
         
+        # Get opinions on the post's topics if available
+        opinion_instruction = ""
+        if agent_attrs and "post_topics" in agent_attrs and agent_attrs["post_topics"]:
+            topics = agent_attrs["post_topics"]
+            opinions = agent_attrs.get("post_opinions", {})
+            
+            if topics and opinions:
+                opinion_parts = []
+                for topic in topics:
+                    if topic in opinions:
+                        opinion_parts.append(f"{topic}: {opinions[topic]}")
+                
+                if opinion_parts:
+                    opinion_str = ", ".join(opinion_parts)
+                    opinion_instruction = f" Your opinions on the discussed topics: {opinion_str}. React accordingly."
+        
         # Get prompt templates from configuration
         system_template = self.prompts_config["generate_read_reaction"]["system_template"]
         user_template = self.prompts_config["generate_read_reaction"]["user_template"]
@@ -313,6 +349,10 @@ class LLMService:
         # Format templates
         system_msg = system_template.format(persona=persona)
         user_msg = user_template.format(post_content=post_content)
+        
+        # Add opinion instruction if available
+        if opinion_instruction:
+            user_msg += opinion_instruction
         
         prompt = ChatPromptTemplate.from_messages([
             ("system", system_msg),
@@ -382,6 +422,22 @@ class LLMService:
         # Build persona using attributes or fallback
         persona = self._build_persona(cluster_id, agent_attrs)
         
+        # Get opinions on the post's topics if available
+        opinion_instruction = ""
+        if agent_attrs and "post_topics" in agent_attrs and agent_attrs["post_topics"]:
+            topics = agent_attrs["post_topics"]
+            opinions = agent_attrs.get("post_opinions", {})
+            
+            if topics and opinions:
+                opinion_parts = []
+                for topic in topics:
+                    if topic in opinions:
+                        opinion_parts.append(f"{topic}: {opinions[topic]}")
+                
+                if opinion_parts:
+                    opinion_str = ", ".join(opinion_parts)
+                    opinion_instruction = f" Your opinions on the discussed topics: {opinion_str}. Consider your viewpoint when deciding how to engage."
+        
         # Get prompt templates from configuration
         search_action_config = self.prompts_config.get("decide_search_action", {})
         system_template = search_action_config.get("system_template")
@@ -400,6 +456,10 @@ class LLMService:
         # Format templates
         system_msg = system_template.format(persona=persona)
         user_msg = user_template.format(post_content=post_content)
+        
+        # Add opinion instruction if available
+        if opinion_instruction:
+            user_msg += opinion_instruction
         
         prompt = ChatPromptTemplate.from_messages([
             ("system", system_msg),

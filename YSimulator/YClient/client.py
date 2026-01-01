@@ -1512,8 +1512,18 @@ class SimulationClient:
                     )
                 )
 
-                # Fire off async LLM call to generate comment with agent attributes, author name, and thread context
+                # Get agent attributes including opinions on post topics
                 agent_attrs = self._extract_agent_attrs(agent)
+                
+                # Get opinions for the topics in this post
+                opinion_info = self._get_opinions_for_post(agent.id, target_post)
+                if opinion_info["topics"]:
+                    # Add opinion information to agent attrs
+                    agent_attrs["post_topics"] = opinion_info["topics"]
+                    agent_attrs["post_opinions"] = opinion_info["opinions"]
+                    agent_attrs["post_opinion_values"] = opinion_info["opinion_values"]
+                
+                # Fire off async LLM call to generate comment with agent attributes, author name, and thread context
                 future = self.llm.generate_comment.remote(
                     agent.cluster, post_content, agent_attrs, author_name, thread_context
                 )
@@ -1567,17 +1577,82 @@ class SimulationClient:
             post_data = ray.get(self.server.get_post.remote(target_post, client_id=self.client_id))
             if post_data:
                 post_content = post_data.get("tweet", "")
-                # Fire off async LLM call to decide reaction with agent attributes
+                # Get agent attributes
                 agent_attrs = self._extract_agent_attrs(agent)
+                
+                # Get opinions for the topics in this post
+                opinion_info = self._get_opinions_for_post(agent.id, target_post)
+                if opinion_info["topics"]:
+                    # Add opinion information to agent attrs
+                    agent_attrs["post_topics"] = opinion_info["topics"]
+                    agent_attrs["post_opinions"] = opinion_info["opinions"]
+                    agent_attrs["post_opinion_values"] = opinion_info["opinion_values"]
+                
+                # Fire off async LLM call to decide reaction with agent attributes
                 future = generate_llm_read_async(self.llm, agent.cluster, post_content, agent_attrs)
                 pending_llm_reactions.append((agent.id, agent.cluster, target_post, future))
         else:
             # Rule-based: Randomly choose LIKE, DISLIKE (ANGRY), or IGNORE
-            action = generate_rule_based_read(agent.id, agent.cluster, target_post)
-            if action:  # Only add if not IGNORE
-                actions.append(action)
-                # Track for secondary follow (rule-based read)
-                post_data = ray.get(self.server.get_post.remote(target_post, client_id=self.client_id))
+            # Consider opinion when choosing reaction
+            post_data = ray.get(self.server.get_post.remote(target_post, client_id=self.client_id))
+            if post_data:
+                # Get opinions for the topics in this post
+                opinion_info = self._get_opinions_for_post(agent.id, target_post)
+                
+                # Generate reaction based on opinion if available
+                if opinion_info["topics"] and opinion_info["opinion_values"]:
+                    # Calculate average opinion
+                    avg_opinion = sum(opinion_info["opinion_values"].values()) / len(opinion_info["opinion_values"])
+                    
+                    # Choose reaction based on opinion
+                    # Higher opinion -> more likely to LIKE, lower -> more likely to express negative reaction
+                    if avg_opinion > 0.6:
+                        # Positive opinion - mostly LIKE
+                        reaction_type = random.choices(
+                            ["LIKE", "LOVE", "IGNORE"],
+                            weights=[0.6, 0.3, 0.1]
+                        )[0]
+                    elif avg_opinion < 0.4:
+                        # Negative opinion - more likely to express disagreement or ignore
+                        reaction_type = random.choices(
+                            ["ANGRY", "SAD", "IGNORE"],
+                            weights=[0.4, 0.2, 0.4]
+                        )[0]
+                    else:
+                        # Neutral - balanced reactions
+                        reaction_type = random.choices(
+                            ["LIKE", "IGNORE", "ANGRY"],
+                            weights=[0.4, 0.4, 0.2]
+                        )[0]
+                    
+                    if reaction_type != "IGNORE":
+                        action = ActionDTO(agent.id, agent.cluster, reaction_type, target_post_id=target_post)
+                        actions.append(action)
+                        # Track for secondary follow
+                        rule_based_interactions.append(
+                            (
+                                agent.id,
+                                agent.cluster,
+                                post_data.get("user_id"),
+                                post_data.get("tweet", ""),
+                                False,
+                            )
+                        )
+                else:
+                    # No opinion information, use default rule-based behavior
+                    action = generate_rule_based_read(agent.id, agent.cluster, target_post)
+                    if action:  # Only add if not IGNORE
+                        actions.append(action)
+                        # Track for secondary follow (rule-based read)
+                        rule_based_interactions.append(
+                            (
+                                agent.id,
+                                agent.cluster,
+                                post_data.get("user_id"),
+                                post_data.get("tweet", ""),
+                                False,
+                            )
+                        )
                 if post_data:
                     rule_based_interactions.append(
                         (
@@ -1928,6 +2003,15 @@ class SimulationClient:
                 f"search action: LLM deciding engagement for agent {agent.username}",
                 extra={"extra_data": {"agent_id": agent.id, "target_post_id": target_post}},
             )
+            
+            # Get opinions for the topics in this post
+            opinion_info = self._get_opinions_for_post(agent.id, target_post)
+            if opinion_info["topics"]:
+                # Add opinion information to agent attrs
+                agent_attrs["post_topics"] = opinion_info["topics"]
+                agent_attrs["post_opinions"] = opinion_info["opinions"]
+                agent_attrs["post_opinion_values"] = opinion_info["opinion_values"]
+            
             future = generate_llm_search_action_async(
                 self.llm, agent.cluster, post_content, agent_attrs
             )
@@ -2785,6 +2869,70 @@ class SimulationClient:
         
         # Fallback
         return "Neutral"
+
+    def _get_opinions_for_post(self, agent_id: str, post_id: str) -> dict:
+        """
+        Get agent's opinions on the topics discussed in a post.
+        
+        Args:
+            agent_id: UUID of the agent
+            post_id: UUID of the post
+            
+        Returns:
+            dict: {
+                "topics": List of topic names,
+                "opinions": Dict mapping topic names to opinion labels,
+                "opinion_values": Dict mapping topic names to numeric values
+            }
+        """
+        try:
+            # Get agent profile
+            agent_profile = next(
+                (a for a in self.agent_profiles if a.id == agent_id), None
+            )
+            if not agent_profile or not agent_profile.opinions:
+                return {"topics": [], "opinions": {}, "opinion_values": {}}
+            
+            # Get post topics
+            topic_ids = ray.get(
+                self.server.get_post_topics.remote(post_id, client_id=self.client_id)
+            )
+            if not topic_ids:
+                return {"topics": [], "opinions": {}, "opinion_values": {}}
+            
+            # For each topic, get the agent's opinion
+            topics = []
+            opinions = {}
+            opinion_values = {}
+            
+            for topic_id in topic_ids:
+                # Get topic name
+                topic_name = ray.get(
+                    self.server.get_topic_name_from_id.remote(topic_id, client_id=self.client_id)
+                )
+                if not topic_name:
+                    continue
+                
+                # Get agent's opinion on this topic
+                if topic_name in agent_profile.opinions:
+                    opinion_value = agent_profile.opinions[topic_name]
+                    opinion_label = self._map_opinion_to_group(opinion_value)
+                    
+                    topics.append(topic_name)
+                    opinions[topic_name] = opinion_label
+                    opinion_values[topic_name] = opinion_value
+            
+            return {
+                "topics": topics,
+                "opinions": opinions,
+                "opinion_values": opinion_values
+            }
+        except Exception as e:
+            self.logger.error(
+                f"Error getting opinions for post {post_id}: {e}",
+                extra={"extra_data": {"error": str(e), "agent_id": agent_id, "post_id": post_id}}
+            )
+            return {"topics": [], "opinions": {}, "opinion_values": {}}
 
     def _process_secondary_follows(
         self, secondary_follow_candidates: list, rule_based_interactions: list, actions: list
