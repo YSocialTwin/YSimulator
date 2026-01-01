@@ -273,6 +273,13 @@ class DatabaseMiddleware:
                 self.redis_client.hset(key, mapping=redis_data)
                 # Add to user set
                 self.redis_client.sadd(self._redis_key("user_mgmt", "ids"), user_id)
+
+                # Create username index for fast lookup
+                username = user_data.get("username")
+                if username:
+                    username_key = self._redis_key("user_mgmt:by_username", username)
+                    self.redis_client.set(username_key, user_id)
+
                 return True
             else:
                 # Store in SQLite
@@ -330,6 +337,13 @@ class DatabaseMiddleware:
                     self.redis_client.hset(key, mapping=redis_data)
                     # Add to user set
                     self.redis_client.sadd(self._redis_key("user_mgmt", "ids"), user_id)
+
+                    # Create username index for fast lookup
+                    username = user_data.get("username")
+                    if username:
+                        username_key = self._redis_key("user_mgmt:by_username", username)
+                        self.redis_client.set(username_key, user_id)
+
                     registered_count += 1
                     newly_registered_ids.add(user_id)
                 return (registered_count, newly_registered_ids)
@@ -1223,31 +1237,62 @@ class DatabaseMiddleware:
         Returns:
             List[Dict]: List of user dictionaries with id, username, and archetype
         """
-        from YSimulator.YServer.classes.models import User_mgmt
+        if self.use_redis:
+            try:
+                # Get all user IDs from the set
+                user_ids_key = self._redis_key("user_mgmt", "ids")
+                user_ids = self.redis_client.smembers(user_ids_key)
 
-        session = Session(self.engine)
-        try:
-            users = session.query(User_mgmt).all()
+                result = []
+                for user_id in user_ids:
+                    # Decode if bytes
+                    user_id_str = user_id.decode() if isinstance(user_id, bytes) else user_id
+                    # Get full user data
+                    user_data = self.get_user(user_id_str)
+                    if user_data:
+                        # Extract only the fields we need
+                        result.append(
+                            {
+                                "id": user_data.get("id"),
+                                "username": user_data.get("username"),
+                                "archetype": user_data.get("archetype"),
+                            }
+                        )
 
-            result = []
-            for user in users:
-                result.append(
-                    {
-                        "id": user.id,
-                        "username": user.username,
-                        "archetype": user.archetype,
-                    }
+                return result
+
+            except Exception as e:
+                self.logger.error(
+                    f"Error getting all users from Redis: {e}",
+                    extra={"extra_data": {"error": str(e)}},
                 )
+                return []
+        else:
+            from YSimulator.YServer.classes.models import User_mgmt
 
-            return result
+            session = Session(self.engine)
+            try:
+                users = session.query(User_mgmt).all()
 
-        except Exception as e:
-            self.logger.error(
-                f"Error getting all users: {e}", extra={"extra_data": {"error": str(e)}}
-            )
-            return []
-        finally:
-            session.close()
+                result = []
+                for user in users:
+                    result.append(
+                        {
+                            "id": user.id,
+                            "username": user.username,
+                            "archetype": user.archetype,
+                        }
+                    )
+
+                return result
+
+            except Exception as e:
+                self.logger.error(
+                    f"Error getting all users: {e}", extra={"extra_data": {"error": str(e)}}
+                )
+                return []
+            finally:
+                session.close()
 
     def update_user_archetype(self, user_id: str, new_archetype: str) -> bool:
         """
@@ -1260,35 +1305,60 @@ class DatabaseMiddleware:
         Returns:
             bool: True if update successful, False otherwise
         """
-        from YSimulator.YServer.classes.models import User_mgmt
+        if self.use_redis:
+            try:
+                # Check if user exists
+                user_key = self._redis_key("user_mgmt", user_id)
+                if not self.redis_client.exists(user_key):
+                    self.logger.warning(f"User {user_id} not found for archetype update")
+                    return False
 
-        session = Session(self.engine)
-        try:
-            user = session.query(User_mgmt).filter(User_mgmt.id == user_id).first()
-
-            if user:
-                user.archetype = new_archetype
-                session.commit()
+                # Update archetype field in user hash
+                self.redis_client.hset(user_key, "archetype", new_archetype)
                 return True
-            else:
-                self.logger.warning(f"User {user_id} not found for archetype update")
-                return False
 
-        except Exception as e:
-            session.rollback()
-            self.logger.error(
-                f"Error updating user archetype: {e}",
-                extra={
-                    "extra_data": {
-                        "error": str(e),
-                        "user_id": user_id,
-                        "new_archetype": new_archetype,
-                    }
-                },
-            )
-            return False
-        finally:
-            session.close()
+            except Exception as e:
+                self.logger.error(
+                    f"Error updating user archetype in Redis: {e}",
+                    extra={
+                        "extra_data": {
+                            "error": str(e),
+                            "user_id": user_id,
+                            "new_archetype": new_archetype,
+                        }
+                    },
+                )
+                return False
+        else:
+            from YSimulator.YServer.classes.models import User_mgmt
+
+            session = Session(self.engine)
+            try:
+                user = session.query(User_mgmt).filter(User_mgmt.id == user_id).first()
+
+                if user:
+                    user.archetype = new_archetype
+                    session.commit()
+                    return True
+                else:
+                    self.logger.warning(f"User {user_id} not found for archetype update")
+                    return False
+
+            except Exception as e:
+                session.rollback()
+                self.logger.error(
+                    f"Error updating user archetype: {e}",
+                    extra={
+                        "extra_data": {
+                            "error": str(e),
+                            "user_id": user_id,
+                            "new_archetype": new_archetype,
+                        }
+                    },
+                )
+                return False
+            finally:
+                session.close()
 
     def add_website(self, website_data: Dict[str, Any]) -> Optional[str]:
         """
@@ -2468,24 +2538,44 @@ class DatabaseMiddleware:
         Returns:
             dict: User data dict with 'id' and other fields, or None if not found
         """
-        from YSimulator.YServer.classes.models import User_mgmt
+        if self.use_redis:
+            try:
+                # Look up user ID from username index
+                username_key = self._redis_key("user_mgmt:by_username", username)
+                user_id = self.redis_client.get(username_key)
 
-        session = Session(self.engine)
-        try:
-            user = session.query(User_mgmt).filter(User_mgmt.username == username).first()
+                if user_id:
+                    # Decode if bytes
+                    user_id_str = user_id.decode() if isinstance(user_id, bytes) else user_id
+                    # Get user data by ID (reuse existing method)
+                    return self.get_user(user_id_str)
+                return None
 
-            if user:
-                return {"id": user.id, "username": user.username, "email": user.email}
-            return None
+            except Exception as e:
+                self.logger.error(
+                    f"Error getting user by username from Redis: {e}",
+                    extra={"extra_data": {"error": str(e), "username": username}},
+                )
+                return None
+        else:
+            from YSimulator.YServer.classes.models import User_mgmt
 
-        except Exception as e:
-            self.logger.error(
-                f"Error getting user by username: {e}",
-                extra={"extra_data": {"error": str(e), "username": username}},
-            )
-            return None
-        finally:
-            session.close()
+            session = Session(self.engine)
+            try:
+                user = session.query(User_mgmt).filter(User_mgmt.username == username).first()
+
+                if user:
+                    return {"id": user.id, "username": user.username, "email": user.email}
+                return None
+
+            except Exception as e:
+                self.logger.error(
+                    f"Error getting user by username: {e}",
+                    extra={"extra_data": {"error": str(e), "username": username}},
+                )
+                return None
+            finally:
+                session.close()
 
     def add_mention(self, mention_data: Dict[str, Any]) -> bool:
         """
@@ -2933,6 +3023,48 @@ class DatabaseMiddleware:
         Returns:
             dict: Emotion data with 'id', 'emotion', 'icon' fields, or None if not found
         """
+        if self.use_redis:
+            try:
+                # Look up emotion ID from name index
+                emotion_name_key = self._redis_key("emotion:by_name", emotion_name)
+                emotion_id = self.redis_client.get(emotion_name_key)
+
+                if emotion_id:
+                    # Decode if bytes
+                    emotion_id_str = (
+                        emotion_id.decode() if isinstance(emotion_id, bytes) else emotion_id
+                    )
+                    # Get emotion data from hash
+                    emotion_key = self._redis_key("emotion", emotion_id_str)
+                    emotion_data = self.redis_client.hgetall(emotion_key)
+
+                    if emotion_data:
+                        # Decode all keys and values
+                        return {
+                            k.decode() if isinstance(k, bytes) else k: (
+                                v.decode() if isinstance(v, bytes) else v
+                            )
+                            for k, v in emotion_data.items()
+                        }
+
+                # If not found in Redis, fall back to SQL and cache the result
+                emotion = self._get_emotion_by_name_from_sql(emotion_name)
+                if emotion:
+                    # Cache in Redis for future lookups
+                    self._cache_emotion_in_redis(emotion)
+                return emotion
+
+            except Exception as e:
+                self.logger.error(
+                    f"Error getting emotion by name from Redis: {e}",
+                    extra={"extra_data": {"error": str(e), "emotion_name": emotion_name}},
+                )
+                return None
+        else:
+            return self._get_emotion_by_name_from_sql(emotion_name)
+
+    def _get_emotion_by_name_from_sql(self, emotion_name: str) -> Optional[Dict[str, Any]]:
+        """Helper method to get emotion from SQL database."""
         from YSimulator.YServer.classes.models import Emotion
 
         session = Session(self.engine)
@@ -2945,12 +3077,34 @@ class DatabaseMiddleware:
 
         except Exception as e:
             self.logger.error(
-                f"Error getting emotion by name: {e}",
+                f"Error getting emotion by name from SQL: {e}",
                 extra={"extra_data": {"error": str(e), "emotion_name": emotion_name}},
             )
             return None
         finally:
             session.close()
+
+    def _cache_emotion_in_redis(self, emotion_data: Dict[str, Any]) -> bool:
+        """Helper method to cache emotion data in Redis."""
+        try:
+            emotion_id = emotion_data["id"]
+            emotion_name = emotion_data["emotion"]
+
+            # Store emotion data in hash
+            emotion_key = self._redis_key("emotion", emotion_id)
+            self.redis_client.hset(emotion_key, mapping=emotion_data)
+
+            # Create name index
+            emotion_name_key = self._redis_key("emotion:by_name", emotion_name)
+            self.redis_client.set(emotion_name_key, emotion_id)
+
+            return True
+        except Exception as e:
+            self.logger.error(
+                f"Error caching emotion in Redis: {e}",
+                extra={"extra_data": {"error": str(e), "emotion_data": emotion_data}},
+            )
+            return False
 
     def add_post_emotion(self, post_id: str, emotion_id: str) -> bool:
         """
