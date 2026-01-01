@@ -1766,10 +1766,62 @@ class SimulationClient:
                                         self.logger.info(
                                             f"Stored {len(topic_ids)} topics for article {article_id}"
                                         )
+                                        
+                                        # CLIENT-SIDE: Infer and store opinions for LLM page agent on article topics
+                                        if self._is_opinion_dynamics_enabled():
+                                            article_content = f"{article.get('title', '')} {article.get('summary', '')}"
+                                            for topic_name in topic_names[:2]:
+                                                try:
+                                                    opinion_value = self._infer_page_agent_opinion(
+                                                        agent.id, article_content, topic_name
+                                                    )
+                                                    # Get topic ID
+                                                    topic_id = ray.get(
+                                                        self.server.get_topic_id_by_name.remote(topic_name)
+                                                    )
+                                                    if topic_id:
+                                                        # Store opinion in database
+                                                        ray.get(
+                                                            self.server.add_agent_opinion.remote(
+                                                                agent.id, topic_id, opinion_value, None, None
+                                                            )
+                                                        )
+                                                        self.logger.info(
+                                                            f"Stored opinion {opinion_value:.3f} for LLM page {agent.username} on topic '{topic_name}'"
+                                                        )
+                                                except Exception as e:
+                                                    self.logger.warning(
+                                                        f"Failed to infer/store opinion for topic '{topic_name}': {e}"
+                                                    )
                             else:
                                 self.logger.info(
                                     f"Article {article_id} already has {len(existing_topics)} topics"
                                 )
+                                # CLIENT-SIDE: Ensure opinions exist for existing article topics
+                                if self._is_opinion_dynamics_enabled():
+                                    article_content = f"{article.get('title', '')} {article.get('summary', '')}"
+                                    for topic_id, topic_name in existing_topics:
+                                        try:
+                                            # Check if opinion already exists
+                                            existing_opinion = ray.get(
+                                                self.server.get_latest_agent_opinion.remote(agent.id, topic_id)
+                                            )
+                                            if existing_opinion is None:
+                                                opinion_value = self._infer_page_agent_opinion(
+                                                    agent.id, article_content, topic_name
+                                                )
+                                                ray.get(
+                                                    self.server.add_agent_opinion.remote(
+                                                        agent.id, topic_id, opinion_value, None, None
+                                                    )
+                                                )
+                                                self.logger.info(
+                                                    f"Stored opinion {opinion_value:.3f} for LLM page {agent.username} on existing topic '{topic_name}'"
+                                                )
+                                        except Exception as e:
+                                            self.logger.warning(
+                                                f"Failed to ensure opinion for existing topic '{topic_name}': {e}"
+                                            )
                         except Exception as e:
                             self.logger.warning(
                                 f"Failed to extract/store topics for article {article_id}: {e}"
@@ -1818,11 +1870,63 @@ class SimulationClient:
                                     if topic_ids:
                                         self.logger.info(
                                             f"Stored {len(topic_ids)} topics for article {article_id}"
+                                        
+                                        # CLIENT-SIDE: Infer and store opinions for rule-based page agent on article topics
+                                        if self._is_opinion_dynamics_enabled():
+                                            article_content = f"{article.get('title', '')} {article.get('summary', '')}"
+                                            for topic_name in topic_names[:2]:
+                                                try:
+                                                    opinion_value = self._infer_page_agent_opinion(
+                                                        agent.id, article_content, topic_name
+                                                    )
+                                                    # Get topic ID
+                                                    topic_id = ray.get(
+                                                        self.server.get_topic_id_by_name.remote(topic_name)
+                                                    )
+                                                    if topic_id:
+                                                        # Store opinion in database
+                                                        ray.get(
+                                                            self.server.add_agent_opinion.remote(
+                                                                agent.id, topic_id, opinion_value, None, None
+                                                            )
+                                                        )
+                                                        self.logger.info(
+                                                            f"Stored opinion {opinion_value:.3f} for rule-based page {agent.username} on topic '{topic_name}'"
+                                                        )
+                                                except Exception as e:
+                                                    self.logger.warning(
+                                                        f"Failed to infer/store opinion for topic '{topic_name}': {e}"
+                                                    )
                                         )
                             else:
                                 self.logger.info(
                                     f"Article {article_id} already has {len(existing_topics)} topics"
                                 )
+                                # CLIENT-SIDE: Ensure opinions exist for existing article topics
+                                if self._is_opinion_dynamics_enabled():
+                                    article_content = f"{article.get('title', '')} {article.get('summary', '')}"
+                                    for topic_id, topic_name in existing_topics:
+                                        try:
+                                            # Check if opinion already exists
+                                            existing_opinion = ray.get(
+                                                self.server.get_latest_agent_opinion.remote(agent.id, topic_id)
+                                            )
+                                            if existing_opinion is None:
+                                                opinion_value = self._infer_page_agent_opinion(
+                                                    agent.id, article_content, topic_name
+                                                )
+                                                ray.get(
+                                                    self.server.add_agent_opinion.remote(
+                                                        agent.id, topic_id, opinion_value, None, None
+                                                    )
+                                                )
+                                                self.logger.info(
+                                                    f"Stored opinion {opinion_value:.3f} for rule-based page {agent.username} on existing topic '{topic_name}'"
+                                                )
+                                        except Exception as e:
+                                            self.logger.warning(
+                                                f"Failed to ensure opinion for existing topic '{topic_name}': {e}"
+                                            )
                         except Exception as e:
                             self.logger.warning(
                                 f"Failed to extract/store topics for article {article_id}: {e}"
