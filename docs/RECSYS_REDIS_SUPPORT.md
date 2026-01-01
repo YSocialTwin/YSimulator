@@ -788,9 +788,13 @@ def get_neighbors_opinions(agent_id, topic_id):
         Follow.action == 'follow'
     ).all()
     
+    # Extract user IDs from query results (tuples)
+    followee_ids = [row[0] for row in followees]
+    
     # Get each followee's opinion on topic
+    # Note: For production with many followees, consider batch query optimization
     opinions = []
-    for followee_id in followees:
+    for followee_id in followee_ids:
         opinion = get_latest_agent_opinion(followee_id, topic_id)
         if opinion is not None:
             opinions.append(opinion)
