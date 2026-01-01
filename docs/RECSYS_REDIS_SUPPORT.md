@@ -765,3 +765,77 @@ The YSimulator recommendation system provides comprehensive functionality with *
 ### Key Achievement
 
 **All 10 recommendation modes are functional and performant**, with a future-ready architecture that will seamlessly transition to 100% Redis operations when additional caching is implemented. No blind fallbacks, no loss of personalization, and excellent performance today with even better performance tomorrow.
+
+---
+
+## Opinion Dynamics and Redis
+
+### Current Status
+
+The opinion dynamics system includes a `get_neighbors_opinions()` method that retrieves follower opinions for LLM-based opinion evaluation with `evaluation_scope="neighbors"`.
+
+**Current Implementation:**
+- ✅ **SQL**: Fully supported via JOIN queries on Follow table
+- 🔄 **Redis**: Returns empty list (future implementation needed)
+
+### SQL Implementation
+
+```python
+def get_neighbors_opinions(agent_id, topic_id):
+    # Query Follow table for followees
+    followees = session.query(Follow.user_id).filter(
+        Follow.follower_id == agent_id,
+        Follow.action == 'follow'
+    ).all()
+    
+    # Extract user IDs from query results (tuples)
+    followee_ids = [row[0] for row in followees]
+    
+    # Get each followee's opinion on topic
+    # Note: For production with many followees, consider batch query optimization
+    opinions = []
+    for followee_id in followee_ids:
+        opinion = get_latest_agent_opinion(followee_id, topic_id)
+        if opinion is not None:
+            opinions.append(opinion)
+    
+    return opinions
+```
+
+### Future Redis Implementation
+
+To enable Redis support for `get_neighbors_opinions()`, populate:
+
+```redis
+# Followees per user
+ysim:user:{user_id}:followees -> SET of user_ids
+# Example: ysim:user:abc123:followees = {"user456", "user789"}
+
+# Latest opinions per user per topic  
+ysim:user:{user_id}:opinion:{topic_id} -> FLOAT
+# Example: ysim:user:abc123:opinion:politics = 0.75
+```
+
+**Implementation when Redis populated:**
+```python
+# Get followees from Redis SET
+followees = redis_client.smembers(f"ysim:user:{agent_id}:followees")
+
+# Get opinions from Redis
+opinions = []
+for followee_id in followees:
+    opinion = redis_client.get(f"ysim:user:{followee_id}:opinion:{topic_id}")
+    if opinion:
+        opinions.append(float(opinion))
+
+return opinions
+```
+
+**Impact:**
+- LLM evaluation with `evaluation_scope="neighbors"` currently uses SQL
+- Falls back to empty list in Redis (agents won't consider neighbors' opinions)
+- Future Redis implementation will enable full neighbor-aware opinion evaluation
+
+**Note:** Opinion dynamics with `evaluation_scope="interlocutor_only"` works fully in both SQL and Redis modes since it doesn't require neighbor data.
+
+**See also:** [OPINION_DYNAMICS.md](OPINION_DYNAMICS.md) for complete opinion dynamics documentation.

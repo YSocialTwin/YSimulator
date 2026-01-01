@@ -1,14 +1,35 @@
-# Opinion Dynamics: Bounded Confidence Model
+# Opinion Dynamics Models
 
 ## Overview
 
-YSimulator implements a comprehensive **opinion dynamics system** based on the **bounded confidence model**. This system tracks and evolves agent opinions on various topics throughout the simulation, enabling realistic opinion formation, polarization effects, and opinion-based interactions.
+YSimulator implements a comprehensive **opinion dynamics system** with support for **two opinion update models**. This system tracks and evolves agent opinions on various topics throughout the simulation, enabling realistic opinion formation, polarization effects, and opinion-based interactions.
 
 The opinion dynamics module allows agents to:
 - Maintain numeric opinions on topics (ranging from 0 to 1)
 - Update opinions through social interactions (comments, shares)
 - Form new opinions when encountering new topics
 - Express opinions in content generation and reactions
+
+**Related Documentation:**
+- **[Configuration Guide (CONFIG.md)](CONFIG.md)** - Opinion dynamics configuration in `simulation_config.json`
+- **[Redis Integration (RECSYS_REDIS_SUPPORT.md)](RECSYS_REDIS_SUPPORT.md)** - Redis support status for opinion dynamics
+- **[Architecture Overview (ARCHITECTURE.md)](ARCHITECTURE.md)** - System architecture and component interactions
+- **[Example Configurations](../example/)** - Example directories with different opinion dynamics setups
+
+## Supported Models
+
+YSimulator supports two opinion dynamics models:
+
+1. **Bounded Confidence Model** (`bounded_confidence`)
+   - Classic opinion dynamics based on confidence bounds
+   - Mathematical model with convergence/polarization
+   - Works for all agent types (LLM and rule-based)
+
+2. **LLM Evaluation Model** (`llm_evaluation`)
+   - LLM-based opinion reasoning
+   - Natural language evaluation of agreement/disagreement
+   - Works only for LLM-based agents
+   - Can consider opinions of neighbors in evaluation
 
 ---
 
@@ -17,13 +38,14 @@ The opinion dynamics module allows agents to:
 1. [Core Concepts](#core-concepts)
 2. [Configuration](#configuration)
 3. [Bounded Confidence Model](#bounded-confidence-model)
-4. [Opinion Storage](#opinion-storage)
-5. [Opinion Updates](#opinion-updates)
-6. [Page Agent Opinion Handling](#page-agent-opinion-handling)
-7. [Opinion-Based Interactions](#opinion-based-interactions)
-8. [Implementation Architecture](#implementation-architecture)
-9. [API Reference](#api-reference)
-10. [Examples](#examples)
+4. [LLM Evaluation Model](#llm-evaluation-model)
+5. [Opinion Storage](#opinion-storage)
+6. [Opinion Updates](#opinion-updates)
+7. [Page Agent Opinion Handling](#page-agent-opinion-handling)
+8. [Opinion-Based Interactions](#opinion-based-interactions)
+9. [Implementation Architecture](#implementation-architecture)
+10. [API Reference](#api-reference)
+11. [Examples](#examples)
 
 ---
 
@@ -98,16 +120,38 @@ Opinion dynamics is controlled via the `opinion_dynamics` section in `simulation
 }
 ```
 
+### Disabling Opinion Dynamics
+
+To disable opinion dynamics, set `enabled` to `false`:
+
+```json
+{
+  "opinion_dynamics": {
+    "enabled": false
+  }
+}
+```
+
+When disabled:
+- No opinion updates occur during interactions
+- Agents can still have initial opinions defined in `agent_population.json`
+- Opinion-based content generation and reactions still work with initial opinions
+- No opinion records are stored in the database beyond initial values
+- The simulation runs normally without any opinion evolution
+
+You can also completely omit the `opinion_dynamics` section from the configuration, which is equivalent to setting `enabled: false`.
+
 ### Configuration Parameters
 
-| Parameter | Type | Description | Default |
-|-----------|------|-------------|---------|
-| `enabled` | boolean | Master switch for opinion dynamics | `true` |
-| `model_name` | string | Opinion update model to use | `"bounded_confidence"` |
-| `epsilon` | float | Confidence bound threshold | `0.25` |
-| `mu` | float | Convergence rate when within bound (0-1) | `0.5` |
-| `theta` | float | Polarization rate when outside bound | `0.0` |
-| `cold_start` | string | Strategy for agents with no prior opinion | `"neutral"` |
+| Parameter | Type | Description | Default | Models |
+|-----------|------|-------------|---------|--------|
+| `enabled` | boolean | Master switch for opinion dynamics | `true` | Both |
+| `model_name` | string | Opinion update model: `"bounded_confidence"` or `"llm_evaluation"` | `"bounded_confidence"` | Both |
+| `epsilon` | float | Confidence bound threshold | `0.25` | bounded_confidence |
+| `mu` | float | Convergence rate when within bound (0-1) | `0.5` | bounded_confidence |
+| `theta` | float | Polarization rate when outside bound | `0.0` | bounded_confidence |
+| `evaluation_scope` | string | `"interlocutor_only"` or `"neighbors"` | `"interlocutor_only"` | llm_evaluation |
+| `cold_start` | string | Strategy for agents with no prior opinion: `"neutral"` or `"inherited"` | `"neutral"` | Both |
 
 ### Initial Agent Opinions
 
@@ -219,6 +263,214 @@ def bounded_confidence(x: float, y: float, epsilon: float = 0.25,
     - Updated opinion value in [0, 1]
     """
 ```
+
+---
+
+## LLM Evaluation Model
+
+### Model Description
+
+The LLM evaluation model uses **natural language reasoning** to evaluate opinion updates. Instead of mathematical formulas, this model:
+- Uses LLM to assess whether an agent agrees, disagrees, or remains neutral about a post
+- Shifts opinions between discrete opinion classes based on the assessment
+- Can optionally consider the opinions of the agent's social network neighbors
+
+This model is **only available for LLM-based agents** as it requires language understanding capabilities.
+
+### Configuration
+
+The LLM evaluation model is specified in `simulation_config.json`:
+
+```json
+{
+  "opinion_dynamics": {
+    "enabled": true,
+    "model_name": "llm_evaluation",
+    "parameters": {
+      "evaluation_scope": "interlocutor_only",
+      "cold_start": "neutral"
+    },
+    "opinion_groups": {
+      "Strongly against": [0.0, 0.2],
+      "Against": [0.2, 0.4],
+      "Neutral": [0.4, 0.6],
+      "In favor": [0.6, 0.8],
+      "Strongly in favor": [0.8, 1.0]
+    }
+  }
+}
+```
+
+### Parameters
+
+| Parameter | Type | Values | Description | Default |
+|-----------|------|--------|-------------|---------|
+| `evaluation_scope` | string | `"interlocutor_only"` or `"neighbors"` | Scope of opinion evaluation | `"interlocutor_only"` |
+| `cold_start` | string | `"neutral"` or `"inherited"` | Strategy for agents with no prior opinion | `"neutral"` |
+
+**evaluation_scope options:**
+- `"interlocutor_only"`: LLM only considers the post author's opinion
+- `"neighbors"`: LLM also considers the opinions of agents the reader follows
+
+### How It Works
+
+#### Step 1: Opinion Assessment
+
+The LLM is prompted to evaluate whether the agent agrees, disagrees, or remains neutral about the post:
+
+```
+Read the following text on the topic 'CLIMATE CHANGE': 
+'Renewable energy is the future we need to embrace for our planet...'
+
+The author has opinion 'Strongly in favor' on the topic.
+Your initial opinion is 'Neutral'
+
+[If evaluation_scope = "neighbors"]
+The following are the opinions of your friends:
+Opinion: 'In favor' (5)
+Opinion: 'Strongly in favor' (3)
+Opinion: 'Neutral' (2)
+
+What do you think about the expressed opinion? 
+Answer with a single word among the options: AGREE|DISAGREE|NEUTRAL.
+```
+
+#### Step 2: Opinion Shift
+
+Based on the LLM's response, the opinion is shifted:
+
+- **AGREE**: Move one step towards the author's opinion class
+  - Example: "Neutral" → "In favor" (when author is "Strongly in favor")
+- **DISAGREE**: Move one step away from the author's opinion class
+  - Example: "Neutral" → "Against" (when author is "Strongly in favor")
+- **NEUTRAL**: No change to opinion
+
+#### Step 3: Boundary Clamping
+
+Opinion shifts are clamped at the boundaries:
+- Cannot move beyond "Strongly against" (lower bound)
+- Cannot move beyond "Strongly in favor" (upper bound)
+
+### Opinion Class Shift Logic
+
+The `shift_class` function handles opinion shifts:
+
+```python
+def shift_class(current_class, author_class, direction, opinion_groups):
+    """
+    Shift opinion from current_class towards or away from author_class.
+    
+    Args:
+        current_class: Agent's current opinion label (e.g., "Neutral")
+        author_class: Author's opinion label (e.g., "In favor")
+        direction: Direction.AGREE or Direction.DISAGREE
+        opinion_groups: Opinion class definitions
+    
+    Returns:
+        (new_label, new_value) where new_value is the midpoint of new class
+    """
+```
+
+**Examples:**
+
+1. **Agreement Shift:**
+   - Current: "Neutral" [0.4, 0.6] → mid = 0.5
+   - Author: "In favor" [0.6, 0.8]
+   - Direction: AGREE
+   - Result: "In favor" → mid = 0.7
+
+2. **Disagreement Shift:**
+   - Current: "Neutral" [0.4, 0.6] → mid = 0.5
+   - Author: "In favor" [0.6, 0.8]
+   - Direction: DISAGREE
+   - Result: "Against" [0.2, 0.4] → mid = 0.3
+
+3. **Same Class:**
+   - Current: "Neutral"
+   - Author: "Neutral"
+   - Direction: AGREE
+   - Result: "Neutral" (no change)
+
+4. **Boundary Clamping:**
+   - Current: "Strongly against"
+   - Author: "In favor"
+   - Direction: DISAGREE
+   - Result: "Strongly against" (already at lower bound)
+
+### Cold Start Behavior
+
+When an agent encounters a topic for the first time:
+
+**Neutral Strategy (`cold_start = "neutral"`):**
+```python
+x = 0.5  # Start at midpoint
+```
+
+**Inherited Strategy (`cold_start = "inherited"`):**
+```python
+x = y  # Adopt author's opinion
+```
+
+### Implementation
+
+The LLM evaluation function is located in:
+```
+YSimulator/YClient/opinion_dynamics/llm_evaluation.py
+```
+
+```python
+def llm_evaluation(
+    x: float,             # Agent's current opinion (can be None)
+    y: float,             # Author's opinion (must not be None)
+    text: str,            # Post content
+    topic: str,           # Topic name
+    evaluation_scope: str,  # "interlocutor_only" or "neighbors"
+    cold_start: str,      # "neutral" or "inherited"
+    group_classes: dict,  # Opinion group definitions
+    peers_opinions: list, # List of (label, count) tuples
+    llm_service          # Ray actor reference to LLMService
+) -> float:
+    """
+    LLM-based opinion evaluation.
+    
+    Returns: Updated opinion value in [0, 1]
+    """
+```
+
+The LLM interaction is handled in:
+```
+YSimulator/YClient/LLM_interactions/llm_service.py
+```
+
+```python
+def evaluate_opinion(
+    self, 
+    agent_opinion: str,     # Agent's opinion label
+    author_opinion: str,    # Author's opinion label
+    post_text: str,         # Post content
+    topic: str,             # Topic name
+    peers_opinions: list    # Optional neighbors' opinions
+) -> str:
+    """
+    Use LLM to evaluate agreement/disagreement.
+    
+    Returns: "AGREE", "DISAGREE", or "NEUTRAL"
+    """
+```
+
+### Advantages
+
+- **Natural Language Understanding**: LLM can understand nuanced expressions of opinion
+- **Context-Aware**: Can consider post content semantics, not just numeric values
+- **Social Context**: Can incorporate neighbors' opinions in evaluation
+- **Realistic**: Models how humans actually evaluate opinions
+
+### Limitations
+
+- **LLM Agents Only**: Requires language model capabilities
+- **Computational Cost**: LLM inference is slower than mathematical models
+- **Determinism**: LLM responses may vary slightly between runs
+- **Discrete Shifts**: Only moves one opinion class at a time
 
 ---
 
@@ -1002,7 +1254,14 @@ GROUP BY topic_id;
 
 ## Version History
 
-- **v1.0** (2026-01-01): Initial opinion dynamics implementation
+- **v1.1** (2026-01-01): Opinion dynamics model selection
+  - Added LLM evaluation model
+  - Support for model selection via configuration
+  - Evaluation scope with neighbors' opinions
+  - Validation for LLM-only models
+  - Comprehensive test suite
+
+- **v1.0** (2025-12-01): Initial opinion dynamics implementation
   - Bounded confidence model
   - Database tracking
   - Opinion-based interactions

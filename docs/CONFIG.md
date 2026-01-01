@@ -858,6 +858,108 @@ With probability `secondary_follow`, after read or comment action:
 
 ---
 
+### Opinion Dynamics
+
+YSimulator supports configurable opinion dynamics models to simulate realistic opinion evolution and polarization.
+
+**Configuration:**
+
+```json
+{
+  "opinion_dynamics": {
+    "enabled": true,
+    "model_name": "bounded_confidence",
+    "parameters": {
+      "epsilon": 0.25,
+      "mu": 0.5,
+      "theta": 0.0,
+      "cold_start": "neutral"
+    },
+    "opinion_groups": {
+      "Strongly against": [0.0, 0.2],
+      "Against": [0.2, 0.4],
+      "Neutral": [0.4, 0.6],
+      "In favor": [0.6, 0.8],
+      "Strongly in favor": [0.8, 1.0]
+    }
+  }
+}
+```
+
+#### Available Models
+
+**1. Bounded Confidence** (`model_name: "bounded_confidence"`)
+- Classic mathematical opinion dynamics model
+- Agents update opinions when interacting with similar agents
+- Applicable to all agent types (LLM and rule-based)
+
+**Parameters:**
+- `epsilon` (0.0-1.0): Confidence bound threshold - opinions within this distance influence each other
+- `mu` (0.0-1.0): Convergence rate when within epsilon
+- `theta` (0.0-1.0): Polarization rate when outside epsilon
+- `cold_start` ("neutral" or "inherited"): Strategy for agents with no prior opinion
+
+**2. LLM Evaluation** (`model_name: "llm_evaluation"`)
+- LLM-based opinion assessment using natural language reasoning
+- Evaluates agreement/disagreement with post content
+- Only applicable to LLM agents (validated at runtime)
+
+**Parameters:**
+- `evaluation_scope` ("interlocutor_only" or "neighbors"): Scope of opinion evaluation
+  - `"interlocutor_only"`: Only considers post author's opinion
+  - `"neighbors"`: Also considers opinions of agents the reader follows
+- `cold_start` ("neutral" or "inherited"): Strategy for agents with no prior opinion
+
+#### Disabling Opinion Dynamics
+
+To disable opinion dynamics:
+
+```json
+{
+  "opinion_dynamics": {
+    "enabled": false
+  }
+}
+```
+
+When disabled:
+- No opinion updates occur during interactions
+- Agents can still have initial opinions from `agent_population.json`
+- The simulation runs normally without opinion evolution
+
+You can also completely omit the `opinion_dynamics` section (equivalent to `enabled: false`).
+
+#### Opinion Groups
+
+Opinion groups map continuous values [0, 1] to discrete labels for:
+- LLM prompt generation (readable opinion descriptions)
+- Opinion shift calculations (LLM evaluation model)
+- Logging and debugging
+
+**Example Configuration:**
+```json
+{
+  "opinion_groups": {
+    "Strongly against": [0.0, 0.2],
+    "Against": [0.2, 0.4],
+    "Neutral": [0.4, 0.6],
+    "In favor": [0.6, 0.8],
+    "Strongly in favor": [0.8, 1.0]
+  }
+}
+```
+
+#### Examples
+
+See the `example/` directory for complete configurations:
+- `llm_population_100/`: Bounded confidence model (default)
+- `llm_population_100_llm_opinion/`: LLM evaluation with neighbor influence
+- `llm_population_100_no_opinion/`: Opinion dynamics disabled
+
+**For detailed documentation**, see [OPINION_DYNAMICS.md](OPINION_DYNAMICS.md).
+
+---
+
 ## Agent Population Configuration
 
 ### File: `agent_population.json`

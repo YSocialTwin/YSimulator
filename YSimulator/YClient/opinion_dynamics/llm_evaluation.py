@@ -1,107 +1,33 @@
-from typing import Any
-
-from YSimulator.YClient.opinion_dynamics.utils import get_opinion_group
-from requests import post
-from collections import Counter
-import json
+from typing import Optional
 from enum import Enum
 
-
-def llm_evaluation(uid: int, x: float, y: float, text: str = None, topic: str = None,
-                   evaluation_scope: str = "interlocutor_only", cold_start: str = "neutral", group_classes: dict = None,
-                   base_url: str = None, llm_config: dict = None) -> float | str:
-    """
-    LLM-based evaluation of opinion dynamics between two users.
-    :param uid:
-    :param x:
-    :param y:
-    :param text:
-    :param topic:
-    :param evaluation_scope:
-    :param cold_start:
-    :param group_classes:
-    :param base_url:
-    :param llm_config:
-    :return:
-    """
-
-    if x is None:
-        if cold_start == "neutral":
-            x = 0.5
-        if cold_start == "inherited":
-            x = y
-
-    else:
-        x_op = get_opinion_group(x, group_classes)
-        y_op = get_opinion_group(y, group_classes)
-
-        if evaluation_scope != "interlocutor_only":
-            peers_opinions = __get_opinions(uid, topic, base_url, group_classes)
-
-        text = (f"Read the following text on the topic '{topic.upper()}': '{text}'.\n "
-                f"The author has opinion '{y_op}' on the topic.\n "
-                f"Your initial opinion is '{x_op}'")
-
-        if evaluation_scope != "interlocutor_only":
-            text += " The following are the opinions of your friends:\n"
-            for op, count in peers_opinions:
-                text += (f"Opinion: '{op}' ({count})\n")
-
-        text += (f"\nWhat do you think about the expressed opinion? Answer with a single word among the options: AGREE|DISAGREE|NEUTRAL.\n")
-
-        response = llm_eval(llm_config=llm_config, text=text)
-
-        if "AGREE" in response.upper():
-            new_class, x = shift_class(x_op, y_op, Direction.AGREE, group_classes)
-        elif "DISAGREE" in response.upper():
-            new_class, x = shift_class(x_op, y_op, Direction.AGREE, group_classes)
-
-    return x
-
-
-def __get_opinions(user_id: int, topic: str | None = None, base_url: str = None, group_classes: dict = None) -> list[
-    tuple[Any, int]]:
-
-    api_url = f"{base_url}/get_users_opinions"
-
-    data = {
-        "user_id": user_id,
-        "topic": topic
-    }
-    response = post(
-            f"{api_url}",
-            headers={"Content-Type": "application/x-www-form-urlencoded"},
-            data=json.dumps(data))
-    data = json.loads(response.__dict__["_content"].decode("utf-8"))
-
-    opinions = [get_opinion_group(float(x), group_classes) for x in data]
-    opinions = list(Counter(opinions).items())
-
-    return opinions
-
-
-def llm_eval(llm_config, text):
-    user_agent = AssistantAgent(
-        name="agent",
-        llm_config=llm_config,
-        system_message="",
-        max_consecutive_auto_reply=1,
-    )
-
-    post_text = user_agent.generate_reply(messages=[{"role": "user", "content": text}])
-    return post_text
+from YSimulator.YClient.opinion_dynamics.utils import get_opinion_group
 
 
 class Direction(Enum):
+    """Direction of opinion shift."""
     AGREE = 1
     DISAGREE = -1
 
 
 def class_mid(bounds):
+    """Calculate the midpoint of an opinion class range."""
     return (bounds[0] + bounds[1]) / 2
 
 
 def shift_class(A, B, direction, class_bounds):
+    """
+    Shift opinion from class A towards or away from class B.
+    
+    Args:
+        A: Current opinion class label
+        B: Target opinion class label (interlocutor's opinion)
+        direction: Direction.AGREE (move towards B) or Direction.DISAGREE (move away from B)
+        class_bounds: Dict mapping class labels to [min, max] ranges
+        
+    Returns:
+        Tuple of (new_label, new_value) where new_value is the midpoint of the new class
+    """
     # Order classes by lower bound
     ordered = sorted(
         class_bounds.items(),
@@ -140,3 +66,73 @@ def shift_class(A, B, direction, class_bounds):
     new_mid = class_mid(bounds_map[new_label])
 
     return new_label, new_mid
+
+
+def llm_evaluation(
+    x: float, 
+    y: float, 
+    text: str = None, 
+    topic: str = None,
+    evaluation_scope: str = "interlocutor_only", 
+    cold_start: str = "neutral", 
+    group_classes: dict = None,
+    peers_opinions: list = None,
+    llm_service = None
+) -> float:
+    """
+    LLM-based evaluation of opinion dynamics between two users.
+    
+    This function uses an LLM to evaluate how an agent's opinion should change
+    after reading a post from another user. The LLM considers:
+    - The agent's current opinion on the topic
+    - The author's opinion on the topic
+    - The post content
+    - Optionally, the opinions of the agent's neighbors
+    
+    Args:
+        x: Agent's current opinion value (None for cold start)
+        y: Author's opinion value (must not be None)
+        text: Post content to evaluate
+        topic: Topic name being discussed
+        evaluation_scope: "interlocutor_only" or "neighbors"
+        cold_start: "neutral" (start at 0.5) or "inherited" (start at y)
+        group_classes: Dict mapping opinion labels to [min, max] ranges
+        peers_opinions: List of (opinion_label, count) tuples for neighbors
+        llm_service: Ray actor reference to LLMService
+    
+    Returns:
+        float: Updated opinion value in [0, 1] range
+    """
+    # Handle cold start case (agent has no prior opinion on this topic)
+    if x is None:
+        if cold_start == "neutral":
+            x = 0.5
+        elif cold_start == "inherited":
+            x = y
+        return x
+
+    # Get opinion labels for agent and author
+    x_op = get_opinion_group(x, group_classes)
+    y_op = get_opinion_group(y, group_classes)
+
+    # Call LLM service to evaluate opinion
+    # Note: llm_service is a Ray actor, so we need to call it with .remote()
+    import ray
+    response = ray.get(
+        llm_service.evaluate_opinion.remote(
+            agent_opinion=x_op,
+            author_opinion=y_op,
+            post_text=text,
+            topic=topic,
+            peers_opinions=peers_opinions if evaluation_scope != "interlocutor_only" else None
+        )
+    )
+
+    # Shift opinion class based on LLM response
+    if "AGREE" in response.upper():
+        new_class, x = shift_class(x_op, y_op, Direction.AGREE, group_classes)
+    elif "DISAGREE" in response.upper():
+        new_class, x = shift_class(x_op, y_op, Direction.DISAGREE, group_classes)
+    # NEUTRAL means no change, keep current opinion x
+
+    return x

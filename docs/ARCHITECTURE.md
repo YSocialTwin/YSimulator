@@ -797,5 +797,7 @@ This design provides:
 
 For implementation details, see:
 - [Configuration Guide](CONFIG.md)
+- [Opinion Dynamics](OPINION_DYNAMICS.md)
 - [Extension Guide](EXTENDING.md)
+- [Redis Integration](RECSYS_REDIS_SUPPORT.md)
 - [Code Formatting](FORMATTING.md)
