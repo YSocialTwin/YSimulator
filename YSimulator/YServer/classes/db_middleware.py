@@ -1788,6 +1788,33 @@ class DatabaseMiddleware:
         finally:
             session.close()
 
+    def get_topic_name_from_id(self, topic_id: str) -> Optional[str]:
+        """
+        Get topic name from topic UUID.
+        
+        Args:
+            topic_id: Topic UUID (iid)
+            
+        Returns:
+            str: Topic name or None if not found
+        """
+        from YSimulator.YServer.classes.models import Interest
+        
+        session = Session(self.engine)
+        try:
+            interest = session.query(Interest).filter(Interest.iid == topic_id).first()
+            if interest:
+                return interest.interest
+            return None
+        except Exception as e:
+            self.logger.error(
+                f"Error getting topic name from ID: {e}",
+                extra={"extra_data": {"error": str(e), "topic_id": topic_id}},
+            )
+            return None
+        finally:
+            session.close()
+
     def add_user_interest(self, user_id: str, interest_id: str, round_id: str) -> bool:
         """
         Add a user interest association to the database.
