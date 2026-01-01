@@ -2650,6 +2650,30 @@ class OrchestratorServer:
         return self.db.get_latest_agent_opinion(agent_id, topic_id)
 
     @log_server_request
+    def add_agent_opinion(
+        self, agent_id: str, topic_id: str, opinion: float, 
+        id_interacted_with: Optional[str] = None, id_post: Optional[str] = None,
+        client_id: str = None
+    ) -> bool:
+        """
+        Add an agent opinion record to the database.
+        
+        Args:
+            agent_id: Agent UUID
+            topic_id: Topic UUID
+            opinion: Opinion value in [0, 1]
+            id_interacted_with: Optional UUID of agent interacted with
+            id_post: Optional UUID of post interacted with
+            client_id: Optional client identifier for logging
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        return self.db.add_agent_opinion(
+            agent_id, topic_id, opinion, id_interacted_with, id_post
+        )
+
+    @log_server_request
     def get_follow_suggestions(
         self, agent_id: str, mode: str = "random", n_neighbors: int = 10, leaning_bias: int = 1, client_id: str = None
     ) -> List[str]:
