@@ -5,8 +5,6 @@ This test verifies that opinion storage and retrieval work correctly when Redis 
 following the specification in RECSYS_REDIS_SUPPORT.md.
 """
 
-import pytest
-
 
 def test_redis_opinion_key_format():
     """Test that Redis opinion keys follow the correct format."""

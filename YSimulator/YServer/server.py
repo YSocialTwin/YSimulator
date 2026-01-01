@@ -2726,6 +2726,8 @@ class OrchestratorServer:
                 # Redis implementation: hybrid approach
                 # Step 1: Get followees from Redis follow keys
                 follow_pattern = self.db.get_redis_key_pattern("follow", "*")
+                # Note: Using KEYS here for consistency with follow_recsys_redis.py
+                # For large-scale production deployments, consider using SCAN instead
                 follow_keys = self.db.redis_client.keys(follow_pattern)
 
                 # Encode agent_id once for efficiency
