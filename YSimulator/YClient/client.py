@@ -1869,7 +1869,7 @@ class SimulationClient:
                                     )
                                     if topic_ids:
                                         self.logger.info(
-                                            f"Stored {len(topic_ids)} topics for article {article_id}"
+                                            f"Stored {len(topic_ids)} topics for article {article_id}")
                                         
                                         # CLIENT-SIDE: Infer and store opinions for rule-based page agent on article topics
                                         if self._is_opinion_dynamics_enabled():
@@ -1897,7 +1897,7 @@ class SimulationClient:
                                                     self.logger.warning(
                                                         f"Failed to infer/store opinion for topic '{topic_name}': {e}"
                                                     )
-                                        )
+
                             else:
                                 self.logger.info(
                                     f"Article {article_id} already has {len(existing_topics)} topics"
