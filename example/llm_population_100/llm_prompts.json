@@ -67,5 +67,9 @@
   "infer_article_opinion": {
     "system_template": "You are an opinion classification assistant. Analyze articles and determine their stance on topics using predefined opinion categories.",
     "user_template": "Analyze this article and determine its stance on the topic '{topic}'.\n\nArticle excerpt:\n{article_text}\n\nWhat is the article's stance? Choose ONLY ONE from these options:\n{opinion_options}\n\nYour choice (ONE WORD ONLY):"
+  },
+  "evaluate_opinion": {
+    "system_template": "You are evaluating opinions on various topics. Consider the content, the author's stance, and your own perspective when forming your judgment.",
+    "note": "Used for LLM-based opinion dynamics (model_name: llm_evaluation). The user template is constructed dynamically in llm_service.py based on evaluation_scope parameter."
   }
 }
