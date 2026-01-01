@@ -2807,11 +2807,21 @@ class SimulationClient:
                     )
                 )
                 
-                # If author has no opinion, assume neutral (0.5)
+                # If author has no opinion, apply cold_start strategy
                 if author_opinion is None:
-                    author_opinion = 0.5
+                    cold_start_strategy = params.get("cold_start", "neutral")
+                    if cold_start_strategy == "neutral":
+                        author_opinion = 0.5
+                    elif cold_start_strategy == "inherited":
+                        # If author has no opinion, use agent's opinion (no change)
+                        author_opinion = agent_opinion if agent_opinion is not None else 0.5
+                    else:
+                        # Default to neutral
+                        author_opinion = 0.5
+                    
                     self.logger.debug(
-                        f"Author {parent_author_id} has no opinion on topic {topic_name}, using neutral value (0.5)"
+                        f"Author {parent_author_id} has no opinion on topic {topic_name}, "
+                        f"using cold_start strategy '{cold_start_strategy}': {author_opinion}"
                     )
                 
                 # Calculate new opinion using bounded confidence
