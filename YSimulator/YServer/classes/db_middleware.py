@@ -1879,6 +1879,25 @@ class DatabaseMiddleware:
         """
         import uuid
 
+        # If using Redis, cache the latest opinion for quick access
+        if self.use_redis:
+            try:
+                # Store latest opinion in Redis: ysim:user:{user_id}:opinion:{topic_id}
+                opinion_key = f"ysim:user:{agent_id}:opinion:{topic_id}"
+                self.redis_client.set(opinion_key, str(opinion))
+            except Exception as e:
+                self.logger.error(
+                    f"Error caching opinion in Redis: {e}",
+                    extra={
+                        "extra_data": {
+                            "error": str(e),
+                            "agent_id": agent_id,
+                            "topic_id": topic_id,
+                        }
+                    },
+                )
+                # Continue to SQL storage even if Redis fails
+
         session = Session(self.engine)
         try:
             # Create agent opinion record
@@ -1925,6 +1944,26 @@ class DatabaseMiddleware:
         Returns:
             float: Latest opinion value, or None if not found
         """
+        # If using Redis, try to get from cache first
+        if self.use_redis:
+            try:
+                opinion_key = f"ysim:user:{agent_id}:opinion:{topic_id}"
+                opinion_str = self.redis_client.get(opinion_key)
+                if opinion_str is not None:
+                    return float(opinion_str)
+            except Exception as e:
+                self.logger.error(
+                    f"Error getting opinion from Redis: {e}",
+                    extra={
+                        "extra_data": {
+                            "error": str(e),
+                            "agent_id": agent_id,
+                            "topic_id": topic_id,
+                        }
+                    },
+                )
+                # Fall through to SQL query
+        
         session = Session(self.engine)
         try:
             # Get the most recent opinion for this agent-topic pair

@@ -2695,9 +2695,31 @@ class OrchestratorServer:
             # Query the Follow table to get users that agent_id follows
             # In the Follow table: follower_id is the agent, user_id is who they follow
             if self.db.use_redis:
-                # For Redis implementation, we would need to scan follow keys
-                # For now, return empty list as Redis path needs more implementation
-                return []
+                # Redis implementation: hybrid approach
+                # Step 1: Get followees from Redis follow keys
+                follow_pattern = self.db._redis_key("follow", "*")
+                follow_keys = self.db.redis_client.keys(follow_pattern)
+                
+                followee_ids = set()
+                for key in follow_keys:
+                    follow_data = self.db.redis_client.hgetall(key)
+                    # Check if this is a follow relationship for the agent
+                    if follow_data.get(b"follower_id") == agent_id.encode() and follow_data.get(b"action") == b"follow":
+                        user_id = follow_data.get(b"user_id")
+                        if user_id:
+                            followee_ids.add(user_id.decode())
+                
+                if not followee_ids:
+                    return []
+                
+                # Step 2: Get opinions from Redis for each followee
+                opinions = []
+                for followee_id in followee_ids:
+                    opinion = self.db.get_latest_agent_opinion(followee_id, topic_id)
+                    if opinion is not None:
+                        opinions.append(opinion)
+                
+                return opinions
             else:
                 # SQL implementation
                 from sqlalchemy.orm import Session
