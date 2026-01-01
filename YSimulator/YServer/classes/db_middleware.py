@@ -1893,24 +1893,47 @@ class DatabaseMiddleware:
         Returns:
             dict: Interest data with 'iid' and 'interest' keys, or None if not found
         """
-        from YSimulator.YServer.classes.models import Interest
+        if self.use_redis:
+            try:
+                # Get interest from Redis
+                interest_key = self._redis_key("interest", interest_id)
+                interest_data = self.redis_client.hgetall(interest_key)
 
-        session = Session(self.engine)
-        try:
-            interest = session.query(Interest).filter(Interest.iid == interest_id).first()
+                if interest_data:
+                    # Decode all keys and values
+                    return {
+                        k.decode() if isinstance(k, bytes) else k: (
+                            v.decode() if isinstance(v, bytes) else v
+                        )
+                        for k, v in interest_data.items()
+                    }
+                return None
 
-            if interest:
-                return {"iid": interest.iid, "interest": interest.interest}
-            return None
+            except Exception as e:
+                self.logger.error(
+                    f"Error getting interest from Redis: {e}",
+                    extra={"extra_data": {"error": str(e), "interest_id": interest_id}},
+                )
+                return None
+        else:
+            from YSimulator.YServer.classes.models import Interest
 
-        except Exception as e:
-            self.logger.error(
-                f"Error getting interest by ID: {e}",
-                extra={"extra_data": {"error": str(e), "interest_id": interest_id}},
-            )
-            return None
-        finally:
-            session.close()
+            session = Session(self.engine)
+            try:
+                interest = session.query(Interest).filter(Interest.iid == interest_id).first()
+
+                if interest:
+                    return {"iid": interest.iid, "interest": interest.interest}
+                return None
+
+            except Exception as e:
+                self.logger.error(
+                    f"Error getting interest by ID: {e}",
+                    extra={"extra_data": {"error": str(e), "interest_id": interest_id}},
+                )
+                return None
+            finally:
+                session.close()
 
     def add_or_get_interest(self, interest_name: str) -> Optional[str]:
         """
@@ -1924,31 +1947,67 @@ class DatabaseMiddleware:
         """
         import uuid
 
-        from YSimulator.YServer.classes.models import Interest
+        if self.use_redis:
+            try:
+                # Check if interest already exists using name index
+                name_index_key = self._redis_key("interest:by_name", interest_name)
+                existing_id = self.redis_client.get(name_index_key)
 
-        session = Session(self.engine)
-        try:
-            # Check if interest already exists
-            existing = session.query(Interest).filter(Interest.interest == interest_name).first()
-            if existing:
-                return existing.iid
+                if existing_id:
+                    return existing_id.decode() if isinstance(existing_id, bytes) else existing_id
 
-            # Create new interest
-            interest_id = str(uuid.uuid4())
-            interest = Interest(iid=interest_id, interest=interest_name)
-            session.add(interest)
-            session.commit()
-            return interest_id
+                # Create new interest
+                interest_id = str(uuid.uuid4())
 
-        except Exception as e:
-            session.rollback()
-            self.logger.error(
-                f"Error adding interest: {e}",
-                extra={"extra_data": {"error": str(e), "interest_name": interest_name}},
-            )
-            return None
-        finally:
-            session.close()
+                # Store interest data
+                interest_key = self._redis_key("interest", interest_id)
+                self.redis_client.hset(
+                    interest_key,
+                    mapping={
+                        "iid": interest_id,
+                        "interest": interest_name,
+                    },
+                )
+
+                # Create name index
+                self.redis_client.set(name_index_key, interest_id)
+
+                return interest_id
+
+            except Exception as e:
+                self.logger.error(
+                    f"Error adding interest to Redis: {e}",
+                    extra={"extra_data": {"error": str(e), "interest_name": interest_name}},
+                )
+                return None
+        else:
+            from YSimulator.YServer.classes.models import Interest
+
+            session = Session(self.engine)
+            try:
+                # Check if interest already exists
+                existing = (
+                    session.query(Interest).filter(Interest.interest == interest_name).first()
+                )
+                if existing:
+                    return existing.iid
+
+                # Create new interest
+                interest_id = str(uuid.uuid4())
+                interest = Interest(iid=interest_id, interest=interest_name)
+                session.add(interest)
+                session.commit()
+                return interest_id
+
+            except Exception as e:
+                session.rollback()
+                self.logger.error(
+                    f"Error adding interest: {e}",
+                    extra={"extra_data": {"error": str(e), "interest_name": interest_name}},
+                )
+                return None
+            finally:
+                session.close()
 
     def get_topic_id_by_name(self, topic_name: str) -> Optional[str]:
         """
@@ -1960,25 +2019,42 @@ class DatabaseMiddleware:
         Returns:
             str: Topic UUID or None if not found
         """
-        from YSimulator.YServer.classes.models import Interest
+        if self.use_redis:
+            try:
+                # Look up topic ID from name index
+                name_index_key = self._redis_key("interest:by_name", topic_name)
+                topic_id = self.redis_client.get(name_index_key)
 
-        session = Session(self.engine)
-        try:
-            # Search for interest by name (case-sensitive exact match)
-            interest = session.query(Interest).filter(Interest.interest == topic_name).first()
+                if topic_id:
+                    return topic_id.decode() if isinstance(topic_id, bytes) else topic_id
+                return None
 
-            if interest:
-                return interest.iid
-            return None
+            except Exception as e:
+                self.logger.error(
+                    f"Error getting topic ID by name from Redis: {e}",
+                    extra={"extra_data": {"error": str(e), "topic_name": topic_name}},
+                )
+                return None
+        else:
+            from YSimulator.YServer.classes.models import Interest
 
-        except Exception as e:
-            self.logger.error(
-                f"Error getting topic ID by name: {e}",
-                extra={"extra_data": {"error": str(e), "topic_name": topic_name}},
-            )
-            return None
-        finally:
-            session.close()
+            session = Session(self.engine)
+            try:
+                # Search for interest by name (case-sensitive exact match)
+                interest = session.query(Interest).filter(Interest.interest == topic_name).first()
+
+                if interest:
+                    return interest.iid
+                return None
+
+            except Exception as e:
+                self.logger.error(
+                    f"Error getting topic ID by name: {e}",
+                    extra={"extra_data": {"error": str(e), "topic_name": topic_name}},
+                )
+                return None
+            finally:
+                session.close()
 
     def get_topic_name_from_id(self, topic_id: str) -> Optional[str]:
         """
@@ -2021,30 +2097,68 @@ class DatabaseMiddleware:
         """
         import uuid
 
-        from YSimulator.YServer.classes.models import UserInterest
+        if self.use_redis:
+            try:
+                # Add interest to user's interests set
+                user_interests_key = self._redis_key(f"user:{user_id}:interests", "")
+                self.redis_client.sadd(user_interests_key, interest_id)
 
-        session = Session(self.engine)
-        try:
-            # Create user interest record
-            user_interest_id = str(uuid.uuid4())
-            user_interest = UserInterest(
-                id=user_interest_id, user_id=user_id, interest_id=interest_id, round_id=round_id
-            )
-            session.add(user_interest)
-            session.commit()
-            return True
+                # Store the user interest record with round info
+                user_interest_id = str(uuid.uuid4())
+                user_interest_key = self._redis_key("user_interest", user_interest_id)
+                self.redis_client.hset(
+                    user_interest_key,
+                    mapping={
+                        "id": user_interest_id,
+                        "user_id": user_id,
+                        "interest_id": interest_id,
+                        "round_id": round_id,
+                    },
+                )
 
-        except Exception as e:
-            session.rollback()
-            self.logger.error(
-                f"Error adding user interest: {e}",
-                extra={
-                    "extra_data": {"error": str(e), "user_id": user_id, "interest_id": interest_id}
-                },
-            )
-            return False
-        finally:
-            session.close()
+                return True
+
+            except Exception as e:
+                self.logger.error(
+                    f"Error adding user interest to Redis: {e}",
+                    extra={
+                        "extra_data": {
+                            "error": str(e),
+                            "user_id": user_id,
+                            "interest_id": interest_id,
+                        }
+                    },
+                )
+                return False
+        else:
+            from YSimulator.YServer.classes.models import UserInterest
+
+            session = Session(self.engine)
+            try:
+                # Create user interest record
+                user_interest_id = str(uuid.uuid4())
+                user_interest = UserInterest(
+                    id=user_interest_id, user_id=user_id, interest_id=interest_id, round_id=round_id
+                )
+                session.add(user_interest)
+                session.commit()
+                return True
+
+            except Exception as e:
+                session.rollback()
+                self.logger.error(
+                    f"Error adding user interest: {e}",
+                    extra={
+                        "extra_data": {
+                            "error": str(e),
+                            "user_id": user_id,
+                            "interest_id": interest_id,
+                        }
+                    },
+                )
+                return False
+            finally:
+                session.close()
 
     def add_agent_opinion(
         self,
@@ -2195,26 +2309,57 @@ class DatabaseMiddleware:
         """
         import uuid
 
-        from YSimulator.YServer.classes.models import PostTopic
+        if self.use_redis:
+            try:
+                # Add topic to post's topics set
+                post_topics_key = self._redis_key(f"post:{post_id}:topics", "")
+                self.redis_client.sadd(post_topics_key, topic_id)
 
-        session = Session(self.engine)
-        try:
-            # Create post topic record
-            post_topic_id = str(uuid.uuid4())
-            post_topic = PostTopic(id=post_topic_id, post_id=post_id, topic_id=topic_id)
-            session.add(post_topic)
-            session.commit()
-            return True
+                # Store the post topic record
+                post_topic_id = str(uuid.uuid4())
+                post_topic_key = self._redis_key("post_topic", post_topic_id)
+                self.redis_client.hset(
+                    post_topic_key,
+                    mapping={
+                        "id": post_topic_id,
+                        "post_id": post_id,
+                        "topic_id": topic_id,
+                    },
+                )
 
-        except Exception as e:
-            session.rollback()
-            self.logger.error(
-                f"Error adding post topic: {e}",
-                extra={"extra_data": {"error": str(e), "post_id": post_id, "topic_id": topic_id}},
-            )
-            return False
-        finally:
-            session.close()
+                return True
+
+            except Exception as e:
+                self.logger.error(
+                    f"Error adding post topic to Redis: {e}",
+                    extra={
+                        "extra_data": {"error": str(e), "post_id": post_id, "topic_id": topic_id}
+                    },
+                )
+                return False
+        else:
+            from YSimulator.YServer.classes.models import PostTopic
+
+            session = Session(self.engine)
+            try:
+                # Create post topic record
+                post_topic_id = str(uuid.uuid4())
+                post_topic = PostTopic(id=post_topic_id, post_id=post_id, topic_id=topic_id)
+                session.add(post_topic)
+                session.commit()
+                return True
+
+            except Exception as e:
+                session.rollback()
+                self.logger.error(
+                    f"Error adding post topic: {e}",
+                    extra={
+                        "extra_data": {"error": str(e), "post_id": post_id, "topic_id": topic_id}
+                    },
+                )
+                return False
+            finally:
+                session.close()
 
     def get_post_topics(self, post_id: str) -> List[str]:
         """
@@ -2226,21 +2371,37 @@ class DatabaseMiddleware:
         Returns:
             List[str]: List of topic UUIDs
         """
-        from YSimulator.YServer.classes.models import PostTopic
+        if self.use_redis:
+            try:
+                # Get topics from post's topics set
+                post_topics_key = self._redis_key(f"post:{post_id}:topics", "")
+                topic_ids = self.redis_client.smembers(post_topics_key)
 
-        session = Session(self.engine)
-        try:
-            post_topics = session.query(PostTopic).filter(PostTopic.post_id == post_id).all()
-            return [pt.topic_id for pt in post_topics]
+                # Decode all topic IDs
+                return [tid.decode() if isinstance(tid, bytes) else tid for tid in topic_ids]
 
-        except Exception as e:
-            self.logger.error(
-                f"Error getting post topics: {e}",
-                extra={"extra_data": {"error": str(e), "post_id": post_id}},
-            )
-            return []
-        finally:
-            session.close()
+            except Exception as e:
+                self.logger.error(
+                    f"Error getting post topics from Redis: {e}",
+                    extra={"extra_data": {"error": str(e), "post_id": post_id}},
+                )
+                return []
+        else:
+            from YSimulator.YServer.classes.models import PostTopic
+
+            session = Session(self.engine)
+            try:
+                post_topics = session.query(PostTopic).filter(PostTopic.post_id == post_id).all()
+                return [pt.topic_id for pt in post_topics]
+
+            except Exception as e:
+                self.logger.error(
+                    f"Error getting post topics: {e}",
+                    extra={"extra_data": {"error": str(e), "post_id": post_id}},
+                )
+                return []
+            finally:
+                session.close()
 
     def search_posts_by_topic(self, topic_id: str, agent_id: str, limit: int = 10) -> List[str]:
         """
@@ -2376,23 +2537,39 @@ class DatabaseMiddleware:
         Returns:
             List[str]: List of topic UUIDs
         """
-        from YSimulator.YServer.classes.models import ArticleTopic
+        if self.use_redis:
+            try:
+                # Get topics from article's topics set
+                article_topics_key = self._redis_key(f"article:{article_id}:topics", "")
+                topic_ids = self.redis_client.smembers(article_topics_key)
 
-        session = Session(self.engine)
-        try:
-            article_topics = (
-                session.query(ArticleTopic).filter(ArticleTopic.article_id == article_id).all()
-            )
-            return [at.topic_id for at in article_topics]
+                # Decode all topic IDs
+                return [tid.decode() if isinstance(tid, bytes) else tid for tid in topic_ids]
 
-        except Exception as e:
-            self.logger.error(
-                f"Error getting article topics: {e}",
-                extra={"extra_data": {"error": str(e), "article_id": article_id}},
-            )
-            return []
-        finally:
-            session.close()
+            except Exception as e:
+                self.logger.error(
+                    f"Error getting article topics from Redis: {e}",
+                    extra={"extra_data": {"error": str(e), "article_id": article_id}},
+                )
+                return []
+        else:
+            from YSimulator.YServer.classes.models import ArticleTopic
+
+            session = Session(self.engine)
+            try:
+                article_topics = (
+                    session.query(ArticleTopic).filter(ArticleTopic.article_id == article_id).all()
+                )
+                return [at.topic_id for at in article_topics]
+
+            except Exception as e:
+                self.logger.error(
+                    f"Error getting article topics: {e}",
+                    extra={"extra_data": {"error": str(e), "article_id": article_id}},
+                )
+                return []
+            finally:
+                session.close()
 
     def get_article(self, article_id: str) -> Optional[dict]:
         """
@@ -2465,51 +2642,105 @@ class DatabaseMiddleware:
         """
         import uuid
 
-        from YSimulator.YServer.classes.models import ArticleTopic
-
         self.logger.info(f"add_article_topic called: article_id={article_id}, topic_id={topic_id}")
 
-        session = Session(self.engine)
-        try:
-            # Check if already exists
-            existing = (
-                session.query(ArticleTopic)
-                .filter(ArticleTopic.article_id == article_id, ArticleTopic.topic_id == topic_id)
-                .first()
-            )
+        if self.use_redis:
+            try:
+                # Check if already exists
+                article_topics_key = self._redis_key(f"article:{article_id}:topics", "")
+                is_member = self.redis_client.sismember(article_topics_key, topic_id)
 
-            if existing:
-                self.logger.info(
-                    f"Article-topic association already exists: {article_id} - {topic_id}"
+                if is_member:
+                    self.logger.info(
+                        f"Article-topic association already exists: {article_id} - {topic_id}"
+                    )
+                    return True
+
+                # Add topic to article's topics set
+                self.redis_client.sadd(article_topics_key, topic_id)
+
+                # Store the article topic record
+                article_topic_id = str(uuid.uuid4())
+                article_topic_key = self._redis_key("article_topic", article_topic_id)
+                self.redis_client.hset(
+                    article_topic_key,
+                    mapping={
+                        "id": article_topic_id,
+                        "article_id": article_id,
+                        "topic_id": topic_id,
+                    },
                 )
-                return True  # Already exists, no need to add
 
-            # Create article topic record
-            article_topic_id = str(uuid.uuid4())
-            article_topic = ArticleTopic(
-                id=article_topic_id, article_id=article_id, topic_id=topic_id
-            )
-            session.add(article_topic)
-            session.commit()
-            self.logger.info(
-                f"Successfully created article_topic entry: id={article_topic_id}, article_id={article_id}, topic_id={topic_id}"
-            )
-            return True
+                self.logger.info(
+                    f"Successfully created article_topic entry: id={article_topic_id}, article_id={article_id}, topic_id={topic_id}"
+                )
+                return True
 
-        except Exception as e:
-            session.rollback()
-            self.logger.error(
-                f"Error adding article topic: {e}",
-                extra={
-                    "extra_data": {"error": str(e), "article_id": article_id, "topic_id": topic_id}
-                },
-            )
-            import traceback
+            except Exception as e:
+                self.logger.error(
+                    f"Error adding article topic to Redis: {e}",
+                    extra={
+                        "extra_data": {
+                            "error": str(e),
+                            "article_id": article_id,
+                            "topic_id": topic_id,
+                        }
+                    },
+                )
+                import traceback
 
-            self.logger.error(f"Traceback: {traceback.format_exc()}")
-            return False
-        finally:
-            session.close()
+                self.logger.error(f"Traceback: {traceback.format_exc()}")
+                return False
+        else:
+            from YSimulator.YServer.classes.models import ArticleTopic
+
+            session = Session(self.engine)
+            try:
+                # Check if already exists
+                existing = (
+                    session.query(ArticleTopic)
+                    .filter(
+                        ArticleTopic.article_id == article_id, ArticleTopic.topic_id == topic_id
+                    )
+                    .first()
+                )
+
+                if existing:
+                    self.logger.info(
+                        f"Article-topic association already exists: {article_id} - {topic_id}"
+                    )
+                    return True  # Already exists, no need to add
+
+                # Create article topic record
+                article_topic_id = str(uuid.uuid4())
+                article_topic = ArticleTopic(
+                    id=article_topic_id, article_id=article_id, topic_id=topic_id
+                )
+                session.add(article_topic)
+                session.commit()
+                self.logger.info(
+                    f"Successfully created article_topic entry: id={article_topic_id}, article_id={article_id}, topic_id={topic_id}"
+                )
+                return True
+
+            except Exception as e:
+                session.rollback()
+                self.logger.error(
+                    f"Error adding article topic: {e}",
+                    extra={
+                        "extra_data": {
+                            "error": str(e),
+                            "article_id": article_id,
+                            "topic_id": topic_id,
+                        }
+                    },
+                )
+                import traceback
+
+                self.logger.error(f"Traceback: {traceback.format_exc()}")
+                return False
+            finally:
+                session.close()
 
     def add_or_get_hashtag(self, hashtag_text: str) -> Optional[str]:
         """
