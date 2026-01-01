@@ -382,6 +382,50 @@ class OrchestratorServer:
             str: Topic name or None if not found
         """
         return self.interest_manager.get_topic_name_from_id(topic_id)
+    
+    def _ensure_agent_opinion_exists(self, agent_id: str, topic_id: str, topic_name: str):
+        """
+        Ensure an agent has an opinion recorded for a topic.
+        If the agent doesn't have an opinion on the topic, create one based on their
+        cached profile opinions or use neutral (0.5) as default.
+        
+        This is called when an agent posts about a topic to ensure they have an opinion
+        on it in the database, which is required for opinion dynamics calculations.
+        
+        Args:
+            agent_id: Agent UUID
+            topic_id: Topic UUID (from interests table)
+            topic_name: Topic name for looking up in cached profile
+        """
+        # Check if agent already has an opinion on this topic
+        existing_opinion = self.db.get_latest_agent_opinion(agent_id, topic_id)
+        if existing_opinion is not None:
+            return  # Opinion already exists
+        
+        # Agent doesn't have opinion - need to create one
+        # First, try to get from their cached profile
+        opinion_value = None
+        if agent_id in self.registered_agents:
+            # This would require caching the full AgentProfile, not just username
+            # For now, we'll use a neutral starting value
+            pass
+        
+        # Default to neutral opinion if not found in profile
+        if opinion_value is None:
+            opinion_value = 0.5
+            self.logger.info(
+                f"Creating default opinion for agent {agent_id} on topic '{topic_name}' (topic_id: {topic_id}): {opinion_value}"
+            )
+        
+        # Store the opinion
+        self.db.add_agent_opinion(
+            agent_id=agent_id,
+            round_id=self.current_round_id,
+            topic_id=topic_id,
+            opinion=opinion_value,
+            id_interacted_with=None,
+            id_post=None,
+        )
 
     def _reaction_to_sentiment(self, reaction_type: str) -> Optional[Dict[str, float]]:
         """
@@ -1310,6 +1354,12 @@ class OrchestratorServer:
                                     # Article already has topics, link them to the post
                                     for topic_id in existing_topic_ids:
                                         self.db.add_post_topic(post_id, topic_id)
+                                        # Ensure author has opinion on each topic
+                                        topic_name = self.db.get_topic_name_from_id(topic_id)
+                                        if topic_name:
+                                            self._ensure_agent_opinion_exists(
+                                                act.agent_id, topic_id, topic_name
+                                            )
                                     self.logger.info(
                                         f"Linked {len(existing_topic_ids)} existing article topics to post {post_id}"
                                     )
@@ -1320,6 +1370,12 @@ class OrchestratorServer:
                             # Image posts have pre-fetched topic IDs from article
                             for topic_id in act.topic_ids:
                                 self.db.add_post_topic(post_id, topic_id)
+                                # Ensure author has opinion on each topic
+                                topic_name = self.db.get_topic_name_from_id(topic_id)
+                                if topic_name:
+                                    self._ensure_agent_opinion_exists(
+                                        act.agent_id, topic_id, topic_name
+                                    )
                             self.logger.info(
                                 f"Linked {len(act.topic_ids)} article topics to image post {post_id}"
                             )
@@ -1335,6 +1391,11 @@ class OrchestratorServer:
                                 # Increment the agent's interest counter for this topic
                                 self._update_agent_interest_counter(
                                     act.agent_id, act.topic, increment=1
+                                )
+                                
+                                # Ensure author has an opinion on the topic they're posting about
+                                self._ensure_agent_opinion_exists(
+                                    act.agent_id, topic_id, act.topic
                                 )
 
                         # Process annotations AFTER topics are assigned

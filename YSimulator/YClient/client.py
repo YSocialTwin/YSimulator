@@ -2798,7 +2798,17 @@ class SimulationClient:
                 if not topic_name:
                     continue
                 
-                agent_opinion = agent_profile.opinions.get(topic_name)
+                # Look up agent opinion (case-insensitive)
+                agent_opinion = None
+                if agent_profile.opinions:
+                    # Try exact match first
+                    agent_opinion = agent_profile.opinions.get(topic_name)
+                    # If not found, try case-insensitive match
+                    if agent_opinion is None:
+                        for key, value in agent_profile.opinions.items():
+                            if key.lower() == topic_name.lower():
+                                agent_opinion = value
+                                break
                 
                 # Get author's latest opinion from server
                 author_opinion = ray.get(
@@ -2809,9 +2819,11 @@ class SimulationClient:
                 
                 # Author must have an opinion on their own post's topics
                 if author_opinion is None:
-                    self.logger.warning(
-                        f"Author {parent_author_id} has no opinion on topic {topic_name} "
-                        f"in their own post {parent_post_id}. Skipping opinion update for this topic."
+                    self.logger.error(
+                        f"Data inconsistency: Author {parent_author_id} has no recorded opinion on topic "
+                        f"'{topic_name}' (topic_id: {topic_id}) in their own post {parent_post_id}. "
+                        f"This indicates the author posted about a topic they don't have in agent_opinion table. "
+                        f"Skipping opinion update for this topic."
                     )
                     continue
                 
