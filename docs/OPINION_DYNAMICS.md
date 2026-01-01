@@ -114,6 +114,27 @@ Opinion dynamics is controlled via the `opinion_dynamics` section in `simulation
 }
 ```
 
+### Disabling Opinion Dynamics
+
+To disable opinion dynamics, set `enabled` to `false`:
+
+```json
+{
+  "opinion_dynamics": {
+    "enabled": false
+  }
+}
+```
+
+When disabled:
+- No opinion updates occur during interactions
+- Agents can still have initial opinions defined in `agent_population.json`
+- Opinion-based content generation and reactions still work with initial opinions
+- No opinion records are stored in the database beyond initial values
+- The simulation runs normally without any opinion evolution
+
+You can also completely omit the `opinion_dynamics` section from the configuration, which is equivalent to setting `enabled: false`.
+
 ### Configuration Parameters
 
 | Parameter | Type | Description | Default | Models |

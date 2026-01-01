@@ -7,17 +7,21 @@ This directory contains various pre-configured population examples for running Y
 ### LLM-Only Populations
 All agents use Large Language Models for decision-making. Best for testing advanced AI behaviors and interactions.
 
-| Example | Total Agents | LLM Agents | Rule-based | Network Size |
-|---------|--------------|------------|------------|--------------|
-| [llm_population_100](llm_population_100/) | 101 | 100 + 1 page | 0 | ~1,000 edges |
-| [llm_population_1000](llm_population_1000/) | 1001 | 1000 + 1 page | 0 | ~10,000 edges |
-| [llm_population_5000](llm_population_5000/) | 5001 | 5000 + 1 page | 0 | ~50,000 edges |
-| [llm_population_10000](llm_population_10000/) | 10001 | 10000 + 1 page | 0 | ~100,000 edges |
+| Example | Total Agents | LLM Agents | Rule-based | Network Size | Opinion Model |
+|---------|--------------|------------|------------|--------------|---------------|
+| [llm_population_100](llm_population_100/) | 101 | 100 + 1 page | 0 | ~1,000 edges | Bounded Confidence |
+| [llm_population_100_llm_opinion](llm_population_100_llm_opinion/) | 101 | 100 + 1 page | 0 | ~1,000 edges | **LLM Evaluation** |
+| [llm_population_100_no_opinion](llm_population_100_no_opinion/) | 101 | 100 + 1 page | 0 | ~1,000 edges | **Disabled** |
+| [llm_population_1000](llm_population_1000/) | 1001 | 1000 + 1 page | 0 | ~10,000 edges | Bounded Confidence |
+| [llm_population_5000](llm_population_5000/) | 5001 | 5000 + 1 page | 0 | ~50,000 edges | Bounded Confidence |
+| [llm_population_10000](llm_population_10000/) | 10001 | 10000 + 1 page | 0 | ~100,000 edges | Bounded Confidence |
 
 **Use cases:**
 - Research on LLM-driven social dynamics
 - Testing advanced AI reasoning and interactions
 - Studying emergent behaviors in AI populations
+- **llm_population_100_llm_opinion**: Testing LLM-based opinion evaluation with social influence
+- **llm_population_100_no_opinion**: Baseline simulations without opinion dynamics
 - Requires: Ollama or OpenAI API access
 
 ### Mixed Populations
