@@ -197,6 +197,9 @@ class OrchestratorServer:
 
         # Track last archetype transition day (start at 0, so first transition at day 7)
         self.last_archetype_transition_day = 0
+        
+        # Cache agent profiles for opinion lookup (only when opinion dynamics enabled)
+        self.agent_profiles_cache = {}
 
         # Simulation timing configuration
         self.num_slots_per_day = simulation_config.get("simulation", {}).get(
@@ -383,11 +386,14 @@ class OrchestratorServer:
         """
         return self.interest_manager.get_topic_name_from_id(topic_id)
     
-    def _ensure_agent_opinion_exists(self, agent_id: str, topic_id: str, topic_name: str):
+    def _ensure_agent_opinion_exists(self, agent_id: str, topic_id: str, topic_name: str, article_content: str = None):
         """
         Ensure an agent has an opinion recorded for a topic.
-        If the agent doesn't have an opinion on the topic, create one based on their
-        cached profile opinions or use neutral (0.5) as default.
+        
+        For regular agents: Use cached profile opinion or neutral (0.5) as fallback.
+        For page agents posting articles on new topics:
+          - Rule-based: Generate random opinion [0,1]
+          - LLM-based: Infer opinion from article content
         
         This is called when an agent posts about a topic to ensure they have an opinion
         on it in the database, which is required for opinion dynamics calculations.
@@ -398,6 +404,7 @@ class OrchestratorServer:
             agent_id: Agent UUID
             topic_id: Topic UUID (from interests table)
             topic_name: Topic name for looking up in cached profile
+            article_content: Optional article text for LLM opinion inference
         """
         # Only enforce this constraint when opinion dynamics is enabled
         opinion_config = self.simulation_config.get("opinion_dynamics", {})
@@ -410,19 +417,51 @@ class OrchestratorServer:
             return  # Opinion already exists
         
         # Agent doesn't have opinion - need to create one
-        # First, try to get from their cached profile
-        opinion_value = None
-        if agent_id in self.registered_agents:
-            # This would require caching the full AgentProfile, not just username
-            # For now, we'll use a neutral starting value
-            pass
+        # Check if this is a page agent
+        cached_profile = self.agent_profiles_cache.get(agent_id)
+        is_page_agent = cached_profile and cached_profile.is_page == 1
+        is_llm_agent = cached_profile and cached_profile.llm
         
-        # Default to neutral opinion if not found in profile
-        if opinion_value is None:
-            opinion_value = 0.5
-            self.logger.info(
-                f"Creating default opinion for agent {agent_id} on topic '{topic_name}' (topic_id: {topic_id}): {opinion_value}"
-            )
+        opinion_value = None
+        
+        if is_page_agent:
+            # Page agent posting about a new topic
+            if is_llm_agent and article_content:
+                # LLM page agent: infer opinion from article content
+                opinion_value = self._infer_opinion_from_article(article_content, topic_name)
+                self.logger.info(
+                    f"LLM page agent {agent_id}: inferred opinion {opinion_value} on topic '{topic_name}' from article content"
+                )
+            else:
+                # Rule-based page agent: assign random opinion
+                import random
+                opinion_value = random.random()
+                self.logger.info(
+                    f"Rule-based page agent {agent_id}: assigned random opinion {opinion_value} on topic '{topic_name}'"
+                )
+        else:
+            # Regular agent: try to get from cached profile
+            if cached_profile and cached_profile.opinions:
+                # Try exact match first
+                opinion_value = cached_profile.opinions.get(topic_name)
+                # If not found, try case-insensitive match
+                if opinion_value is None:
+                    for key, value in cached_profile.opinions.items():
+                        if key.lower() == topic_name.lower():
+                            opinion_value = value
+                            break
+                
+                if opinion_value is not None:
+                    self.logger.info(
+                        f"Regular agent {agent_id}: using initial opinion {opinion_value} from profile for topic '{topic_name}'"
+                    )
+            
+            # Default to neutral opinion if not found in profile
+            if opinion_value is None:
+                opinion_value = 0.5
+                self.logger.info(
+                    f"Regular agent {agent_id}: creating default neutral opinion {opinion_value} for topic '{topic_name}'"
+                )
         
         # Store the opinion
         self.db.add_agent_opinion(
@@ -433,6 +472,60 @@ class OrchestratorServer:
             id_interacted_with=None,
             id_post=None,
         )
+    
+    def _infer_opinion_from_article(self, article_content: str, topic_name: str) -> float:
+        """
+        Use LLM to infer opinion on a topic from article content.
+        
+        Args:
+            article_content: Article text to analyze
+            topic_name: Topic to infer opinion about
+        
+        Returns:
+            float: Opinion value in [0, 1] range
+        """
+        try:
+            # Import LLM service
+            from YSimulator.YClient.LLM_interactions.llm_service import LLMService
+            
+            # Create prompt for opinion inference
+            prompt = f"""Analyze this article and determine its stance on the topic "{topic_name}".
+
+Article:
+{article_content[:1000]}  
+
+Rate the article's stance from 0 to 1, where:
+- 0.0 = Strongly against {topic_name}
+- 0.5 = Neutral on {topic_name}
+- 1.0 = Strongly in favor of {topic_name}
+
+Respond with ONLY a single number between 0 and 1."""
+            
+            # Get LLM response
+            llm_service = LLMService()
+            response = llm_service.generate_generic_response(prompt)
+            
+            # Parse numeric value from response
+            import re
+            match = re.search(r'0?\.\d+|[01]\.?\d*', response)
+            if match:
+                opinion_value = float(match.group())
+                # Clamp to [0, 1] range
+                opinion_value = max(0.0, min(1.0, opinion_value))
+                return opinion_value
+            else:
+                self.logger.warning(
+                    f"Could not parse opinion from LLM response: {response}. Using random value."
+                )
+                import random
+                return random.random()
+                
+        except Exception as e:
+            self.logger.error(
+                f"Error inferring opinion from article: {e}. Using random value."
+            )
+            import random
+            return random.random()
 
     def _reaction_to_sentiment(self, reaction_type: str) -> Optional[Dict[str, float]]:
         """
@@ -773,8 +866,16 @@ class OrchestratorServer:
             registered_count, newly_registered_ids = self.db.register_users_batch(users_data)
 
             # All agents (new and existing) should be in registered_agents dict
-            for agent_profile in agents:
-                self.registered_agents[agent_profile.id] = agent_profile.username
+            # Also cache agent profiles for opinion lookups (when opinion dynamics enabled)
+            opinion_config = self.simulation_config.get("opinion_dynamics", {})
+            if opinion_config.get("enabled", False):
+                for agent_profile in agents:
+                    self.registered_agents[agent_profile.id] = agent_profile.username
+                    # Cache full profile for opinion lookups
+                    self.agent_profiles_cache[agent_profile.id] = agent_profile
+            else:
+                for agent_profile in agents:
+                    self.registered_agents[agent_profile.id] = agent_profile.username
 
             skipped_count = len(agents) - registered_count
 
@@ -1356,6 +1457,9 @@ class OrchestratorServer:
                                 # Note: We need the LLM service handle - we'll get it from the client context
                                 # For now, check if article already has topics
                                 existing_topic_ids = self.db.get_article_topics(article_id)
+                                
+                                # Get article content for opinion inference
+                                article_content = article_data.get("content") or article_data.get("summary") or article_data.get("title", "")
 
                                 if existing_topic_ids:
                                     # Article already has topics, link them to the post
@@ -1365,7 +1469,7 @@ class OrchestratorServer:
                                         topic_name = self.db.get_topic_name_from_id(topic_id)
                                         if topic_name:
                                             self._ensure_agent_opinion_exists(
-                                                act.agent_id, topic_id, topic_name
+                                                act.agent_id, topic_id, topic_name, article_content=article_content
                                             )
                                     self.logger.info(
                                         f"Linked {len(existing_topic_ids)} existing article topics to post {post_id}"

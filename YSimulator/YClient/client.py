@@ -2784,31 +2784,20 @@ class SimulationClient:
             # Calculate updated opinions for each topic
             updated_opinions = {}
             for topic_id in topic_ids:
-                # Get agent's current opinion from local cache (from AgentProfile)
-                agent_profile = next(
-                    (a for a in self.agent_profiles if a.id == agent_id), None
-                )
-                if not agent_profile or not agent_profile.opinions:
-                    continue
-                
-                # Get topic name to look up opinion
+                # Get topic name
                 topic_name = ray.get(
                     self.server.get_topic_name_from_id.remote(topic_id, client_id=self.client_id)
                 )
                 if not topic_name:
                     continue
                 
-                # Look up agent opinion (case-insensitive)
-                agent_opinion = None
-                if agent_profile.opinions:
-                    # Try exact match first
-                    agent_opinion = agent_profile.opinions.get(topic_name)
-                    # If not found, try case-insensitive match
-                    if agent_opinion is None:
-                        for key, value in agent_profile.opinions.items():
-                            if key.lower() == topic_name.lower():
-                                agent_opinion = value
-                                break
+                # Get agent's LATEST opinion from database (not cached profile)
+                # This ensures we use the most recent opinion after interactions
+                agent_opinion = ray.get(
+                    self.server.get_latest_agent_opinion.remote(
+                        agent_id, topic_id, client_id=self.client_id
+                    )
+                )
                 
                 # Get author's latest opinion from server
                 author_opinion = ray.get(
@@ -2840,10 +2829,6 @@ class SimulationClient:
                 )
                 
                 updated_opinions[topic_id] = new_opinion
-                
-                # Update local cache
-                if agent_profile.opinions:
-                    agent_profile.opinions[topic_name] = new_opinion
                 
                 self.logger.info(
                     f"Opinion update calculated: agent={agent_id}, topic={topic_name}, "
