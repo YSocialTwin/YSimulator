@@ -1800,8 +1800,16 @@ class SimulationClient:
                                 # CLIENT-SIDE: Ensure opinions exist for existing article topics
                                 if self._is_opinion_dynamics_enabled():
                                     article_content = f"{article.get('title', '')} {article.get('summary', '')}"
-                                    for topic_id, topic_name in existing_topics:
+                                    # existing_topics is List[str] of topic IDs
+                                    for topic_id in existing_topics:
                                         try:
+                                            # Get topic name from ID
+                                            topic_name = ray.get(
+                                                self.server.get_topic_name_from_id.remote(topic_id)
+                                            )
+                                            if not topic_name:
+                                                continue
+                                            
                                             # Check if opinion already exists
                                             existing_opinion = ray.get(
                                                 self.server.get_latest_agent_opinion.remote(agent.id, topic_id)
@@ -1820,7 +1828,7 @@ class SimulationClient:
                                                 )
                                         except Exception as e:
                                             self.logger.warning(
-                                                f"Failed to ensure opinion for existing topic '{topic_name}': {e}"
+                                                f"Failed to ensure opinion for existing topic: {e}"
                                             )
                         except Exception as e:
                             self.logger.warning(
@@ -1905,8 +1913,16 @@ class SimulationClient:
                                 # CLIENT-SIDE: Ensure opinions exist for existing article topics
                                 if self._is_opinion_dynamics_enabled():
                                     article_content = f"{article.get('title', '')} {article.get('summary', '')}"
-                                    for topic_id, topic_name in existing_topics:
+                                    # existing_topics is List[str] of topic IDs
+                                    for topic_id in existing_topics:
                                         try:
+                                            # Get topic name from ID
+                                            topic_name = ray.get(
+                                                self.server.get_topic_name_from_id.remote(topic_id)
+                                            )
+                                            if not topic_name:
+                                                continue
+                                            
                                             # Check if opinion already exists
                                             existing_opinion = ray.get(
                                                 self.server.get_latest_agent_opinion.remote(agent.id, topic_id)
@@ -1925,7 +1941,7 @@ class SimulationClient:
                                                 )
                                         except Exception as e:
                                             self.logger.warning(
-                                                f"Failed to ensure opinion for existing topic '{topic_name}': {e}"
+                                                f"Failed to ensure opinion for existing topic: {e}"
                                             )
                         except Exception as e:
                             self.logger.warning(
