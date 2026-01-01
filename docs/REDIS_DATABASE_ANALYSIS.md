@@ -1,6 +1,6 @@
 # Redis vs Database Backend: Comprehensive Analysis
 
-**Document Version:** 1.2  
+**Document Version:** 1.3  
 **Last Updated:** January 1, 2026  
 **Author:** Analysis generated for YSimulator PR integration
 
@@ -11,11 +11,9 @@
 YSimulator supports both Redis (in-memory cache) and relational databases (SQLite/PostgreSQL/MySQL) as backend storage. This document provides a comprehensive analysis of the implementation differences, identifies gaps in Redis support, and proposes alignment strategies.
 
 **Key Findings:**
-- **52% Redis Coverage**: 28 out of 54 methods have Redis implementations
-- **Recent Improvements**: User Management and Annotations now at 100% Redis coverage
-- **Remaining Gaps**: Topics/Interests system and search operations (by design, better suited for SQL)
-- **Recent Additions**: Search action and topic-based content discovery (DB-only)
-- **Recent Fix**: Reply pipeline (mention system) Redis compatibility was recently fixed
+- **72% Redis Coverage**: 39 out of 54 methods have Redis implementations
+- **Recent Improvements**: Articles & News and Topics & Interests now have Redis support
+- **Remaining Gaps**: 3 complex temporal/aggregation methods in Topics & Interests (SQL-only by design)
 - **Hybrid Architecture**: System uses Redis for performance with SQL fallback for complex queries
 
 ---
@@ -48,15 +46,17 @@ The `DatabaseMiddleware` class provides a unified interface that switches betwee
 
 ```
 Total Methods: 54 (including churn/new agents support)
-├─ Redis Supported: 28 (52%)
-├─ Database Only: 22 (41%)
-└─ Special/Utility: 4 (7%)
+├─ Redis Supported: 39 (72%)
+├─ Database Only: 11 (20%)
+└─ Special/Utility: 4 (8%)
 Note: Percentages may not sum to exactly 100% due to rounding.
 ```
 
 **Recent Updates:**
 - **User Management**: 100% Redis coverage (added username index, get_all_users, update_user_archetype)
 - **Annotations**: 100% Redis coverage (added get_emotion_by_name with lazy caching)
+- **Articles & News**: 100% Redis coverage (get_article, get_website_by_rss, get_random_image)
+- **Topics & Interests**: 73% Redis coverage (8/11 methods implemented, 3 remain SQL-only by design)
 - **Churn System**: Full Redis support for tracking agent activity and churn status
 - **New Agents**: Uses existing `register_user` method with batch operations
 - **Population Dynamics**: Efficient queries for inactive and churned agents
@@ -65,7 +65,7 @@ Note: Percentages may not sum to exactly 100% due to rounding.
 
 ## Method-by-Method Analysis
 
-### ✅ Methods WITH Redis Support (28)
+### ✅ Methods WITH Redis Support (39)
 
 These methods have complete dual implementations:
 
@@ -131,27 +131,14 @@ These methods have complete dual implementations:
 
 ---
 
-### ❌ Methods WITHOUT Redis Support (22)
+### ❌ Methods WITHOUT Redis Support (11)
 
 These methods **only** use the SQL database:
 
-#### Topics & Interests System (10) - **Major Gap**
-- `add_or_get_interest` - Interest/topic registry
-- `get_interest_by_id` - Retrieve topic names from IDs
-- `get_topic_id_by_name` - **NEW** Topic lookup by name
-- `add_user_interest` - User-interest relationships
-- `add_post_topic` - Post-topic relationships
-- `get_post_topics` - Retrieve post topics
-- `search_posts_by_topic` - **NEW** Search posts by topic (for search action)
-- `get_user_interests_in_window` - Temporal interest query
-- `compute_interest_counts_in_window` - Interest aggregation
-- `add_article_topic` - Article-topic relationships
-- `get_article_topics` - Retrieve article topics
-
-#### Articles & News (3)
-- `get_article` - Article retrieval by ID
-- `get_website_by_rss` - Website lookup by RSS URL
-- `get_random_image` - Random image selection for sharing
+#### Topics & Interests (3) - **By Design**
+- `search_posts_by_topic` - Complex JOIN operations (SQL optimal)
+- `get_user_interests_in_window` - Temporal queries with time windows
+- `compute_interest_counts_in_window` - Aggregation operations
 
 #### System Utilities (4)
 - `get_or_create_round` - Round management (simulation time)
@@ -224,58 +211,58 @@ These methods **only** use the SQL database:
 
 ---
 
-### 5. Topics & Interests: **0% Coverage** ❌ **CRITICAL GAP**
+### 5. Topics & Interests: **73% Coverage** 🎯
 ```
-❌ add_or_get_interest              - Interest registry
-❌ get_interest_by_id               - Retrieve interest/topic by ID
-❌ get_topic_id_by_name             - NEW: Lookup topic by name
-❌ add_user_interest                - User interests
-❌ add_post_topic                   - Post topics
-❌ get_post_topics                  - Query post topics
-❌ search_posts_by_topic            - NEW: Search posts by topic (for search action)
-❌ get_user_interests_in_window     - Temporal interest query
-❌ compute_interest_counts_in_window - Interest aggregation
-❌ add_article_topic                - Article topics
-❌ get_article_topics               - Query article topics
+✅ add_or_get_interest              - Interest registry (name index)
+✅ get_interest_by_id               - Retrieve interest/topic by ID
+✅ get_topic_id_by_name             - Lookup topic by name (name index)
+✅ add_user_interest                - User interests (Redis sets)
+✅ add_post_topic                   - Post topics (Redis sets)
+✅ get_post_topics                  - Query post topics
+✅ add_article_topic                - Article topics (Redis sets)
+✅ get_article_topics               - Query article topics
+❌ search_posts_by_topic            - Search posts by topic (SQL-only by design - complex JOINs)
+❌ get_user_interests_in_window     - Temporal interest query (SQL-only by design)
+❌ compute_interest_counts_in_window - Interest aggregation (SQL-only by design)
 ```
 
-**Impact:** When Redis is enabled, all topic/interest operations still use SQL database. This affects:
-- Content recommendation systems that rely on topics
-- User interest tracking over time
-- Article topic extraction and storage
-- **Search action** - Agents searching for posts by topic
+**Status:** Core functionality implemented in Redis!
 
-**Why Missing:** Topics/interests require:
-- Many-to-many relationships (posts ↔ topics, users ↔ interests)
-- Temporal queries (interests within time window)
-- Aggregation operations (count interests by type)
-- Complex join operations (search posts with specific topic)
+**Implementation Details:**
+- Interest name index: `ysim:interest:by_name:{name}` → interest_id
+- Interest data stored in hashes: `ysim:interest:{id}`
+- User interests tracked in sets: `ysim:user:{user_id}:interests:`
+- Post topics tracked in sets: `ysim:post:{post_id}:topics:`
+- Article topics tracked in sets: `ysim:article:{article_id}:topics:`
+- Many-to-many relationships efficiently stored as Redis sets
 
-**Recent Additions:**
-- `get_topic_id_by_name`: Added for topic lookup by name (case-sensitive exact match)
-- `search_posts_by_topic`: Added to support the search action feature where agents actively search for posts on topics they're interested in. Uses SQL joins with Round table for chronological ordering.
-
-These are complex to implement efficiently in Redis without secondary indices.
+**Impact:** Core topic/interest operations now use Redis:
+- Interest creation and lookup (fast via name index)
+- Post-topic and article-topic associations
+- User interest tracking
+- Complex temporal queries and aggregations remain in SQL (appropriate design choice)
 
 ---
 
-### 6. Articles & News: **43% Coverage**
+### 6. Articles & News: **100% Coverage** ✅
 ```
-✅ add_website           - CREATE
+✅ add_website           - CREATE (with RSS URL index)
 ✅ add_article           - CREATE
-✅ add_image             - CREATE (stores image URL, description, article reference)
-❌ get_article           - READ
-❌ get_website_by_rss    - LOOKUP by RSS URL
-❌ get_random_image      - RANDOM SELECTION (used for image sharing action)
-❌ get_article_topics    - Query article topics
+✅ add_image             - CREATE (with IDs set)
+✅ get_article           - READ from Redis
+✅ get_website_by_rss    - LOOKUP by RSS URL (uses index)
+✅ get_random_image      - RANDOM SELECTION from Redis set
 ```
 
-**Impact:** Articles and images can be written to Redis but reads always hit SQL. Affects news-sharing page agents, image sharing actions, and article topic operations.
+**Status:** Complete Redis support!
 
-**Note on Images:** The `add_image` method stores images extracted from RSS feeds with:
-- `url`: Image URL from feed
-- `description`: Vision LLM-generated description
-- `article_id`: Reference to source article
+**Implementation Details:**
+- Articles cached at: `ysim:articles:{id}`
+- Website RSS URL index: `ysim:website:by_rss:{rss_url}` → website_id
+- Images tracked in set: `ysim:images:ids` for random selection
+- Image data cached at: `ysim:images:{id}`
+
+**Impact:** All article and image operations now use Redis, improving performance for news-sharing agents.
 
 ---
 
