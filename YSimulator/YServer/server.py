@@ -392,11 +392,18 @@ class OrchestratorServer:
         This is called when an agent posts about a topic to ensure they have an opinion
         on it in the database, which is required for opinion dynamics calculations.
         
+        Only executes when opinion dynamics is enabled in simulation config.
+        
         Args:
             agent_id: Agent UUID
             topic_id: Topic UUID (from interests table)
             topic_name: Topic name for looking up in cached profile
         """
+        # Only enforce this constraint when opinion dynamics is enabled
+        opinion_config = self.simulation_config.get("opinion_dynamics", {})
+        if not opinion_config.get("enabled", False):
+            return  # Opinion dynamics disabled, no need to ensure opinions exist
+        
         # Check if agent already has an opinion on this topic
         existing_opinion = self.db.get_latest_agent_opinion(agent_id, topic_id)
         if existing_opinion is not None:
