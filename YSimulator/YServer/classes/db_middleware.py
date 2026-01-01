@@ -1421,6 +1421,12 @@ class DatabaseMiddleware:
                     },
                 )
 
+                # Create RSS URL index for fast lookup
+                rss_url = website_data.get("rss")
+                if rss_url:
+                    rss_index_key = self._redis_key("website:by_rss", rss_url)
+                    self.redis_client.set(rss_index_key, website_id)
+
             return website_id
 
         except Exception as e:
@@ -1491,6 +1497,12 @@ class DatabaseMiddleware:
                             "language": website.get("language", ""),
                         },
                     )
+
+                    # Create RSS URL index for fast lookup
+                    rss_url = website.get("rss")
+                    if rss_url:
+                        rss_index_key = self._redis_key("website:by_rss", rss_url)
+                        self.redis_client.set(rss_index_key, website["id"])
 
             return len(new_websites)
         except Exception as e:
@@ -1687,6 +1699,23 @@ class DatabaseMiddleware:
             session.add(image)
             session.commit()
 
+            # Cache in Redis if enabled
+            if self.use_redis:
+                redis_key = self._redis_key("images", image_id)
+                self.redis_client.hset(
+                    redis_key,
+                    mapping={
+                        "id": image_id,
+                        "url": image_data.get("url", ""),
+                        "description": image_data.get("description", ""),
+                        "article_id": article_id,
+                    },
+                )
+
+                # Add to images set for random selection
+                images_set_key = self._redis_key("images", "ids")
+                self.redis_client.sadd(images_set_key, image_id)
+
             self.logger.info(
                 f"Image added successfully: {image_id}",
                 extra={
@@ -1719,36 +1748,73 @@ class DatabaseMiddleware:
             dict: Image data with keys: id, url, description, article_id
                  Returns None if no images available
         """
-        import random
+        if self.use_redis:
+            try:
+                # Get all image IDs from the set
+                images_set_key = self._redis_key("images", "ids")
+                image_ids = self.redis_client.smembers(images_set_key)
 
-        from YSimulator.YServer.classes.models import Image
+                if not image_ids:
+                    self.logger.info("No images available in Redis")
+                    return None
 
-        session = Session(self.engine)
-        try:
-            # Get all images
-            images = session.query(Image).all()
+                # Select random image ID
+                import random
 
-            if not images:
-                self.logger.info("No images available in database")
+                image_id = random.choice(list(image_ids))
+                image_id_str = image_id.decode() if isinstance(image_id, bytes) else image_id
+
+                # Get image data
+                redis_key = self._redis_key("images", image_id_str)
+                image_data = self.redis_client.hgetall(redis_key)
+
+                if image_data:
+                    # Decode all keys and values
+                    return {
+                        k.decode() if isinstance(k, bytes) else k: (
+                            v.decode() if isinstance(v, bytes) else v
+                        )
+                        for k, v in image_data.items()
+                    }
                 return None
 
-            # Select random image
-            image = random.choice(images)
+            except Exception as e:
+                self.logger.error(
+                    f"Error getting random image from Redis: {e}",
+                    extra={"extra_data": {"error": str(e)}},
+                )
+                return None
+        else:
+            import random
 
-            return {
-                "id": image.id,
-                "url": image.url,
-                "description": image.description,
-                "article_id": image.article_id,
-            }
+            from YSimulator.YServer.classes.models import Image
 
-        except Exception as e:
-            self.logger.error(
-                f"Error getting random image: {e}", extra={"extra_data": {"error": str(e)}}
-            )
-            return None
-        finally:
-            session.close()
+            session = Session(self.engine)
+            try:
+                # Get all images
+                images = session.query(Image).all()
+
+                if not images:
+                    self.logger.info("No images available in database")
+                    return None
+
+                # Select random image
+                image = random.choice(images)
+
+                return {
+                    "id": image.id,
+                    "url": image.url,
+                    "description": image.description,
+                    "article_id": image.article_id,
+                }
+
+            except Exception as e:
+                self.logger.error(
+                    f"Error getting random image: {e}", extra={"extra_data": {"error": str(e)}}
+                )
+                return None
+            finally:
+                session.close()
 
     def get_website_by_rss(self, rss_url: str) -> Optional[Dict[str, Any]]:
         """
@@ -1760,30 +1826,62 @@ class DatabaseMiddleware:
         Returns:
             dict: Website data if found, None otherwise
         """
-        from YSimulator.YServer.classes.models import Website
+        if self.use_redis:
+            try:
+                # Look up website ID from RSS URL index
+                rss_index_key = self._redis_key("website:by_rss", rss_url)
+                website_id = self.redis_client.get(rss_index_key)
 
-        session = Session(self.engine)
-        try:
-            website = session.query(Website).filter(Website.rss == rss_url).first()
+                if website_id:
+                    # Decode if bytes
+                    website_id_str = (
+                        website_id.decode() if isinstance(website_id, bytes) else website_id
+                    )
+                    # Get website data by ID
+                    redis_key = self._redis_key("websites", website_id_str)
+                    website_data = self.redis_client.hgetall(redis_key)
 
-            if website:
-                return {
-                    "id": website.id,
-                    "name": website.name,
-                    "rss": website.rss,
-                    "category": website.category,
-                    "language": website.language,
-                }
-            return None
+                    if website_data:
+                        # Decode all keys and values
+                        return {
+                            k.decode() if isinstance(k, bytes) else k: (
+                                v.decode() if isinstance(v, bytes) else v
+                            )
+                            for k, v in website_data.items()
+                        }
+                return None
 
-        except Exception as e:
-            self.logger.error(
-                f"Error getting website by RSS: {e}",
-                extra={"extra_data": {"error": str(e), "rss_url": rss_url}},
-            )
-            return None
-        finally:
-            session.close()
+            except Exception as e:
+                self.logger.error(
+                    f"Error getting website by RSS from Redis: {e}",
+                    extra={"extra_data": {"error": str(e), "rss_url": rss_url}},
+                )
+                return None
+        else:
+            from YSimulator.YServer.classes.models import Website
+
+            session = Session(self.engine)
+            try:
+                website = session.query(Website).filter(Website.rss == rss_url).first()
+
+                if website:
+                    return {
+                        "id": website.id,
+                        "name": website.name,
+                        "rss": website.rss,
+                        "category": website.category,
+                        "language": website.language,
+                    }
+                return None
+
+            except Exception as e:
+                self.logger.error(
+                    f"Error getting website by RSS: {e}",
+                    extra={"extra_data": {"error": str(e), "rss_url": rss_url}},
+                )
+                return None
+            finally:
+                session.close()
 
     def get_interest_by_id(self, interest_id: str) -> Optional[dict]:
         """
@@ -2306,30 +2404,53 @@ class DatabaseMiddleware:
         Returns:
             dict: Article data or None if not found
         """
-        from YSimulator.YServer.classes.models import Article
+        if self.use_redis:
+            try:
+                # Try to get from Redis first
+                redis_key = self._redis_key("articles", article_id)
+                article_data = self.redis_client.hgetall(redis_key)
 
-        session = Session(self.engine)
-        try:
-            article = session.query(Article).filter(Article.id == article_id).first()
-            if article:
-                return {
-                    "id": article.id,
-                    "title": article.title,
-                    "summary": article.summary,
-                    "website_id": article.website_id,
-                    "link": article.link,
-                    "fetched_on": article.fetched_on,
-                }
-            return None
+                if article_data:
+                    # Decode all keys and values
+                    return {
+                        k.decode() if isinstance(k, bytes) else k: (
+                            v.decode() if isinstance(v, bytes) else v
+                        )
+                        for k, v in article_data.items()
+                    }
+                return None
 
-        except Exception as e:
-            self.logger.error(
-                f"Error getting article: {e}",
-                extra={"extra_data": {"error": str(e), "article_id": article_id}},
-            )
-            return None
-        finally:
-            session.close()
+            except Exception as e:
+                self.logger.error(
+                    f"Error getting article from Redis: {e}",
+                    extra={"extra_data": {"error": str(e), "article_id": article_id}},
+                )
+                return None
+        else:
+            from YSimulator.YServer.classes.models import Article
+
+            session = Session(self.engine)
+            try:
+                article = session.query(Article).filter(Article.id == article_id).first()
+                if article:
+                    return {
+                        "id": article.id,
+                        "title": article.title,
+                        "summary": article.summary,
+                        "website_id": article.website_id,
+                        "link": article.link,
+                        "fetched_on": article.fetched_on,
+                    }
+                return None
+
+            except Exception as e:
+                self.logger.error(
+                    f"Error getting article: {e}",
+                    extra={"extra_data": {"error": str(e), "article_id": article_id}},
+                )
+                return None
+            finally:
+                session.close()
 
     def add_article_topic(self, article_id: str, topic_id: str) -> bool:
         """
