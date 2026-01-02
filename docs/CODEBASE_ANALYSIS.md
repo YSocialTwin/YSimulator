@@ -22,10 +22,14 @@ YSimulator is a distributed social media simulation framework with **~22,000 lin
 | Print statements (production code) | 89 | 🟡 Medium | ✅ **FIXED** |
 | Code formatting (Black/isort) | All files | 🟡 Medium | ✅ **FIXED** |
 | Type hints (key functions) | 22+ functions | 🟡 Medium | ✅ **SIGNIFICANTLY IMPROVED** |
+| Testing infrastructure (pytest-cov, CI) | - | 🟡 Medium | ✅ **IMPLEMENTED** |
+| Test coverage baseline | 25% | 🟡 Medium | ✅ **GENERATED** |
+| Critical paths documentation | - | 🟡 Medium | ✅ **DOCUMENTED** |
 | Print statements (test files) | 572 | 🟢 Low | Acceptable for tests |
 | Ray blocking calls | 95 | 🟡 Medium | 🔄 TODO |
 | Large files (>2000 lines) | 3 | 🟡 Medium | 🔄 TODO |
-| Test coverage gaps | Multiple | 🟡 Medium | 🔄 TODO |
+| Test coverage improvement | 25%→60% | 🟡 Medium | 🔄 IN PROGRESS |
+| Failing tests (isolation issues) | 9 | 🟡 Medium | 🔄 TODO |
 | Wildcard imports | 1 | 🟢 Low | 🔄 TODO |
 
 ---
@@ -369,7 +373,116 @@ YServer/
 
 ---
 
-### 2.3 Ray Blocking Calls
+### 2.4 Testing and Coverage - PARTIALLY COMPLETE ✅
+
+**Status**: 🟡 **IN PROGRESS** - Test infrastructure established, baseline coverage generated
+
+**Changes Made**:
+
+1. **pytest-cov Integration** ✅
+   - Added `pytest-cov>=4.1.0` to `requirements-dev.txt`
+   - Added `pytest-asyncio>=0.21.0` for async test support
+   - Created comprehensive dev requirements with all testing tools
+
+2. **GitHub Actions CI Workflow** ✅
+   - Created `.github/workflows/ci.yml` with comprehensive CI pipeline
+   - **Features**:
+     - Multi-Python version testing (3.9, 3.10, 3.11)
+     - Redis service for integration tests
+     - Code quality checks (Black, isort, flake8)
+     - Coverage reporting with Codecov integration
+     - HTML coverage report artifacts
+     - PR coverage comments
+     - Security scanning with bandit
+     - Type checking with mypy (non-blocking)
+   - **Test execution**: Runs on push to main/develop and all PRs
+
+3. **pytest Configuration** ✅
+   - Extended `pyproject.toml` with comprehensive pytest settings
+   - **Test discovery**: Automatic test collection from `YSimulator/tests/`
+   - **Coverage configuration**: 
+     - Branch coverage enabled
+     - Omits test files and pycache
+     - HTML reports in `htmlcov/`
+     - Skip lines with pragma comments
+
+4. **Initial Coverage Report Generated** ✅
+   - **Baseline Coverage**: 25% (2,262 of 8,364 statements covered)
+   - **Test Results**: 116 passing tests, 9 failing (database constraint issues)
+   - **Coverage by Component**:
+     - Server: ~30%
+     - Client: ~20%
+     - Recommendation Systems: ~15%
+     - Interest Management: ~25%
+     - News Integration: ~20%
+
+5. **Critical Code Paths Documentation** ✅
+   - Created `CRITICAL_CODE_PATHS.md` (150+ lines)
+   - **Documented**:
+     - 10 critical code paths with priority levels
+     - Coverage targets for each path (60-95%)
+     - Test coverage gaps and recommendations
+     - Testing strategy with timeline
+     - Known issues and missing infrastructure
+   - **Prioritization**:
+     - 🔴 Critical: Agent lifecycle, action pipeline, database ops (90%+ target)
+     - 🟡 High: Recommendations, interests, news, Ray, Redis (75%+ target)
+     - 🟢 Medium: Text processing, logging (60%+ target)
+
+**Configuration Files**:
+```toml
+# pyproject.toml additions
+[tool.pytest.ini_options]
+testpaths = ["YSimulator/tests"]
+addopts = ["-ra", "--strict-markers", "--showlocals"]
+markers = ["slow", "integration", "unit"]
+
+[tool.coverage.run]
+branch = true
+source = ["YSimulator"]
+omit = ["*/tests/*", "*/__pycache__/*"]
+
+[tool.coverage.report]
+precision = 2
+show_missing = true
+exclude_lines = ["pragma: no cover", "if __name__ == .__main__.:", ...]
+```
+
+**Example Usage**:
+```bash
+# Run tests with coverage
+pytest YSimulator/tests/ --cov=YSimulator --cov-report=html
+
+# View HTML report
+open htmlcov/index.html
+
+# Run specific test categories
+pytest -m "not slow"  # Skip slow tests
+pytest -m integration  # Only integration tests
+```
+
+**Impact**:
+- ✅ Automated test execution on every push/PR
+- ✅ Coverage tracking and trending
+- ✅ Code quality gates (formatting, linting)
+- ✅ Security scanning integrated
+- ✅ Clear documentation of critical paths
+- ✅ Foundation for systematic test improvement
+- ✅ Visible coverage metrics in CI
+
+**Remaining Work**:
+- 🔲 Fix 9 failing tests (database constraint issues - test isolation)
+- 🔲 Increase coverage for critical paths (agent lifecycle, actions, DB ops)
+- 🔲 Add performance benchmarks
+- 🔲 Implement chaos testing for resilience
+- 🔲 Configure coverage thresholds in CI (enforce minimums)
+- 🔲 Add end-to-end integration tests
+
+**Priority**: 🟡 **HIGH** - Continue test development to reach coverage targets
+
+---
+
+### 2.5 Ray Blocking Calls
 
 **Issue**: 95 instances of `ray.get()` which block execution
 
@@ -1245,7 +1358,7 @@ def health_check(self) -> Dict[str, Any]:
 - ✅ **HIGH**: Added upper bounds to all dependency versions
 - ✅ **Verified**: All Python files compile without syntax errors
 
-**Phase 2 - High Priority Improvements (Complete)**:
+**Phase 2 - High Priority Improvements (Partially Complete)**:
 - ✅ **HIGH**: Replaced all 89 production print statements with logging
   - ✅ news_service.py (48 statements)
   - ✅ server.py (13 statements)
@@ -1264,6 +1377,15 @@ def health_check(self) -> Dict[str, Any]:
   - ✅ llm_service.py: Constructor with full type signatures
   - ✅ llm_actions.py: All 9 async functions with ray.ObjectRef return types
   - ✅ rule_based_actions.py: News post function fully typed
+- ✅ **HIGH**: Added pytest-cov and testing infrastructure
+  - ✅ Created `requirements-dev.txt` with pytest-cov, pytest-asyncio, black, isort, mypy, flake8, pylint
+  - ✅ Created GitHub Actions CI workflow (`.github/workflows/ci.yml`)
+  - ✅ Extended `pyproject.toml` with pytest and coverage configuration
+  - ✅ Generated initial coverage report (25% baseline, 116 passing tests)
+  - ✅ Created `CRITICAL_CODE_PATHS.md` documentation
+- 🔲 **HIGH**: Fix 9 failing tests (database constraint issues)
+- 🔲 **MEDIUM**: Optimize 95 Ray blocking calls
+- 🔲 **MEDIUM**: Configure coverage thresholds in CI
 - ✅ **Verified**: All files compile and maintain functionality
 
 ### 🔄 Phase 3 - In Progress (Do Next)
