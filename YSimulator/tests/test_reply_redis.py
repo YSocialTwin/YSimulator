@@ -20,14 +20,11 @@ def test_redis_byte_handling():
         
         if not isinstance(mention_id_str, str):
             print(f"  ✗ Failed to decode mention_id: {mention_id}")
-            return False
         
         if mention_id_str.startswith("b'"):
             print(f"  ✗ mention_id not properly decoded: {mention_id_str}")
-            return False
     
     print(f"  ✓ All mention_ids properly decoded from bytes to strings")
-    return True
 
 
 def test_mention_data_byte_handling():
@@ -54,10 +51,8 @@ def test_mention_data_byte_handling():
     for key, value in mention_dict.items():
         if not isinstance(key, str):
             print(f"  ✗ Key not converted to string: {key}")
-            return False
         if not isinstance(value, str):
             print(f"  ✗ Value not converted to string: {value}")
-            return False
     
     print(f"  ✓ All mention data properly converted from bytes to strings")
     
@@ -66,9 +61,7 @@ def test_mention_data_byte_handling():
         print(f"  ✓ Answered field comparison works correctly")
     else:
         print(f"  ✗ Answered field comparison failed")
-        return False
     
-    return True
 
 
 def test_redis_key_generation():
@@ -83,10 +76,8 @@ def test_redis_key_generation():
     
     if redis_key == "ysim:mentions:mention-uuid-123":
         print(f"  ✓ Redis key generated correctly: {redis_key}")
-        return True
     else:
         print(f"  ✗ Redis key incorrect: {redis_key}")
-        return False
 
 
 def test_method_signatures():
@@ -103,11 +94,9 @@ def test_method_signatures():
     for method_name in required_methods:
         if not hasattr(DatabaseMiddleware, method_name):
             print(f"  ✗ Missing method: {method_name}")
-            return False
         else:
             print(f"  ✓ Method exists: {method_name}")
     
-    return True
 
 
 if __name__ == "__main__":

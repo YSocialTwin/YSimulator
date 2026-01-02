@@ -71,7 +71,6 @@ def test_client_specific_config_fallback():
         assert data["personas"]["0"] == "Generic persona"
         print("✓ Fallback to generic llm_prompts.json works")
         
-        return True
 
 
 def test_network_csv_client_specific():
@@ -112,7 +111,6 @@ def test_network_csv_client_specific():
         assert "user1,user2" in content
         print("✓ Fallback to generic network.csv works")
         
-        return True
 
 
 if __name__ == '__main__':

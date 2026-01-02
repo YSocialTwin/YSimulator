@@ -47,7 +47,6 @@ def test_churn_configuration():
     assert churn_config["churn_percentage"] == 0.1
     
     print("✓ Churn configuration structure is valid")
-    return True
 
 
 def test_churn_config_in_all_examples():
@@ -79,7 +78,6 @@ def test_churn_config_in_all_examples():
         assert "churn_percentage" in churn_config, f"Missing 'churn_percentage' in {config_file}"
     
     print(f"✓ All {len(config_files)} example configs have valid churn configuration")
-    return True
 
 
 def test_inactive_agent_logic():
@@ -118,7 +116,6 @@ def test_inactive_agent_logic():
     assert "agent_3" in inactive_agents
     
     print("✓ Inactive agent identification logic is correct")
-    return True
 
 
 def test_churn_percentage_selection():
@@ -138,7 +135,6 @@ def test_churn_percentage_selection():
     assert num_candidates_small == 1, f"Expected at least 1 candidate, got {num_candidates_small}"
     
     print("✓ Churn percentage selection logic is correct")
-    return True
 
 
 def test_churn_probability_application():
@@ -165,7 +161,6 @@ def test_churn_probability_application():
     assert all(isinstance(a, str) for a in churned)
     
     print("✓ Churn probability application logic is correct")
-    return True
 
 
 def test_database_schema_updates():
@@ -186,7 +181,6 @@ def test_database_schema_updates():
     assert "left_on" in schema_content, "Missing 'left_on' column in schema"
     
     print("✓ Database schema includes last_active_day and left_on columns")
-    return True
 
 
 def test_sqlalchemy_model_updates():
@@ -206,7 +200,6 @@ def test_sqlalchemy_model_updates():
     assert "left_on = Column" in models_content, "Missing left_on column in User_mgmt model"
     
     print("✓ SQLAlchemy models include churn fields")
-    return True
 
 
 if __name__ == '__main__':

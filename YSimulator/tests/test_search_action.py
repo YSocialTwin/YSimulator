@@ -226,10 +226,8 @@ def test_llm_search_function():
         # Check that it's a function
         if not callable(generate_llm_search_action_async):
             print(f"  ✗ generate_llm_search_action_async is not callable")
-            return False
         
         print(f"  ✓ Function is callable")
-        return True
     except ImportError as e:
         print(f"\n=== Test 5: LLM Search Function ===")
         print(f"  ! Skipping test (missing dependency: {e})")
@@ -244,11 +242,9 @@ def test_imports_in_init():
         print("\n=== Test 6: Imports in __init__.py ===")
         print(f"  ✓ generate_llm_search_action_async is exported")
         
-        return True
     except ImportError as e:
         print(f"\n=== Test 6: Imports in __init__.py ===")
         print(f"  ! Skipping test (missing dependency: {e})")
-        return True
 
 
 def test_client_imports():
@@ -258,10 +254,8 @@ def test_client_imports():
     try:
         from YSimulator.YClient.client import SimulationClient
         print(f"  ✓ client.py imports successfully")
-        return True
     except ImportError as e:
         print(f"  ! Skipping test (missing dependency: {e})")
-        return True
 
 
 def run_tests():

@@ -15,10 +15,8 @@ def test_llm_reply_function():
     # Check that it's a function
     if not callable(generate_llm_reply_to_mention_async):
         print(f"  ✗ generate_llm_reply_to_mention_async is not callable")
-        return False
     
     print(f"  ✓ Function is callable")
-    return True
 
 
 def test_rule_based_reply_function():
@@ -40,29 +38,24 @@ def test_rule_based_reply_function():
     
     if not isinstance(action, ActionDTO):
         print(f"  ✗ Function did not return ActionDTO")
-        return False
     
     print(f"  ✓ Function returns ActionDTO")
     
     if action.action_type != "COMMENT":
         print(f"  ✗ Action type is not COMMENT: {action.action_type}")
-        return False
     
     print(f"  ✓ Action type is COMMENT")
     
     if not action.content.startswith(f"@{author_username}"):
         print(f"  ✗ Content does not start with @{author_username}: {action.content}")
-        return False
     
     print(f"  ✓ Content includes @{author_username}: '{action.content}'")
     
     if action.target_post_id != post_id:
         print(f"  ✗ Target post ID mismatch")
-        return False
     
     print(f"  ✓ Target post ID is correct")
     
-    return True
 
 
 def test_imports_in_init():
@@ -76,7 +69,6 @@ def test_imports_in_init():
     print(f"  ✓ generate_llm_reply_to_mention_async is exported")
     print(f"  ✓ generate_rule_based_reply_to_mention is exported")
     
-    return True
 
 
 def test_client_imports():
@@ -87,10 +79,8 @@ def test_client_imports():
     try:
         from YSimulator.YClient.client import SimulationClient
         print(f"  ✓ client.py imports successfully")
-        return True
     except ImportError as e:
         print(f"  ✗ Failed to import client.py: {e}")
-        return False
 
 
 if __name__ == "__main__":
