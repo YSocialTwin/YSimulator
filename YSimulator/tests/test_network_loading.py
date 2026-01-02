@@ -49,24 +49,30 @@ class TestNetworkLoading(unittest.TestCase):
         with Session(self.db.engine) as session:
             user1 = User_mgmt(
                 id=self.user1_id,
-                username="test_user1",
-                email="test1@example.com",
+                username=f"test_user1_{self.user1_id[:8]}",
+                email=f"test1_{self.user1_id[:8]}@example.com",
+                password="test_password",  # Add required password field
                 leaning="neutral",
-                user_type="agent"
+                user_type="agent",
+                round_actions=3
             )
             user2 = User_mgmt(
                 id=self.user2_id,
-                username="test_user2",
-                email="test2@example.com",
+                username=f"test_user2_{self.user2_id[:8]}",
+                email=f"test2_{self.user2_id[:8]}@example.com",
+                password="test_password",  # Add required password field
                 leaning="neutral",
-                user_type="agent"
+                user_type="agent",
+                round_actions=3
             )
             user3 = User_mgmt(
                 id=self.user3_id,
-                username="test_user3",
-                email="test3@example.com",
+                username=f"test_user3_{self.user3_id[:8]}",
+                email=f"test3_{self.user3_id[:8]}@example.com",
+                password="test_password",  # Add required password field
                 leaning="neutral",
-                user_type="agent"
+                user_type="agent",
+                round_actions=3
             )
             session.add_all([user1, user2, user3])
             session.commit()

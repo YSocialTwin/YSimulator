@@ -71,8 +71,12 @@ class TestLLMActionGeneration:
         mock = Mock()
         mock.generate_post = Mock()
         mock.generate_post.remote = Mock(return_value="mock_object_ref")
-        mock.generate_reaction = Mock()
-        mock.generate_reaction.remote = Mock(return_value="mock_object_ref")
+        mock.decide_reaction = Mock()
+        mock.decide_reaction.remote = Mock(return_value="mock_object_ref")
+        mock.generate_read_reaction = Mock()
+        mock.generate_read_reaction.remote = Mock(return_value="mock_object_ref")
+        mock.generate_follow_decision = Mock()
+        mock.generate_follow_decision.remote = Mock(return_value="mock_object_ref")
         return mock
 
     def test_generate_llm_post_async_basic(self, mock_llm_handle):
@@ -117,56 +121,43 @@ class TestLLMActionGeneration:
         
         result = generate_llm_reaction_async(
             llm_handle=mock_llm_handle,
-            post_id="test-post-123",
-            post_content="Test post content",
             cluster_id=1,
-            day=1,
-            slot=0,
-            agent_attrs=None
+            content="Test post content"
         )
         
         assert result == "mock_object_ref"
-        mock_llm_handle.generate_reaction.remote.assert_called_once()
+        mock_llm_handle.decide_reaction.remote.assert_called_once()
 
     def test_generate_llm_read_async_basic(self, mock_llm_handle):
         """Test LLM read action generation."""
         from YSimulator.YClient.actions.llm_actions import generate_llm_read_async
         
-        mock_llm_handle.generate_read = Mock()
-        mock_llm_handle.generate_read.remote = Mock(return_value="mock_read_ref")
-        
         result = generate_llm_read_async(
             llm_handle=mock_llm_handle,
-            post_id="test-post-123",
-            post_content="Test post content",
             cluster_id=1,
-            day=1,
-            slot=0,
+            content="Test post content",
             agent_attrs=None
         )
         
-        assert result == "mock_read_ref"
-        mock_llm_handle.generate_read.remote.assert_called_once()
+        assert result == "mock_object_ref"
+        mock_llm_handle.generate_read_reaction.remote.assert_called_once()
 
     def test_generate_llm_follow_async_basic(self, mock_llm_handle):
         """Test LLM follow action generation."""
         from YSimulator.YClient.actions.llm_actions import generate_llm_follow_async
         
-        mock_llm_handle.generate_follow = Mock()
-        mock_llm_handle.generate_follow.remote = Mock(return_value="mock_follow_ref")
+        candidate_users = [
+            {"username": "target_user", "bio": "Target user bio"}
+        ]
         
         result = generate_llm_follow_async(
             llm_handle=mock_llm_handle,
-            target_username="target_user",
-            target_bio="Target user bio",
             cluster_id=1,
-            day=1,
-            slot=0,
-            agent_attrs=None
+            candidate_users=candidate_users
         )
         
-        assert result == "mock_follow_ref"
-        mock_llm_handle.generate_follow.remote.assert_called_once()
+        assert result == "mock_object_ref"
+        mock_llm_handle.generate_follow_decision.remote.assert_called_once()
 
 
 class TestRuleBasedActions:
@@ -204,24 +195,30 @@ class TestRuleBasedActions:
             generate_rule_based_news_post,
         )
         
-        mock_news_service = Mock()
-        mock_news_service.generate_commentary = Mock(return_value="Commentary")
-        
-        article = {
-            "title": "Test Article",
-            "content": "Test content",
-            "url": "http://example.com"
-        }
-        
-        result = generate_rule_based_news_post(
-            agent_id=123,
-            cluster_id=1,
-            article=article,
-            news_service=mock_news_service,
-            article_id=None
-        )
-        
-        assert isinstance(result, tuple)
+        with patch('YSimulator.YClient.actions.rule_based_actions.ray.get') as mock_ray_get:
+            mock_ray_get.return_value = "saved-article-id"
+            
+            mock_news_service = Mock()
+            mock_news_service.save_article_to_db = Mock()
+            mock_news_service.save_article_to_db.remote = Mock(return_value="mock_object_ref")
+            
+            article = {
+                "title": "Test Article",
+                "content": "Test content",
+                "url": "http://example.com"
+            }
+            
+            result = generate_rule_based_news_post(
+                agent_id=123,
+                cluster_id=1,
+                article=article,
+                news_service=mock_news_service,
+                article_id=None
+            )
+            
+            assert isinstance(result, tuple)
+            # Should have called save_article_to_db
+            mock_news_service.save_article_to_db.remote.assert_called_once_with(article)
 
 
 class TestActionTypeHints:

@@ -48,12 +48,12 @@ class TestInterestTracking(unittest.TestCase):
             round_obj = Round(id=self.round_id, day=random.randint(1, 100), hour=random.randint(0, 23))
             session.add(round_obj)
             
-            # Create test user
+            # Create test user with unique username each time
             self.user_id = str(uuid.uuid4())
             user = User_mgmt(
                 id=self.user_id,
-                username="test_user",
-                email="test@example.com",
+                username=f"test_user_{self.user_id[:8]}",  # Make username unique
+                email=f"test_{self.user_id[:8]}@example.com",  # Make email unique
                 password="password",
                 round_actions=3
             )
