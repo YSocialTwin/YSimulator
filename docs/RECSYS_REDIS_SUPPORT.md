@@ -723,11 +723,23 @@ The YSimulator recommendation system provides comprehensive functionality with *
 
 ### Current Status
 
+**Recommendation Modes:**
 - ✅ **6 modes fully operational in Redis**: random, rchrono, rchrono_popularity, rchrono_followers, rchrono_followers_popularity, rchrono_comments
 - 🔄 **4 modes Redis-ready with SQL fallback**: common_interests, common_user_interests, similar_users_react, similar_users_posts
 - **0 modes with degraded functionality**: All modes maintain full personalization
 
+**Opinion Dynamics:**
+- ✅ **Fully implemented in Redis**: `get_neighbors_opinions()` works correctly with Redis enabled
+- ✅ **Hybrid approach**: Uses Redis for follow relationships and opinion cache, SQL fallback for reliability
+- ✅ **LLM evaluation**: `evaluation_scope="neighbors"` now functional in Redis mode
+
 ### Future-Ready Architecture
+
+**Opinion Dynamics (Already Implemented):**
+- ✅ Latest opinions cached at `ysim:user:{user_id}:opinion:{topic_id}`
+- ✅ `add_agent_opinion()` caches opinions in Redis while maintaining SQL audit trail
+- ✅ `get_latest_agent_opinion()` retrieves from Redis first, SQL fallback
+- ✅ `get_neighbors_opinions()` scans Redis follow keys and retrieves opinions from cache
 
 **When Redis caches are populated** with:
 - User interests (SET: `ysim:user:{user_id}:interests`)
@@ -736,7 +748,7 @@ The YSimulator recommendation system provides comprehensive functionality with *
 - User demographics (HASH fields in `ysim:users:{user_id}`)
 
 **Then**:
-- All 10 modes will operate purely on Redis
+- All 10 recommendation modes will operate purely on Redis
 - Zero SQL queries for recommendations
 - Sub-millisecond recommendation latency
 - Seamless automatic transition (no code changes needed)
@@ -776,7 +788,7 @@ The opinion dynamics system includes a `get_neighbors_opinions()` method that re
 
 **Current Implementation:**
 - ✅ **SQL**: Fully supported via JOIN queries on Follow table
-- 🔄 **Redis**: Returns empty list (future implementation needed)
+- ✅ **Redis**: Fully implemented via hybrid approach (follow keys + opinion cache)
 
 ### SQL Implementation
 
@@ -802,39 +814,62 @@ def get_neighbors_opinions(agent_id, topic_id):
     return opinions
 ```
 
-### Future Redis Implementation
+### Redis Implementation
 
-To enable Redis support for `get_neighbors_opinions()`, populate:
+Redis support has been fully implemented using a hybrid approach:
 
-```redis
-# Followees per user
-ysim:user:{user_id}:followees -> SET of user_ids
-# Example: ysim:user:abc123:followees = {"user456", "user789"}
+**Step 1: Query Follow Relationships**
+```python
+# Scan Redis follow keys
+follow_pattern = db.get_redis_key_pattern("follow", "*")
+follow_keys = redis_client.keys(follow_pattern)
 
-# Latest opinions per user per topic  
-ysim:user:{user_id}:opinion:{topic_id} -> FLOAT
-# Example: ysim:user:abc123:opinion:politics = 0.75
+# Extract followees for this agent
+agent_id_bytes = agent_id.encode()
+followee_ids = set()
+for key in follow_keys:
+    follow_data = redis_client.hgetall(key)
+    if (follow_data.get(b"follower_id") == agent_id_bytes and 
+        follow_data.get(b"action") == b"follow"):
+        user_id = follow_data.get(b"user_id")
+        if user_id:
+            followee_ids.add(user_id.decode())
 ```
 
-**Implementation when Redis populated:**
+**Step 2: Retrieve Opinions from Redis Cache**
 ```python
-# Get followees from Redis SET
-followees = redis_client.smembers(f"ysim:user:{agent_id}:followees")
-
-# Get opinions from Redis
+# Get opinions from Redis for each followee
 opinions = []
-for followee_id in followees:
-    opinion = redis_client.get(f"ysim:user:{followee_id}:opinion:{topic_id}")
-    if opinion:
-        opinions.append(float(opinion))
+for followee_id in followee_ids:
+    opinion = get_latest_agent_opinion(followee_id, topic_id)
+    if opinion is not None:
+        opinions.append(opinion)
 
 return opinions
 ```
 
+**Redis Keys Used:**
+```redis
+# Follow relationships (existing)
+ysim:follow:{follow_id} -> HASH with fields: follower_id, user_id, action
+
+# Latest opinions per user per topic (new)
+ysim:user:{user_id}:opinion:{topic_id} -> STRING (float)
+# Example: ysim:user:abc123:opinion:politics = "0.75"
+```
+
+**Implementation Details:**
+- Opinions are cached in Redis when `add_agent_opinion()` is called
+- `get_latest_agent_opinion()` checks Redis first, falls back to SQL if not found
+- Follow relationships are scanned from existing `ysim:follow:*` hash keys
+- Hybrid approach: uses Redis for speed, SQL as fallback for reliability
+- SQL audit trail maintained for all opinions
+
 **Impact:**
-- LLM evaluation with `evaluation_scope="neighbors"` currently uses SQL
-- Falls back to empty list in Redis (agents won't consider neighbors' opinions)
-- Future Redis implementation will enable full neighbor-aware opinion evaluation
+- ✅ LLM evaluation with `evaluation_scope="neighbors"` now works correctly in Redis mode
+- ✅ Fast opinion retrieval from Redis cache
+- ✅ Backward compatible with SQL-only mode
+- ✅ No breaking changes to existing functionality
 
 **Note:** Opinion dynamics with `evaluation_scope="interlocutor_only"` works fully in both SQL and Redis modes since it doesn't require neighbor data.
 

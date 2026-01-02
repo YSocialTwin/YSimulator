@@ -18,17 +18,34 @@ A distributed social media simulation system using Ray for orchestration and LLM
 
 ## Documentation
 
-Comprehensive documentation is available in the [`docs/`](docs/) directory:
+**📚 [Complete Documentation Index](docs/INDEX.md)** - Navigate all documentation organized by topic and use case
 
-- **[Configuration Guide](docs/CONFIG.md)** - Complete guide to all configuration options
-- **[Architecture Overview](docs/ARCHITECTURE.md)** - System design and component details
-- **[Opinion Dynamics](docs/OPINION_DYNAMICS.md)** - Opinion dynamics models (bounded confidence, LLM evaluation), configuration, and implementation
-- **[Extension Guide](docs/EXTENDING.md)** - How to add new agent actions and features
-- **[Redis Integration](docs/RECSYS_REDIS_SUPPORT.md)** - Redis caching for recommendation systems
-- **[System Diagrams](docs/DIAGRAMS.md)** - Visual architecture and interaction diagrams
-- **[Logging Guide](docs/LOGGING_CONFIG.md)** - Comprehensive logging configuration and best practices
-- **[Action Logging](docs/ACTION_LOGGING.md)** - Guide to client action logging and summaries
+### Quick Links
+
+**Getting Started:**
+- **[Configuration Guide](docs/CONFIG.md)** - Complete guide to all configuration options (1,550 lines)
+- **[Architecture Overview](docs/ARCHITECTURE.md)** - System design and components (800 lines)
+
+**Core Features:**
+- **[Recommendation Systems](docs/RECOMMENDATION_SYSTEMS.md)** - Content & follow recommendations with 15 algorithms (1,200 lines)
+- **[Opinion Dynamics](docs/OPINION_DYNAMICS.md)** - Bounded confidence and LLM evaluation models (1,200 lines)
+- **[Interests & Topics](docs/INTERESTS.md)** - Interest management with attention windows (300 lines)
+
+**System & Performance:**
+- **[Database & Storage](docs/REDIS_DATABASE_ANALYSIS.md)** - Redis/SQL hybrid architecture, 89% Redis coverage (480 lines)
+- **[Redis Integration](docs/RECSYS_REDIS_SUPPORT.md)** - Caching strategies and implementation (870 lines)
+
+**Development:**
+- **[Extension Guide](docs/EXTENDING.md)** - How to add new agent actions and features (950 lines)
+- **[System Diagrams](docs/DIAGRAMS.md)** - Visual architecture and interaction diagrams (800 lines)
 - **[Code Formatting](docs/FORMATTING.md)** - Development guidelines and tooling
+
+**Monitoring:**
+- **[Logging Configuration](docs/LOGGING_CONFIG.md)** - Comprehensive logging setup (420 lines)
+- **[Server Logging](docs/SERVER_LOGGING.md)** - Server log analysis (380 lines)
+- **[Action Logging](docs/ACTION_LOGGING.md)** - Client action tracking (160 lines)
+
+**Browse by Use Case**: See the [Documentation Index](docs/INDEX.md) for recommended reading paths by role (Researcher, Developer, Admin) and feature cross-references.
 
 ## Configuration
 

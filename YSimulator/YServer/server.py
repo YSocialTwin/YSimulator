@@ -37,7 +37,7 @@ LOG_FILE_BACKUP_COUNT = 5  # Keep 5 backup files
 def log_server_request(func):
     """
     Decorator to log server requests to _server.log with detailed information.
-    
+
     Logs each method call with:
     - request_id: unique request identifier
     - client_name: client making the request (if available)
@@ -49,19 +49,21 @@ def log_server_request(func):
     - day: current simulation day
     - hour: current simulation slot/hour
     """
+
     @functools.wraps(func)
     def wrapper(self, *args, **kwargs):
         # Generate request ID with better uniqueness using UUID hex
         request_id = f"{time.time()}-{uuid.uuid4().hex[:10]}"
-        
+
         # Extract client_name from arguments
         # Only look for explicit client_id parameter - this represents the actual client making the request
         client_name = kwargs.get("client_id")
-        
+
         # If not in kwargs, check if first positional arg is client_id by checking parameter name
         if not client_name and args:
             # Get the function signature to check parameter names
             import inspect
+
             try:
                 sig = inspect.signature(func)
                 param_names = list(sig.parameters.keys())
@@ -73,16 +75,16 @@ def log_server_request(func):
                         client_name = args[0]
             except:
                 pass
-        
+
         # Default to "unknown" if still not found
         if not client_name:
             client_name = "unknown"
-        
+
         # Start timing
         start_time = time.time()
         status_code = 200
         error = None
-        
+
         try:
             # Execute the method
             result = func(self, *args, **kwargs)
@@ -94,15 +96,15 @@ def log_server_request(func):
         finally:
             # Calculate duration
             duration = time.time() - start_time
-            
+
             # Get current simulation state (getattr with defaults never raises exceptions)
-            tid = getattr(self, 'current_round_id', None)
-            day = getattr(self, 'day', None)
-            hour = getattr(self, 'slot', None)
-            
+            tid = getattr(self, "current_round_id", None)
+            day = getattr(self, "day", None)
+            hour = getattr(self, "slot", None)
+
             # Log the request
             try:
-                server_logger = getattr(self, 'server_request_logger', None)
+                server_logger = getattr(self, "server_request_logger", None)
                 if server_logger:
                     log_entry = {
                         "request_id": request_id,
@@ -117,26 +119,26 @@ def log_server_request(func):
                     }
                     if error:
                         log_entry["error"] = error
-                    
+
                     server_logger.info(json.dumps(log_entry))
             except Exception as log_error:
                 # Don't let logging errors break the application
                 # Log to stderr as fallback for debugging
                 print(f"WARNING: Server request logging failed: {log_error}", file=sys.stderr)
-    
+
     return wrapper
 
 
 def compress_rotated_log(source, dest):
     """
     Compress a rotated log file using gzip.
-    
+
     Args:
         source: Path to the source log file
         dest: Path to the destination compressed file
     """
-    with open(source, 'rb') as f_in:
-        with gzip.open(dest, 'wb') as f_out:
+    with open(source, "rb") as f_in:
+        with gzip.open(dest, "wb") as f_out:
             shutil.copyfileobj(f_in, f_out)
     os.remove(source)
 
@@ -183,7 +185,7 @@ class OrchestratorServer:
         self.server_name = server_name
         self.config_path = Path(config_path)
         self.timeout_seconds = timeout_seconds
-        
+
         # Store simulation config for logging configuration
         if simulation_config is None:
             simulation_config = {}
@@ -197,7 +199,7 @@ class OrchestratorServer:
 
         # Track last archetype transition day (start at 0, so first transition at day 7)
         self.last_archetype_transition_day = 0
-        
+
         # Cache agent profiles for opinion lookup (only when opinion dynamics enabled)
         self.agent_profiles_cache = {}
 
@@ -268,7 +270,7 @@ class OrchestratorServer:
         logging_config = self.simulation_config.get("logging", {})
         enable_actor_log = logging_config.get("enable_actor_log", True)
         enable_request_log = logging_config.get("enable_request_log", True)
-        
+
         log_dir = self.config_path / "logs"
         log_dir.mkdir(exist_ok=True)
 
@@ -282,11 +284,13 @@ class OrchestratorServer:
         # Create file handler with JSON formatting (actor log)
         if enable_actor_log:
             log_file = log_dir / f"{self.server_name}_actor.log"
-            
+
             from logging.handlers import RotatingFileHandler
 
-            handler = RotatingFileHandler(log_file, maxBytes=LOG_FILE_MAX_BYTES, backupCount=LOG_FILE_BACKUP_COUNT)
-            
+            handler = RotatingFileHandler(
+                log_file, maxBytes=LOG_FILE_MAX_BYTES, backupCount=LOG_FILE_BACKUP_COUNT
+            )
+
             # Add compression for rotated files
             handler.rotator = compress_rotated_log
             handler.namer = lambda name: name + ".gz"
@@ -311,30 +315,34 @@ class OrchestratorServer:
             self.logger.addHandler(handler)
 
         # Set up server request logger for _server.log
-        self.server_request_logger = logging.getLogger(f"YSimulator.Server.{self.server_name}.Requests")
+        self.server_request_logger = logging.getLogger(
+            f"YSimulator.Server.{self.server_name}.Requests"
+        )
         self.server_request_logger.setLevel(logging.INFO)
         self.server_request_logger.handlers = []
-        
+
         if enable_request_log:
             from logging.handlers import RotatingFileHandler
-            
+
             server_log_file = log_dir / "_server.log"
-            
+
             # Create handler for server requests (raw JSON, one per line)
-            server_handler = RotatingFileHandler(server_log_file, maxBytes=LOG_FILE_MAX_BYTES, backupCount=LOG_FILE_BACKUP_COUNT)
-            
+            server_handler = RotatingFileHandler(
+                server_log_file, maxBytes=LOG_FILE_MAX_BYTES, backupCount=LOG_FILE_BACKUP_COUNT
+            )
+
             # Add compression for rotated files
             server_handler.rotator = compress_rotated_log
             server_handler.namer = lambda name: name + ".gz"
-            
+
             # Simple formatter that just outputs the message (already JSON)
             class RawFormatter(logging.Formatter):
                 def format(self, record):
                     return record.getMessage()
-            
+
             server_handler.setFormatter(RawFormatter())
             self.server_request_logger.addHandler(server_handler)
-        
+
         # Prevent propagation to avoid duplicate logs
         self.server_request_logger.propagate = False
 
@@ -385,22 +393,24 @@ class OrchestratorServer:
             str: Topic name or None if not found
         """
         return self.interest_manager.get_topic_name_from_id(topic_id)
-    
-    def _ensure_agent_opinion_exists(self, agent_id: str, topic_id: str, topic_name: str, article_content: str = None):
+
+    def _ensure_agent_opinion_exists(
+        self, agent_id: str, topic_id: str, topic_name: str, article_content: str = None
+    ):
         """
         Ensure an agent has an opinion recorded for a topic.
-        
+
         This is a safety fallback that creates opinions if they don't exist.
         For page agents, the client should have already inferred opinions via LLM
         before submitting the POST action. This method just provides defaults.
-        
+
         For regular agents: Use cached profile opinion or neutral (0.5) as fallback.
         For page agents: Use neutral (0.5) as placeholder (client should set opinion first).
-        
+
         Only executes when opinion dynamics is enabled in simulation config.
-        
+
         NOTE: Server does NOT call LLM service. All LLM interactions happen on client side.
-        
+
         Args:
             agent_id: Agent UUID
             topic_id: Topic UUID (from interests table)
@@ -411,18 +421,18 @@ class OrchestratorServer:
         opinion_config = self.simulation_config.get("opinion_dynamics", {})
         if not opinion_config.get("enabled", False):
             return  # Opinion dynamics disabled, no need to ensure opinions exist
-        
+
         # Check if agent already has an opinion on this topic
         existing_opinion = self.db.get_latest_agent_opinion(agent_id, topic_id)
         if existing_opinion is not None:
             return  # Opinion already exists
-        
+
         # Agent doesn't have opinion - need to create one as fallback
         cached_profile = self.agent_profiles_cache.get(agent_id)
         is_page_agent = cached_profile and cached_profile.is_page == 1
-        
+
         opinion_value = None
-        
+
         if is_page_agent:
             # Page agent: Client should have already set opinion via LLM/random
             # This is just a fallback - use neutral placeholder
@@ -442,19 +452,19 @@ class OrchestratorServer:
                         if key.lower() == topic_name.lower():
                             opinion_value = value
                             break
-                
+
                 if opinion_value is not None:
                     self.logger.info(
                         f"Regular agent {agent_id}: using initial opinion {opinion_value} from profile for topic '{topic_name}'"
                     )
-            
+
             # Default to neutral opinion if not found in profile
             if opinion_value is None:
                 opinion_value = 0.5
                 self.logger.info(
                     f"Regular agent {agent_id}: creating default neutral opinion {opinion_value} for topic '{topic_name}'"
                 )
-        
+
         # Store the opinion
         self.db.add_agent_opinion(
             agent_id=agent_id,
@@ -464,8 +474,6 @@ class OrchestratorServer:
             id_interacted_with=None,
             id_post=None,
         )
-    
-
 
     def _reaction_to_sentiment(self, reaction_type: str) -> Optional[Dict[str, float]]:
         """
@@ -773,7 +781,9 @@ class OrchestratorServer:
                 "language": agent_profile.language,
                 "owner": agent_profile.owner,
                 "education_level": agent_profile.education_level,
-                "joined_on": agent_profile.joined_on if agent_profile.joined_on else self.current_round_id,  # Use agent's joined_on or current round
+                "joined_on": (
+                    agent_profile.joined_on if agent_profile.joined_on else self.current_round_id
+                ),  # Use agent's joined_on or current round
                 "gender": agent_profile.gender,
                 "nationality": agent_profile.nationality,
                 "round_actions": agent_profile.round_actions,
@@ -829,7 +839,7 @@ class OrchestratorServer:
                         interests=agent_profile.interests,
                         round_id=self.current_round_id,
                     )
-                
+
                 # Initialize opinions for newly registered agents
                 if agent_profile and agent_profile.opinions:
                     # Get interest IDs for the agent's topics
@@ -1397,9 +1407,13 @@ class OrchestratorServer:
                                 # Note: We need the LLM service handle - we'll get it from the client context
                                 # For now, check if article already has topics
                                 existing_topic_ids = self.db.get_article_topics(article_id)
-                                
+
                                 # Get article content for opinion inference
-                                article_content = article_data.get("content") or article_data.get("summary") or article_data.get("title", "")
+                                article_content = (
+                                    article_data.get("content")
+                                    or article_data.get("summary")
+                                    or article_data.get("title", "")
+                                )
 
                                 if existing_topic_ids:
                                     # Article already has topics, link them to the post
@@ -1409,7 +1423,10 @@ class OrchestratorServer:
                                         topic_name = self.db.get_topic_name_from_id(topic_id)
                                         if topic_name:
                                             self._ensure_agent_opinion_exists(
-                                                act.agent_id, topic_id, topic_name, article_content=article_content
+                                                act.agent_id,
+                                                topic_id,
+                                                topic_name,
+                                                article_content=article_content,
                                             )
                                     self.logger.info(
                                         f"Linked {len(existing_topic_ids)} existing article topics to post {post_id}"
@@ -1443,11 +1460,9 @@ class OrchestratorServer:
                                 self._update_agent_interest_counter(
                                     act.agent_id, act.topic, increment=1
                                 )
-                                
+
                                 # Ensure author has an opinion on the topic they're posting about
-                                self._ensure_agent_opinion_exists(
-                                    act.agent_id, topic_id, act.topic
-                                )
+                                self._ensure_agent_opinion_exists(act.agent_id, topic_id, act.topic)
 
                         # Process annotations AFTER topics are assigned
                         if hasattr(act, "annotations") and act.annotations:
@@ -1566,9 +1581,9 @@ class OrchestratorServer:
                                     self._update_agent_interest_counter(
                                         act.agent_id, topic_name, increment=1
                                     )
-                            
+
                             # Store opinion updates if calculated by client
-                            if hasattr(act, 'updated_opinions') and act.updated_opinions:
+                            if hasattr(act, "updated_opinions") and act.updated_opinions:
                                 parent_author_id = parent_post.get("user_id")
                                 for topic_id, new_opinion in act.updated_opinions.items():
                                     self.db.add_agent_opinion(
@@ -1577,7 +1592,7 @@ class OrchestratorServer:
                                         topic_id=topic_id,
                                         opinion=new_opinion,
                                         id_interacted_with=parent_author_id,
-                                        id_post=parent_post_id
+                                        id_post=parent_post_id,
                                     )
                                 self.logger.info(
                                     f"Stored {len(act.updated_opinions)} opinion updates for agent {act.agent_id}"
@@ -1618,9 +1633,9 @@ class OrchestratorServer:
                         post_id = self.db.add_post(post_data)
                         if post_id:
                             new_ids.append(post_id)
-                            
+
                             # Store opinion updates if calculated by client
-                            if hasattr(act, 'updated_opinions') and act.updated_opinions:
+                            if hasattr(act, "updated_opinions") and act.updated_opinions:
                                 parent_author_id = original_post.get("user_id")
                                 for topic_id, new_opinion in act.updated_opinions.items():
                                     self.db.add_agent_opinion(
@@ -1629,7 +1644,7 @@ class OrchestratorServer:
                                         topic_id=topic_id,
                                         opinion=new_opinion,
                                         id_interacted_with=parent_author_id,
-                                        id_post=act.target_post_id
+                                        id_post=act.target_post_id,
                                     )
                                 self.logger.info(
                                     f"Stored {len(act.updated_opinions)} opinion updates for share by agent {act.agent_id}"
@@ -1827,55 +1842,55 @@ class OrchestratorServer:
     def get_current_day(self) -> int:
         """
         Get the current simulation day.
-        
+
         Returns:
             int: Current day number
         """
         return self.day
-    
+
     def get_current_round_id(self) -> str:
         """
         Get the current round ID.
-        
+
         Returns:
             str: Current round ID (UUID)
         """
         return self.current_round_id
-    
+
     def get_inactive_agents(self, current_day: int, inactivity_threshold: int) -> List[str]:
         """
         Get list of inactive agents from database (simple database wrapper for client use).
-        
+
         Args:
             current_day: Current simulation day
             inactivity_threshold: Number of days of inactivity to consider
-            
+
         Returns:
             List of agent IDs (strings) that are inactive
         """
         return self.db.get_inactive_agents(current_day, inactivity_threshold)
-    
+
     def set_agent_churned(self, agent_id: str, round_id: str) -> bool:
         """
         Mark an agent as churned (simple database wrapper for client use).
-        
+
         Args:
             agent_id: Agent ID to churn
             round_id: Round ID when agent churned
-            
+
         Returns:
             bool: True if successful
         """
         return self.db.set_agent_churned(agent_id, round_id)
-    
+
     def set_agents_churned_batch(self, agent_ids: List[str], round_id: str) -> int:
         """
         Mark multiple agents as churned in a batch operation (simple database wrapper for client use).
-        
+
         Args:
             agent_ids: List of agent IDs to churn
             round_id: Round ID when agents churned
-            
+
         Returns:
             int: Number of agents successfully churned
         """
@@ -1888,7 +1903,7 @@ class OrchestratorServer:
     def get_churned_agents(self) -> List[str]:
         """
         Get list of all churned agents (simple database wrapper for client use).
-        
+
         Returns:
             List of agent IDs (UUID strings) that are churned
         """
@@ -2293,7 +2308,12 @@ class OrchestratorServer:
 
     @log_server_request
     def get_recommended_posts(
-        self, agent_id: str, mode: str = "random", limit: int = 5, followers_ratio: float = 0.6, client_id: str = None
+        self,
+        agent_id: str,
+        mode: str = "random",
+        limit: int = 5,
+        followers_ratio: float = 0.6,
+        client_id: str = None,
     ) -> List[str]:
         """
         Get recommended posts for an agent using the specified recommendation strategy.
@@ -2556,7 +2576,9 @@ class OrchestratorServer:
         return self.db.get_post(post_id)
 
     @log_server_request
-    def get_thread_context(self, post_id: str, max_length: int = 5, client_id: str = None) -> List[Dict[str, Any]]:
+    def get_thread_context(
+        self, post_id: str, max_length: int = 5, client_id: str = None
+    ) -> List[Dict[str, Any]]:
         """
         Get thread context for a post - retrieve up to max_length posts/comments
         that immediately precede the target post in the discussion thread.
@@ -2590,7 +2612,9 @@ class OrchestratorServer:
         return self.db.get_user(user_id)
 
     @log_server_request
-    def search_posts_by_topic(self, topic_id: str, agent_id: str, limit: int = 10, client_id: str = None) -> List[str]:
+    def search_posts_by_topic(
+        self, topic_id: str, agent_id: str, limit: int = 10, client_id: str = None
+    ) -> List[str]:
         """
         Search for recent posts on a specific topic from other users.
 
@@ -2608,42 +2632,42 @@ class OrchestratorServer:
     def get_post_topics(self, post_id: str, client_id: str = None) -> List[str]:
         """
         Get topic IDs associated with a post.
-        
+
         Args:
             post_id: UUID of the post
             client_id: Optional client identifier for logging
-            
+
         Returns:
             List of topic UUIDs
         """
         return self.db.get_post_topics(post_id)
-    
+
     @log_server_request
     def get_topic_name_from_id(self, topic_id: str, client_id: str = None) -> Optional[str]:
         """
         Get topic name from topic UUID.
-        
+
         Args:
             topic_id: Topic UUID (iid)
             client_id: Optional client identifier for logging
-            
+
         Returns:
             Topic name or None if not found
         """
         return self._get_topic_name_from_id(topic_id)
-    
+
     @log_server_request
     def get_latest_agent_opinion(
         self, agent_id: str, topic_id: str, client_id: str = None
     ) -> Optional[float]:
         """
         Get the latest opinion value for an agent on a topic.
-        
+
         Args:
             agent_id: Agent UUID
             topic_id: Topic UUID
             client_id: Optional client identifier for logging
-            
+
         Returns:
             Latest opinion value or None if not found
         """
@@ -2651,13 +2675,17 @@ class OrchestratorServer:
 
     @log_server_request
     def add_agent_opinion(
-        self, agent_id: str, topic_id: str, opinion: float, 
-        id_interacted_with: Optional[str] = None, id_post: Optional[str] = None,
-        client_id: str = None
+        self,
+        agent_id: str,
+        topic_id: str,
+        opinion: float,
+        id_interacted_with: Optional[str] = None,
+        id_post: Optional[str] = None,
+        client_id: str = None,
     ) -> bool:
         """
         Add an agent opinion record to the database.
-        
+
         Args:
             agent_id: Agent UUID
             topic_id: Topic UUID
@@ -2665,7 +2693,7 @@ class OrchestratorServer:
             id_interacted_with: Optional UUID of agent interacted with
             id_post: Optional UUID of post interacted with
             client_id: Optional client identifier for logging
-            
+
         Returns:
             True if successful, False otherwise
         """
@@ -2679,15 +2707,15 @@ class OrchestratorServer:
     ) -> List[float]:
         """
         Get the opinions of an agent's neighbors (followees) on a specific topic.
-        
+
         This method retrieves the latest opinions of all users that the agent follows
         on the specified topic. Used for LLM-based opinion dynamics with evaluation_scope="neighbors".
-        
+
         Args:
             agent_id: Agent UUID
             topic_id: Topic UUID
             client_id: Optional client identifier for logging
-            
+
         Returns:
             List of opinion values (floats in [0, 1]) from the agent's neighbors
         """
@@ -2695,44 +2723,80 @@ class OrchestratorServer:
             # Query the Follow table to get users that agent_id follows
             # In the Follow table: follower_id is the agent, user_id is who they follow
             if self.db.use_redis:
-                # For Redis implementation, we would need to scan follow keys
-                # For now, return empty list as Redis path needs more implementation
-                return []
+                # Redis implementation: hybrid approach
+                # Step 1: Get followees from Redis follow keys
+                follow_pattern = self.db.get_redis_key_pattern("follow", "*")
+                # Note: Using KEYS here for consistency with follow_recsys_redis.py
+                # For large-scale production deployments, consider using SCAN instead
+                follow_keys = self.db.redis_client.keys(follow_pattern)
+
+                # Encode agent_id once for efficiency
+                agent_id_bytes = agent_id.encode()
+
+                followee_ids = set()
+                for key in follow_keys:
+                    follow_data = self.db.redis_client.hgetall(key)
+                    # Check if this is a follow relationship for the agent
+                    if (
+                        follow_data.get(b"follower_id") == agent_id_bytes
+                        and follow_data.get(b"action") == b"follow"
+                    ):
+                        user_id = follow_data.get(b"user_id")
+                        if user_id:
+                            followee_ids.add(user_id.decode())
+
+                if not followee_ids:
+                    return []
+
+                # Step 2: Get opinions from Redis for each followee
+                opinions = []
+                for followee_id in followee_ids:
+                    opinion = self.db.get_latest_agent_opinion(followee_id, topic_id)
+                    if opinion is not None:
+                        opinions.append(opinion)
+
+                return opinions
             else:
                 # SQL implementation
                 from sqlalchemy.orm import Session
                 from YSimulator.YServer.classes.models import Follow
-                
+
                 with Session(self.db.engine) as session:
                     # Get list of user_ids that agent follows (where agent is the follower and action='follow')
-                    followees_query = session.query(Follow.user_id).filter(
-                        Follow.follower_id == agent_id,
-                        Follow.action == 'follow'
-                    ).all()
-                    
+                    followees_query = (
+                        session.query(Follow.user_id)
+                        .filter(Follow.follower_id == agent_id, Follow.action == "follow")
+                        .all()
+                    )
+
                     followee_ids = [row[0] for row in followees_query]
-                    
+
                     if not followee_ids:
                         return []
-                    
+
                     # Get opinions of each followee on this topic
                     opinions = []
                     for followee_id in followee_ids:
                         opinion = self.db.get_latest_agent_opinion(followee_id, topic_id)
                         if opinion is not None:
                             opinions.append(opinion)
-                    
+
                     return opinions
         except Exception as e:
             self.logger.error(
                 f"Error getting neighbors opinions: {e}",
-                extra={"extra_data": {"error": str(e), "agent_id": agent_id, "topic_id": topic_id}}
+                extra={"extra_data": {"error": str(e), "agent_id": agent_id, "topic_id": topic_id}},
             )
             return []
 
     @log_server_request
     def get_follow_suggestions(
-        self, agent_id: str, mode: str = "random", n_neighbors: int = 10, leaning_bias: int = 1, client_id: str = None
+        self,
+        agent_id: str,
+        mode: str = "random",
+        n_neighbors: int = 10,
+        leaning_bias: int = 1,
+        client_id: str = None,
     ) -> List[str]:
         """
         Get follow suggestions for an agent using the specified recommendation strategy.

@@ -22,7 +22,15 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 
-from YSimulator.YServer.classes.models import Base, Follow, Post, Reaction, Round, User_mgmt, Agent_Opinion
+from YSimulator.YServer.classes.models import (
+    Base,
+    Follow,
+    Post,
+    Reaction,
+    Round,
+    User_mgmt,
+    Agent_Opinion,
+)
 
 # Constants
 DEFAULT_USERNAME = "Someone"  # Default username when user data is not found
@@ -222,6 +230,22 @@ class DatabaseMiddleware:
             return f"ysim:{table}:{id}"
         return f"ysim:{table}"
 
+    def get_redis_key_pattern(self, table: str, pattern: str = "*") -> str:
+        """
+        Generate a Redis key pattern for scanning.
+
+        This is a public method for generating Redis key patterns that can be used
+        with redis.keys() or redis.scan() operations.
+
+        Args:
+            table: Table name (e.g., "follow", "post")
+            pattern: Pattern to match (default: "*")
+
+        Returns:
+            str: Redis key pattern (e.g., "ysim:follow:*")
+        """
+        return self._redis_key(table, pattern)
+
     def register_user(self, user_data: Dict[str, Any]) -> bool:
         """
         Register a user in the database.
@@ -249,6 +273,13 @@ class DatabaseMiddleware:
                 self.redis_client.hset(key, mapping=redis_data)
                 # Add to user set
                 self.redis_client.sadd(self._redis_key("user_mgmt", "ids"), user_id)
+
+                # Create username index for fast lookup
+                username = user_data.get("username")
+                if username:
+                    username_key = self._redis_key("user_mgmt:by_username", username)
+                    self.redis_client.set(username_key, user_id)
+
                 return True
             else:
                 # Store in SQLite
@@ -306,6 +337,13 @@ class DatabaseMiddleware:
                     self.redis_client.hset(key, mapping=redis_data)
                     # Add to user set
                     self.redis_client.sadd(self._redis_key("user_mgmt", "ids"), user_id)
+
+                    # Create username index for fast lookup
+                    username = user_data.get("username")
+                    if username:
+                        username_key = self._redis_key("user_mgmt:by_username", username)
+                        self.redis_client.set(username_key, user_id)
+
                     registered_count += 1
                     newly_registered_ids.add(user_id)
                 return (registered_count, newly_registered_ids)
@@ -838,7 +876,8 @@ class DatabaseMiddleware:
                 post_ids = self.redis_client.lrange(
                     self._redis_key("posts", "recent"), 0, limit - 1
                 )
-                return [str(pid) for pid in post_ids]
+                # Properly decode bytes
+                return [pid.decode() if isinstance(pid, bytes) else str(pid) for pid in post_ids]
             else:
                 session = Session(self.engine)
                 try:
@@ -1199,31 +1238,62 @@ class DatabaseMiddleware:
         Returns:
             List[Dict]: List of user dictionaries with id, username, and archetype
         """
-        from YSimulator.YServer.classes.models import User_mgmt
+        if self.use_redis:
+            try:
+                # Get all user IDs from the set
+                user_ids_key = self._redis_key("user_mgmt", "ids")
+                user_ids = self.redis_client.smembers(user_ids_key)
 
-        session = Session(self.engine)
-        try:
-            users = session.query(User_mgmt).all()
+                result = []
+                for user_id in user_ids:
+                    # Decode if bytes
+                    user_id_str = user_id.decode() if isinstance(user_id, bytes) else user_id
+                    # Get full user data
+                    user_data = self.get_user(user_id_str)
+                    if user_data:
+                        # Extract only the fields we need
+                        result.append(
+                            {
+                                "id": user_data.get("id"),
+                                "username": user_data.get("username"),
+                                "archetype": user_data.get("archetype"),
+                            }
+                        )
 
-            result = []
-            for user in users:
-                result.append(
-                    {
-                        "id": user.id,
-                        "username": user.username,
-                        "archetype": user.archetype,
-                    }
+                return result
+
+            except Exception as e:
+                self.logger.error(
+                    f"Error getting all users from Redis: {e}",
+                    extra={"extra_data": {"error": str(e)}},
                 )
+                return []
+        else:
+            from YSimulator.YServer.classes.models import User_mgmt
 
-            return result
+            session = Session(self.engine)
+            try:
+                users = session.query(User_mgmt).all()
 
-        except Exception as e:
-            self.logger.error(
-                f"Error getting all users: {e}", extra={"extra_data": {"error": str(e)}}
-            )
-            return []
-        finally:
-            session.close()
+                result = []
+                for user in users:
+                    result.append(
+                        {
+                            "id": user.id,
+                            "username": user.username,
+                            "archetype": user.archetype,
+                        }
+                    )
+
+                return result
+
+            except Exception as e:
+                self.logger.error(
+                    f"Error getting all users: {e}", extra={"extra_data": {"error": str(e)}}
+                )
+                return []
+            finally:
+                session.close()
 
     def update_user_archetype(self, user_id: str, new_archetype: str) -> bool:
         """
@@ -1236,35 +1306,60 @@ class DatabaseMiddleware:
         Returns:
             bool: True if update successful, False otherwise
         """
-        from YSimulator.YServer.classes.models import User_mgmt
+        if self.use_redis:
+            try:
+                # Check if user exists
+                user_key = self._redis_key("user_mgmt", user_id)
+                if not self.redis_client.exists(user_key):
+                    self.logger.warning(f"User {user_id} not found for archetype update")
+                    return False
 
-        session = Session(self.engine)
-        try:
-            user = session.query(User_mgmt).filter(User_mgmt.id == user_id).first()
-
-            if user:
-                user.archetype = new_archetype
-                session.commit()
+                # Update archetype field in user hash
+                self.redis_client.hset(user_key, "archetype", new_archetype)
                 return True
-            else:
-                self.logger.warning(f"User {user_id} not found for archetype update")
-                return False
 
-        except Exception as e:
-            session.rollback()
-            self.logger.error(
-                f"Error updating user archetype: {e}",
-                extra={
-                    "extra_data": {
-                        "error": str(e),
-                        "user_id": user_id,
-                        "new_archetype": new_archetype,
-                    }
-                },
-            )
-            return False
-        finally:
-            session.close()
+            except Exception as e:
+                self.logger.error(
+                    f"Error updating user archetype in Redis: {e}",
+                    extra={
+                        "extra_data": {
+                            "error": str(e),
+                            "user_id": user_id,
+                            "new_archetype": new_archetype,
+                        }
+                    },
+                )
+                return False
+        else:
+            from YSimulator.YServer.classes.models import User_mgmt
+
+            session = Session(self.engine)
+            try:
+                user = session.query(User_mgmt).filter(User_mgmt.id == user_id).first()
+
+                if user:
+                    user.archetype = new_archetype
+                    session.commit()
+                    return True
+                else:
+                    self.logger.warning(f"User {user_id} not found for archetype update")
+                    return False
+
+            except Exception as e:
+                session.rollback()
+                self.logger.error(
+                    f"Error updating user archetype: {e}",
+                    extra={
+                        "extra_data": {
+                            "error": str(e),
+                            "user_id": user_id,
+                            "new_archetype": new_archetype,
+                        }
+                    },
+                )
+                return False
+            finally:
+                session.close()
 
     def add_website(self, website_data: Dict[str, Any]) -> Optional[str]:
         """
@@ -1326,6 +1421,12 @@ class DatabaseMiddleware:
                         "language": website_data.get("language", ""),
                     },
                 )
+
+                # Create RSS URL index for fast lookup
+                rss_url = website_data.get("rss")
+                if rss_url:
+                    rss_index_key = self._redis_key("website:by_rss", rss_url)
+                    self.redis_client.set(rss_index_key, website_id)
 
             return website_id
 
@@ -1397,6 +1498,12 @@ class DatabaseMiddleware:
                             "language": website.get("language", ""),
                         },
                     )
+
+                    # Create RSS URL index for fast lookup
+                    rss_url = website.get("rss")
+                    if rss_url:
+                        rss_index_key = self._redis_key("website:by_rss", rss_url)
+                        self.redis_client.set(rss_index_key, website["id"])
 
             return len(new_websites)
         except Exception as e:
@@ -1593,6 +1700,23 @@ class DatabaseMiddleware:
             session.add(image)
             session.commit()
 
+            # Cache in Redis if enabled
+            if self.use_redis:
+                redis_key = self._redis_key("images", image_id)
+                self.redis_client.hset(
+                    redis_key,
+                    mapping={
+                        "id": image_id,
+                        "url": image_data.get("url", ""),
+                        "description": image_data.get("description", ""),
+                        "article_id": article_id,
+                    },
+                )
+
+                # Add to images set for random selection
+                images_set_key = self._redis_key("images", "ids")
+                self.redis_client.sadd(images_set_key, image_id)
+
             self.logger.info(
                 f"Image added successfully: {image_id}",
                 extra={
@@ -1625,36 +1749,73 @@ class DatabaseMiddleware:
             dict: Image data with keys: id, url, description, article_id
                  Returns None if no images available
         """
-        import random
+        if self.use_redis:
+            try:
+                # Get all image IDs from the set
+                images_set_key = self._redis_key("images", "ids")
+                image_ids = self.redis_client.smembers(images_set_key)
 
-        from YSimulator.YServer.classes.models import Image
+                if not image_ids:
+                    self.logger.info("No images available in Redis")
+                    return None
 
-        session = Session(self.engine)
-        try:
-            # Get all images
-            images = session.query(Image).all()
+                # Select random image ID
+                import random
 
-            if not images:
-                self.logger.info("No images available in database")
+                image_id = random.choice(list(image_ids))
+                image_id_str = image_id.decode() if isinstance(image_id, bytes) else image_id
+
+                # Get image data
+                redis_key = self._redis_key("images", image_id_str)
+                image_data = self.redis_client.hgetall(redis_key)
+
+                if image_data:
+                    # Decode all keys and values
+                    return {
+                        k.decode() if isinstance(k, bytes) else k: (
+                            v.decode() if isinstance(v, bytes) else v
+                        )
+                        for k, v in image_data.items()
+                    }
                 return None
 
-            # Select random image
-            image = random.choice(images)
+            except Exception as e:
+                self.logger.error(
+                    f"Error getting random image from Redis: {e}",
+                    extra={"extra_data": {"error": str(e)}},
+                )
+                return None
+        else:
+            import random
 
-            return {
-                "id": image.id,
-                "url": image.url,
-                "description": image.description,
-                "article_id": image.article_id,
-            }
+            from YSimulator.YServer.classes.models import Image
 
-        except Exception as e:
-            self.logger.error(
-                f"Error getting random image: {e}", extra={"extra_data": {"error": str(e)}}
-            )
-            return None
-        finally:
-            session.close()
+            session = Session(self.engine)
+            try:
+                # Get all images
+                images = session.query(Image).all()
+
+                if not images:
+                    self.logger.info("No images available in database")
+                    return None
+
+                # Select random image
+                image = random.choice(images)
+
+                return {
+                    "id": image.id,
+                    "url": image.url,
+                    "description": image.description,
+                    "article_id": image.article_id,
+                }
+
+            except Exception as e:
+                self.logger.error(
+                    f"Error getting random image: {e}", extra={"extra_data": {"error": str(e)}}
+                )
+                return None
+            finally:
+                session.close()
 
     def get_website_by_rss(self, rss_url: str) -> Optional[Dict[str, Any]]:
         """
@@ -1666,30 +1827,62 @@ class DatabaseMiddleware:
         Returns:
             dict: Website data if found, None otherwise
         """
-        from YSimulator.YServer.classes.models import Website
+        if self.use_redis:
+            try:
+                # Look up website ID from RSS URL index
+                rss_index_key = self._redis_key("website:by_rss", rss_url)
+                website_id = self.redis_client.get(rss_index_key)
 
-        session = Session(self.engine)
-        try:
-            website = session.query(Website).filter(Website.rss == rss_url).first()
+                if website_id:
+                    # Decode if bytes
+                    website_id_str = (
+                        website_id.decode() if isinstance(website_id, bytes) else website_id
+                    )
+                    # Get website data by ID
+                    redis_key = self._redis_key("websites", website_id_str)
+                    website_data = self.redis_client.hgetall(redis_key)
 
-            if website:
-                return {
-                    "id": website.id,
-                    "name": website.name,
-                    "rss": website.rss,
-                    "category": website.category,
-                    "language": website.language,
-                }
-            return None
+                    if website_data:
+                        # Decode all keys and values
+                        return {
+                            k.decode() if isinstance(k, bytes) else k: (
+                                v.decode() if isinstance(v, bytes) else v
+                            )
+                            for k, v in website_data.items()
+                        }
+                return None
 
-        except Exception as e:
-            self.logger.error(
-                f"Error getting website by RSS: {e}",
-                extra={"extra_data": {"error": str(e), "rss_url": rss_url}},
-            )
-            return None
-        finally:
-            session.close()
+            except Exception as e:
+                self.logger.error(
+                    f"Error getting website by RSS from Redis: {e}",
+                    extra={"extra_data": {"error": str(e), "rss_url": rss_url}},
+                )
+                return None
+        else:
+            from YSimulator.YServer.classes.models import Website
+
+            session = Session(self.engine)
+            try:
+                website = session.query(Website).filter(Website.rss == rss_url).first()
+
+                if website:
+                    return {
+                        "id": website.id,
+                        "name": website.name,
+                        "rss": website.rss,
+                        "category": website.category,
+                        "language": website.language,
+                    }
+                return None
+
+            except Exception as e:
+                self.logger.error(
+                    f"Error getting website by RSS: {e}",
+                    extra={"extra_data": {"error": str(e), "rss_url": rss_url}},
+                )
+                return None
+            finally:
+                session.close()
 
     def get_interest_by_id(self, interest_id: str) -> Optional[dict]:
         """
@@ -1701,24 +1894,47 @@ class DatabaseMiddleware:
         Returns:
             dict: Interest data with 'iid' and 'interest' keys, or None if not found
         """
-        from YSimulator.YServer.classes.models import Interest
+        if self.use_redis:
+            try:
+                # Get interest from Redis
+                interest_key = self._redis_key("interest", interest_id)
+                interest_data = self.redis_client.hgetall(interest_key)
 
-        session = Session(self.engine)
-        try:
-            interest = session.query(Interest).filter(Interest.iid == interest_id).first()
+                if interest_data:
+                    # Decode all keys and values
+                    return {
+                        k.decode() if isinstance(k, bytes) else k: (
+                            v.decode() if isinstance(v, bytes) else v
+                        )
+                        for k, v in interest_data.items()
+                    }
+                return None
 
-            if interest:
-                return {"iid": interest.iid, "interest": interest.interest}
-            return None
+            except Exception as e:
+                self.logger.error(
+                    f"Error getting interest from Redis: {e}",
+                    extra={"extra_data": {"error": str(e), "interest_id": interest_id}},
+                )
+                return None
+        else:
+            from YSimulator.YServer.classes.models import Interest
 
-        except Exception as e:
-            self.logger.error(
-                f"Error getting interest by ID: {e}",
-                extra={"extra_data": {"error": str(e), "interest_id": interest_id}},
-            )
-            return None
-        finally:
-            session.close()
+            session = Session(self.engine)
+            try:
+                interest = session.query(Interest).filter(Interest.iid == interest_id).first()
+
+                if interest:
+                    return {"iid": interest.iid, "interest": interest.interest}
+                return None
+
+            except Exception as e:
+                self.logger.error(
+                    f"Error getting interest by ID: {e}",
+                    extra={"extra_data": {"error": str(e), "interest_id": interest_id}},
+                )
+                return None
+            finally:
+                session.close()
 
     def add_or_get_interest(self, interest_name: str) -> Optional[str]:
         """
@@ -1732,31 +1948,67 @@ class DatabaseMiddleware:
         """
         import uuid
 
-        from YSimulator.YServer.classes.models import Interest
+        if self.use_redis:
+            try:
+                # Check if interest already exists using name index
+                name_index_key = self._redis_key("interest:by_name", interest_name)
+                existing_id = self.redis_client.get(name_index_key)
 
-        session = Session(self.engine)
-        try:
-            # Check if interest already exists
-            existing = session.query(Interest).filter(Interest.interest == interest_name).first()
-            if existing:
-                return existing.iid
+                if existing_id:
+                    return existing_id.decode() if isinstance(existing_id, bytes) else existing_id
 
-            # Create new interest
-            interest_id = str(uuid.uuid4())
-            interest = Interest(iid=interest_id, interest=interest_name)
-            session.add(interest)
-            session.commit()
-            return interest_id
+                # Create new interest
+                interest_id = str(uuid.uuid4())
 
-        except Exception as e:
-            session.rollback()
-            self.logger.error(
-                f"Error adding interest: {e}",
-                extra={"extra_data": {"error": str(e), "interest_name": interest_name}},
-            )
-            return None
-        finally:
-            session.close()
+                # Store interest data
+                interest_key = self._redis_key("interest", interest_id)
+                self.redis_client.hset(
+                    interest_key,
+                    mapping={
+                        "iid": interest_id,
+                        "interest": interest_name,
+                    },
+                )
+
+                # Create name index
+                self.redis_client.set(name_index_key, interest_id)
+
+                return interest_id
+
+            except Exception as e:
+                self.logger.error(
+                    f"Error adding interest to Redis: {e}",
+                    extra={"extra_data": {"error": str(e), "interest_name": interest_name}},
+                )
+                return None
+        else:
+            from YSimulator.YServer.classes.models import Interest
+
+            session = Session(self.engine)
+            try:
+                # Check if interest already exists
+                existing = (
+                    session.query(Interest).filter(Interest.interest == interest_name).first()
+                )
+                if existing:
+                    return existing.iid
+
+                # Create new interest
+                interest_id = str(uuid.uuid4())
+                interest = Interest(iid=interest_id, interest=interest_name)
+                session.add(interest)
+                session.commit()
+                return interest_id
+
+            except Exception as e:
+                session.rollback()
+                self.logger.error(
+                    f"Error adding interest: {e}",
+                    extra={"extra_data": {"error": str(e), "interest_name": interest_name}},
+                )
+                return None
+            finally:
+                session.close()
 
     def get_topic_id_by_name(self, topic_name: str) -> Optional[str]:
         """
@@ -1768,38 +2020,55 @@ class DatabaseMiddleware:
         Returns:
             str: Topic UUID or None if not found
         """
-        from YSimulator.YServer.classes.models import Interest
+        if self.use_redis:
+            try:
+                # Look up topic ID from name index
+                name_index_key = self._redis_key("interest:by_name", topic_name)
+                topic_id = self.redis_client.get(name_index_key)
 
-        session = Session(self.engine)
-        try:
-            # Search for interest by name (case-sensitive exact match)
-            interest = session.query(Interest).filter(Interest.interest == topic_name).first()
+                if topic_id:
+                    return topic_id.decode() if isinstance(topic_id, bytes) else topic_id
+                return None
 
-            if interest:
-                return interest.iid
-            return None
+            except Exception as e:
+                self.logger.error(
+                    f"Error getting topic ID by name from Redis: {e}",
+                    extra={"extra_data": {"error": str(e), "topic_name": topic_name}},
+                )
+                return None
+        else:
+            from YSimulator.YServer.classes.models import Interest
 
-        except Exception as e:
-            self.logger.error(
-                f"Error getting topic ID by name: {e}",
-                extra={"extra_data": {"error": str(e), "topic_name": topic_name}},
-            )
-            return None
-        finally:
-            session.close()
+            session = Session(self.engine)
+            try:
+                # Search for interest by name (case-sensitive exact match)
+                interest = session.query(Interest).filter(Interest.interest == topic_name).first()
+
+                if interest:
+                    return interest.iid
+                return None
+
+            except Exception as e:
+                self.logger.error(
+                    f"Error getting topic ID by name: {e}",
+                    extra={"extra_data": {"error": str(e), "topic_name": topic_name}},
+                )
+                return None
+            finally:
+                session.close()
 
     def get_topic_name_from_id(self, topic_id: str) -> Optional[str]:
         """
         Get topic name from topic UUID.
-        
+
         Args:
             topic_id: Topic UUID (iid)
-            
+
         Returns:
             str: Topic name or None if not found
         """
         from YSimulator.YServer.classes.models import Interest
-        
+
         session = Session(self.engine)
         try:
             interest = session.query(Interest).filter(Interest.iid == topic_id).first()
@@ -1829,30 +2098,68 @@ class DatabaseMiddleware:
         """
         import uuid
 
-        from YSimulator.YServer.classes.models import UserInterest
+        if self.use_redis:
+            try:
+                # Add interest to user's interests set
+                user_interests_key = self._redis_key(f"user:{user_id}:interests", "")
+                self.redis_client.sadd(user_interests_key, interest_id)
 
-        session = Session(self.engine)
-        try:
-            # Create user interest record
-            user_interest_id = str(uuid.uuid4())
-            user_interest = UserInterest(
-                id=user_interest_id, user_id=user_id, interest_id=interest_id, round_id=round_id
-            )
-            session.add(user_interest)
-            session.commit()
-            return True
+                # Store the user interest record with round info
+                user_interest_id = str(uuid.uuid4())
+                user_interest_key = self._redis_key("user_interest", user_interest_id)
+                self.redis_client.hset(
+                    user_interest_key,
+                    mapping={
+                        "id": user_interest_id,
+                        "user_id": user_id,
+                        "interest_id": interest_id,
+                        "round_id": round_id,
+                    },
+                )
 
-        except Exception as e:
-            session.rollback()
-            self.logger.error(
-                f"Error adding user interest: {e}",
-                extra={
-                    "extra_data": {"error": str(e), "user_id": user_id, "interest_id": interest_id}
-                },
-            )
-            return False
-        finally:
-            session.close()
+                return True
+
+            except Exception as e:
+                self.logger.error(
+                    f"Error adding user interest to Redis: {e}",
+                    extra={
+                        "extra_data": {
+                            "error": str(e),
+                            "user_id": user_id,
+                            "interest_id": interest_id,
+                        }
+                    },
+                )
+                return False
+        else:
+            from YSimulator.YServer.classes.models import UserInterest
+
+            session = Session(self.engine)
+            try:
+                # Create user interest record
+                user_interest_id = str(uuid.uuid4())
+                user_interest = UserInterest(
+                    id=user_interest_id, user_id=user_id, interest_id=interest_id, round_id=round_id
+                )
+                session.add(user_interest)
+                session.commit()
+                return True
+
+            except Exception as e:
+                session.rollback()
+                self.logger.error(
+                    f"Error adding user interest: {e}",
+                    extra={
+                        "extra_data": {
+                            "error": str(e),
+                            "user_id": user_id,
+                            "interest_id": interest_id,
+                        }
+                    },
+                )
+                return False
+            finally:
+                session.close()
 
     def add_agent_opinion(
         self,
@@ -1878,6 +2185,25 @@ class DatabaseMiddleware:
             bool: True if successful, False otherwise
         """
         import uuid
+
+        # If using Redis, cache the latest opinion for quick access
+        if self.use_redis:
+            try:
+                # Store latest opinion in Redis: ysim:user:{user_id}:opinion:{topic_id}
+                opinion_key = f"ysim:user:{agent_id}:opinion:{topic_id}"
+                self.redis_client.set(opinion_key, str(opinion))
+            except Exception as e:
+                self.logger.error(
+                    f"Error caching opinion in Redis: {e}",
+                    extra={
+                        "extra_data": {
+                            "error": str(e),
+                            "agent_id": agent_id,
+                            "topic_id": topic_id,
+                        }
+                    },
+                )
+                # Continue to SQL storage even if Redis fails
 
         session = Session(self.engine)
         try:
@@ -1912,9 +2238,7 @@ class DatabaseMiddleware:
         finally:
             session.close()
 
-    def get_latest_agent_opinion(
-        self, agent_id: str, topic_id: str
-    ) -> Optional[float]:
+    def get_latest_agent_opinion(self, agent_id: str, topic_id: str) -> Optional[float]:
         """
         Get the latest opinion value for an agent on a topic.
 
@@ -1925,19 +2249,36 @@ class DatabaseMiddleware:
         Returns:
             float: Latest opinion value, or None if not found
         """
+        # If using Redis, try to get from cache first
+        if self.use_redis:
+            try:
+                opinion_key = f"ysim:user:{agent_id}:opinion:{topic_id}"
+                opinion_str = self.redis_client.get(opinion_key)
+                if opinion_str is not None:
+                    return float(opinion_str)
+            except Exception as e:
+                self.logger.error(
+                    f"Error getting opinion from Redis: {e}",
+                    extra={
+                        "extra_data": {
+                            "error": str(e),
+                            "agent_id": agent_id,
+                            "topic_id": topic_id,
+                        }
+                    },
+                )
+                # Fall through to SQL query
+
         session = Session(self.engine)
         try:
             # Get the most recent opinion for this agent-topic pair
             opinion_record = (
                 session.query(Agent_Opinion)
-                .filter(
-                    Agent_Opinion.agent_id == agent_id,
-                    Agent_Opinion.topic_id == topic_id
-                )
+                .filter(Agent_Opinion.agent_id == agent_id, Agent_Opinion.topic_id == topic_id)
                 .order_by(Agent_Opinion.tid.desc())
                 .first()
             )
-            
+
             if opinion_record:
                 return opinion_record.opinion
             return None
@@ -1969,26 +2310,57 @@ class DatabaseMiddleware:
         """
         import uuid
 
-        from YSimulator.YServer.classes.models import PostTopic
+        if self.use_redis:
+            try:
+                # Add topic to post's topics set
+                post_topics_key = self._redis_key(f"post:{post_id}:topics", "")
+                self.redis_client.sadd(post_topics_key, topic_id)
 
-        session = Session(self.engine)
-        try:
-            # Create post topic record
-            post_topic_id = str(uuid.uuid4())
-            post_topic = PostTopic(id=post_topic_id, post_id=post_id, topic_id=topic_id)
-            session.add(post_topic)
-            session.commit()
-            return True
+                # Store the post topic record
+                post_topic_id = str(uuid.uuid4())
+                post_topic_key = self._redis_key("post_topic", post_topic_id)
+                self.redis_client.hset(
+                    post_topic_key,
+                    mapping={
+                        "id": post_topic_id,
+                        "post_id": post_id,
+                        "topic_id": topic_id,
+                    },
+                )
 
-        except Exception as e:
-            session.rollback()
-            self.logger.error(
-                f"Error adding post topic: {e}",
-                extra={"extra_data": {"error": str(e), "post_id": post_id, "topic_id": topic_id}},
-            )
-            return False
-        finally:
-            session.close()
+                return True
+
+            except Exception as e:
+                self.logger.error(
+                    f"Error adding post topic to Redis: {e}",
+                    extra={
+                        "extra_data": {"error": str(e), "post_id": post_id, "topic_id": topic_id}
+                    },
+                )
+                return False
+        else:
+            from YSimulator.YServer.classes.models import PostTopic
+
+            session = Session(self.engine)
+            try:
+                # Create post topic record
+                post_topic_id = str(uuid.uuid4())
+                post_topic = PostTopic(id=post_topic_id, post_id=post_id, topic_id=topic_id)
+                session.add(post_topic)
+                session.commit()
+                return True
+
+            except Exception as e:
+                session.rollback()
+                self.logger.error(
+                    f"Error adding post topic: {e}",
+                    extra={
+                        "extra_data": {"error": str(e), "post_id": post_id, "topic_id": topic_id}
+                    },
+                )
+                return False
+            finally:
+                session.close()
 
     def get_post_topics(self, post_id: str) -> List[str]:
         """
@@ -2000,21 +2372,37 @@ class DatabaseMiddleware:
         Returns:
             List[str]: List of topic UUIDs
         """
-        from YSimulator.YServer.classes.models import PostTopic
+        if self.use_redis:
+            try:
+                # Get topics from post's topics set
+                post_topics_key = self._redis_key(f"post:{post_id}:topics", "")
+                topic_ids = self.redis_client.smembers(post_topics_key)
 
-        session = Session(self.engine)
-        try:
-            post_topics = session.query(PostTopic).filter(PostTopic.post_id == post_id).all()
-            return [pt.topic_id for pt in post_topics]
+                # Decode all topic IDs
+                return [tid.decode() if isinstance(tid, bytes) else tid for tid in topic_ids]
 
-        except Exception as e:
-            self.logger.error(
-                f"Error getting post topics: {e}",
-                extra={"extra_data": {"error": str(e), "post_id": post_id}},
-            )
-            return []
-        finally:
-            session.close()
+            except Exception as e:
+                self.logger.error(
+                    f"Error getting post topics from Redis: {e}",
+                    extra={"extra_data": {"error": str(e), "post_id": post_id}},
+                )
+                return []
+        else:
+            from YSimulator.YServer.classes.models import PostTopic
+
+            session = Session(self.engine)
+            try:
+                post_topics = session.query(PostTopic).filter(PostTopic.post_id == post_id).all()
+                return [pt.topic_id for pt in post_topics]
+
+            except Exception as e:
+                self.logger.error(
+                    f"Error getting post topics: {e}",
+                    extra={"extra_data": {"error": str(e), "post_id": post_id}},
+                )
+                return []
+            finally:
+                session.close()
 
     def search_posts_by_topic(self, topic_id: str, agent_id: str, limit: int = 10) -> List[str]:
         """
@@ -2150,23 +2538,39 @@ class DatabaseMiddleware:
         Returns:
             List[str]: List of topic UUIDs
         """
-        from YSimulator.YServer.classes.models import ArticleTopic
+        if self.use_redis:
+            try:
+                # Get topics from article's topics set
+                article_topics_key = self._redis_key(f"article:{article_id}:topics", "")
+                topic_ids = self.redis_client.smembers(article_topics_key)
 
-        session = Session(self.engine)
-        try:
-            article_topics = (
-                session.query(ArticleTopic).filter(ArticleTopic.article_id == article_id).all()
-            )
-            return [at.topic_id for at in article_topics]
+                # Decode all topic IDs
+                return [tid.decode() if isinstance(tid, bytes) else tid for tid in topic_ids]
 
-        except Exception as e:
-            self.logger.error(
-                f"Error getting article topics: {e}",
-                extra={"extra_data": {"error": str(e), "article_id": article_id}},
-            )
-            return []
-        finally:
-            session.close()
+            except Exception as e:
+                self.logger.error(
+                    f"Error getting article topics from Redis: {e}",
+                    extra={"extra_data": {"error": str(e), "article_id": article_id}},
+                )
+                return []
+        else:
+            from YSimulator.YServer.classes.models import ArticleTopic
+
+            session = Session(self.engine)
+            try:
+                article_topics = (
+                    session.query(ArticleTopic).filter(ArticleTopic.article_id == article_id).all()
+                )
+                return [at.topic_id for at in article_topics]
+
+            except Exception as e:
+                self.logger.error(
+                    f"Error getting article topics: {e}",
+                    extra={"extra_data": {"error": str(e), "article_id": article_id}},
+                )
+                return []
+            finally:
+                session.close()
 
     def get_article(self, article_id: str) -> Optional[dict]:
         """
@@ -2178,30 +2582,53 @@ class DatabaseMiddleware:
         Returns:
             dict: Article data or None if not found
         """
-        from YSimulator.YServer.classes.models import Article
+        if self.use_redis:
+            try:
+                # Try to get from Redis first
+                redis_key = self._redis_key("articles", article_id)
+                article_data = self.redis_client.hgetall(redis_key)
 
-        session = Session(self.engine)
-        try:
-            article = session.query(Article).filter(Article.id == article_id).first()
-            if article:
-                return {
-                    "id": article.id,
-                    "title": article.title,
-                    "summary": article.summary,
-                    "website_id": article.website_id,
-                    "link": article.link,
-                    "fetched_on": article.fetched_on,
-                }
-            return None
+                if article_data:
+                    # Decode all keys and values
+                    return {
+                        k.decode() if isinstance(k, bytes) else k: (
+                            v.decode() if isinstance(v, bytes) else v
+                        )
+                        for k, v in article_data.items()
+                    }
+                return None
 
-        except Exception as e:
-            self.logger.error(
-                f"Error getting article: {e}",
-                extra={"extra_data": {"error": str(e), "article_id": article_id}},
-            )
-            return None
-        finally:
-            session.close()
+            except Exception as e:
+                self.logger.error(
+                    f"Error getting article from Redis: {e}",
+                    extra={"extra_data": {"error": str(e), "article_id": article_id}},
+                )
+                return None
+        else:
+            from YSimulator.YServer.classes.models import Article
+
+            session = Session(self.engine)
+            try:
+                article = session.query(Article).filter(Article.id == article_id).first()
+                if article:
+                    return {
+                        "id": article.id,
+                        "title": article.title,
+                        "summary": article.summary,
+                        "website_id": article.website_id,
+                        "link": article.link,
+                        "fetched_on": article.fetched_on,
+                    }
+                return None
+
+            except Exception as e:
+                self.logger.error(
+                    f"Error getting article: {e}",
+                    extra={"extra_data": {"error": str(e), "article_id": article_id}},
+                )
+                return None
+            finally:
+                session.close()
 
     def add_article_topic(self, article_id: str, topic_id: str) -> bool:
         """
@@ -2216,51 +2643,105 @@ class DatabaseMiddleware:
         """
         import uuid
 
-        from YSimulator.YServer.classes.models import ArticleTopic
-
         self.logger.info(f"add_article_topic called: article_id={article_id}, topic_id={topic_id}")
 
-        session = Session(self.engine)
-        try:
-            # Check if already exists
-            existing = (
-                session.query(ArticleTopic)
-                .filter(ArticleTopic.article_id == article_id, ArticleTopic.topic_id == topic_id)
-                .first()
-            )
+        if self.use_redis:
+            try:
+                # Check if already exists
+                article_topics_key = self._redis_key(f"article:{article_id}:topics", "")
+                is_member = self.redis_client.sismember(article_topics_key, topic_id)
 
-            if existing:
-                self.logger.info(
-                    f"Article-topic association already exists: {article_id} - {topic_id}"
+                if is_member:
+                    self.logger.info(
+                        f"Article-topic association already exists: {article_id} - {topic_id}"
+                    )
+                    return True
+
+                # Add topic to article's topics set
+                self.redis_client.sadd(article_topics_key, topic_id)
+
+                # Store the article topic record
+                article_topic_id = str(uuid.uuid4())
+                article_topic_key = self._redis_key("article_topic", article_topic_id)
+                self.redis_client.hset(
+                    article_topic_key,
+                    mapping={
+                        "id": article_topic_id,
+                        "article_id": article_id,
+                        "topic_id": topic_id,
+                    },
                 )
-                return True  # Already exists, no need to add
 
-            # Create article topic record
-            article_topic_id = str(uuid.uuid4())
-            article_topic = ArticleTopic(
-                id=article_topic_id, article_id=article_id, topic_id=topic_id
-            )
-            session.add(article_topic)
-            session.commit()
-            self.logger.info(
-                f"Successfully created article_topic entry: id={article_topic_id}, article_id={article_id}, topic_id={topic_id}"
-            )
-            return True
+                self.logger.info(
+                    f"Successfully created article_topic entry: id={article_topic_id}, article_id={article_id}, topic_id={topic_id}"
+                )
+                return True
 
-        except Exception as e:
-            session.rollback()
-            self.logger.error(
-                f"Error adding article topic: {e}",
-                extra={
-                    "extra_data": {"error": str(e), "article_id": article_id, "topic_id": topic_id}
-                },
-            )
-            import traceback
+            except Exception as e:
+                self.logger.error(
+                    f"Error adding article topic to Redis: {e}",
+                    extra={
+                        "extra_data": {
+                            "error": str(e),
+                            "article_id": article_id,
+                            "topic_id": topic_id,
+                        }
+                    },
+                )
+                import traceback
 
-            self.logger.error(f"Traceback: {traceback.format_exc()}")
-            return False
-        finally:
-            session.close()
+                self.logger.error(f"Traceback: {traceback.format_exc()}")
+                return False
+        else:
+            from YSimulator.YServer.classes.models import ArticleTopic
+
+            session = Session(self.engine)
+            try:
+                # Check if already exists
+                existing = (
+                    session.query(ArticleTopic)
+                    .filter(
+                        ArticleTopic.article_id == article_id, ArticleTopic.topic_id == topic_id
+                    )
+                    .first()
+                )
+
+                if existing:
+                    self.logger.info(
+                        f"Article-topic association already exists: {article_id} - {topic_id}"
+                    )
+                    return True  # Already exists, no need to add
+
+                # Create article topic record
+                article_topic_id = str(uuid.uuid4())
+                article_topic = ArticleTopic(
+                    id=article_topic_id, article_id=article_id, topic_id=topic_id
+                )
+                session.add(article_topic)
+                session.commit()
+                self.logger.info(
+                    f"Successfully created article_topic entry: id={article_topic_id}, article_id={article_id}, topic_id={topic_id}"
+                )
+                return True
+
+            except Exception as e:
+                session.rollback()
+                self.logger.error(
+                    f"Error adding article topic: {e}",
+                    extra={
+                        "extra_data": {
+                            "error": str(e),
+                            "article_id": article_id,
+                            "topic_id": topic_id,
+                        }
+                    },
+                )
+                import traceback
+
+                self.logger.error(f"Traceback: {traceback.format_exc()}")
+                return False
+            finally:
+                session.close()
 
     def add_or_get_hashtag(self, hashtag_text: str) -> Optional[str]:
         """
@@ -2410,24 +2891,44 @@ class DatabaseMiddleware:
         Returns:
             dict: User data dict with 'id' and other fields, or None if not found
         """
-        from YSimulator.YServer.classes.models import User_mgmt
+        if self.use_redis:
+            try:
+                # Look up user ID from username index
+                username_key = self._redis_key("user_mgmt:by_username", username)
+                user_id = self.redis_client.get(username_key)
 
-        session = Session(self.engine)
-        try:
-            user = session.query(User_mgmt).filter(User_mgmt.username == username).first()
+                if user_id:
+                    # Decode if bytes
+                    user_id_str = user_id.decode() if isinstance(user_id, bytes) else user_id
+                    # Get user data by ID (reuse existing method)
+                    return self.get_user(user_id_str)
+                return None
 
-            if user:
-                return {"id": user.id, "username": user.username, "email": user.email}
-            return None
+            except Exception as e:
+                self.logger.error(
+                    f"Error getting user by username from Redis: {e}",
+                    extra={"extra_data": {"error": str(e), "username": username}},
+                )
+                return None
+        else:
+            from YSimulator.YServer.classes.models import User_mgmt
 
-        except Exception as e:
-            self.logger.error(
-                f"Error getting user by username: {e}",
-                extra={"extra_data": {"error": str(e), "username": username}},
-            )
-            return None
-        finally:
-            session.close()
+            session = Session(self.engine)
+            try:
+                user = session.query(User_mgmt).filter(User_mgmt.username == username).first()
+
+                if user:
+                    return {"id": user.id, "username": user.username, "email": user.email}
+                return None
+
+            except Exception as e:
+                self.logger.error(
+                    f"Error getting user by username: {e}",
+                    extra={"extra_data": {"error": str(e), "username": username}},
+                )
+                return None
+            finally:
+                session.close()
 
     def add_mention(self, mention_data: Dict[str, Any]) -> bool:
         """
@@ -2661,41 +3162,47 @@ class DatabaseMiddleware:
 
                 # Get the first sentiment
                 sentiment_id = list(sentiment_ids)[0]
-                key = self._redis_key("post_sentiment", sentiment_id)
+                # Decode sentiment_id if bytes
+                sentiment_id_str = (
+                    sentiment_id.decode() if isinstance(sentiment_id, bytes) else sentiment_id
+                )
+                key = self._redis_key("post_sentiment", sentiment_id_str)
                 sentiment_data = self.redis_client.hgetall(key)
 
                 if sentiment_data:
+                    # Decode all keys and values from bytes
+                    decoded_data = {
+                        k.decode() if isinstance(k, bytes) else k: (
+                            v.decode() if isinstance(v, bytes) else v
+                        )
+                        for k, v in sentiment_data.items()
+                    }
+
                     # Convert string values back to appropriate types
                     return {
-                        "id": sentiment_data.get("id"),
-                        "post_id": sentiment_data.get("post_id"),
-                        "user_id": sentiment_data.get("user_id"),
-                        "topic_id": sentiment_data.get("topic_id"),
-                        "round": int(sentiment_data.get("round", 0)),
+                        "id": decoded_data.get("id"),
+                        "post_id": decoded_data.get("post_id"),
+                        "user_id": decoded_data.get("user_id"),
+                        "topic_id": decoded_data.get("topic_id"),
+                        "round": int(decoded_data.get("round", 0)),
                         "neg": (
-                            float(sentiment_data.get("neg", 0.0))
-                            if sentiment_data.get("neg")
-                            else None
+                            float(decoded_data.get("neg", 0.0)) if decoded_data.get("neg") else None
                         ),
                         "pos": (
-                            float(sentiment_data.get("pos", 0.0))
-                            if sentiment_data.get("pos")
-                            else None
+                            float(decoded_data.get("pos", 0.0)) if decoded_data.get("pos") else None
                         ),
                         "neu": (
-                            float(sentiment_data.get("neu", 0.0))
-                            if sentiment_data.get("neu")
-                            else None
+                            float(decoded_data.get("neu", 0.0)) if decoded_data.get("neu") else None
                         ),
                         "compound": (
-                            float(sentiment_data.get("compound", 0.0))
-                            if sentiment_data.get("compound")
+                            float(decoded_data.get("compound", 0.0))
+                            if decoded_data.get("compound")
                             else None
                         ),
-                        "sentiment_parent": sentiment_data.get("sentiment_parent", ""),
-                        "is_post": int(sentiment_data.get("is_post", 0)),
-                        "is_comment": int(sentiment_data.get("is_comment", 0)),
-                        "is_reaction": int(sentiment_data.get("is_reaction", 0)),
+                        "sentiment_parent": decoded_data.get("sentiment_parent", ""),
+                        "is_post": int(decoded_data.get("is_post", 0)),
+                        "is_comment": int(decoded_data.get("is_comment", 0)),
+                        "is_reaction": int(decoded_data.get("is_reaction", 0)),
                     }
                 return None
             else:
@@ -2875,6 +3382,48 @@ class DatabaseMiddleware:
         Returns:
             dict: Emotion data with 'id', 'emotion', 'icon' fields, or None if not found
         """
+        if self.use_redis:
+            try:
+                # Look up emotion ID from name index
+                emotion_name_key = self._redis_key("emotion:by_name", emotion_name)
+                emotion_id = self.redis_client.get(emotion_name_key)
+
+                if emotion_id:
+                    # Decode if bytes
+                    emotion_id_str = (
+                        emotion_id.decode() if isinstance(emotion_id, bytes) else emotion_id
+                    )
+                    # Get emotion data from hash
+                    emotion_key = self._redis_key("emotion", emotion_id_str)
+                    emotion_data = self.redis_client.hgetall(emotion_key)
+
+                    if emotion_data:
+                        # Decode all keys and values
+                        return {
+                            k.decode() if isinstance(k, bytes) else k: (
+                                v.decode() if isinstance(v, bytes) else v
+                            )
+                            for k, v in emotion_data.items()
+                        }
+
+                # If not found in Redis, fall back to SQL and cache the result
+                emotion = self._get_emotion_by_name_from_sql(emotion_name)
+                if emotion:
+                    # Cache in Redis for future lookups
+                    self._cache_emotion_in_redis(emotion)
+                return emotion
+
+            except Exception as e:
+                self.logger.error(
+                    f"Error getting emotion by name from Redis: {e}",
+                    extra={"extra_data": {"error": str(e), "emotion_name": emotion_name}},
+                )
+                return None
+        else:
+            return self._get_emotion_by_name_from_sql(emotion_name)
+
+    def _get_emotion_by_name_from_sql(self, emotion_name: str) -> Optional[Dict[str, Any]]:
+        """Helper method to get emotion from SQL database."""
         from YSimulator.YServer.classes.models import Emotion
 
         session = Session(self.engine)
@@ -2887,12 +3436,34 @@ class DatabaseMiddleware:
 
         except Exception as e:
             self.logger.error(
-                f"Error getting emotion by name: {e}",
+                f"Error getting emotion by name from SQL: {e}",
                 extra={"extra_data": {"error": str(e), "emotion_name": emotion_name}},
             )
             return None
         finally:
             session.close()
+
+    def _cache_emotion_in_redis(self, emotion_data: Dict[str, Any]) -> bool:
+        """Helper method to cache emotion data in Redis."""
+        try:
+            emotion_id = emotion_data["id"]
+            emotion_name = emotion_data["emotion"]
+
+            # Store emotion data in hash
+            emotion_key = self._redis_key("emotion", emotion_id)
+            self.redis_client.hset(emotion_key, mapping=emotion_data)
+
+            # Create name index
+            emotion_name_key = self._redis_key("emotion:by_name", emotion_name)
+            self.redis_client.set(emotion_name_key, emotion_id)
+
+            return True
+        except Exception as e:
+            self.logger.error(
+                f"Error caching emotion in Redis: {e}",
+                extra={"extra_data": {"error": str(e), "emotion_data": emotion_data}},
+            )
+            return False
 
     def add_post_emotion(self, post_id: str, emotion_id: str) -> bool:
         """
@@ -3043,11 +3614,11 @@ class DatabaseMiddleware:
     def update_agent_last_active_day(self, agent_id: str, day: int) -> bool:
         """
         Update the last_active_day field for an agent.
-        
+
         Args:
             agent_id: Agent ID (UUID string)
             day: Current simulation day
-            
+
         Returns:
             bool: True if successful, False otherwise
         """
@@ -3059,16 +3630,14 @@ class DatabaseMiddleware:
             else:
                 session = Session(self.engine)
                 try:
-                    session.query(User_mgmt).filter_by(id=agent_id).update({
-                        "last_active_day": day
-                    })
+                    session.query(User_mgmt).filter_by(id=agent_id).update({"last_active_day": day})
                     session.commit()
                     return True
                 except Exception as e:
                     session.rollback()
                     self.logger.error(
                         f"Error updating last_active_day for agent {agent_id}: {e}",
-                        extra={"extra_data": {"agent_id": agent_id, "error": str(e)}}
+                        extra={"extra_data": {"agent_id": agent_id, "error": str(e)}},
                     )
                     return False
                 finally:
@@ -3076,30 +3645,30 @@ class DatabaseMiddleware:
         except Exception as e:
             self.logger.error(
                 f"Error updating last_active_day: {e}",
-                extra={"extra_data": {"agent_id": agent_id, "error": str(e)}}
+                extra={"extra_data": {"agent_id": agent_id, "error": str(e)}},
             )
             return False
 
     def get_inactive_agents(self, current_day: int, inactivity_threshold: int) -> List[str]:
         """
         Get agents that have been inactive for the specified threshold.
-        
+
         Uses last_active_day for efficiency. An agent is considered inactive if:
         - They have not churned (left_on is None)
         - They have a last_active_day set
         - current_day - last_active_day >= inactivity_threshold
-        
+
         Args:
             current_day: Current simulation day
             inactivity_threshold: Number of days of inactivity
-            
+
         Returns:
             List of agent IDs (UUID strings) that are inactive
         """
         self.logger.info(
             f"Checking for inactive agents: current_day={current_day}, threshold={inactivity_threshold}"
         )
-        
+
         try:
             if self.use_redis:
                 inactive_agents = []
@@ -3111,12 +3680,12 @@ class DatabaseMiddleware:
                 for key in self.redis_client.scan_iter(match=pattern):
                     agent_data = self.redis_client.hgetall(key)
                     total_agents += 1
-                    
+
                     # Skip if already churned (left_on is set)
                     if agent_data.get("left_on"):
                         churned_agents += 1
                         continue
-                    
+
                     # Check last_active_day
                     last_active = agent_data.get("last_active_day")
                     if last_active:
@@ -3127,7 +3696,7 @@ class DatabaseMiddleware:
                             self.logger.debug(
                                 f"Agent {agent_data.get('id')} inactive: last_active={last_active}, days_inactive={days_inactive}"
                             )
-                
+
                 self.logger.info(
                     f"Inactive agents check (Redis): total={total_agents}, churned={churned_agents}, with_last_active={agents_with_last_active}, inactive={len(inactive_agents)}"
                 )
@@ -3137,42 +3706,51 @@ class DatabaseMiddleware:
                 try:
                     # First, let's get some debug info
                     total_count = session.query(User_mgmt).count()
-                    churned_count = session.query(User_mgmt).filter(User_mgmt.left_on.isnot(None)).count()
-                    with_last_active = session.query(User_mgmt).filter(User_mgmt.last_active_day.isnot(None)).count()
-                    
+                    churned_count = (
+                        session.query(User_mgmt).filter(User_mgmt.left_on.isnot(None)).count()
+                    )
+                    with_last_active = (
+                        session.query(User_mgmt)
+                        .filter(User_mgmt.last_active_day.isnot(None))
+                        .count()
+                    )
+
                     self.logger.info(
                         f"Database stats: total_agents={total_count}, churned={churned_count}, with_last_active={with_last_active}"
                     )
-                    
+
                     # Query for inactive agents
-                    inactive_agents = session.query(User_mgmt.id).filter(
-                        User_mgmt.left_on.is_(None),  # Not churned
-                        User_mgmt.last_active_day.isnot(None),
-                        (current_day - User_mgmt.last_active_day) >= inactivity_threshold
-                    ).all()
-                    
+                    inactive_agents = (
+                        session.query(User_mgmt.id)
+                        .filter(
+                            User_mgmt.left_on.is_(None),  # Not churned
+                            User_mgmt.last_active_day.isnot(None),
+                            (current_day - User_mgmt.last_active_day) >= inactivity_threshold,
+                        )
+                        .all()
+                    )
+
                     self.logger.info(
                         f"Found {len(inactive_agents)} inactive agents (threshold={inactivity_threshold})"
                     )
-                    
+
                     return [agent.id for agent in inactive_agents]
                 finally:
                     session.close()
         except Exception as e:
             self.logger.error(
-                f"Error getting inactive agents: {e}",
-                extra={"extra_data": {"error": str(e)}}
+                f"Error getting inactive agents: {e}", extra={"extra_data": {"error": str(e)}}
             )
             return []
 
     def set_agent_churned(self, agent_id: str, round_id: str) -> bool:
         """
         Mark an agent as churned by setting the left_on field to the current round.
-        
+
         Args:
             agent_id: Agent ID (UUID string)
             round_id: Round ID when agent churned (UUID string)
-            
+
         Returns:
             bool: True if successful, False otherwise
         """
@@ -3184,16 +3762,14 @@ class DatabaseMiddleware:
             else:
                 session = Session(self.engine)
                 try:
-                    session.query(User_mgmt).filter_by(id=agent_id).update({
-                        "left_on": round_id
-                    })
+                    session.query(User_mgmt).filter_by(id=agent_id).update({"left_on": round_id})
                     session.commit()
                     return True
                 except Exception as e:
                     session.rollback()
                     self.logger.error(
                         f"Error setting left_on for agent {agent_id}: {e}",
-                        extra={"extra_data": {"agent_id": agent_id, "error": str(e)}}
+                        extra={"extra_data": {"agent_id": agent_id, "error": str(e)}},
                     )
                     return False
                 finally:
@@ -3201,14 +3777,14 @@ class DatabaseMiddleware:
         except Exception as e:
             self.logger.error(
                 f"Error setting left_on: {e}",
-                extra={"extra_data": {"agent_id": agent_id, "error": str(e)}}
+                extra={"extra_data": {"agent_id": agent_id, "error": str(e)}},
             )
             return False
 
     def get_churned_agents(self) -> List[str]:
         """
         Get all churned agents (agents with left_on set).
-        
+
         Returns:
             List of agent IDs (UUID strings) that are churned
         """
@@ -3226,15 +3802,14 @@ class DatabaseMiddleware:
             else:
                 session = Session(self.engine)
                 try:
-                    churned_agents = session.query(User_mgmt.id).filter(
-                        User_mgmt.left_on.isnot(None)
-                    ).all()
+                    churned_agents = (
+                        session.query(User_mgmt.id).filter(User_mgmt.left_on.isnot(None)).all()
+                    )
                     return [agent.id for agent in churned_agents]
                 finally:
                     session.close()
         except Exception as e:
             self.logger.error(
-                f"Error getting churned agents: {e}",
-                extra={"extra_data": {"error": str(e)}}
+                f"Error getting churned agents: {e}", extra={"extra_data": {"error": str(e)}}
             )
             return []
