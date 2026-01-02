@@ -125,7 +125,7 @@ def log_server_request(func):
             except Exception as log_error:
                 # Don't let logging errors break the application
                 # Log to stderr as fallback for debugging
-                print(f"WARNING: Server request logging failed: {log_error}", file=sys.stderr)
+                self.logger.error(f"Server request logging failed: {log_error}")
 
     return wrapper
 
@@ -878,7 +878,7 @@ class OrchestratorServer:
                 },
             )
 
-            print(
+            self.logger.info(
                 f"[Server] 👥 Agent Registration: {registered_count} new, {skipped_count} existing, {pages_registered} pages"
             )
 
@@ -893,7 +893,7 @@ class OrchestratorServer:
             self.logger.error(
                 f"Agent registration error: {e}", extra={"extra_data": {"error": str(e)}}
             )
-            print(f"[Server] ❌ Agent registration error: {e}")
+            self.logger.error(f"Agent registration error: {e}")
             raise
 
     @log_server_request
@@ -1151,7 +1151,7 @@ class OrchestratorServer:
                     }
                 },
             )
-            print(
+            self.logger.info(
                 f"[Server] 🟢 Client {client_id} joined at day {self.day}, slot {self.slot}. "
                 f"Will run for {num_days if num_days > 0 else '∞'} days. "
                 f"Total: {len(self.registered_clients)}, Active: {len(self._get_active_clients())}"
@@ -1194,7 +1194,7 @@ class OrchestratorServer:
                     }
                 },
             )
-            print(
+            self.logger.info(
                 f"[Server] 🏁 Client {client_id} completed. "
                 f"Active: {len(self._get_active_clients())}, "
                 f"Completed: {len(self.completed_clients)}"
@@ -1276,7 +1276,7 @@ class OrchestratorServer:
                     }
                 },
             )
-            print(
+            self.logger.info(
                 f"[Server] ⚠️  Removing stale client {client_id} "
                 f"(no heartbeat for {time_since_heartbeat:.1f}s)"
             )
@@ -1324,7 +1324,7 @@ class OrchestratorServer:
                     }
                 },
             )
-            print(f"[Server] 🔴 Client {client_id} left. Total: {len(self.registered_clients)}")
+            self.logger.info(f"Client {client_id} left. Total: {len(self.registered_clients)}")
 
             # Check if leaving unblocked the barrier
             self._check_barrier_and_advance()
@@ -1832,7 +1832,7 @@ class OrchestratorServer:
                 f"DB Error during action submission: {e}",
                 extra={"extra_data": {"client_id": client_id, "error": str(e)}},
             )
-            print(f"DB Error: {e}")
+            self.logger.error(f"DB Error: {e}")
 
         # Mark this specific client as done
         self.submitted_clients.add(client_id)
@@ -2013,7 +2013,7 @@ class OrchestratorServer:
         if active_submitted_count >= active_count:
             execution_start = time.time()
 
-            print(
+            self.logger.info(
                 f"[Server] ✅ Day {self.day} Slot {self.slot} complete "
                 f"(Active clients: {active_count}). Advancing..."
             )
@@ -2054,7 +2054,7 @@ class OrchestratorServer:
                             }
                         },
                     )
-                    print(
+                    self.logger.info(
                         f"[Server] 💾 Day {completed_day} complete - "
                         f"Consolidated {consolidation_result.get('posts', 0)} posts, "
                         f"{consolidation_result.get('interactions', 0)} interactions to SQLite. "
@@ -2089,7 +2089,7 @@ class OrchestratorServer:
                             }
                         },
                     )
-                    print(
+                    self.logger.info(
                         f"[Server] 🧹 Redis cleanup - "
                         f"Removed {cleanup_result.get('removed_posts', 0)} old posts, "
                         f"{cleanup_result.get('removed_interactions', 0)} old interactions. "
@@ -2200,7 +2200,7 @@ class OrchestratorServer:
             self.logger.error(
                 f"Error during archetype transitions: {e}", extra={"extra_data": {"error": str(e)}}
             )
-            print(f"[Server] ❌ Archetype transition error: {e}")
+            self.logger.error(f"Archetype transition error: {e}")
             return
 
         transition_time = (time.time() - transition_start) * 1000
@@ -2218,7 +2218,7 @@ class OrchestratorServer:
             },
         )
 
-        print(
+        self.logger.info(
             f"[Server] 🔄 Archetype transitions complete - "
             f"{transitioned_count} agents changed archetypes (day {self.day})"
         )

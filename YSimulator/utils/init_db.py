@@ -116,7 +116,7 @@ def initialize_database(db_config: dict, config_path: Path = None, logger=None):
                 extra={"extra_data": {"db_type": db_config.get("type", "sqlite")}},
             )
         else:
-            print(f"✅ Database initialized successfully ({db_config.get('type', 'sqlite')})")
+            logging.info(f"✅ Database initialized successfully ({db_config.get('type', 'sqlite')})")
 
         return True
 
@@ -124,7 +124,7 @@ def initialize_database(db_config: dict, config_path: Path = None, logger=None):
         if logger:
             logger.error(f"Failed to initialize database: {e}")
         else:
-            print(f"❌ Failed to initialize database: {e}")
+            logging.error(f"❌ Failed to initialize database: {e}")
         return False
 
 
@@ -230,7 +230,7 @@ def main():
     config_path = Path(args.config_path) if args.config_path else None
 
     # Initialize database
-    print(f"Initializing {args.db_type} database...")
+    logging.info(f"Initializing {args.db_type} database...")
     success = initialize_database(db_config, config_path)
 
     sys.exit(0 if success else 1)

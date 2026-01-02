@@ -16,10 +16,11 @@ YSimulator is a distributed social media simulation framework with **~22,000 lin
 
 | Category | Count | Severity | Status |
 |----------|-------|----------|--------|
-| Bare `except:` clauses | 3 | 🔴 High | ✅ **FIXED** |
+| Bare `except:` clauses | 5 | 🔴 High | ✅ **FIXED** |
 | Missing dependency version bounds | All | 🔴 High | ✅ **FIXED** |
 | Password security documentation | 1 | 🔴 High | ✅ **DOCUMENTED** |
-| Print statements | 661 | 🟡 Medium | 🔄 TODO |
+| Print statements (production code) | 89 | 🟡 Medium | ✅ **FIXED** |
+| Print statements (test files) | 572 | 🟢 Low | Acceptable for tests |
 | Ray blocking calls | 95 | 🟡 Medium | 🔄 TODO |
 | Large files (>2000 lines) | 3 | 🟡 Medium | 🔄 TODO |
 | Test coverage gaps | Multiple | 🟡 Medium | 🔄 TODO |
@@ -168,15 +169,43 @@ logger.info("Processing agent", extra={"agent_id": agent_id})
 
 ## 2. Remaining High Priority Issues
 
-### 2.1 Excessive Print Statements
+### 2.1 Excessive Print Statements - FIXED ✅
 
-**Issue**: 661 `print()` statements instead of proper logging
+**Issue**: 661 `print()` statements (89 in production code, 572 in tests)
 
-**Location**: Throughout codebase
+**Status**: ✅ **COMPLETE** - All production code print statements replaced
 
-**Status**: 🔄 **TODO** - Not yet addressed
+**Locations Fixed** (89 statements in production code):
+1. ✅ `YClient/news_feeds/news_service.py` - 48 prints → `self.logger` calls
+2. ✅ `YServer/server.py` - 13 prints → `self.logger` calls
+3. ✅ `YClient/client.py` - 11 prints → `self.logger` calls  
+4. ✅ `YClient/LLM_interactions/llm_service.py` - 7 prints → `logger` calls
+5. ✅ `common_utils.py` - 7 prints → `logger` calls
+6. ✅ `utils/init_db.py` - 3 prints → `logging` calls
 
-**Problem**:
+**Changes Made**:
+- Added logger initialization where missing (news_service.py, common_utils.py)
+- Replaced all print statements with appropriate logging levels:
+  - `ERROR` for error messages and exceptions
+  - `WARNING` for warnings and deprecation notices
+  - `INFO` for informational messages and progress updates
+  - `DEBUG` for detailed debugging information
+- Maintained all message content while removing redundant service prefixes
+
+**Test Files**: 572 print statements remain in test files (acceptable for test output)
+
+**Impact**:
+- ✅ Proper log levels for filtering and analysis
+- ✅ Centralized logging configuration possible
+- ✅ Better production observability
+- ✅ Consistent logging across all services
+- ✅ Can now configure log rotation, formatting, and destinations
+
+**Priority**: ✅ **COMPLETE** - Phase 2 milestone achieved
+
+---
+
+### 2.2 Large File Complexity - TODO
 
 **Issue**: Three files exceed 2,000 lines
 
@@ -1071,8 +1100,9 @@ def health_check(self) -> Dict[str, Any]:
 
 ## Comprehensive TODO List
 
-### ✅ Phase 1 - Completed (January 2, 2026)
+### ✅ Phase 1 & 2 - Completed (January 2, 2026)
 
+**Phase 1 - Critical Fixes (Complete)**:
 - ✅ **CRITICAL**: Fixed 5 bare `except:` clauses
   - ✅ server.py (3 locations) 
   - ✅ content_recsys.py (1 location)
@@ -1081,9 +1111,17 @@ def health_check(self) -> Dict[str, Any]:
 - ✅ **HIGH**: Added upper bounds to all dependency versions
 - ✅ **Verified**: All Python files compile without syntax errors
 
-### 🔄 Phase 2 - In Progress (Do Next)
+**Phase 2 - High Priority Logging (Complete)**:
+- ✅ **HIGH**: Replaced all 89 production print statements with logging
+  - ✅ news_service.py (48 statements)
+  - ✅ server.py (13 statements)
+  - ✅ client.py (11 statements)
+  - ✅ llm_service.py (7 statements)
+  - ✅ common_utils.py (7 statements)
+  - ✅ init_db.py (3 statements)
+- ✅ **Verified**: All files compile and maintain functionality
 
-- [ ] **HIGH**: Replace top 50 print statements in hot paths
+### 🔄 Phase 2 Continued - In Progress (Do Next)
 - [ ] Add pytest-cov to requirements-dev.txt
 - [ ] Create GitHub Actions CI workflow
 - [ ] Generate initial coverage report

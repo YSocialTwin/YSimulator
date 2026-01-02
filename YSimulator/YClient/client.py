@@ -657,7 +657,7 @@ class SimulationClient:
             """Helper to log and print round ID error."""
             if error_msg:
                 self.logger.error(error_msg, extra={"extra_data": {"error": error_msg}})
-            print(f"[{self.client_id}] ❌ Error: Cannot load network without valid round ID")
+            self.logger.error(f" Cannot load network without valid round ID")
             return 0
 
         try:
@@ -747,7 +747,7 @@ class SimulationClient:
                     "extra_data": {"follow_count": follow_count, "skipped_count": skipped_count}
                 },
             )
-            print(
+            self.logger.info(
                 f"[{self.client_id}] Social network loaded: {follow_count} follow relationships created"
             )
 
@@ -773,7 +773,7 @@ class SimulationClient:
         """
         # Register agents with the server
         start_time = time.time()
-        print(f"[{self.client_id}] Registering {len(self.agent_profiles)} agents with server...")
+        self.logger.info(f" Registering {len(self.agent_profiles)} agents with server...")
 
         registration_result = ray.get(self.server.register_agents.remote(self.agent_profiles, client_id=self.client_id))
         reg_time = (time.time() - start_time) * 1000
@@ -782,7 +782,7 @@ class SimulationClient:
             "Agents registered with server",
             extra={"extra_data": {**registration_result, "execution_time_ms": reg_time}},
         )
-        print(f"[{self.client_id}] Agent registration complete: {registration_result}")
+        self.logger.info(f" Agent registration complete: {registration_result}")
 
         # Register client with the server, passing num_days for informational purposes
         client_reg = ray.get(self.server.register_client.remote(self.client_id, self.num_days))
@@ -812,7 +812,7 @@ class SimulationClient:
 
         if network_csv_path.exists():
             # First, parse the network edges from CSV
-            print(
+            self.logger.info(
                 f"[{self.client_id}] Checking if social network needs to be loaded from {network_csv_path.name}..."
             )
             edges = self._parse_network_edges(network_csv_path)
@@ -822,13 +822,13 @@ class SimulationClient:
                 edges_exist = ray.get(self.server.check_network_edges_exist.remote(edges))
 
                 if not edges_exist:
-                    print(
+                    self.logger.info(
                         f"[{self.client_id}] Loading social network topology from {network_csv_path.name}..."
                     )
                     self._load_and_create_social_network(network_csv_path)
                 else:
                     self.logger.info("Network already loaded (edges exist in database)")
-                    print(f"[{self.client_id}] Social network already loaded, skipping")
+                    self.logger.info(f" Social network already loaded, skipping")
             else:
                 self.logger.warning(f"No valid edges found in {network_csv_path.name}")
         else:
@@ -850,7 +850,7 @@ class SimulationClient:
                 }
             },
         )
-        print(
+        self.logger.info(
             f"[{self.client_id}] Client registered. Starting at day {start_day}, slot {start_slot}. "
             f"Will run for {self.num_days if self.num_days > 0 else '∞'} days (until day {max_day_str})."
         )
@@ -888,7 +888,7 @@ class SimulationClient:
                             }
                         },
                     )
-                    print(
+                    self.logger.info(
                         f"[{self.client_id}] Completed {self.num_days} days "
                         f"(day {start_day} to {instruction.day - 1}). Total slots: {slot_count}"
                     )
@@ -1039,7 +1039,7 @@ class SimulationClient:
                     },
                 )
 
-                print(
+                self.logger.info(
                     f"[{self.client_id}] Day {instruction.day} Slot {instruction.slot} -> "
                     f"Submitted {len(actions)} actions."
                 )
@@ -1049,7 +1049,7 @@ class SimulationClient:
             try:
                 ray.get(self.server.complete_client.remote(self.client_id))
                 self.logger.info("Notified server of completion")
-                print(f"[{self.client_id}] ✅ Simulation complete. Server notified.")
+                self.logger.info(f" Simulation complete. Server notified.")
             except Exception as e:
                 self.logger.warning(
                     f"Failed to notify server of completion: {e}",
