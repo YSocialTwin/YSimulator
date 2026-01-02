@@ -20,12 +20,17 @@ from sqlalchemy.orm import Session
 class TestThreadContext(unittest.TestCase):
     """Test thread context retrieval for comment action."""
     
+    # Class-level counter to ensure unique day/hour combinations across all tests
+    _round_counter = 2000  # Start at 2000 to avoid collision with other test classes
+    
     def setUp(self):
         """Set up test fixtures."""
         # Create an in-memory SQLite database for testing
         self.db_config = {
             "type": "sqlite",
-            "database": ":memory:"
+            "sqlite": {
+                "filename": ":memory:"
+            }
         }
         
         # Initialize database middleware
@@ -40,11 +45,11 @@ class TestThreadContext(unittest.TestCase):
         Base.metadata.create_all(self.db.engine)
         
         # Create test fixtures with unique values for each test
-        import random
         with Session(self.db.engine) as session:
-            # Create rounds with unique day/hour combinations
+            # Create rounds with unique day/hour combinations to avoid UNIQUE constraint violations
             unique_id = uuid.uuid4().hex[:8]
-            base_day = random.randint(1, 100)
+            TestThreadContext._round_counter += 1
+            base_day = TestThreadContext._round_counter * 10  # Use counter-based day to ensure uniqueness
             
             self.round1_id = str(uuid.uuid4())
             self.round2_id = str(uuid.uuid4())
