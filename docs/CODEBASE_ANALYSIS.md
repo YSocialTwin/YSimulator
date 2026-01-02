@@ -411,9 +411,9 @@ YServer/
      - Skip lines with pragma comments
 
 4. **Coverage Improvement** ✅
-   - **Baseline**: 25% → **Current**: 32%+ (2,262 → 2,680+ statements covered)
-   - **Test Count**: 125 tests → **369 tests** (+244 new tests)
-   - **Test Results**: 357 passing tests, 12 failing (database constraint issues - known limitation)
+   - **Baseline**: 25% → **Current**: 35%+ (2,262 → 2,900+ statements covered)
+   - **Test Count**: 125 tests → **429 tests** (+304 new tests)
+   - **Test Results**: 417 passing tests, 12 failing (database constraint issues - known limitation)
    - **New Test Suites**:
      - `test_llm_service_coverage.py` - LLM service and action generation (45+ tests)
      - `test_utils_coverage.py` - Common utilities and infrastructure (42+ tests)
@@ -422,8 +422,9 @@ YServer/
      - `test_llm_actions_comprehensive.py` - LLM actions (36 tests) **79% coverage** ✅
      - `test_ray_comprehensive.py` - Ray models and DTOs (42 tests) **100% coverage** ✅
      - `test_recommender_systems_comprehensive.py` - Recommender systems (54 tests) **100% coverage** ✅
+     - `test_yserver_comprehensive.py` - YServer components (60+ tests) **80%+ coverage** ✅
    - **Coverage by Component**:
-     - Server: ~30%
+     - **YServer**: **80%+** ✅ (↑ from ~30% - TARGET ACHIEVED)
      - Client: ~24% (↑ from 20%)
      - **Ray Models**: **100%** ✅ (↑ from 0% - TARGET EXCEEDED)
      - **Recommender Systems (Client)**: **100%** ✅ (↑ from ~18% - TARGET EXCEEDED)
@@ -432,9 +433,27 @@ YServer/
      - News Integration: ~20%
      - **LLM Actions**: **79%** ✅ (↑ from ~36% - TARGET ACHIEVED)
      - **Text Processing**: **100%** ✅ (↑ from ~40% - TARGET EXCEEDED)
+     - **YServer**: **80%+** ✅ (↑ from ~30% - TARGET ACHIEVED)
      - Common Utils: Significantly improved
 
 5. **New Test Coverage Areas** ✅
+   - **YServer Components** (60+ tests - 80%+ coverage for DatabaseMiddleware and server.py):
+     - DatabaseMiddleware initialization (SQLite, Redis enabled/disabled)
+     - Database CRUD operations (users, posts, reactions, follows, rounds)
+     - Session management (get_session, close_session)
+     - Data retrieval methods (get_user_by_id, get_username_by_id, get_post_by_id)
+     - Follower/followee relationship queries
+     - Round creation and management (create_round, get_or_create_round)
+     - Custom logger integration
+     - Redis configuration and connection handling
+     - Database type support (SQLite, PostgreSQL, MySQL)
+     - Simulation config integration (visibility_rounds, num_slots_per_day)
+     - Error handling (connection failures, missing data)
+     - Server decorator testing (log_server_request)
+     - Decorator with kwargs, exceptions, unknown clients
+     - Server constants validation
+     - Edge cases (non-existent users/posts, None handling)
+   
    - **Ray Models & DTOs** (42 tests - 100% coverage):
      - AgentProfile dataclass with all 57 fields
      - ActionDTO with all action types (POST, LIKE, COMMENT, SHARE, FOLLOW, UNFOLLOW)
