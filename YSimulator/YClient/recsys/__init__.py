@@ -19,17 +19,17 @@ Exports:
 """
 
 from .ContentRecSys import (
-    ContentRecSys,
-    ReverseChrono,
-    ReverseChronoPopularity,
-    ReverseChronoFollowers,
-    ReverseChronoFollowersPopularity,
-    ReverseChronoComments,
     CommonInterests,
     CommonUserInterests,
-    SimilarUsersReact,
+    ContentRecSys,
+    RandomOrder,
+    ReverseChrono,
+    ReverseChronoComments,
+    ReverseChronoFollowers,
+    ReverseChronoFollowersPopularity,
+    ReverseChronoPopularity,
     SimilarUsersPosts,
-    RandomOrder
+    SimilarUsersReact,
 )
 
 __all__ = [
@@ -43,5 +43,5 @@ __all__ = [
     "CommonUserInterests",
     "SimilarUsersReact",
     "SimilarUsersPosts",
-    "RandomOrder"
+    "RandomOrder",
 ]

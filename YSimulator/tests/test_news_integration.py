@@ -282,13 +282,14 @@ class TestNewsIntegration(unittest.TestCase):
             round_obj = Round(id=round_id, day=1, hour=0)
             session.add(round_obj)
             
-            # Create user
+            # Create user with unique username
             user_id = str(uuid.uuid4())
             user = User_mgmt(
                 id=user_id,
-                username="test_user",
+                username=f"test_user_{user_id[:8]}",  # Make username unique
                 password="test_password",  # Required field
-                archetype="broadcaster"
+                archetype="broadcaster",
+                round_actions=3
             )
             session.add(user)
             session.commit()

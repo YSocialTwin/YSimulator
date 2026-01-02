@@ -17,7 +17,6 @@ from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from typing import Optional
 
-
 import ray
 
 from YSimulator.YClient.actions import (
@@ -92,16 +91,16 @@ FOLLOW_RECSYS_CLASS_MAP = {
 }
 
 
-def compress_rotated_log(source, dest):
+def compress_rotated_log(source: str, dest: str) -> None:
     """
     Compress a rotated log file using gzip.
-    
+
     Args:
         source: Path to the source log file
         dest: Path to the destination compressed file
     """
-    with open(source, 'rb') as f_in:
-        with gzip.open(dest, 'wb') as f_out:
+    with open(source, "rb") as f_in:
+        with gzip.open(dest, "wb") as f_out:
             shutil.copyfileobj(f_in, f_out)
     os.remove(source)
 
@@ -144,7 +143,7 @@ class SimulationClient:
         self.llm = llm_handle
         self.news_service = news_service_handle
         self.config_path = Path(config_path)
-        
+
         # Store simulation config for logging configuration
         self.simulation_config = simulation_config if simulation_config else {}
 
@@ -258,7 +257,7 @@ class SimulationClient:
         logging_config = self.simulation_config.get("logging", {})
         enable_actor_log = logging_config.get("enable_actor_log", True)
         enable_client_log = logging_config.get("enable_client_log", True)
-        
+
         log_dir = self.config_path / "logs"
         log_dir.mkdir(exist_ok=True)
 
@@ -272,14 +271,16 @@ class SimulationClient:
         # Create file handler with JSON formatting (actor log)
         if enable_actor_log:
             log_file = log_dir / f"{self.client_id}_actor.log"
-            handler = RotatingFileHandler(log_file, maxBytes=10 * 1024 * 1024, backupCount=5)  # 10MB
-            
+            handler = RotatingFileHandler(
+                log_file, maxBytes=10 * 1024 * 1024, backupCount=5
+            )  # 10MB
+
             # Add compression for rotated files
             handler.rotator = compress_rotated_log
             handler.namer = lambda name: name + ".gz"
 
             class JsonFormatter(logging.Formatter):
-                def format(self, record):
+                def format(self, record: logging.LogRecord) -> str:
                     log_data = {
                         "timestamp": datetime.utcnow().isoformat(),
                         "level": record.levelname,
@@ -308,13 +309,13 @@ class SimulationClient:
             action_handler = RotatingFileHandler(
                 action_log_file, maxBytes=10 * 1024 * 1024, backupCount=5
             )
-            
+
             # Add compression for rotated files
             action_handler.rotator = compress_rotated_log
             action_handler.namer = lambda name: name + ".gz"
 
             class ActionFormatter(logging.Formatter):
-                def format(self, record):
+                def format(self, record: logging.LogRecord) -> str:
                     # Simple format for action logs: one JSON object per line
                     return record.getMessage()
 
@@ -657,7 +658,7 @@ class SimulationClient:
             """Helper to log and print round ID error."""
             if error_msg:
                 self.logger.error(error_msg, extra={"extra_data": {"error": error_msg}})
-            print(f"[{self.client_id}] ❌ Error: Cannot load network without valid round ID")
+            self.logger.error(f" Cannot load network without valid round ID")
             return 0
 
         try:
@@ -722,7 +723,9 @@ class SimulationClient:
                 )
                 try:
                     follow_count = ray.get(
-                        self.server.add_follow_relationships_batch.remote(follows_to_create, client_id=self.client_id)
+                        self.server.add_follow_relationships_batch.remote(
+                            follows_to_create, client_id=self.client_id
+                        )
                     )
                     if follow_count != expected_count:
                         self.logger.warning(
@@ -747,7 +750,7 @@ class SimulationClient:
                     "extra_data": {"follow_count": follow_count, "skipped_count": skipped_count}
                 },
             )
-            print(
+            self.logger.info(
                 f"[{self.client_id}] Social network loaded: {follow_count} follow relationships created"
             )
 
@@ -760,7 +763,7 @@ class SimulationClient:
             )
             return 0
 
-    def run(self):
+    def run(self) -> None:
         """
         Main simulation loop for the client.
 
@@ -773,16 +776,18 @@ class SimulationClient:
         """
         # Register agents with the server
         start_time = time.time()
-        print(f"[{self.client_id}] Registering {len(self.agent_profiles)} agents with server...")
+        self.logger.info(f" Registering {len(self.agent_profiles)} agents with server...")
 
-        registration_result = ray.get(self.server.register_agents.remote(self.agent_profiles, client_id=self.client_id))
+        registration_result = ray.get(
+            self.server.register_agents.remote(self.agent_profiles, client_id=self.client_id)
+        )
         reg_time = (time.time() - start_time) * 1000
 
         self.logger.info(
             "Agents registered with server",
             extra={"extra_data": {**registration_result, "execution_time_ms": reg_time}},
         )
-        print(f"[{self.client_id}] Agent registration complete: {registration_result}")
+        self.logger.info(f" Agent registration complete: {registration_result}")
 
         # Register client with the server, passing num_days for informational purposes
         client_reg = ray.get(self.server.register_client.remote(self.client_id, self.num_days))
@@ -812,7 +817,7 @@ class SimulationClient:
 
         if network_csv_path.exists():
             # First, parse the network edges from CSV
-            print(
+            self.logger.info(
                 f"[{self.client_id}] Checking if social network needs to be loaded from {network_csv_path.name}..."
             )
             edges = self._parse_network_edges(network_csv_path)
@@ -822,13 +827,13 @@ class SimulationClient:
                 edges_exist = ray.get(self.server.check_network_edges_exist.remote(edges))
 
                 if not edges_exist:
-                    print(
+                    self.logger.info(
                         f"[{self.client_id}] Loading social network topology from {network_csv_path.name}..."
                     )
                     self._load_and_create_social_network(network_csv_path)
                 else:
                     self.logger.info("Network already loaded (edges exist in database)")
-                    print(f"[{self.client_id}] Social network already loaded, skipping")
+                    self.logger.info(f" Social network already loaded, skipping")
             else:
                 self.logger.warning(f"No valid edges found in {network_csv_path.name}")
         else:
@@ -850,7 +855,7 @@ class SimulationClient:
                 }
             },
         )
-        print(
+        self.logger.info(
             f"[{self.client_id}] Client registered. Starting at day {start_day}, slot {start_slot}. "
             f"Will run for {self.num_days if self.num_days > 0 else '∞'} days (until day {max_day_str})."
         )
@@ -888,7 +893,7 @@ class SimulationClient:
                             }
                         },
                     )
-                    print(
+                    self.logger.info(
                         f"[{self.client_id}] Completed {self.num_days} days "
                         f"(day {start_day} to {instruction.day - 1}). Total slots: {slot_count}"
                     )
@@ -1039,7 +1044,7 @@ class SimulationClient:
                     },
                 )
 
-                print(
+                self.logger.info(
                     f"[{self.client_id}] Day {instruction.day} Slot {instruction.slot} -> "
                     f"Submitted {len(actions)} actions."
                 )
@@ -1049,7 +1054,7 @@ class SimulationClient:
             try:
                 ray.get(self.server.complete_client.remote(self.client_id))
                 self.logger.info("Notified server of completion")
-                print(f"[{self.client_id}] ✅ Simulation complete. Server notified.")
+                self.logger.info(f" Simulation complete. Server notified.")
             except Exception as e:
                 self.logger.warning(
                     f"Failed to notify server of completion: {e}",
@@ -1059,22 +1064,22 @@ class SimulationClient:
     def _determine_agent_type(self, agent_profile: AgentProfile) -> str:
         """
         Determine the agent type (llm or rule_based) based on agent profile and downcast settings.
-        
+
         Args:
             agent_profile: Agent profile containing behavior settings
-            
+
         Returns:
             str: "llm" or "rule_based"
         """
         # Start with the agent's configured type
         agent_type = "llm" if agent_profile.llm else "rule_based"
-        
+
         # Apply agent_downcast logic: if enabled, treat validator and explorer as rule-based
         if self.agent_downcast and agent_profile.archetype:
             archetype_lower = agent_profile.archetype.lower()
             if archetype_lower in ["validator", "explorer"]:
                 agent_type = "rule_based"
-        
+
         return agent_type
 
     def __select_action(self, agent_profile: AgentProfile, recent_posts: list) -> tuple:
@@ -1125,7 +1130,7 @@ class SimulationClient:
                 "image",
                 "share",
                 "comment",
-                "search"
+                "search",
             ],  # Broadcasters post, comment and share contents and images: they are content producers
             "explorer": [
                 "follow",
@@ -1197,11 +1202,16 @@ class SimulationClient:
             import random
 
             selected_topic = random.choices(topics, weights=counts, k=1)[0]
-        
+
         # Get opinion on the selected topic if available (only if opinion dynamics is enabled)
         topic_opinion = None
         topic_opinion_label = None
-        if self._is_opinion_dynamics_enabled() and selected_topic and agent.opinions and selected_topic in agent.opinions:
+        if (
+            self._is_opinion_dynamics_enabled()
+            and selected_topic
+            and agent.opinions
+            and selected_topic in agent.opinions
+        ):
             topic_opinion = agent.opinions[selected_topic]
             topic_opinion_label = self._map_opinion_to_group(topic_opinion)
 
@@ -1220,12 +1230,12 @@ class SimulationClient:
             "toxicity": agent.toxicity if agent.toxicity and agent.toxicity != "" else "no",
             "topic": selected_topic,  # Include the sampled topic
         }
-        
+
         # Add opinion information if available and opinion dynamics is enabled
         if topic_opinion is not None and topic_opinion_label:
             attrs["topic_opinion"] = topic_opinion_label
             attrs["topic_opinion_value"] = topic_opinion
-        
+
         return attrs
 
     def _save_updated_agent_population(self, updated_interests: dict):
@@ -1484,7 +1494,9 @@ class SimulationClient:
         recsys = recsys_class(n_posts=self.recsys_n_posts)
 
         # Get recommended posts from server
-        recommended_posts = recsys.get_recommendations(self.server, agent.id, client_id=self.client_id)
+        recommended_posts = recsys.get_recommendations(
+            self.server, agent.id, client_id=self.client_id
+        )
 
         if not recommended_posts:
             return  # No posts available to comment on
@@ -1501,7 +1513,9 @@ class SimulationClient:
                 # Get author username
                 author_name = "Someone"
                 if author_id:
-                    author_user = ray.get(self.server.get_user.remote(author_id, client_id=self.client_id))
+                    author_user = ray.get(
+                        self.server.get_user.remote(author_id, client_id=self.client_id)
+                    )
                     if author_user:
                         author_name = author_user.get("username", "Someone")
 
@@ -1514,7 +1528,7 @@ class SimulationClient:
 
                 # Get agent attributes including opinions on post topics
                 agent_attrs = self._extract_agent_attrs(agent)
-                
+
                 # Get opinions for the topics in this post
                 opinion_info = self._get_opinions_for_post(agent.id, target_post)
                 if opinion_info["topics"]:
@@ -1522,7 +1536,7 @@ class SimulationClient:
                     agent_attrs["post_topics"] = opinion_info["topics"]
                     agent_attrs["post_opinions"] = opinion_info["opinions"]
                     agent_attrs["post_opinion_values"] = opinion_info["opinion_values"]
-                
+
                 # Fire off async LLM call to generate comment with agent attributes, author name, and thread context
                 future = self.llm.generate_comment.remote(
                     agent.cluster, post_content, agent_attrs, author_name, thread_context
@@ -1533,14 +1547,14 @@ class SimulationClient:
             action = generate_rule_based_comment(agent.id, agent.cluster, target_post)
             # Annotate rule-based comment
             self._annotate_action_content(action)
-            
+
             # Calculate opinion updates for rule-based comment
             post_data = ray.get(self.server.get_post.remote(target_post, client_id=self.client_id))
             if post_data:
                 updated_opinions = self._calculate_opinion_updates(agent.id, target_post, post_data)
                 if updated_opinions:
                     action.updated_opinions = updated_opinions
-                
+
                 # Track for secondary follow (rule-based comment)
                 rule_based_interactions.append(
                     (
@@ -1551,7 +1565,7 @@ class SimulationClient:
                         False,
                     )
                 )
-            
+
             actions.append(action)
 
     def _handle_read_action(
@@ -1564,7 +1578,9 @@ class SimulationClient:
         recsys = recsys_class(n_posts=self.recsys_n_posts)
 
         # Get recommended posts from server
-        recommended_posts = recsys.get_recommendations(self.server, agent.id, client_id=self.client_id)
+        recommended_posts = recsys.get_recommendations(
+            self.server, agent.id, client_id=self.client_id
+        )
 
         if not recommended_posts:
             return  # No posts available to read
@@ -1579,7 +1595,7 @@ class SimulationClient:
                 post_content = post_data.get("tweet", "")
                 # Get agent attributes
                 agent_attrs = self._extract_agent_attrs(agent)
-                
+
                 # Get opinions for the topics in this post
                 opinion_info = self._get_opinions_for_post(agent.id, target_post)
                 if opinion_info["topics"]:
@@ -1587,7 +1603,7 @@ class SimulationClient:
                     agent_attrs["post_topics"] = opinion_info["topics"]
                     agent_attrs["post_opinions"] = opinion_info["opinions"]
                     agent_attrs["post_opinion_values"] = opinion_info["opinion_values"]
-                
+
                 # Fire off async LLM call to decide reaction with agent attributes
                 future = generate_llm_read_async(self.llm, agent.cluster, post_content, agent_attrs)
                 pending_llm_reactions.append((agent.id, agent.cluster, target_post, future))
@@ -1598,35 +1614,36 @@ class SimulationClient:
             if post_data:
                 # Get opinions for the topics in this post
                 opinion_info = self._get_opinions_for_post(agent.id, target_post)
-                
+
                 # Generate reaction based on opinion if available
                 if opinion_info["topics"] and opinion_info["opinion_values"]:
                     # Calculate average opinion
-                    avg_opinion = sum(opinion_info["opinion_values"].values()) / len(opinion_info["opinion_values"])
-                    
+                    avg_opinion = sum(opinion_info["opinion_values"].values()) / len(
+                        opinion_info["opinion_values"]
+                    )
+
                     # Choose reaction based on opinion
                     # Higher opinion -> more likely to LIKE, lower -> more likely to express negative reaction
                     if avg_opinion > 0.6:
                         # Positive opinion - mostly LIKE
                         reaction_type = random.choices(
-                            ["LIKE", "LOVE", "IGNORE"],
-                            weights=[0.6, 0.3, 0.1]
+                            ["LIKE", "LOVE", "IGNORE"], weights=[0.6, 0.3, 0.1]
                         )[0]
                     elif avg_opinion < 0.4:
                         # Negative opinion - more likely to express disagreement or ignore
                         reaction_type = random.choices(
-                            ["ANGRY", "SAD", "IGNORE"],
-                            weights=[0.4, 0.2, 0.4]
+                            ["ANGRY", "SAD", "IGNORE"], weights=[0.4, 0.2, 0.4]
                         )[0]
                     else:
                         # Neutral - balanced reactions
                         reaction_type = random.choices(
-                            ["LIKE", "IGNORE", "ANGRY"],
-                            weights=[0.4, 0.4, 0.2]
+                            ["LIKE", "IGNORE", "ANGRY"], weights=[0.4, 0.4, 0.2]
                         )[0]
-                    
+
                     if reaction_type != "IGNORE":
-                        action = ActionDTO(agent.id, agent.cluster, reaction_type, target_post_id=target_post)
+                        action = ActionDTO(
+                            agent.id, agent.cluster, reaction_type, target_post_id=target_post
+                        )
                         actions.append(action)
                         # Track for secondary follow
                         rule_based_interactions.append(
@@ -1672,7 +1689,9 @@ class SimulationClient:
         frecsys = frecsys_class(n_neighbors=10, leaning_bias=1)
 
         # Get follow suggestions from server
-        suggested_users = frecsys.get_follow_suggestions(self.server, agent.id, client_id=self.client_id)
+        suggested_users = frecsys.get_follow_suggestions(
+            self.server, agent.id, client_id=self.client_id
+        )
 
         if not suggested_users:
             return  # No users available to follow
@@ -1766,7 +1785,7 @@ class SimulationClient:
                                         self.logger.info(
                                             f"Stored {len(topic_ids)} topics for article {article_id}"
                                         )
-                                        
+
                                         # CLIENT-SIDE: Infer and store opinions for LLM page agent on article topics
                                         if self._is_opinion_dynamics_enabled():
                                             article_content = f"{article.get('title', '')} {article.get('summary', '')}"
@@ -1777,13 +1796,19 @@ class SimulationClient:
                                                     )
                                                     # Get topic ID
                                                     topic_id = ray.get(
-                                                        self.server.get_topic_id_by_name.remote(topic_name)
+                                                        self.server.get_topic_id_by_name.remote(
+                                                            topic_name
+                                                        )
                                                     )
                                                     if topic_id:
                                                         # Store opinion in database
                                                         ray.get(
                                                             self.server.add_agent_opinion.remote(
-                                                                agent.id, topic_id, opinion_value, None, None
+                                                                agent.id,
+                                                                topic_id,
+                                                                opinion_value,
+                                                                None,
+                                                                None,
                                                             )
                                                         )
                                                         self.logger.info(
@@ -1799,7 +1824,9 @@ class SimulationClient:
                                 )
                                 # CLIENT-SIDE: Ensure opinions exist for existing article topics
                                 if self._is_opinion_dynamics_enabled():
-                                    article_content = f"{article.get('title', '')} {article.get('summary', '')}"
+                                    article_content = (
+                                        f"{article.get('title', '')} {article.get('summary', '')}"
+                                    )
                                     # existing_topics is List[str] of topic IDs
                                     for topic_id in existing_topics:
                                         try:
@@ -1809,10 +1836,12 @@ class SimulationClient:
                                             )
                                             if not topic_name:
                                                 continue
-                                            
+
                                             # Check if opinion already exists
                                             existing_opinion = ray.get(
-                                                self.server.get_latest_agent_opinion.remote(agent.id, topic_id)
+                                                self.server.get_latest_agent_opinion.remote(
+                                                    agent.id, topic_id
+                                                )
                                             )
                                             if existing_opinion is None:
                                                 opinion_value = self._infer_page_agent_opinion(
@@ -1820,7 +1849,11 @@ class SimulationClient:
                                                 )
                                                 ray.get(
                                                     self.server.add_agent_opinion.remote(
-                                                        agent.id, topic_id, opinion_value, None, None
+                                                        agent.id,
+                                                        topic_id,
+                                                        opinion_value,
+                                                        None,
+                                                        None,
                                                     )
                                                 )
                                                 self.logger.info(
@@ -1877,8 +1910,9 @@ class SimulationClient:
                                     )
                                     if topic_ids:
                                         self.logger.info(
-                                            f"Stored {len(topic_ids)} topics for article {article_id}")
-                                        
+                                            f"Stored {len(topic_ids)} topics for article {article_id}"
+                                        )
+
                                         # CLIENT-SIDE: Infer and store opinions for rule-based page agent on article topics
                                         if self._is_opinion_dynamics_enabled():
                                             article_content = f"{article.get('title', '')} {article.get('summary', '')}"
@@ -1889,13 +1923,19 @@ class SimulationClient:
                                                     )
                                                     # Get topic ID
                                                     topic_id = ray.get(
-                                                        self.server.get_topic_id_by_name.remote(topic_name)
+                                                        self.server.get_topic_id_by_name.remote(
+                                                            topic_name
+                                                        )
                                                     )
                                                     if topic_id:
                                                         # Store opinion in database
                                                         ray.get(
                                                             self.server.add_agent_opinion.remote(
-                                                                agent.id, topic_id, opinion_value, None, None
+                                                                agent.id,
+                                                                topic_id,
+                                                                opinion_value,
+                                                                None,
+                                                                None,
                                                             )
                                                         )
                                                         self.logger.info(
@@ -1912,7 +1952,9 @@ class SimulationClient:
                                 )
                                 # CLIENT-SIDE: Ensure opinions exist for existing article topics
                                 if self._is_opinion_dynamics_enabled():
-                                    article_content = f"{article.get('title', '')} {article.get('summary', '')}"
+                                    article_content = (
+                                        f"{article.get('title', '')} {article.get('summary', '')}"
+                                    )
                                     # existing_topics is List[str] of topic IDs
                                     for topic_id in existing_topics:
                                         try:
@@ -1922,10 +1964,12 @@ class SimulationClient:
                                             )
                                             if not topic_name:
                                                 continue
-                                            
+
                                             # Check if opinion already exists
                                             existing_opinion = ray.get(
-                                                self.server.get_latest_agent_opinion.remote(agent.id, topic_id)
+                                                self.server.get_latest_agent_opinion.remote(
+                                                    agent.id, topic_id
+                                                )
                                             )
                                             if existing_opinion is None:
                                                 opinion_value = self._infer_page_agent_opinion(
@@ -1933,7 +1977,11 @@ class SimulationClient:
                                                 )
                                                 ray.get(
                                                     self.server.add_agent_opinion.remote(
-                                                        agent.id, topic_id, opinion_value, None, None
+                                                        agent.id,
+                                                        topic_id,
+                                                        opinion_value,
+                                                        None,
+                                                        None,
                                                     )
                                                 )
                                                 self.logger.info(
@@ -2036,7 +2084,9 @@ class SimulationClient:
         # Search for posts on this topic (up to 10 recent posts from other users)
         try:
             found_posts = ray.get(
-                self.server.search_posts_by_topic.remote(topic_id, agent.id, limit=10, client_id=self.client_id)
+                self.server.search_posts_by_topic.remote(
+                    topic_id, agent.id, limit=10, client_id=self.client_id
+                )
             )
         except Exception as e:
             self.logger.warning(
@@ -2123,7 +2173,7 @@ class SimulationClient:
                 f"search action: LLM deciding engagement for agent {agent.username}",
                 extra={"extra_data": {"agent_id": agent.id, "target_post_id": target_post}},
             )
-            
+
             # Get opinions for the topics in this post
             opinion_info = self._get_opinions_for_post(agent.id, target_post)
             if opinion_info["topics"]:
@@ -2131,7 +2181,7 @@ class SimulationClient:
                 agent_attrs["post_topics"] = opinion_info["topics"]
                 agent_attrs["post_opinions"] = opinion_info["opinions"]
                 agent_attrs["post_opinion_values"] = opinion_info["opinion_values"]
-            
+
             future = generate_llm_search_action_async(
                 self.llm, agent.cluster, post_content, agent_attrs
             )
@@ -2156,14 +2206,18 @@ class SimulationClient:
                 action = generate_rule_based_comment(agent.id, agent.cluster, target_post)
                 # Calculate opinion updates for the comment
                 if post_data:
-                    updated_opinions = self._calculate_opinion_updates(agent.id, target_post, post_data)
+                    updated_opinions = self._calculate_opinion_updates(
+                        agent.id, target_post, post_data
+                    )
                     if updated_opinions:
                         action.updated_opinions = updated_opinions
             elif selected_action == "share":
                 action = generate_rule_based_share(agent.id, agent.cluster, target_post)
                 # Calculate opinion updates for the share
                 if post_data:
-                    updated_opinions = self._calculate_opinion_updates(agent.id, target_post, post_data)
+                    updated_opinions = self._calculate_opinion_updates(
+                        agent.id, target_post, post_data
+                    )
                     if updated_opinions:
                         action.updated_opinions = updated_opinions
             else:  # react
@@ -2297,7 +2351,9 @@ class SimulationClient:
             self.logger.debug(
                 f"[REPLY] Checking unreplied mentions for agent {agent.username} (ID: {agent.id})"
             )
-            unreplied_mentions = ray.get(self.server.get_unreplied_mentions.remote(agent.id, client_id=self.client_id))
+            unreplied_mentions = ray.get(
+                self.server.get_unreplied_mentions.remote(agent.id, client_id=self.client_id)
+            )
 
             if not unreplied_mentions:
                 self.logger.debug(f"[REPLY] No unreplied mentions found for agent {agent.username}")
@@ -2334,7 +2390,9 @@ class SimulationClient:
             # Get author username
             author_username = "Someone"
             if author_id:
-                author_user = ray.get(self.server.get_user.remote(author_id, client_id=self.client_id))
+                author_user = ray.get(
+                    self.server.get_user.remote(author_id, client_id=self.client_id)
+                )
                 if author_user:
                     author_username = author_user.get("username", "Someone")
 
@@ -2346,7 +2404,9 @@ class SimulationClient:
             if agent_type == "llm":
                 # Get thread context (preceding posts/comments in chronological order)
                 thread_context = ray.get(
-                    self.server.get_thread_context.remote(post_id, self.max_length_thread_reading, client_id=self.client_id)
+                    self.server.get_thread_context.remote(
+                        post_id, self.max_length_thread_reading, client_id=self.client_id
+                    )
                 )
                 self.logger.debug(
                     f"[REPLY] Retrieved thread context: {len(thread_context)} previous posts/comments"
@@ -2441,8 +2501,7 @@ class SimulationClient:
                     churned_agent_ids = self._churned_agents_cache
             except Exception as e:
                 self.logger.warning(
-                    f"Error getting churned agents: {e}",
-                    extra={"extra_data": {"error": str(e)}}
+                    f"Error getting churned agents: {e}", extra={"extra_data": {"error": str(e)}}
                 )
 
         # Get hourly activity probability for this slot (default to 0.04 if not specified)
@@ -2458,7 +2517,7 @@ class SimulationClient:
             # Skip churned agents
             if agent.id in churned_agent_ids:
                 continue
-            
+
             profile_name = agent.activity_profile
             active_hours = self.activity_profiles.get(profile_name, list(range(24)))
             if slot in active_hours:
@@ -2744,13 +2803,13 @@ class SimulationClient:
                 self.logger.info(
                     f"LLM comment annotated for agent {a_id}: has_sentiment={bool(annotations.get('sentiment'))}, has_toxicity={bool(annotations.get('toxicity'))}, has_emotions={bool(annotations.get('emotions'))}, hashtags={len(annotations.get('hashtags', []))}, mentions={len(annotations.get('mentions', []))}"
                 )
-                
+
                 # Calculate opinion updates before creating action
                 post_data = ray.get(self.server.get_post.remote(target, client_id=self.client_id))
                 updated_opinions = None
                 if post_data:
                     updated_opinions = self._calculate_opinion_updates(a_id, target, post_data)
-                
+
                 action = ActionDTO(
                     a_id,
                     cid,
@@ -2786,14 +2845,20 @@ class SimulationClient:
                     # For SHARE actions, use cluster-specific share content (similar to rule-based)
                     share_content = f"Sharing from cluster {cid}"
                     # Calculate opinion updates for the share
-                    post_data = ray.get(self.server.get_post.remote(target, client_id=self.client_id))
+                    post_data = ray.get(
+                        self.server.get_post.remote(target, client_id=self.client_id)
+                    )
                     updated_opinions = None
                     if post_data:
                         updated_opinions = self._calculate_opinion_updates(a_id, target, post_data)
-                    
+
                     action = ActionDTO(
-                        a_id, cid, res_act.upper(), content=share_content, target_post_id=target,
-                        updated_opinions=updated_opinions
+                        a_id,
+                        cid,
+                        res_act.upper(),
+                        content=share_content,
+                        target_post_id=target,
+                        updated_opinions=updated_opinions,
                     )
                     self.logger.info(
                         f"search action: LLM agent {a_id} decided to SHARE with content",
@@ -2814,7 +2879,9 @@ class SimulationClient:
                     # Regular reaction (LIKE, LOVE, LAUGH, ANGRY, SAD)
                     action = ActionDTO(a_id, cid, res_act, target_post_id=target)
                     # Track for secondary follow (read/reaction action)
-                    post_data = ray.get(self.server.get_post.remote(target, client_id=self.client_id))
+                    post_data = ray.get(
+                        self.server.get_post.remote(target, client_id=self.client_id)
+                    )
                     if post_data:
                         secondary_follow_candidates.append(
                             (a_id, cid, post_data.get("user_id"), post_data.get("tweet", ""), True)
@@ -2862,16 +2929,16 @@ class SimulationClient:
     ) -> Optional[dict]:
         """
         Calculate opinion updates when an agent comments on a post.
-        
+
         Supports two opinion dynamics models based on simulation_config:
         - "bounded_confidence": Classic bounded confidence model (all agents)
         - "llm_evaluation": LLM-based evaluation (LLM agents only)
-        
+
         Args:
             agent_id: UUID of the agent making the comment
             parent_post_id: UUID of the post being commented on
             parent_post_data: Dictionary containing post data including user_id
-            
+
         Returns:
             dict: Mapping of topic_id to new opinion value, or None if no updates
         """
@@ -2879,44 +2946,42 @@ class SimulationClient:
             # Check if opinion dynamics is enabled
             if not self._is_opinion_dynamics_enabled():
                 return None
-            
+
             # Get opinion dynamics config
             opinion_config = self.simulation_config.get("opinion_dynamics", {})
             if not opinion_config:
                 return None
-            
+
             # Get model name and parameters
             model_name = opinion_config.get("model_name", "bounded_confidence")
             params = opinion_config.get("parameters", {})
-            
+
             # Validate model selection
             if model_name == "llm_evaluation":
                 # Check if this is an LLM agent
-                agent_profile = next(
-                    (a for a in self.agent_profiles if a.id == agent_id), None
-                )
+                agent_profile = next((a for a in self.agent_profiles if a.id == agent_id), None)
                 if not agent_profile or not agent_profile.llm:
                     self.logger.error(
                         f"llm_evaluation model can only be used with LLM agents. "
                         f"Agent {agent_id} is not an LLM agent. Skipping opinion update."
                     )
                     return None
-            
+
             # Get the parent post author
             parent_author_id = parent_post_data.get("user_id")
             if not parent_author_id:
                 return None
-            
+
             # Get the post topics from server
             topic_ids = ray.get(
                 self.server.get_post_topics.remote(parent_post_id, client_id=self.client_id)
             )
             if not topic_ids:
                 return None
-            
+
             # Get post content (needed for LLM evaluation)
             post_content = parent_post_data.get("tweet", "")
-            
+
             # Calculate updated opinions for each topic
             updated_opinions = {}
             for topic_id in topic_ids:
@@ -2926,7 +2991,7 @@ class SimulationClient:
                 )
                 if not topic_name:
                     continue
-                
+
                 # Get agent's LATEST opinion from database (not cached profile)
                 # This ensures we use the most recent opinion after interactions
                 agent_opinion = ray.get(
@@ -2934,14 +2999,14 @@ class SimulationClient:
                         agent_id, topic_id, client_id=self.client_id
                     )
                 )
-                
+
                 # Get author's latest opinion from server
                 author_opinion = ray.get(
                     self.server.get_latest_agent_opinion.remote(
                         parent_author_id, topic_id, client_id=self.client_id
                     )
                 )
-                
+
                 # Author must have an opinion on their own post's topics
                 if author_opinion is None:
                     self.logger.error(
@@ -2951,16 +3016,16 @@ class SimulationClient:
                         f"Skipping opinion update for this topic."
                     )
                     continue
-                
+
                 # Calculate new opinion based on selected model
                 if model_name == "llm_evaluation":
                     # Use LLM-based evaluation
                     from YSimulator.YClient.opinion_dynamics.llm_evaluation import llm_evaluation
-                    
+
                     # Get evaluation scope and prepare neighbors' opinions if needed
                     evaluation_scope = params.get("evaluation_scope", "interlocutor_only")
                     peers_opinions = None
-                    
+
                     if evaluation_scope == "neighbors":
                         # Get neighbors' opinions from server
                         neighbor_opinion_values = ray.get(
@@ -2968,19 +3033,20 @@ class SimulationClient:
                                 agent_id, topic_id, client_id=self.client_id
                             )
                         )
-                        
+
                         if neighbor_opinion_values:
                             # Convert to opinion labels and count occurrences
-                            from YSimulator.YClient.opinion_dynamics.utils import get_opinion_group
                             from collections import Counter
-                            
+
+                            from YSimulator.YClient.opinion_dynamics.utils import get_opinion_group
+
                             opinion_groups = opinion_config.get("opinion_groups", {})
                             neighbor_labels = [
-                                get_opinion_group(val, opinion_groups) 
+                                get_opinion_group(val, opinion_groups)
                                 for val in neighbor_opinion_values
                             ]
                             peers_opinions = list(Counter(neighbor_labels).items())
-                    
+
                     # Calculate new opinion using LLM evaluation
                     new_opinion = llm_evaluation(
                         x=agent_opinion,
@@ -2991,50 +3057,52 @@ class SimulationClient:
                         cold_start=params.get("cold_start", "neutral"),
                         group_classes=opinion_config.get("opinion_groups", {}),
                         peers_opinions=peers_opinions,
-                        llm_service=self.llm
+                        llm_service=self.llm,
                     )
                 else:
                     # Use bounded confidence model (default)
-                    from YSimulator.YClient.opinion_dynamics.confidence_bound import bounded_confidence
-                    
+                    from YSimulator.YClient.opinion_dynamics.confidence_bound import (
+                        bounded_confidence,
+                    )
+
                     new_opinion = bounded_confidence(
                         x=agent_opinion,
                         y=author_opinion,
                         epsilon=params.get("epsilon", 0.25),
                         mu=params.get("mu", 0.5),
                         theta=params.get("theta", 0.0),
-                        cold_start=params.get("cold_start", "neutral")
+                        cold_start=params.get("cold_start", "neutral"),
                     )
-                
+
                 updated_opinions[topic_id] = new_opinion
-                
+
                 self.logger.info(
                     f"Opinion update calculated (model={model_name}): agent={agent_id}, "
                     f"topic={topic_name}, old={agent_opinion}, author={author_opinion}, new={new_opinion}"
                 )
-            
+
             return updated_opinions if updated_opinions else None
-            
+
         except Exception as e:
             self.logger.error(
                 f"Error calculating opinion updates for agent {agent_id}: {e}",
-                extra={"extra_data": {"error": str(e), "agent_id": agent_id}}
+                extra={"extra_data": {"error": str(e), "agent_id": agent_id}},
             )
             return None
 
     def _map_opinion_to_group(self, opinion_value: float) -> str:
         """
         Map a numeric opinion value to a discrete opinion group label.
-        
+
         Args:
             opinion_value: Numeric opinion in [0, 1]
-            
+
         Returns:
             str: Opinion group label from simulation_config opinion_groups
         """
         opinion_config = self.simulation_config.get("opinion_dynamics", {})
         opinion_groups = opinion_config.get("opinion_groups", {})
-        
+
         if not opinion_groups:
             # Default mapping if not configured
             if opinion_value < 0.2:
@@ -3047,60 +3115,60 @@ class SimulationClient:
                 return "In favor"
             else:
                 return "Strongly in favor"
-        
+
         # Find which group the opinion falls into
         for group_name, (lower, upper) in opinion_groups.items():
             if lower <= opinion_value <= upper:
                 return group_name
-        
+
         # Fallback
         return "Neutral"
 
     def _is_opinion_dynamics_enabled(self) -> bool:
         """
         Check if opinion dynamics is enabled in the simulation configuration.
-        
+
         Returns:
             bool: True if opinion dynamics is enabled, False otherwise
         """
         opinion_config = self.simulation_config.get("opinion_dynamics", {})
         return opinion_config.get("enabled", False)
-    
-    def _infer_page_agent_opinion(self, agent_id: str, article_content: str, topic_name: str) -> float:
+
+    def _infer_page_agent_opinion(
+        self, agent_id: str, article_content: str, topic_name: str
+    ) -> float:
         """
         Infer opinion for a page agent on a topic from article content.
-        
+
         This method is called CLIENT-SIDE before submitting article posts.
         - LLM page agents: Use LLM service to infer opinion from article
         - Rule-based page agents: Generate random opinion
-        
+
         Args:
             agent_id: Agent UUID
             article_content: Article text to analyze
             topic_name: Topic to infer opinion about
-            
+
         Returns:
             float: Opinion value in [0, 1] range
         """
         try:
             # Get agent profile to determine if LLM or rule-based
-            agent_profile = next(
-                (a for a in self.agent_profiles if a.id == agent_id), None
-            )
+            agent_profile = next((a for a in self.agent_profiles if a.id == agent_id), None)
             if not agent_profile:
                 self.logger.warning(f"Agent profile not found for {agent_id}, using random opinion")
                 return random.random()
-            
+
             # Check if this is an LLM agent
             if agent_profile.llm:
                 # LLM page agent: infer opinion from article content using LLM service
                 opinion_config = self.simulation_config.get("opinion_dynamics", {})
                 opinion_groups = opinion_config.get("opinion_groups", {})
-                
+
                 if not opinion_groups:
                     self.logger.warning("No opinion_groups configured, using random opinion")
                     return random.random()
-                
+
                 # Call LLM service to infer opinion
                 opinion_value = ray.get(
                     self.llm.infer_article_opinion.remote(
@@ -3120,7 +3188,7 @@ class SimulationClient:
                     f"on topic '{topic_name}'"
                 )
                 return opinion_value
-                
+
         except Exception as e:
             self.logger.error(
                 f"Error inferring opinion for page agent {agent_id}: {e}. Using random value."
@@ -3130,11 +3198,11 @@ class SimulationClient:
     def _get_opinions_for_post(self, agent_id: str, post_id: str) -> dict:
         """
         Get agent's opinions on the topics discussed in a post.
-        
+
         Args:
             agent_id: UUID of the agent
             post_id: UUID of the post
-            
+
         Returns:
             dict: {
                 "topics": List of topic names,
@@ -3146,26 +3214,24 @@ class SimulationClient:
             # Check if opinion dynamics is enabled
             if not self._is_opinion_dynamics_enabled():
                 return {"topics": [], "opinions": {}, "opinion_values": {}}
-            
+
             # Get agent profile
-            agent_profile = next(
-                (a for a in self.agent_profiles if a.id == agent_id), None
-            )
+            agent_profile = next((a for a in self.agent_profiles if a.id == agent_id), None)
             if not agent_profile or not agent_profile.opinions:
                 return {"topics": [], "opinions": {}, "opinion_values": {}}
-            
+
             # Get post topics
             topic_ids = ray.get(
                 self.server.get_post_topics.remote(post_id, client_id=self.client_id)
             )
             if not topic_ids:
                 return {"topics": [], "opinions": {}, "opinion_values": {}}
-            
+
             # For each topic, get the agent's opinion
             topics = []
             opinions = {}
             opinion_values = {}
-            
+
             for topic_id in topic_ids:
                 # Get topic name
                 topic_name = ray.get(
@@ -3173,25 +3239,21 @@ class SimulationClient:
                 )
                 if not topic_name:
                     continue
-                
+
                 # Get agent's opinion on this topic
                 if topic_name in agent_profile.opinions:
                     opinion_value = agent_profile.opinions[topic_name]
                     opinion_label = self._map_opinion_to_group(opinion_value)
-                    
+
                     topics.append(topic_name)
                     opinions[topic_name] = opinion_label
                     opinion_values[topic_name] = opinion_value
-            
-            return {
-                "topics": topics,
-                "opinions": opinions,
-                "opinion_values": opinion_values
-            }
+
+            return {"topics": topics, "opinions": opinions, "opinion_values": opinion_values}
         except Exception as e:
             self.logger.error(
                 f"Error getting opinions for post {post_id}: {e}",
-                extra={"extra_data": {"error": str(e), "agent_id": agent_id, "post_id": post_id}}
+                extra={"extra_data": {"error": str(e), "agent_id": agent_id, "post_id": post_id}},
             )
             return {"topics": [], "opinions": {}, "opinion_values": {}}
 
@@ -3322,7 +3384,9 @@ class SimulationClient:
 
             # Get follow suggestions from server
             try:
-                follow_suggestions = frecsys.get_follow_suggestions(self.server, agent.id, client_id=self.client_id)
+                follow_suggestions = frecsys.get_follow_suggestions(
+                    self.server, agent.id, client_id=self.client_id
+                )
 
                 if follow_suggestions:
                     # Randomly select one candidate to follow
@@ -3345,24 +3409,24 @@ class SimulationClient:
     def _evaluate_churn(self) -> dict[str, int]:
         """
         Evaluate and process churn at the end of a day (client-side).
-        
+
         This method:
         1. Gets current day and round from server
         2. Identifies inactive agents based on inactivity_threshold
         3. Selects a percentage of them based on churn_percentage
         4. Flags them as churned based on churn_probability
-        
+
         Returns:
             Dictionary with churn statistics
         """
         self.logger.info(
             f"Starting churn evaluation (client-side): enabled={self.churn_enabled}, threshold={self.inactivity_threshold}"
         )
-        
+
         if not self.churn_enabled:
             self.logger.info("Churn disabled, skipping evaluation")
             return {"inactive_agents": 0, "candidates": 0, "churned": 0}
-        
+
         # Get current day and round ID from server
         try:
             current_day = ray.get(self.server.get_current_day.remote())
@@ -3370,7 +3434,7 @@ class SimulationClient:
         except Exception as e:
             self.logger.error(f"Failed to get current day/round from server: {e}")
             return {"inactive_agents": 0, "candidates": 0, "churned": 0}
-        
+
         # Get inactive agents from server database
         try:
             inactive_agents = ray.get(
@@ -3379,77 +3443,81 @@ class SimulationClient:
         except Exception as e:
             self.logger.error(f"Failed to get inactive agents: {e}")
             return {"inactive_agents": 0, "candidates": 0, "churned": 0}
-        
+
         self.logger.info(
             f"Found {len(inactive_agents)} inactive agents (threshold={self.inactivity_threshold} days)"
         )
-        
+
         if not inactive_agents:
             self.logger.info("No inactive agents found, skipping churn")
             return {"inactive_agents": 0, "candidates": 0, "churned": 0}
-        
+
         # Select percentage of inactive agents as churn candidates
         num_candidates = max(1, int(len(inactive_agents) * self.churn_percentage))
         churn_candidates = random.sample(inactive_agents, min(num_candidates, len(inactive_agents)))
-        
+
         self.logger.info(
             f"Selected {len(churn_candidates)} churn candidates (percentage={self.churn_percentage})"
         )
-        
+
         # Churn agents based on probability
         churned_count = 0
         agents_to_churn = []  # Collect agents to churn for batch operation
-        
+
         for agent_id in churn_candidates:
             # Use random for stochastic churn decision
             if random.random() < self.churn_probability:
                 agents_to_churn.append(agent_id)
-        
+
         # Batch churn all selected agents in a single server call
         if agents_to_churn:
             try:
-                self.logger.info(f"Batch churning {len(agents_to_churn)} agents at round {current_round_id}")
-                churned_count = ray.get(self.server.set_agents_churned_batch.remote(agents_to_churn, current_round_id))
-                
+                self.logger.info(
+                    f"Batch churning {len(agents_to_churn)} agents at round {current_round_id}"
+                )
+                churned_count = ray.get(
+                    self.server.set_agents_churned_batch.remote(agents_to_churn, current_round_id)
+                )
+
                 self.logger.info(
                     f"Successfully churned {churned_count} agents in batch",
-                    extra={"extra_data": {
-                        "churned_agent_ids": agents_to_churn,
-                        "day": current_day,
-                        "round_id": current_round_id
-                    }}
+                    extra={
+                        "extra_data": {
+                            "churned_agent_ids": agents_to_churn,
+                            "day": current_day,
+                            "round_id": current_round_id,
+                        }
+                    },
                 )
-                
+
                 # Update local agent profiles for all churned agents
                 for agent_id in agents_to_churn:
                     for agent in self.agent_profiles:
                         if agent.id == agent_id:
                             agent.left_on = current_round_id
                             break
-                            
+
             except Exception as e:
                 self.logger.error(
                     f"Failed to batch churn {len(agents_to_churn)} agents: {e}",
-                    extra={"extra_data": {"error": str(e), "num_agents": len(agents_to_churn)}}
+                    extra={"extra_data": {"error": str(e), "num_agents": len(agents_to_churn)}},
                 )
                 churned_count = 0
-        
+
         result = {
             "inactive_agents": len(inactive_agents),
             "candidates": len(churn_candidates),
-            "churned": churned_count
+            "churned": churned_count,
         }
-        
-        self.logger.info(
-            f"Churn evaluation completed: {result}"
-        )
-        
+
+        self.logger.info(f"Churn evaluation completed: {result}")
+
         return result
 
     def _evaluate_new_agents(self, current_round_id: str) -> int:
         """
         Evaluate and add new agents at the end of a day.
-        
+
         This method:
         1. Counts non-churned agents
         2. Calculates x = percentage_new_agents * non_churned_agents
@@ -3457,80 +3525,89 @@ class SimulationClient:
         4. New agent is a copy of an existing agent with unique name
         5. Adds to database and agent_population.json
         6. Sets joined_on to current round
-        
+
         Args:
             current_round_id: Current round ID (UUID string)
-            
+
         Returns:
             int: Number of new agents added
         """
         self.logger.info(
             f"Starting new agents evaluation: enabled={self.new_agents_enabled}, probability={self.probability_new_agents}, percentage={self.percentage_new_agents}"
         )
-        
+
         if not self.new_agents_enabled:
             self.logger.info("New agents disabled, skipping evaluation")
             return 0
-        
+
         # Get non-churned agents (agents without left_on set)
         non_churned_agents = [agent for agent in self.agent_profiles if agent.left_on is None]
-        
+
         self.logger.info(
             f"Non-churned agents: {len(non_churned_agents)} out of {len(self.agent_profiles)} total (churned: {len(self.agent_profiles) - len(non_churned_agents)})"
         )
-        
+
         if not non_churned_agents:
-            self.logger.warning("No non-churned agents available to use as templates for new agents")
+            self.logger.warning(
+                "No non-churned agents available to use as templates for new agents"
+            )
             return 0
-        
+
         # Calculate x = percentage_new_agents * non_churned_agents
         x = int(len(non_churned_agents) * self.percentage_new_agents)
-        
+
         self.logger.info(
             f"Calculated x={x} new agent slots (percentage={self.percentage_new_agents} * {len(non_churned_agents)})"
         )
-        
+
         if x == 0:
             self.logger.info("x=0, no new agents will be added")
             return 0
-        
+
         new_agents_added = 0
         new_agents_to_register = []  # Collect all new agents for batch registration
-        
-        self.logger.info(f"Attempting to add up to {x} new agents with probability {self.probability_new_agents}")
-        
+
+        self.logger.info(
+            f"Attempting to add up to {x} new agents with probability {self.probability_new_agents}"
+        )
+
         # Add x new agents, each with probability probability_new_agents
         for i in range(x):
             # With probability_new_agents, add a new agent
             roll = random.random()
-            self.logger.debug(f"New agent slot {i+1}/{x}: roll={roll:.4f}, threshold={self.probability_new_agents}")
-            
+            self.logger.debug(
+                f"New agent slot {i+1}/{x}: roll={roll:.4f}, threshold={self.probability_new_agents}"
+            )
+
             if roll < self.probability_new_agents:
-                self.logger.info(f"Creating new agent {i+1}/{x} (roll {roll:.4f} < {self.probability_new_agents})")
-                
+                self.logger.info(
+                    f"Creating new agent {i+1}/{x} (roll {roll:.4f} < {self.probability_new_agents})"
+                )
+
                 # Select a random existing agent as template
                 template_agent = random.choice(non_churned_agents)
-                
+
                 # Generate unique ID and name using Faker
                 import uuid
+
                 from faker import Faker
-                
+
                 fake = Faker()
                 new_agent_id = str(uuid.uuid4())
-                
+
                 # Generate name based on gender
                 gender = template_agent.gender
-                if gender and gender.lower() in ['male', 'm']:
+                if gender and gender.lower() in ["male", "m"]:
                     new_username = fake.name_male()
-                elif gender and gender.lower() in ['female', 'f']:
+                elif gender and gender.lower() in ["female", "f"]:
                     new_username = fake.name_female()
                 else:
                     # If gender is not specified or other, use generic name
                     new_username = fake.name()
-                
+
                 # Replace spaces with underscores for username format
-                new_username = new_username.replace(' ', '_').replace('.', '')
-                
+                new_username = new_username.replace(" ", "_").replace(".", "")
+
                 # Ensure uniqueness by checking existing usernames
                 existing_usernames = {agent.username for agent in self.agent_profiles}
                 # Also check against agents we're about to create
@@ -3540,7 +3617,7 @@ class SimulationClient:
                 while new_username in existing_usernames:
                     new_username = f"{base_username}_{counter}"
                     counter += 1
-                
+
                 # Create new agent profile as copy of template
                 new_agent = AgentProfile(
                     id=new_agent_id,
@@ -3571,78 +3648,97 @@ class SimulationClient:
                     is_page=0,  # New agents are not pages
                     left_on=None,  # New agents are not churned
                 )
-                
+
                 # Add to local list and batch registration list
                 self.agent_profiles.append(new_agent)
                 new_agents_to_register.append(new_agent)
-                
+
                 self.logger.debug(
                     f"Prepared new agent: {new_username} (template: {template_agent.username})",
-                    extra={"extra_data": {"new_agent_id": new_agent_id, "template_id": template_agent.id}}
+                    extra={
+                        "extra_data": {
+                            "new_agent_id": new_agent_id,
+                            "template_id": template_agent.id,
+                        }
+                    },
                 )
             else:
-                self.logger.debug(f"Skipping new agent slot {i+1}/{x} (roll {roll:.4f} >= {self.probability_new_agents})")
-        
+                self.logger.debug(
+                    f"Skipping new agent slot {i+1}/{x} (roll {roll:.4f} >= {self.probability_new_agents})"
+                )
+
         # Batch register all new agents with server in a single call
         if new_agents_to_register:
             try:
-                self.logger.info(f"Batch registering {len(new_agents_to_register)} new agents with server")
-                registration_result = ray.get(self.server.register_agents.remote(new_agents_to_register, client_id=self.client_id))
+                self.logger.info(
+                    f"Batch registering {len(new_agents_to_register)} new agents with server"
+                )
+                registration_result = ray.get(
+                    self.server.register_agents.remote(
+                        new_agents_to_register, client_id=self.client_id
+                    )
+                )
                 new_agents_added = len(new_agents_to_register)
-                
+
                 self.logger.info(
                     f"Successfully registered {new_agents_added} new agents in batch",
-                    extra={"extra_data": {
-                        "agent_ids": [agent.id for agent in new_agents_to_register],
-                        "agent_names": [agent.username for agent in new_agents_to_register]
-                    }}
+                    extra={
+                        "extra_data": {
+                            "agent_ids": [agent.id for agent in new_agents_to_register],
+                            "agent_names": [agent.username for agent in new_agents_to_register],
+                        }
+                    },
                 )
-                
+
                 # Update agent_population.json for all new agents
                 for new_agent in new_agents_to_register:
                     self._add_agent_to_population_file(new_agent)
-                    
+
             except Exception as e:
                 self.logger.error(
                     f"Failed to batch register {len(new_agents_to_register)} new agents: {e}",
-                    extra={"extra_data": {"error": str(e), "num_agents": len(new_agents_to_register)}}
+                    extra={
+                        "extra_data": {"error": str(e), "num_agents": len(new_agents_to_register)}
+                    },
                 )
                 # Remove failed agents from local list
                 for failed_agent in new_agents_to_register:
                     if failed_agent in self.agent_profiles:
                         self.agent_profiles.remove(failed_agent)
                 new_agents_added = 0
-        
-        self.logger.info(f"New agents evaluation complete: added {new_agents_added} out of {x} possible slots")
+
+        self.logger.info(
+            f"New agents evaluation complete: added {new_agents_added} out of {x} possible slots"
+        )
         return new_agents_added
-    
+
     def _add_agent_to_population_file(self, agent: AgentProfile):
         """
         Add a new agent to the agent_population.json file.
-        
+
         Args:
             agent: AgentProfile to add to the file
         """
         # Find agent_population.json file using client-specific naming convention
         client_specific_file = self.config_path / f"{self.client_id}_agent_population.json"
         generic_file = self.config_path / "agent_population.json"
-        
+
         if client_specific_file.exists():
             agent_config_file = client_specific_file
         else:
             agent_config_file = generic_file
-        
+
         if not agent_config_file.exists():
             self.logger.warning(
                 f"Agent config file not found at {agent_config_file}, skipping agent addition to file"
             )
             return
-        
+
         try:
             # Load current agent_population.json
             with open(agent_config_file, "r") as f:
                 agent_data = json.load(f)
-            
+
             # Create agent dict
             agent_dict = {
                 "id": agent.id,
@@ -3672,25 +3768,23 @@ class SimulationClient:
                 "round_actions": agent.round_actions,
                 "is_page": agent.is_page,
             }
-            
+
             # Add to agents list
             if "agents" not in agent_data:
                 agent_data["agents"] = []
             agent_data["agents"].append(agent_dict)
-            
+
             # Write updated data back to file
             with open(agent_config_file, "w") as f:
                 json.dump(agent_data, f, indent=2)
-            
-            self.logger.info(
-                f"Added agent {agent.username} to {agent_config_file.name}"
-            )
-        
+
+            self.logger.info(f"Added agent {agent.username} to {agent_config_file.name}")
+
         except Exception as e:
             self.logger.error(
                 f"Error adding agent to population file: {e}",
-                extra={"extra_data": {"error": str(e), "file": str(agent_config_file)}}
+                extra={"extra_data": {"error": str(e), "file": str(agent_config_file)}},
             )
 
-    def shutdown(self):
+    def shutdown(self) -> None:
         ray.get(self.server.deregister_client.remote(self.client_id))

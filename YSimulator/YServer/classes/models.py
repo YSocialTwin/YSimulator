@@ -7,12 +7,12 @@ and UUID-based primary keys where appropriate for distributed system compatibili
 
 from sqlalchemy import (
     Column,
+    Float,
+    ForeignKey,
+    Index,
     Integer,
     String,
     Text,
-    ForeignKey,
-    Index,
-    Float,
     UniqueConstraint,
 )
 from sqlalchemy.orm import declarative_base, relationship
@@ -35,7 +35,9 @@ class Emotion(Base):
     icon = Column(Text)
 
     # Relationships
-    post_emotions = relationship("PostEmotion", back_populates="emotion", cascade="all, delete-orphan")
+    post_emotions = relationship(
+        "PostEmotion", back_populates="emotion", cascade="all, delete-orphan"
+    )
 
 
 class Hashtag(Base):
@@ -47,7 +49,9 @@ class Hashtag(Base):
     hashtag = Column(Text, nullable=False)
 
     # Relationships
-    post_hashtags = relationship("PostHashtag", back_populates="hashtag", cascade="all, delete-orphan")
+    post_hashtags = relationship(
+        "PostHashtag", back_populates="hashtag", cascade="all, delete-orphan"
+    )
 
 
 class Interest(Base):
@@ -59,11 +63,19 @@ class Interest(Base):
     interest = Column(Text)
 
     # Relationships
-    user_interests = relationship("UserInterest", back_populates="interest", cascade="all, delete-orphan")
-    article_topics = relationship("ArticleTopic", back_populates="topic", cascade="all, delete-orphan")
+    user_interests = relationship(
+        "UserInterest", back_populates="interest", cascade="all, delete-orphan"
+    )
+    article_topics = relationship(
+        "ArticleTopic", back_populates="topic", cascade="all, delete-orphan"
+    )
     post_topics = relationship("PostTopic", back_populates="topic", cascade="all, delete-orphan")
-    post_sentiments = relationship("PostSentiment", back_populates="topic", cascade="all, delete-orphan")
-    agent_opinions = relationship("Agent_Opinion", back_populates="topic", cascade="all, delete-orphan")
+    post_sentiments = relationship(
+        "PostSentiment", back_populates="topic", cascade="all, delete-orphan"
+    )
+    agent_opinions = relationship(
+        "Agent_Opinion", back_populates="topic", cascade="all, delete-orphan"
+    )
 
 
 class Round(Base):
@@ -81,9 +93,15 @@ class Round(Base):
     # Relationships to all tables that reference rounds
     posts = relationship("Post", back_populates="round_obj", cascade="all, delete-orphan")
     reactions = relationship("Reaction", back_populates="round_obj", cascade="all, delete-orphan")
-    recommendations = relationship("Recommendation", back_populates="round_obj", cascade="all, delete-orphan")
-    user_interests = relationship("UserInterest", back_populates="round_obj", cascade="all, delete-orphan")
-    post_sentiments = relationship("PostSentiment", back_populates="round_obj", cascade="all, delete-orphan")
+    recommendations = relationship(
+        "Recommendation", back_populates="round_obj", cascade="all, delete-orphan"
+    )
+    user_interests = relationship(
+        "UserInterest", back_populates="round_obj", cascade="all, delete-orphan"
+    )
+    post_sentiments = relationship(
+        "PostSentiment", back_populates="round_obj", cascade="all, delete-orphan"
+    )
 
 
 # ================================================
@@ -142,12 +160,18 @@ class User_mgmt(Base):
         back_populates="follower",
         cascade="all, delete-orphan",
     )
-    recommendations = relationship("Recommendation", back_populates="user", cascade="all, delete-orphan")
-    user_interests = relationship("UserInterest", back_populates="user", cascade="all, delete-orphan")
+    recommendations = relationship(
+        "Recommendation", back_populates="user", cascade="all, delete-orphan"
+    )
+    user_interests = relationship(
+        "UserInterest", back_populates="user", cascade="all, delete-orphan"
+    )
     votings = relationship("Voting", back_populates="user", cascade="all, delete-orphan")
     posts = relationship("Post", back_populates="user", cascade="all, delete-orphan")
     mentions = relationship("Mention", back_populates="user", cascade="all, delete-orphan")
-    post_sentiments = relationship("PostSentiment", back_populates="user", cascade="all, delete-orphan")
+    post_sentiments = relationship(
+        "PostSentiment", back_populates="user", cascade="all, delete-orphan"
+    )
     reactions = relationship("Reaction", back_populates="user", cascade="all, delete-orphan")
     round_joined = relationship("Round")
 
@@ -170,7 +194,9 @@ class Follow(Base):
 
     # Relationships
     user = relationship("User_mgmt", foreign_keys=[user_id], back_populates="follows_as_user")
-    follower = relationship("User_mgmt", foreign_keys=[follower_id], back_populates="follows_as_follower")
+    follower = relationship(
+        "User_mgmt", foreign_keys=[follower_id], back_populates="follows_as_follower"
+    )
 
 
 Index("idx_follow_user_id", Follow.user_id)
@@ -275,7 +301,9 @@ class Article(Base):
 
     # Relationships
     website = relationship("Website", back_populates="articles")
-    article_topics = relationship("ArticleTopic", back_populates="article", cascade="all, delete-orphan")
+    article_topics = relationship(
+        "ArticleTopic", back_populates="article", cascade="all, delete-orphan"
+    )
     images = relationship("Image", back_populates="article", cascade="all, delete-orphan")
     posts = relationship("Post", back_populates="article", cascade="all, delete-orphan")
 
@@ -352,11 +380,17 @@ class Post(Base):
     mentions = relationship("Mention", back_populates="post", cascade="all, delete-orphan")
     post_emotions = relationship("PostEmotion", back_populates="post", cascade="all, delete-orphan")
     post_hashtags = relationship("PostHashtag", back_populates="post", cascade="all, delete-orphan")
-    post_sentiments = relationship("PostSentiment", back_populates="post", cascade="all, delete-orphan")
+    post_sentiments = relationship(
+        "PostSentiment", back_populates="post", cascade="all, delete-orphan"
+    )
     post_topics = relationship("PostTopic", back_populates="post", cascade="all, delete-orphan")
-    post_toxicity = relationship("PostToxicity", back_populates="post", cascade="all, delete-orphan")
+    post_toxicity = relationship(
+        "PostToxicity", back_populates="post", cascade="all, delete-orphan"
+    )
     reactions = relationship("Reaction", back_populates="post", cascade="all, delete-orphan")
-    agent_opinions = relationship("Agent_Opinion", back_populates="post", cascade="all, delete-orphan")
+    agent_opinions = relationship(
+        "Agent_Opinion", back_populates="post", cascade="all, delete-orphan"
+    )
 
 
 Index("idx_post_user_id", Post.user_id)

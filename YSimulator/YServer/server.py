@@ -34,7 +34,7 @@ LOG_FILE_MAX_BYTES = 10 * 1024 * 1024  # 10MB
 LOG_FILE_BACKUP_COUNT = 5  # Keep 5 backup files
 
 
-def log_server_request(func):
+def log_server_request(func: callable) -> callable:
     """
     Decorator to log server requests to _server.log with detailed information.
 
@@ -73,7 +73,8 @@ def log_server_request(func):
                     # Only use first arg as client_name if the parameter is named 'client_id'
                     if first_param_name == "client_id" and isinstance(args[0], str):
                         client_name = args[0]
-            except:
+            except (ValueError, TypeError, AttributeError) as e:
+                # Signature inspection can fail for various reasons, fallback to "unknown"
                 pass
 
         # Default to "unknown" if still not found
@@ -124,12 +125,12 @@ def log_server_request(func):
             except Exception as log_error:
                 # Don't let logging errors break the application
                 # Log to stderr as fallback for debugging
-                print(f"WARNING: Server request logging failed: {log_error}", file=sys.stderr)
+                self.logger.error(f"Server request logging failed: {log_error}")
 
     return wrapper
 
 
-def compress_rotated_log(source, dest):
+def compress_rotated_log(source: str, dest: str) -> None:
     """
     Compress a rotated log file using gzip.
 
@@ -296,7 +297,7 @@ class OrchestratorServer:
             handler.namer = lambda name: name + ".gz"
 
             class JsonFormatter(logging.Formatter):
-                def format(self, record):
+                def format(self, record: logging.LogRecord) -> str:
                     log_data = {
                         "timestamp": datetime.now(timezone.utc).isoformat(),
                         "level": record.levelname,
@@ -337,7 +338,7 @@ class OrchestratorServer:
 
             # Simple formatter that just outputs the message (already JSON)
             class RawFormatter(logging.Formatter):
-                def format(self, record):
+                def format(self, record: logging.LogRecord) -> str:
                     return record.getMessage()
 
             server_handler.setFormatter(RawFormatter())
@@ -877,7 +878,7 @@ class OrchestratorServer:
                 },
             )
 
-            print(
+            self.logger.info(
                 f"[Server] 👥 Agent Registration: {registered_count} new, {skipped_count} existing, {pages_registered} pages"
             )
 
@@ -892,7 +893,7 @@ class OrchestratorServer:
             self.logger.error(
                 f"Agent registration error: {e}", extra={"extra_data": {"error": str(e)}}
             )
-            print(f"[Server] ❌ Agent registration error: {e}")
+            self.logger.error(f"Agent registration error: {e}")
             raise
 
     @log_server_request
@@ -1150,7 +1151,7 @@ class OrchestratorServer:
                     }
                 },
             )
-            print(
+            self.logger.info(
                 f"[Server] 🟢 Client {client_id} joined at day {self.day}, slot {self.slot}. "
                 f"Will run for {num_days if num_days > 0 else '∞'} days. "
                 f"Total: {len(self.registered_clients)}, Active: {len(self._get_active_clients())}"
@@ -1193,7 +1194,7 @@ class OrchestratorServer:
                     }
                 },
             )
-            print(
+            self.logger.info(
                 f"[Server] 🏁 Client {client_id} completed. "
                 f"Active: {len(self._get_active_clients())}, "
                 f"Completed: {len(self.completed_clients)}"
@@ -1275,7 +1276,7 @@ class OrchestratorServer:
                     }
                 },
             )
-            print(
+            self.logger.info(
                 f"[Server] ⚠️  Removing stale client {client_id} "
                 f"(no heartbeat for {time_since_heartbeat:.1f}s)"
             )
@@ -1323,7 +1324,7 @@ class OrchestratorServer:
                     }
                 },
             )
-            print(f"[Server] 🔴 Client {client_id} left. Total: {len(self.registered_clients)}")
+            self.logger.info(f"Client {client_id} left. Total: {len(self.registered_clients)}")
 
             # Check if leaving unblocked the barrier
             self._check_barrier_and_advance()
@@ -1831,7 +1832,7 @@ class OrchestratorServer:
                 f"DB Error during action submission: {e}",
                 extra={"extra_data": {"client_id": client_id, "error": str(e)}},
             )
-            print(f"DB Error: {e}")
+            self.logger.error(f"DB Error: {e}")
 
         # Mark this specific client as done
         self.submitted_clients.add(client_id)
@@ -2012,7 +2013,7 @@ class OrchestratorServer:
         if active_submitted_count >= active_count:
             execution_start = time.time()
 
-            print(
+            self.logger.info(
                 f"[Server] ✅ Day {self.day} Slot {self.slot} complete "
                 f"(Active clients: {active_count}). Advancing..."
             )
@@ -2053,7 +2054,7 @@ class OrchestratorServer:
                             }
                         },
                     )
-                    print(
+                    self.logger.info(
                         f"[Server] 💾 Day {completed_day} complete - "
                         f"Consolidated {consolidation_result.get('posts', 0)} posts, "
                         f"{consolidation_result.get('interactions', 0)} interactions to SQLite. "
@@ -2088,7 +2089,7 @@ class OrchestratorServer:
                             }
                         },
                     )
-                    print(
+                    self.logger.info(
                         f"[Server] 🧹 Redis cleanup - "
                         f"Removed {cleanup_result.get('removed_posts', 0)} old posts, "
                         f"{cleanup_result.get('removed_interactions', 0)} old interactions. "
@@ -2199,7 +2200,7 @@ class OrchestratorServer:
             self.logger.error(
                 f"Error during archetype transitions: {e}", extra={"extra_data": {"error": str(e)}}
             )
-            print(f"[Server] ❌ Archetype transition error: {e}")
+            self.logger.error(f"Archetype transition error: {e}")
             return
 
         transition_time = (time.time() - transition_start) * 1000
@@ -2217,7 +2218,7 @@ class OrchestratorServer:
             },
         )
 
-        print(
+        self.logger.info(
             f"[Server] 🔄 Archetype transitions complete - "
             f"{transitioned_count} agents changed archetypes (day {self.day})"
         )
@@ -2759,6 +2760,7 @@ class OrchestratorServer:
             else:
                 # SQL implementation
                 from sqlalchemy.orm import Session
+
                 from YSimulator.YServer.classes.models import Follow
 
                 with Session(self.db.engine) as session:
@@ -2926,7 +2928,9 @@ class OrchestratorServer:
                     candidate_ids = [c.id for c in candidates]
                     random.shuffle(candidate_ids)
                     return candidate_ids[:n_neighbors]
-            except:
+            except Exception as e:
+                # Database query failed, return empty list
+                self.logger.error(f"Failed to get follow suggestions from database: {e}")
                 return []
 
     def _get_follow_suggestions_redis(
@@ -2992,5 +2996,7 @@ class OrchestratorServer:
                 candidates = [uid for uid in all_user_ids if uid != agent_id]
                 random.shuffle(candidates)
                 return candidates[:n_neighbors]
-            except:
+            except Exception as e:
+                # Redis query failed, return empty list
+                self.logger.error(f"Failed to get follow suggestions from Redis: {e}")
                 return []

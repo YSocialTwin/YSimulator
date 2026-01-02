@@ -1,11 +1,12 @@
-from typing import Optional
 from enum import Enum
+from typing import Optional
 
 from YSimulator.YClient.opinion_dynamics.utils import get_opinion_group
 
 
 class Direction(Enum):
     """Direction of opinion shift."""
+
     AGREE = 1
     DISAGREE = -1
 
@@ -18,21 +19,18 @@ def class_mid(bounds):
 def shift_class(A, B, direction, class_bounds):
     """
     Shift opinion from class A towards or away from class B.
-    
+
     Args:
         A: Current opinion class label
         B: Target opinion class label (interlocutor's opinion)
         direction: Direction.AGREE (move towards B) or Direction.DISAGREE (move away from B)
         class_bounds: Dict mapping class labels to [min, max] ranges
-        
+
     Returns:
         Tuple of (new_label, new_value) where new_value is the midpoint of the new class
     """
     # Order classes by lower bound
-    ordered = sorted(
-        class_bounds.items(),
-        key=lambda x: x[1][0]
-    )
+    ordered = sorted(class_bounds.items(), key=lambda x: x[1][0])
 
     labels = [lbl for lbl, _ in ordered]
     bounds_map = dict(ordered)
@@ -69,26 +67,26 @@ def shift_class(A, B, direction, class_bounds):
 
 
 def llm_evaluation(
-    x: float, 
-    y: float, 
-    text: str = None, 
+    x: float,
+    y: float,
+    text: str = None,
     topic: str = None,
-    evaluation_scope: str = "interlocutor_only", 
-    cold_start: str = "neutral", 
+    evaluation_scope: str = "interlocutor_only",
+    cold_start: str = "neutral",
     group_classes: dict = None,
     peers_opinions: list = None,
-    llm_service = None
+    llm_service=None,
 ) -> float:
     """
     LLM-based evaluation of opinion dynamics between two users.
-    
+
     This function uses an LLM to evaluate how an agent's opinion should change
     after reading a post from another user. The LLM considers:
     - The agent's current opinion on the topic
     - The author's opinion on the topic
     - The post content
     - Optionally, the opinions of the agent's neighbors
-    
+
     Args:
         x: Agent's current opinion value (None for cold start)
         y: Author's opinion value (must not be None)
@@ -99,7 +97,7 @@ def llm_evaluation(
         group_classes: Dict mapping opinion labels to [min, max] ranges
         peers_opinions: List of (opinion_label, count) tuples for neighbors
         llm_service: Ray actor reference to LLMService
-    
+
     Returns:
         float: Updated opinion value in [0, 1] range
     """
@@ -118,13 +116,14 @@ def llm_evaluation(
     # Call LLM service to evaluate opinion
     # Note: llm_service is a Ray actor, so we need to call it with .remote()
     import ray
+
     response = ray.get(
         llm_service.evaluate_opinion.remote(
             agent_opinion=x_op,
             author_opinion=y_op,
             post_text=text,
             topic=topic,
-            peers_opinions=peers_opinions if evaluation_scope != "interlocutor_only" else None
+            peers_opinions=peers_opinions if evaluation_scope != "interlocutor_only" else None,
         )
     )
 

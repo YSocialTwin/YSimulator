@@ -54,4 +54,3 @@ def toxicity(text, api_key: str) -> dict:
         except Exception as e:
             return {}
     return {}
-
