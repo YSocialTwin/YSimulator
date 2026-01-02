@@ -34,7 +34,7 @@ LOG_FILE_MAX_BYTES = 10 * 1024 * 1024  # 10MB
 LOG_FILE_BACKUP_COUNT = 5  # Keep 5 backup files
 
 
-def log_server_request(func):
+def log_server_request(func: callable) -> callable:
     """
     Decorator to log server requests to _server.log with detailed information.
 
@@ -297,7 +297,7 @@ class OrchestratorServer:
             handler.namer = lambda name: name + ".gz"
 
             class JsonFormatter(logging.Formatter):
-                def format(self, record):
+                def format(self, record: logging.LogRecord) -> str:
                     log_data = {
                         "timestamp": datetime.now(timezone.utc).isoformat(),
                         "level": record.levelname,
@@ -338,7 +338,7 @@ class OrchestratorServer:
 
             # Simple formatter that just outputs the message (already JSON)
             class RawFormatter(logging.Formatter):
-                def format(self, record):
+                def format(self, record: logging.LogRecord) -> str:
                     return record.getMessage()
 
             server_handler.setFormatter(RawFormatter())

@@ -9,14 +9,18 @@ All functions return Ray ObjectRefs (futures) to enable parallel execution
 of multiple LLM calls using the scatter/gather pattern.
 """
 
-from typing import List
+from typing import Any, Dict, List, Optional
 
 import ray
 
 
 def generate_llm_post_async(
-    llm_handle, cluster_id: int, day: int, slot: int, agent_attrs: dict = None
-):
+    llm_handle: Any,
+    cluster_id: int,
+    day: int,
+    slot: int,
+    agent_attrs: Optional[Dict[str, Any]] = None,
+) -> ray.ObjectRef:
     """
     Initiate async LLM post generation.
 
@@ -59,7 +63,7 @@ def generate_llm_post_async(
     return llm_handle.generate_post.remote(cluster_id, day, slot, agent_attrs)
 
 
-def generate_llm_reaction_async(llm_handle, cluster_id: int, content: str):
+def generate_llm_reaction_async(llm_handle: Any, cluster_id: int, content: str) -> ray.ObjectRef:
     """
     Initiate async LLM reaction decision.
 
@@ -138,7 +142,9 @@ def generate_news_post_async(
     return commentary_future, article_id
 
 
-def generate_llm_read_async(llm_handle, cluster_id: int, content: str, agent_attrs: dict = None):
+def generate_llm_read_async(
+    llm_handle: Any, cluster_id: int, content: str, agent_attrs: Optional[Dict[str, Any]] = None
+) -> ray.ObjectRef:
     """
     Initiate async LLM read reaction decision.
 
@@ -177,7 +183,9 @@ def generate_llm_read_async(llm_handle, cluster_id: int, content: str, agent_att
     return llm_handle.generate_read_reaction.remote(cluster_id, content, agent_attrs)
 
 
-def generate_llm_follow_async(llm_handle, cluster_id: int, candidate_users: list):
+def generate_llm_follow_async(
+    llm_handle: Any, cluster_id: int, candidate_users: List[Dict[str, Any]]
+) -> ray.ObjectRef:
     """
     Initiate async LLM follow decision.
 

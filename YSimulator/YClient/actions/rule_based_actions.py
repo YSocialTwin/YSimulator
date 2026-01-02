@@ -7,6 +7,7 @@ and probability distributions.
 """
 
 import random
+from typing import Any, Dict, List, Optional
 
 import ray
 
@@ -150,7 +151,11 @@ def generate_rule_based_share(agent_id: int, cluster_id: int, target_post_id: st
 
 
 def generate_rule_based_news_post(
-    agent_id: int, cluster_id: int, article: dict, news_service, article_id: str = None
+    agent_id: int,
+    cluster_id: int,
+    article: Dict[str, Any],
+    news_service: Any,
+    article_id: Optional[str] = None,
 ) -> tuple:
     """
     Generate a simple rule-based news post.

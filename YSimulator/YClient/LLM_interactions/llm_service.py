@@ -1,5 +1,5 @@
 import random
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 import ray
 from langchain_core.output_parsers import StrOutputParser
@@ -19,7 +19,12 @@ DEFAULT_IMAGE_DESCRIPTION_PROMPTS = {
 # Use standard Ray actor (CPU) - the GPU is managed by Ollama internally
 @ray.remote
 class LLMService:
-    def __init__(self, llm_config=None, prompts_config=None, llm_v_config=None):
+    def __init__(
+        self,
+        llm_config: Optional[Dict[str, Any]] = None,
+        prompts_config: Optional[Dict[str, Any]] = None,
+        llm_v_config: Optional[Dict[str, Any]] = None,
+    ):
         # Load configuration with defaults
         if llm_config is None:
             llm_config = {

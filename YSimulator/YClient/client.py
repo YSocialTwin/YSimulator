@@ -280,7 +280,7 @@ class SimulationClient:
             handler.namer = lambda name: name + ".gz"
 
             class JsonFormatter(logging.Formatter):
-                def format(self, record):
+                def format(self, record: logging.LogRecord) -> str:
                     log_data = {
                         "timestamp": datetime.utcnow().isoformat(),
                         "level": record.levelname,
@@ -315,7 +315,7 @@ class SimulationClient:
             action_handler.namer = lambda name: name + ".gz"
 
             class ActionFormatter(logging.Formatter):
-                def format(self, record):
+                def format(self, record: logging.LogRecord) -> str:
                     # Simple format for action logs: one JSON object per line
                     return record.getMessage()
 
@@ -763,7 +763,7 @@ class SimulationClient:
             )
             return 0
 
-    def run(self):
+    def run(self) -> None:
         """
         Main simulation loop for the client.
 
@@ -3786,5 +3786,5 @@ class SimulationClient:
                 extra={"extra_data": {"error": str(e), "file": str(agent_config_file)}},
             )
 
-    def shutdown(self):
+    def shutdown(self) -> None:
         ray.get(self.server.deregister_client.remote(self.client_id))
