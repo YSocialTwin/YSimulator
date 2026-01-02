@@ -1,11 +1,12 @@
 from sqlalchemy import case, desc, func
+
 from YSimulator.YServer.classes.models import (
     Follow,
     Post,
     PostTopic,
     Reaction,
-    UserInterest,
     User_mgmt,
+    UserInterest,
 )
 
 
@@ -45,9 +46,7 @@ def fetch_common_interest_posts(
     :param additional_posts_limit: the number of additional posts
     :return: the posts query result
     """
-    user_interests = (
-        db.session.query(UserInterest.interest_id).filter_by(user_id=uid).distinct()
-    )
+    user_interests = db.session.query(UserInterest.interest_id).filter_by(user_id=uid).distinct()
     follower_ids = get_follows(uid)
 
     # fetch posts by followers with common interests
@@ -209,9 +208,7 @@ def __get_similar_users(uid, limit=10):
                 func.sum(
                     case([(user.leaning == target.leaning, 1)], else_=0)
                     + case([(user.language == target.language, 1)], else_=0)
-                    + case(
-                        [(user.education_level == target.education_level, 1)], else_=0
-                    )
+                    + case([(user.education_level == target.education_level, 1)], else_=0)
                     + case([(user.gender == target.gender, 1)], else_=0)
                     + case([(user.toxicity == target.toxicity, 1)], else_=0)
                     + case([(user.oe == target.oe, 1)], else_=0)

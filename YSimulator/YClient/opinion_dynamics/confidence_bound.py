@@ -1,7 +1,11 @@
-
-def bounded_confidence(x: float, y: float, epsilon: float = 0.25,
-                       mu: float = 0.5, theta: float = 0.0,
-                       cold_start: str = "neutral") -> float | str:
+def bounded_confidence(
+    x: float,
+    y: float,
+    epsilon: float = 0.25,
+    mu: float = 0.5,
+    theta: float = 0.0,
+    cold_start: str = "neutral",
+) -> float | str:
     """
     Calculate the confidence bound for a given score x and total count y.
 
@@ -25,15 +29,14 @@ def bounded_confidence(x: float, y: float, epsilon: float = 0.25,
             x = y
 
     else:
-        if abs(y-x) > epsilon:
+        if abs(y - x) > epsilon:
             if theta != 0:
                 if x > y:
-                    x = min(x+theta, 1)
+                    x = min(x + theta, 1)
                 else:
-                    x = max(x-theta, 0)
+                    x = max(x - theta, 0)
 
         else:
-            x += mu * abs(x-y)
+            x += mu * abs(x - y)
 
     return x
-

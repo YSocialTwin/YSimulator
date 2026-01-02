@@ -18,18 +18,17 @@ except ImportError:
     REDIS_AVAILABLE = False
     redis = None
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, func
 from sqlalchemy.orm import Session
-from sqlalchemy import func
 
 from YSimulator.YServer.classes.models import (
+    Agent_Opinion,
     Base,
     Follow,
     Post,
     Reaction,
     Round,
     User_mgmt,
-    Agent_Opinion,
 )
 
 # Constants

@@ -1,17 +1,18 @@
-from sqlalchemy import desc, func, case
+from sqlalchemy import case, desc, func
+
+from YSimulator.YServer.classes.models import (
+    Follow,
+    Post,
+    PostTopic,
+    Reaction,
+    Round,
+    User_mgmt,
+)
 from YSimulator.YServer.recsys.utils import (
-    get_follows,
     fetch_common_interest_posts,
     fetch_common_user_interest_posts,
     fetch_similar_users_posts,
-)
-from YSimulator.YServer.classes.models import (
-    Post,
-    User_mgmt,
-    Round,
-    Follow,
-    PostTopic,
-    Reaction,
+    get_follows,
 )
 
 
@@ -117,9 +118,7 @@ def read(db_session, limit, mode, visibility_rounds, uid, followers_ratio=1, art
             ).all()
         else:
             posts = (
-                Post.query.filter(
-                    Post.round >= visibility, Post.user_id.in_(follower_ids)
-                )
+                Post.query.filter(Post.round >= visibility, Post.user_id.in_(follower_ids))
                 .order_by(desc(Post.id))
                 .limit(follower_posts_limit)
             ).all()
@@ -202,9 +201,7 @@ def read(db_session, limit, mode, visibility_rounds, uid, followers_ratio=1, art
     elif mode == "rchrono_comments":
         # get posts with the most comments in reverse chronological order (as longer thread)
         query = (
-            db.session.query(
-                Post
-            )  # , func.count(Post.thread_id).label("comment_count"))
+            db.session.query(Post)  # , func.count(Post.thread_id).label("comment_count"))
             .filter(
                 Post.round >= visibility,
                 # Post.comment_to != -1,
@@ -223,7 +220,7 @@ def read(db_session, limit, mode, visibility_rounds, uid, followers_ratio=1, art
         ]
 
         if additional_posts_limit != 0:
-           # query_additional = query.filter(Post.user_id.notin_(follower_ids))
+            # query_additional = query.filter(Post.user_id.notin_(follower_ids))
             additional_posts = (
                 # query_additional.order_by(desc("comment_count"), desc(Post.id))
                 query_follower.order_by(desc(Post.reaction_count), desc(Post.id))

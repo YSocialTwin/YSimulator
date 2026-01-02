@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Literal, Optional, List, Tuple
+from typing import List, Literal, Optional, Tuple
 
 
 @dataclass
@@ -7,11 +7,12 @@ class AgentProfile:
     """
     Agent profile data class for passing agent information between Ray actors.
     Maps to User_mgmt database model.
-    
+
     Note: The password field is a placeholder for simulation purposes and is NOT
     used for actual authentication. In production scenarios requiring authentication,
     passwords should be hashed using bcrypt or similar before storage.
     """
+
     id: str
     username: str
     email: str = ""
@@ -25,7 +26,9 @@ class AgentProfile:
     ex: Optional[str] = None  # Extraversion
     ag: Optional[str] = None  # Agreeableness
     ne: Optional[str] = None  # Neuroticism
-    recsys_type: str = "random"  # Content recommendation system mode: random, rchrono, rchrono_popularity, rchrono_followers, rchrono_followers_popularity, rchrono_comments, common_interests, common_user_interests, similar_users_react, similar_users_posts
+    recsys_type: str = (
+        "random"  # Content recommendation system mode: random, rchrono, rchrono_popularity, rchrono_followers, rchrono_followers_popularity, rchrono_comments, common_interests, common_user_interests, similar_users_react, similar_users_posts
+    )
     frecsys_type: str = "default"
     language: str = "en"
     owner: Optional[str] = None
@@ -57,9 +60,10 @@ class AgentProfile:
 @dataclass
 class ActionDTO:
     """Action data transfer object for agent actions."""
+
     agent_id: str
     cluster_id: int
-    action_type: Literal['POST', 'LIKE', 'COMMENT', 'SHARE', 'FOLLOW', 'UNFOLLOW']
+    action_type: Literal["POST", "LIKE", "COMMENT", "SHARE", "FOLLOW", "UNFOLLOW"]
     content: Optional[str] = None
     target_post_id: Optional[str] = None  # UUID string - for comments, reactions, and shares
     article_id: Optional[str] = None  # UUID string for news posts
@@ -75,11 +79,12 @@ class ActionDTO:
 class SimulationInstruction:
     """
     Instruction from server to client for simulation coordination.
-    
+
     Server provides current state (day/slot) and coordination status.
     Client handles its own progress tracking and completion logic.
     """
-    status: Literal['WAIT', 'PROCEED']  # COMPLETE removed - client handles completion
+
+    status: Literal["WAIT", "PROCEED"]  # COMPLETE removed - client handles completion
     day: int = 0
     slot: int = 0
     recent_post_ids: List[str] = None  # UUID strings
@@ -93,6 +98,7 @@ class SimulationInstruction:
 @dataclass
 class FollowDTO:
     """Follow/unfollow action between users."""
+
     id: str  # UUID
     user_id: str
     follower_id: str
@@ -103,6 +109,7 @@ class FollowDTO:
 @dataclass
 class ReactionDTO:
     """User reaction to a post (like, love, laugh, etc.)."""
+
     id: str  # UUID
     user_id: int
     post_id: str  # Post UUID
@@ -113,6 +120,7 @@ class ReactionDTO:
 @dataclass
 class MentionDTO:
     """User mention in a post."""
+
     id: str  # UUID
     post_id: str  # Post UUID
     user_id: str
@@ -123,6 +131,7 @@ class MentionDTO:
 @dataclass
 class RecommendationDTO:
     """Content recommendation for a user."""
+
     id: str  # UUID
     user_id: int
     post_ids: str  # Comma-separated or JSON list of post UUIDs
@@ -132,6 +141,7 @@ class RecommendationDTO:
 @dataclass
 class VotingDTO:
     """User voting/preference data."""
+
     vid: str  # UUID (primary key)
     user_id: str
     preference: str
@@ -143,6 +153,7 @@ class VotingDTO:
 @dataclass
 class UserInterestDTO:
     """User interest association."""
+
     id: str  # UUID
     user_id: str
     interest_id: str
@@ -157,6 +168,7 @@ class UserInterestDTO:
 @dataclass
 class PostEmotionDTO:
     """Emotional tag for a post."""
+
     id: str  # UUID
     post_id: str  # Post UUID
     emotion_id: str
@@ -165,6 +177,7 @@ class PostEmotionDTO:
 @dataclass
 class PostHashtagDTO:
     """Hashtag association for a post."""
+
     id: str  # UUID
     post_id: str  # Post UUID
     hashtag_id: str
@@ -173,6 +186,7 @@ class PostHashtagDTO:
 @dataclass
 class PostSentimentDTO:
     """Sentiment analysis data for a post."""
+
     id: str  # UUID
     post_id: str  # Post UUID
     user_id: str
@@ -191,6 +205,7 @@ class PostSentimentDTO:
 @dataclass
 class PostTopicDTO:
     """Topic association for a post."""
+
     id: str  # UUID
     post_id: str  # Post UUID
     topic_id: str
@@ -199,6 +214,7 @@ class PostTopicDTO:
 @dataclass
 class PostToxicityDTO:
     """Toxicity analysis data for a post."""
+
     id: str  # UUID
     post_id: str  # Post UUID
     toxicity: float = 0.0

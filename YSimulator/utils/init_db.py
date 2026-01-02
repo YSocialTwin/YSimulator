@@ -116,7 +116,9 @@ def initialize_database(db_config: dict, config_path: Path = None, logger=None):
                 extra={"extra_data": {"db_type": db_config.get("type", "sqlite")}},
             )
         else:
-            logging.info(f"✅ Database initialized successfully ({db_config.get('type', 'sqlite')})")
+            logging.info(
+                f"✅ Database initialized successfully ({db_config.get('type', 'sqlite')})"
+            )
 
         return True
 

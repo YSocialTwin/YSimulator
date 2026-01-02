@@ -4,14 +4,17 @@ Common utilities for YSimulator.
 This module provides shared utility functions used across the simulation system.
 """
 
-import sys
 import logging
+import sys
 from pathlib import Path
+from typing import List, Optional
 
 logger = logging.getLogger(__name__)
 
 
-def validate_config_directory(config_path_str: str, required_files: list = None) -> Path:
+def validate_config_directory(
+    config_path_str: str, required_files: Optional[List[str]] = None
+) -> Path:
     """
     Validate that a configuration directory exists and contains required files.
 

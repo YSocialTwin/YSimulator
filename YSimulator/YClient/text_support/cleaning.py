@@ -10,8 +10,7 @@ def clean_text(author: str, text: str) -> str:
     :return: the cleaned text
     """
     text = (
-        text
-        .replace("-", "")
+        text.replace("-", "")
         .replace("@ ", "")
         .replace("  ", " ")
         .replace(". ", ".")

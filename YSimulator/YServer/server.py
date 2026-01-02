@@ -130,7 +130,7 @@ def log_server_request(func):
     return wrapper
 
 
-def compress_rotated_log(source, dest):
+def compress_rotated_log(source: str, dest: str) -> None:
     """
     Compress a rotated log file using gzip.
 
@@ -2760,6 +2760,7 @@ class OrchestratorServer:
             else:
                 # SQL implementation
                 from sqlalchemy.orm import Session
+
                 from YSimulator.YServer.classes.models import Follow
 
                 with Session(self.db.engine) as session:
