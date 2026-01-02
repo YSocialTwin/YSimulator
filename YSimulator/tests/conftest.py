@@ -51,8 +51,10 @@ def isolated_db() -> Generator[str, None, None]:
     try:
         if os.path.exists(db_path):
             os.unlink(db_path)
-    except Exception:
-        pass  # Best effort cleanup
+    except (OSError, PermissionError) as e:
+        # Best effort cleanup - log but don't fail test
+        import logging
+        logging.getLogger(__name__).debug(f"Cleanup failed for {db_path}: {e}")
 
 
 @pytest.fixture(scope="function")

@@ -39,7 +39,7 @@ class TestConfigurationValidation:
         """Test validation with non-existent directory."""
         from YSimulator.common_utils import validate_config_directory
         
-        with pytest.raises(Exception):
+        with pytest.raises((FileNotFoundError, ValueError, OSError)):
             validate_config_directory(
                 "/non/existent/path",
                 required_files=["config.yml"]
@@ -52,7 +52,7 @@ class TestConfigurationValidation:
         config_dir = test_data_dir / "config2"
         config_dir.mkdir(parents=True, exist_ok=True)
         
-        with pytest.raises(Exception):
+        with pytest.raises((FileNotFoundError, ValueError)):
             validate_config_directory(
                 str(config_dir),
                 required_files=["missing.yml"]
@@ -236,7 +236,7 @@ class TestInitDatabase:
         """Test init_db with invalid database path."""
         from YSimulator.utils.init_db import init_db
         
-        with pytest.raises(Exception):
+        with pytest.raises((FileNotFoundError, ValueError, OSError, PermissionError)):
             init_db("/invalid/path/to/database.db")
 
 

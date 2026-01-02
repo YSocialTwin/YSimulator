@@ -112,8 +112,8 @@ class TestFollowRecommendationSystem:
             
             assert isinstance(recommendations, list)
             assert len(recommendations) <= 5
-        except (ImportError, Exception):
-            pytest.skip("Follow recsys not fully available")
+        except (ImportError, AttributeError) as e:
+            pytest.skip(f"Follow recsys not fully available: {e}")
 
     def test_follow_recsys_similarity_scoring(self):
         """Test user similarity scoring for recommendations."""
