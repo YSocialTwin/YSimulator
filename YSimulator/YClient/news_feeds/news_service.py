@@ -72,7 +72,9 @@ class NewsFeedService:
         # Get server actor reference
         try:
             self.server = ray.get_actor("Orchestrator")
-        except:
+        except ValueError as e:
+            # Orchestrator actor not found - this is expected if news service starts before server
+            self.logger.warning("Orchestrator actor not yet available, will retry later")
             self.server = None
         
         # Cache structure: {feed_url: {"articles": [...], "timestamp": int, "website_id": str}}

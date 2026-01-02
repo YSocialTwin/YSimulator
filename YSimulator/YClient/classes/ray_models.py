@@ -7,11 +7,15 @@ class AgentProfile:
     """
     Agent profile data class for passing agent information between Ray actors.
     Maps to User_mgmt database model.
+    
+    Note: The password field is a placeholder for simulation purposes and is NOT
+    used for actual authentication. In production scenarios requiring authentication,
+    passwords should be hashed using bcrypt or similar before storage.
     """
     id: str
     username: str
     email: str = ""
-    password: str = "default_password"
+    password: str = "default_password"  # NOTE: Placeholder only, not used for authentication
     leaning: str = "neutral"
     user_type: str = "user"
     age: int = 0

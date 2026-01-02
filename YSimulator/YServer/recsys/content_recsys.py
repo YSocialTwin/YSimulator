@@ -304,7 +304,8 @@ def read(db_session, limit, mode, visibility_rounds, uid, followers_ratio=1, art
                 try:
                     if len(post) > 0 and post[0] is not None:
                         res.append(post[0].id)
-                except:
+                except (TypeError, IndexError, AttributeError) as e:
+                    # Post might be a single object instead of a list
                     if post is not None:
                         res.append(post.id)
         else:

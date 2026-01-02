@@ -73,7 +73,8 @@ def log_server_request(func):
                     # Only use first arg as client_name if the parameter is named 'client_id'
                     if first_param_name == "client_id" and isinstance(args[0], str):
                         client_name = args[0]
-            except:
+            except (ValueError, TypeError, AttributeError) as e:
+                # Signature inspection can fail for various reasons, fallback to "unknown"
                 pass
 
         # Default to "unknown" if still not found
@@ -2926,7 +2927,9 @@ class OrchestratorServer:
                     candidate_ids = [c.id for c in candidates]
                     random.shuffle(candidate_ids)
                     return candidate_ids[:n_neighbors]
-            except:
+            except Exception as e:
+                # Database query failed, return empty list
+                self.logger.error(f"Failed to get follow suggestions from database: {e}")
                 return []
 
     def _get_follow_suggestions_redis(
@@ -2992,5 +2995,7 @@ class OrchestratorServer:
                 candidates = [uid for uid in all_user_ids if uid != agent_id]
                 random.shuffle(candidates)
                 return candidates[:n_neighbors]
-            except:
+            except Exception as e:
+                # Redis query failed, return empty list
+                self.logger.error(f"Failed to get follow suggestions from Redis: {e}")
                 return []
