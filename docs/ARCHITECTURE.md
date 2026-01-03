@@ -24,53 +24,92 @@ YSimulator is a **distributed social media simulation framework** designed to mo
 ## High-Level Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                         YSimulator System                        │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                   │
-│  ┌──────────────┐         ┌──────────────┐                      │
-│  │   Client 1   │         │   Client 2   │    ... Client N      │
-│  │              │         │              │                       │
-│  │ ┌──────────┐ │         │ ┌──────────┐ │                      │
-│  │ │  Agent   │ │         │ │  Agent   │ │                      │
-│  │ │ Population│ │         │ │ Population│ │                      │
-│  │ └──────────┘ │         │ └──────────┘ │                      │
-│  │              │         │              │                       │
-│  │ ┌──────────┐ │         │ ┌──────────┐ │                      │
-│  │ │   LLM    │ │         │ │   LLM    │ │                      │
-│  │ │ Service  │ │         │ │ Service  │ │                      │
-│  │ └──────────┘ │         │ └──────────┘ │                      │
-│  └──────┬───────┘         └──────┬───────┘                      │
-│         │                        │                               │
-│         │    Ray Remote Calls    │                               │
-│         └────────────┬───────────┘                               │
-│                      │                                            │
-│              ┌───────▼────────┐                                  │
-│              │                │                                   │
-│              │  Orchestrator  │                                   │
-│              │     Server     │                                   │
-│              │                │                                   │
-│              │  ┌──────────┐  │                                   │
-│              │  │  Barrier │  │                                   │
-│              │  │  Sync    │  │                                   │
-│              │  └──────────┘  │                                   │
-│              │                │                                   │
-│              │  ┌──────────┐  │                                   │
-│              │  │ Database │  │                                   │
-│              │  │Middleware│  │                                   │
-│              │  └──────────┘  │                                   │
-│              └───────┬────────┘                                  │
-│                      │                                            │
-│                      │                                            │
-│         ┌────────────┼────────────┐                              │
-│         │            │            │                               │
-│    ┌────▼────┐  ┌───▼────┐  ┌───▼────┐                          │
-│    │  Redis  │  │ SQLite │  │  Postgre│   MySQL                  │
-│    │  Cache  │  │        │  │   SQL   │                          │
-│    └─────────┘  └────────┘  └────────┘                          │
-│                                                                   │
-└─────────────────────────────────────────────────────────────────┘
+┌───────────────────────────────────────────────────────────────────┐
+│                         YSimulator System                          │
+├───────────────────────────────────────────────────────────────────┤
+│                                                                     │
+│  ┌──────────────┐         ┌──────────────┐                        │
+│  │   Client 1   │         │   Client 2   │    ... Client N        │
+│  │              │         │              │                         │
+│  │ ┌──────────┐ │         │ ┌──────────┐ │                        │
+│  │ │  Agent   │ │         │ │  Agent   │ │                        │
+│  │ │Population│ │         │ │Population│ │                        │
+│  │ └──────────┘ │         │ └──────────┘ │                        │
+│  │              │         │              │                         │
+│  │ ┌──────────┐ │         │ ┌──────────┐ │                        │
+│  │ │   LLM    │ │         │ │   LLM    │ │                        │
+│  │ │ Service  │ │         │ │ Service  │ │                        │
+│  │ └──────────┘ │         │ └──────────┘ │                        │
+│  └──────┬───────┘         └──────┬───────┘                        │
+│         │                        │                                 │
+│         │    Ray Remote Calls    │                                 │
+│         └────────────┬───────────┘                                 │
+│                      │                                              │
+│              ┌───────▼────────┐                                    │
+│              │                │                                     │
+│              │  Orchestrator  │                                     │
+│              │     Server     │                                     │
+│              │                │                                     │
+│              │  ┌──────────┐  │                                     │
+│              │  │  Barrier │  │                                     │
+│              │  │  Sync    │  │                                     │
+│              │  └──────────┘  │                                     │
+│              │                │                                     │
+│              │  ┌──────────┐  │  NEW: Layered Architecture         │
+│              │  │ Service  │  │  ═══════════════════════════       │
+│              │  │  Layer   │  │  ┌────────────────────┐            │
+│              │  └────┬─────┘  │  │ UserService        │            │
+│              │       │        │  │ PostService        │            │
+│              │  ┌────▼─────┐  │  │ RecommendService   │            │
+│              │  │Repository│  │  └────────────────────┘            │
+│              │  │  Layer   │  │  ┌────────────────────┐            │
+│              │  └────┬─────┘  │  │ SQL Repositories   │            │
+│              │       │        │  │ Redis Repositories │            │
+│              │  ┌────▼─────┐  │  └────────────────────┘            │
+│              │  │ Database │  │  (Legacy: db_middleware)           │
+│              │  │Middleware│  │                                     │
+│              │  └──────────┘  │                                     │
+│              └───────┬────────┘                                    │
+│                      │                                              │
+│                      │                                              │
+│         ┌────────────┼────────────┐                                │
+│         │            │            │                                 │
+│    ┌────▼────┐  ┌───▼────┐  ┌───▼────┐                            │
+│    │  Redis  │  │ SQLite │  │Postgre │   MySQL                     │
+│    │  Cache  │  │        │  │  SQL   │                             │
+│    └─────────┘  └────────┘  └────────┘                            │
+│                                                                     │
+└───────────────────────────────────────────────────────────────────┘
 ```
+
+### Layered Architecture (NEW)
+
+The system now implements a **clean layered architecture** with separation of concerns:
+
+1. **Presentation Layer** (Ray Actors)
+   - YServer: HTTP API endpoints via Ray
+   - YClient: Agent simulation actors
+
+2. **Service Layer** (Business Logic)
+   - **UserService**: User management, registration, interests
+   - **PostService**: Post creation, reactions, thread context
+   - **RecommendationService**: Rounds, follows, agent opinions
+   
+3. **Repository Layer** (Data Access)
+   - **Abstract Interfaces**: Define contracts for data operations
+   - **SQL Repositories**: SQLAlchemy implementations
+   - **Redis Repositories**: High-performance caching implementations
+   
+4. **Data Layer**
+   - Database models (SQLAlchemy ORM)
+   - Database backends (PostgreSQL/MySQL/SQLite)
+   - Cache backend (Redis)
+
+**Benefits**:
+- **Testability**: Services can be tested with mocked repositories
+- **Flexibility**: Swap storage backends without changing business logic
+- **Maintainability**: Clear boundaries between layers
+- **Extensibility**: Easy to add new storage implementations
 
 ## Component Details
 
@@ -209,6 +248,8 @@ get_article_topics()                       # Retrieve article topics
 #### DatabaseMiddleware
 **Location**: `classes/db_middleware.py`
 
+**Status**: Legacy (maintained for backward compatibility)
+
 **Responsibilities**:
 - Abstract storage backend (SQL vs Redis)
 - Provide unified API for data operations
@@ -216,6 +257,12 @@ get_article_topics()                       # Retrieve article topics
 - Handle SQLAlchemy session management
 - Build appropriate connection strings
 - Support interest/topic database operations
+
+**Current Status**:
+- Still functional and fully supported
+- Used by existing code not yet migrated
+- Provides comprehensive database operations
+- Being gradually superseded by Repository/Service pattern
 
 **Key Methods**:
 ```python
@@ -238,6 +285,98 @@ compute_interest_counts_in_window()        # Count interests in window
 - **SQL**: Persistent storage for all data
 - **Sliding Window**: Automatic pruning of old Redis data
 - **Dual Write**: Write to both Redis and SQL for durability
+
+#### Repository Layer (NEW)
+**Location**: `YServer/repositories/`
+
+**Purpose**: Abstract data access from business logic using the Repository Pattern
+
+**Components**:
+
+1. **Abstract Interfaces** (`base_repository.py`)
+   - Defines contracts for all repository types
+   - UserRepository, PostRepository, FollowRepository
+   - InterestRepository, RecommendationRepository
+   - ArticleRepository, ImageRepository
+
+2. **SQL Implementations** (`sql_repository.py`)
+   - SQLAlchemy-based implementations
+   - Automatic field name mapping (API ↔ Database)
+   - Transaction management with session cleanup
+   - Support for PostgreSQL, MySQL, SQLite
+
+3. **Redis Implementations** (`redis_repository.py`)
+   - High-performance caching layer
+   - Uses hashes, sets, and sorted sets
+   - Automatic byte string encoding/decoding
+   - Smart round_id handling (numeric and UUID)
+
+**Field Name Mappings**:
+| API Field | Database Field | Model |
+|-----------|----------------|-------|
+| `text` | `tweet` | Post |
+| `author` | `user_id` | Post |
+| `parent_post` | `comment_to` | Post |
+| `num_reactions` | `reaction_count` | Post |
+| `followee_id` | `user_id` | Follow |
+| `round_id` | `tid` | Agent_Opinion |
+
+**Example Usage**:
+```python
+from YSimulator.YServer.repositories import SQLPostRepository
+from YSimulator.YServer.services import PostService
+
+# Initialize repository
+post_repo = SQLPostRepository(engine, logger)
+
+# Create service with repository
+post_service = PostService(post_repo)
+
+# Use service for business operations
+post_id = post_service.create_post({
+    "id": "post1",
+    "author": "user1",  # Automatically mapped to user_id
+    "text": "Hello",    # Automatically mapped to tweet
+    "round": "round1"
+})
+```
+
+#### Service Layer (NEW)
+**Location**: `YServer/services/`
+
+**Purpose**: Implement business logic coordinating multiple repositories
+
+**Components**:
+
+1. **UserService** (`user_service.py`)
+   - User registration (single and batch)
+   - User profile management
+   - User interest tracking
+   - Archetype management
+
+2. **PostService** (`post_service.py`)
+   - Post creation and retrieval
+   - Reaction and interaction management
+   - Thread context building
+   - Topic association and search
+
+3. **RecommendationService** (`recommendation_service.py`)
+   - Simulation round management
+   - Follow relationship management
+   - Agent opinion tracking
+   - Data cleanup and consolidation
+
+**Benefits**:
+- **Testability**: Easy to mock repositories for testing
+- **Flexibility**: Swap SQL/Redis without changing business logic
+- **Maintainability**: Clear separation of concerns
+- **Extensibility**: Easy to add new storage backends
+
+**Migration Path**:
+- Existing code using db_middleware continues to work
+- New code can use Repository/Service layers
+- Gradual migration strategy documented
+- Full backward compatibility maintained
 
 ### 3. Data Models
 
@@ -768,12 +907,30 @@ Track active agents → End of day → Evaluate with probability → Get suggest
 - ❌ Track other clients' state
 
 ### What the DatabaseMiddleware Does
-- ✅ Abstract storage backend selection
-- ✅ Provide unified API for operations
+- ✅ Abstract storage backend selection (Legacy)
+- ✅ Provide unified API for operations (Legacy)
 - ✅ Build appropriate connection strings
 - ✅ Manage SQLAlchemy sessions
 - ✅ Handle Redis sliding window
 - ✅ Consolidate Redis to SQL daily
+
+**Note**: DatabaseMiddleware is being superseded by the Repository/Service pattern for new code, but remains fully functional for backward compatibility.
+
+### What the Repository Layer Does (NEW)
+- ✅ Define abstract interfaces for data operations
+- ✅ Implement SQL-based data access (SQLAlchemy)
+- ✅ Implement Redis-based caching
+- ✅ Handle field name mapping automatically
+- ✅ Manage transactions and session cleanup
+- ✅ Support multiple storage backends
+
+### What the Service Layer Does (NEW)
+- ✅ Coordinate business logic across repositories
+- ✅ Implement user management operations
+- ✅ Implement post and interaction operations
+- ✅ Implement recommendation operations
+- ✅ Provide health check functionality
+- ✅ Abstract repository details from callers
 
 ### What the DatabaseMiddleware Does NOT Do
 - ❌ Implement business logic
@@ -782,22 +939,29 @@ Track active agents → End of day → Evaluate with probability → Get suggest
 
 ## Conclusion
 
-YSimulator's architecture follows a **coordinator-worker pattern** where:
+YSimulator's architecture follows a **coordinator-worker pattern** with **layered design**:
 - **Server** coordinates temporal progression and manages barriers
 - **Clients** independently execute simulations and manage local state
-- **DatabaseMiddleware** abstracts storage for flexibility and performance
+- **Service Layer** (NEW) implements business logic and coordination
+- **Repository Layer** (NEW) abstracts storage for flexibility
+- **DatabaseMiddleware** (Legacy) provides backward compatibility
 - **Ray** enables distributed execution without manual networking code
 
 This design provides:
 - **Scalability**: Add clients without server changes
 - **Fault Tolerance**: Automatic stale client detection and removal
-- **Flexibility**: Pluggable storage backends
+- **Flexibility**: Pluggable storage backends via Repository Pattern
+- **Testability**: Easy mocking of repositories for testing
+- **Maintainability**: Clear separation of concerns across layers
 - **Observability**: Comprehensive logging at all layers
 - **Simplicity**: Clear separation of concerns
+- **Backward Compatibility**: Existing code continues to work
 
 For implementation details, see:
 - [Configuration Guide](CONFIG.md)
 - [Opinion Dynamics](OPINION_DYNAMICS.md)
-- [Extension Guide](EXTENDING.md)
+- [Extension Guide](EXTENDING.md) - **Updated with repository examples**
+- [Repository Pattern Guide](REPOSITORY_PATTERN.md) - **NEW: Detailed pattern documentation**
 - [Redis Integration](RECSYS_REDIS_SUPPORT.md)
 - [Code Formatting](FORMATTING.md)
+- [Codebase Analysis](../CODEBASE_ANALYSIS.md) - **Updated with current architecture**

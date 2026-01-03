@@ -49,6 +49,251 @@ Client Agent → submit_action() → Server → DatabaseMiddleware → Database
                               Consolidation (if Redis)
 ```
 
+## Using the Repository Pattern (NEW)
+
+YSimulator now supports the **Repository Pattern** for better separation of concerns and testability. This pattern is recommended for all new extensions.
+
+### Benefits of Repository Pattern
+
+1. **Testability**: Easy to mock repositories for unit testing
+2. **Flexibility**: Swap SQL/Redis without changing business logic  
+3. **Maintainability**: Clear separation between data access and business logic
+4. **Extensibility**: Easy to add new storage backends
+
+### Repository Pattern Architecture
+
+```
+Service Layer (Business Logic)
+    ↓
+Repository Layer (Data Access Abstraction)
+    ↓
+Storage Backend (SQL/Redis/etc.)
+```
+
+### Using Repositories in Extensions
+
+When adding new actions with the Repository Pattern:
+
+#### Option 1: Use Existing Services
+
+```python
+# In server.py
+from YSimulator.YServer.services import PostService, UserService
+from YSimulator.YServer.repositories import SQLPostRepository, SQLUserRepository
+
+# Initialize repositories
+post_repo = SQLPostRepository(engine, logger)
+user_repo = SQLUserRepository(engine, logger)
+
+# Create services
+post_service = PostService(post_repo)
+user_service = UserService(user_repo)
+
+# Use in server methods
+def submit_new_action(self, client_id: str, action_data: dict) -> dict:
+    # Use service instead of direct database access
+    result = post_service.create_post({
+        "id": action_data["id"],
+        "author": action_data["user_id"],  # Mapped to user_id automatically
+        "text": action_data["content"],    # Mapped to tweet automatically
+        "round": self.current_round
+    })
+    return {"success": True, "post_id": result}
+```
+
+#### Option 2: Extend Repository Layer
+
+If you need custom data access patterns:
+
+```python
+# 1. Define interface in base_repository.py
+class CustomActionRepository(ABC):
+    """Repository for custom action data."""
+    
+    @abstractmethod
+    def add_custom_action(self, action_data: Dict[str, Any]) -> str:
+        """Add a custom action."""
+        pass
+    
+    @abstractmethod
+    def get_custom_actions(self, user_id: str) -> List[Dict[str, Any]]:
+        """Get custom actions for a user."""
+        pass
+
+# 2. Implement SQL version in sql_repository.py
+class SQLCustomActionRepository(CustomActionRepository):
+    """SQL implementation of CustomActionRepository."""
+    
+    def __init__(self, engine: Engine, logger: Optional[logging.Logger] = None):
+        self.engine = engine
+        self.logger = logger or logging.getLogger(__name__)
+    
+    def add_custom_action(self, action_data: Dict[str, Any]) -> str:
+        import uuid
+        session = Session(self.engine)
+        try:
+            action_id = str(uuid.uuid4())
+            action = CustomActionModel(
+                id=action_id,
+                user_id=action_data["user_id"],
+                action_type=action_data["action_type"],
+                timestamp=int(time.time())
+            )
+            session.add(action)
+            session.commit()
+            return action_id
+        except Exception as e:
+            self.logger.error(f"Error adding custom action: {e}")
+            session.rollback()
+            raise
+        finally:
+            session.close()
+    
+    def get_custom_actions(self, user_id: str) -> List[Dict[str, Any]]:
+        session = Session(self.engine)
+        try:
+            actions = session.query(CustomActionModel).filter_by(
+                user_id=user_id
+            ).all()
+            return [{"id": a.id, "type": a.action_type} for a in actions]
+        finally:
+            session.close()
+
+# 3. Implement Redis version in redis_repository.py
+class RedisCustomActionRepository(CustomActionRepository):
+    """Redis implementation of CustomActionRepository."""
+    
+    def __init__(self, redis_client, logger: Optional[logging.Logger] = None):
+        self.redis_client = redis_client
+        self.logger = logger or logging.getLogger(__name__)
+    
+    def add_custom_action(self, action_data: Dict[str, Any]) -> str:
+        import uuid
+        action_id = str(uuid.uuid4())
+        key = f"custom_action:{action_id}"
+        self.redis_client.hset(key, mapping={
+            "id": action_id,
+            "user_id": action_data["user_id"],
+            "action_type": action_data["action_type"],
+            "timestamp": str(int(time.time()))
+        })
+        # Index by user for retrieval
+        self.redis_client.sadd(f"user_actions:{action_data['user_id']}", action_id)
+        return action_id
+    
+    def get_custom_actions(self, user_id: str) -> List[Dict[str, Any]]:
+        action_ids = self.redis_client.smembers(f"user_actions:{user_id}")
+        actions = []
+        for action_id in action_ids:
+            action_data = self.redis_client.hgetall(f"custom_action:{action_id}")
+            if action_data:
+                actions.append({
+                    "id": action_data[b"id"].decode(),
+                    "type": action_data[b"action_type"].decode()
+                })
+        return actions
+
+# 4. Create service layer
+class CustomActionService:
+    """Service for custom action business logic."""
+    
+    def __init__(self, custom_action_repo: CustomActionRepository):
+        self.repo = custom_action_repo
+        self.logger = logging.getLogger(__name__)
+    
+    def record_action(self, user_id: str, action_type: str) -> Optional[str]:
+        """Record a custom action."""
+        try:
+            action_id = self.repo.add_custom_action({
+                "user_id": user_id,
+                "action_type": action_type
+            })
+            self.logger.info(f"Custom action recorded: {action_id}")
+            return action_id
+        except Exception as e:
+            self.logger.error(f"Failed to record action: {e}")
+            return None
+    
+    def get_user_actions(self, user_id: str) -> List[Dict[str, Any]]:
+        """Get all actions for a user."""
+        return self.repo.get_custom_actions(user_id)
+```
+
+### Field Name Mapping
+
+The repository layer automatically handles field name mapping between API and database:
+
+```python
+# API uses friendly names
+post_data = {
+    "author": "user123",         # Maps to user_id in database
+    "text": "Hello world",       # Maps to tweet in database
+    "parent_post": "post456",    # Maps to comment_to in database
+    "num_reactions": 5           # Maps to reaction_count in database
+}
+
+# Repository handles mapping automatically
+post_repo.add_post(post_data)  # Stores with correct database field names
+```
+
+**Complete Mapping Table**:
+| API Field | Database Field | Model |
+|-----------|----------------|-------|
+| `text` | `tweet` | Post |
+| `author` | `user_id` | Post |
+| `parent_post` | `comment_to` | Post |
+| `root_post` | `thread_id` | Post |
+| `num_reactions` | `reaction_count` | Post |
+| `followee_id` | `user_id` | Follow |
+| `round_id` | `tid` | Agent_Opinion |
+
+### Testing with Repositories
+
+The Repository Pattern makes testing much easier:
+
+```python
+import pytest
+from unittest.mock import Mock
+from YSimulator.YServer.services import CustomActionService
+
+def test_record_action():
+    # Mock the repository
+    mock_repo = Mock()
+    mock_repo.add_custom_action.return_value = "action123"
+    
+    # Create service with mock
+    service = CustomActionService(mock_repo)
+    
+    # Test business logic
+    action_id = service.record_action("user1", "click")
+    
+    # Verify
+    assert action_id == "action123"
+    mock_repo.add_custom_action.assert_called_once_with({
+        "user_id": "user1",
+        "action_type": "click"
+    })
+```
+
+### Migration from DatabaseMiddleware
+
+If you have existing code using DatabaseMiddleware, you can migrate gradually:
+
+```python
+# Old approach (still works)
+share_id = self.db_middleware.add_share(share_data)
+
+# New approach (recommended)
+from YSimulator.YServer.services import PostService
+from YSimulator.YServer.repositories import SQLPostRepository
+
+post_repo = SQLPostRepository(engine, logger)
+post_service = PostService(post_repo)
+post_id = post_service.create_post(post_data)
+```
+
+Both approaches are fully supported for backward compatibility.
+
 ## Adding a New Action: Step by Step
 
 ### Step 1: Define the Action Model
@@ -940,18 +1185,30 @@ def test_search_action_flow():
 
 Adding new actions to YSimulator follows a consistent pattern:
 1. Define the data model
-2. Implement storage in middleware
+2. Implement storage in middleware OR repository layer (recommended)
 3. Add server handler
 4. Implement client logic
 5. Test thoroughly
 
+**Recommended Approach**: Use the Repository/Service pattern for new extensions to benefit from:
+- Better testability with mocked repositories
+- Clearer separation of concerns
+- Easier maintenance and refactoring
+- Support for multiple storage backends
+
+**Legacy Approach**: DatabaseMiddleware is still fully supported for backward compatibility.
+
 Follow the patterns established in existing actions (posts, interactions) and refer to this guide when adding new capabilities.
+
+For detailed Repository Pattern documentation, see [REPOSITORY_PATTERN.md](REPOSITORY_PATTERN.md).
 
 For questions or improvements to this guide, please open an issue on GitHub.
 
 ## Related Documentation
 
 - **[Configuration Guide](CONFIG.md)** - Configure simulation parameters and agent behaviors
-- **[Architecture Overview](ARCHITECTURE.md)** - Understand the system architecture
+- **[Architecture Overview](ARCHITECTURE.md)** - Understand the system architecture (updated with new layers)
+- **[Repository Pattern Guide](REPOSITORY_PATTERN.md)** - NEW: Detailed documentation on the repository pattern
+- **[Codebase Analysis](../CODEBASE_ANALYSIS.md)** - Complete codebase overview (updated)
 - **[Opinion Dynamics](OPINION_DYNAMICS.md)** - Add opinion-based behaviors to new actions
 - **[Action Logging](ACTION_LOGGING.md)** - Ensure new actions are properly logged
