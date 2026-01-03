@@ -121,7 +121,7 @@ if agent.is_page == 1:
 Page agents have special opinion inference for articles:
 - When posting an article, client-side infers opinion on article topics using LLM or random
 - Opinions remain fixed after initialization (no updates)
-- See [OPINION_DYNAMICS.md](OPINION_DYNAMICS.md#page-agent-opinion-handling) for details
+- See [OPINION_DYNAMICS.md](../features/OPINION_DYNAMICS.md#page-agent-opinion-handling) for details
 
 **Database Schema**:
 
@@ -138,9 +138,9 @@ Website:
 ```
 
 **Related Documentation**:
-- RSS feed configuration: [CONFIG.md](CONFIG.md#page-agents)
+- RSS feed configuration: [CONFIG.md](../configuration/CONFIG.md#page-agents)
 - News sharing action: [AGENT_ACTIONS.md](AGENT_ACTIONS.md#8-news-share-news-article)
-- Article topic extraction: [INTERESTS.md](INTERESTS.md#article-topic-extraction)
+- Article topic extraction: [INTERESTS.md](../features/INTERESTS.md#article-topic-extraction)
 
 ---
 
@@ -421,7 +421,7 @@ else:
 
 **Use Case**: Large-scale simulations where cost optimization is important
 
-**Related Documentation**: [CONFIG.md](CONFIG.md#agent-downcast-feature)
+**Related Documentation**: [CONFIG.md](../configuration/CONFIG.md#agent-downcast-feature)
 
 ### Archetype Transitions (Future Feature)
 
@@ -522,7 +522,7 @@ See [AGENT_TEMPORAL_ACTIVITIES.md](AGENT_TEMPORAL_ACTIVITIES.md) for detailed in
 - `random`, `common_neighbors`, `jaccard`
 - `adamic_adar`, `preferential_attachment`
 
-See [RECOMMENDATION_SYSTEMS.md](RECOMMENDATION_SYSTEMS.md) for algorithm details.
+See [RECOMMENDATION_SYSTEMS.md](../features/RECOMMENDATION_SYSTEMS.md) for algorithm details.
 
 #### Interest and Opinion Variables
 
@@ -543,8 +543,8 @@ opinions = {
 ```
 
 See:
-- [INTERESTS.md](INTERESTS.md) for interest tracking and evolution
-- [OPINION_DYNAMICS.md](OPINION_DYNAMICS.md) for opinion modeling
+- [INTERESTS.md](../features/INTERESTS.md) for interest tracking and evolution
+- [OPINION_DYNAMICS.md](../features/OPINION_DYNAMICS.md) for opinion modeling
 
 #### Lifecycle Variables
 
@@ -660,11 +660,11 @@ Values: `low`, `medium`, `high`
 
 - **[AGENT_ACTIONS.md](AGENT_ACTIONS.md)**: Available actions for each agent type
 - **[AGENT_TEMPORAL_ACTIVITIES.md](AGENT_TEMPORAL_ACTIVITIES.md)**: When and how often agents act
-- **[INTERESTS.md](INTERESTS.md)**: Interest tracking and evolution
-- **[OPINION_DYNAMICS.md](OPINION_DYNAMICS.md)**: Opinion modeling and updates
-- **[RECOMMENDATION_SYSTEMS.md](RECOMMENDATION_SYSTEMS.md)**: Content and follow recommendation algorithms
-- **[CONFIG.md](CONFIG.md)**: Complete configuration reference
-- **[ARCHITECTURE.md](ARCHITECTURE.md)**: System architecture and component interaction
+- **[INTERESTS.md](../features/INTERESTS.md)**: Interest tracking and evolution
+- **[OPINION_DYNAMICS.md](../features/OPINION_DYNAMICS.md)**: Opinion modeling and updates
+- **[RECOMMENDATION_SYSTEMS.md](../features/RECOMMENDATION_SYSTEMS.md)**: Content and follow recommendation algorithms
+- **[CONFIG.md](../configuration/CONFIG.md)**: Complete configuration reference
+- **[ARCHITECTURE.md](../architecture/ARCHITECTURE.md)**: System architecture and component interaction
 
 ---
 

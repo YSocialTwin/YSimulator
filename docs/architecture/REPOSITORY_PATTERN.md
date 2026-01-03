@@ -356,4 +356,4 @@ Potential improvements for the repository pattern:
 - [Repository Pattern (Martin Fowler)](https://martinfowler.com/eaaCatalog/repository.html)
 - [SQLAlchemy Documentation](https://docs.sqlalchemy.org/)
 - [Redis Documentation](https://redis.io/documentation)
-- [CODEBASE_ANALYSIS.md](../CODEBASE_ANALYSIS.md) - Original refactoring proposal
+- [CODEBASE_ANALYSIS.md](../development/CODEBASE_ANALYSIS.md) - Original refactoring proposal

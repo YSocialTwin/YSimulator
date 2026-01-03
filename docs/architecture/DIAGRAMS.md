@@ -804,5 +804,5 @@ These diagrams illustrate:
 
 For textual descriptions and implementation details, see:
 - [Architecture Documentation](ARCHITECTURE.md)
-- [Extension Guide](EXTENDING.md)
-- [Configuration Guide](CONFIG.md)
+- [Extension Guide](../development/EXTENDING.md)
+- [Configuration Guide](../configuration/CONFIG.md)

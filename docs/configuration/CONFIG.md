@@ -300,7 +300,7 @@ Redis provides an optional in-memory cache with sliding window for better perfor
 
 #### Logging Configuration
 
-Control which log files are generated. See [LOGGING_CONFIG.md](LOGGING_CONFIG.md) for details.
+Control which log files are generated. See [LOGGING_CONFIG.md](../logging/LOGGING_CONFIG.md) for details.
 
 ```json
 {
@@ -539,7 +539,7 @@ The `agents` section controls detailed behavior parameters:
 
 #### Logging Configuration
 
-Control which log files are generated. See [LOGGING_CONFIG.md](LOGGING_CONFIG.md) for details.
+Control which log files are generated. See [LOGGING_CONFIG.md](../logging/LOGGING_CONFIG.md) for details.
 
 ```json
 {
@@ -956,7 +956,7 @@ See the `example/` directory for complete configurations:
 - `llm_population_100_llm_opinion/`: LLM evaluation with neighbor influence
 - `llm_population_100_no_opinion/`: Opinion dynamics disabled
 
-**For detailed documentation**, see [OPINION_DYNAMICS.md](OPINION_DYNAMICS.md).
+**For detailed documentation**, see [OPINION_DYNAMICS.md](../features/OPINION_DYNAMICS.md).
 
 ---
 
@@ -1362,9 +1362,9 @@ JSON format with structure:
 - **Format**: JSON, one entry per line
 
 **For detailed logging documentation**, see:
-- [LOGGING_CONFIG.md](LOGGING_CONFIG.md) - Complete logging configuration guide
-- [SERVER_LOGGING.md](SERVER_LOGGING.md) - Server request log format and analysis
-- [ACTION_LOGGING.md](ACTION_LOGGING.md) - Client action log format and summaries
+- [LOGGING_CONFIG.md](../logging/LOGGING_CONFIG.md) - Complete logging configuration guide
+- [SERVER_LOGGING.md](../logging/SERVER_LOGGING.md) - Server request log format and analysis
+- [ACTION_LOGGING.md](../logging/ACTION_LOGGING.md) - Client action log format and summaries
 
 ---
 
@@ -1495,11 +1495,11 @@ python run_client.py --config shared_config
 
 ## Related Documentation
 
-- **[LOGGING_CONFIG.md](LOGGING_CONFIG.md)** - Comprehensive logging configuration guide
-- **[SERVER_LOGGING.md](SERVER_LOGGING.md)** - Server request log format and analysis  
-- **[ACTION_LOGGING.md](ACTION_LOGGING.md)** - Client action log format and summaries
-- **[ARCHITECTURE.md](ARCHITECTURE.md)** - System architecture overview
-- **[EXTENDING.md](EXTENDING.md)** - Guide to extending YSimulator
+- **[LOGGING_CONFIG.md](../logging/LOGGING_CONFIG.md)** - Comprehensive logging configuration guide
+- **[SERVER_LOGGING.md](../logging/SERVER_LOGGING.md)** - Server request log format and analysis  
+- **[ACTION_LOGGING.md](../logging/ACTION_LOGGING.md)** - Client action log format and summaries
+- **[ARCHITECTURE.md](../architecture/ARCHITECTURE.md)** - System architecture overview
+- **[EXTENDING.md](../development/EXTENDING.md)** - Guide to extending YSimulator
 
 ---
 

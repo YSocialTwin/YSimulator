@@ -873,4 +873,4 @@ ysim:user:{user_id}:opinion:{topic_id} -> STRING (float)
 
 **Note:** Opinion dynamics with `evaluation_scope="interlocutor_only"` works fully in both SQL and Redis modes since it doesn't require neighbor data.
 
-**See also:** [OPINION_DYNAMICS.md](OPINION_DYNAMICS.md) for complete opinion dynamics documentation.
+**See also:** [OPINION_DYNAMICS.md](../features/OPINION_DYNAMICS.md) for complete opinion dynamics documentation.

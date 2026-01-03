@@ -892,7 +892,7 @@ In multi-client scenarios, temporal coordination ensures all clients progress to
 - Server tracks last heartbeat timestamp
 - Clients exceeding timeout removed from active set
 
-See [ARCHITECTURE.md](ARCHITECTURE.md#coordination-mechanisms) for details.
+See [ARCHITECTURE.md](../architecture/ARCHITECTURE.md#coordination-mechanisms) for details.
 
 ---
 
@@ -982,10 +982,10 @@ Simulate platform growth phase:
 
 - **[AGENT_TYPES.md](AGENT_TYPES.md)**: Agent types, archetypes, and profile variables
 - **[AGENT_ACTIONS.md](AGENT_ACTIONS.md)**: Available actions and selection mechanisms
-- **[CONFIG.md](CONFIG.md)**: Complete configuration reference
-- **[ARCHITECTURE.md](ARCHITECTURE.md)**: System architecture and coordination
-- **[INTERESTS.md](INTERESTS.md)**: Interest tracking and evolution
-- **[OPINION_DYNAMICS.md](OPINION_DYNAMICS.md)**: Opinion modeling
+- **[CONFIG.md](../configuration/CONFIG.md)**: Complete configuration reference
+- **[ARCHITECTURE.md](../architecture/ARCHITECTURE.md)**: System architecture and coordination
+- **[INTERESTS.md](../features/INTERESTS.md)**: Interest tracking and evolution
+- **[OPINION_DYNAMICS.md](../features/OPINION_DYNAMICS.md)**: Opinion modeling
 
 ---
 

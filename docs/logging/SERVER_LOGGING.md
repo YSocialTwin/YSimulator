@@ -347,7 +347,7 @@ Set to `false` to disable request logging entirely. This can reduce disk I/O in 
 
 - **[LOGGING_CONFIG.md](LOGGING_CONFIG.md)** - Complete logging configuration guide
 - **[ACTION_LOGGING.md](ACTION_LOGGING.md)** - Client action log format
-- **[CONFIG.md](CONFIG.md)** - Server configuration guide
+- **[CONFIG.md](../configuration/CONFIG.md)** - Server configuration guide
 
 ---
 

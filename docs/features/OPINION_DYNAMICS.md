@@ -11,9 +11,9 @@ The opinion dynamics module allows agents to:
 - Express opinions in content generation and reactions
 
 **Related Documentation:**
-- **[Configuration Guide (CONFIG.md)](CONFIG.md)** - Opinion dynamics configuration in `simulation_config.json`
-- **[Redis Integration (RECSYS_REDIS_SUPPORT.md)](RECSYS_REDIS_SUPPORT.md)** - Redis support status for opinion dynamics
-- **[Architecture Overview (ARCHITECTURE.md)](ARCHITECTURE.md)** - System architecture and component interactions
+- **[Configuration Guide (CONFIG.md)](../configuration/CONFIG.md)** - Opinion dynamics configuration in `simulation_config.json`
+- **[Redis Integration (RECSYS_REDIS_SUPPORT.md)](../data-storage/RECSYS_REDIS_SUPPORT.md)** - Redis support status for opinion dynamics
+- **[Architecture Overview (ARCHITECTURE.md)](../architecture/ARCHITECTURE.md)** - System architecture and component interactions
 - **[Example Configurations](../example/)** - Example directories with different opinion dynamics setups
 
 ## Supported Models

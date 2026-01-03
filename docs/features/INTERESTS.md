@@ -3,10 +3,10 @@
 The YSimulator includes a comprehensive interest tracking system that allows agents to have topical preferences that influence their behavior and evolve dynamically through interactions. The system implements a sliding window attention mechanism for realistic interest forgetting.
 
 **Related Documentation**:
-- Agent types and profile variables: [AGENT_TYPES.md](AGENT_TYPES.md#interest-and-opinion-variables)
-- Interest-based actions: [AGENT_ACTIONS.md](AGENT_ACTIONS.md#9-search-search-and-engage-with-content)
-- Temporal activities and attention window: [AGENT_TEMPORAL_ACTIVITIES.md](AGENT_TEMPORAL_ACTIVITIES.md)
-- Complete configuration: [CONFIG.md](CONFIG.md#agent-behavior-configuration)
+- Agent types and profile variables: [AGENT_TYPES.md](../agents/AGENT_TYPES.md#interest-and-opinion-variables)
+- Interest-based actions: [AGENT_ACTIONS.md](../agents/AGENT_ACTIONS.md#9-search-search-and-engage-with-content)
+- Temporal activities and attention window: [AGENT_TEMPORAL_ACTIVITIES.md](../agents/AGENT_TEMPORAL_ACTIVITIES.md)
+- Complete configuration: [CONFIG.md](../configuration/CONFIG.md#agent-behavior-configuration)
 
 ## Overview
 
@@ -329,12 +329,12 @@ Multiple `user_interest` entries per topic maintain:
 
 ## Related Documentation
 
-- **[AGENT_ACTIONS.md](AGENT_ACTIONS.md)**: Interest-based posting and search actions
-- **[AGENT_TYPES.md](AGENT_TYPES.md)**: Agent profile variables including interests field
-- **[AGENT_TEMPORAL_ACTIVITIES.md](AGENT_TEMPORAL_ACTIVITIES.md)**: Attention window and temporal recomputation
+- **[AGENT_ACTIONS.md](../agents/AGENT_ACTIONS.md)**: Interest-based posting and search actions
+- **[AGENT_TYPES.md](../agents/AGENT_TYPES.md)**: Agent profile variables including interests field
+- **[AGENT_TEMPORAL_ACTIVITIES.md](../agents/AGENT_TEMPORAL_ACTIVITIES.md)**: Attention window and temporal recomputation
 - **[OPINION_DYNAMICS.md](OPINION_DYNAMICS.md)**: Opinion tracking (complementary to interests)
-- **[CONFIG.md](CONFIG.md)**: Complete configuration reference
-- **[ARCHITECTURE.md](ARCHITECTURE.md)**: InterestManager architecture
+- **[CONFIG.md](../configuration/CONFIG.md)**: Complete configuration reference
+- **[ARCHITECTURE.md](../architecture/ARCHITECTURE.md)**: InterestManager architecture
 
 ---
 

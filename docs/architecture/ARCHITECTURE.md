@@ -958,10 +958,10 @@ This design provides:
 - **Backward Compatibility**: Existing code continues to work
 
 For implementation details, see:
-- [Configuration Guide](CONFIG.md)
-- [Opinion Dynamics](OPINION_DYNAMICS.md)
-- [Extension Guide](EXTENDING.md) - **Updated with repository examples**
+- [Configuration Guide](../configuration/CONFIG.md)
+- [Opinion Dynamics](../features/OPINION_DYNAMICS.md)
+- [Extension Guide](../development/EXTENDING.md) - **Updated with repository examples**
 - [Repository Pattern Guide](REPOSITORY_PATTERN.md) - **NEW: Detailed pattern documentation**
-- [Redis Integration](RECSYS_REDIS_SUPPORT.md)
-- [Code Formatting](FORMATTING.md)
-- [Codebase Analysis](../CODEBASE_ANALYSIS.md) - **Updated with current architecture**
+- [Redis Integration](../data-storage/RECSYS_REDIS_SUPPORT.md)
+- [Code Formatting](../development/FORMATTING.md)
+- [Codebase Analysis](../development/CODEBASE_ANALYSIS.md) - **Updated with current architecture**

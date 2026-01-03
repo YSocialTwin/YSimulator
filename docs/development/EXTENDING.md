@@ -1200,15 +1200,15 @@ Adding new actions to YSimulator follows a consistent pattern:
 
 Follow the patterns established in existing actions (posts, interactions) and refer to this guide when adding new capabilities.
 
-For detailed Repository Pattern documentation, see [REPOSITORY_PATTERN.md](REPOSITORY_PATTERN.md).
+For detailed Repository Pattern documentation, see [REPOSITORY_PATTERN.md](../architecture/REPOSITORY_PATTERN.md).
 
 For questions or improvements to this guide, please open an issue on GitHub.
 
 ## Related Documentation
 
-- **[Configuration Guide](CONFIG.md)** - Configure simulation parameters and agent behaviors
-- **[Architecture Overview](ARCHITECTURE.md)** - Understand the system architecture (updated with new layers)
-- **[Repository Pattern Guide](REPOSITORY_PATTERN.md)** - NEW: Detailed documentation on the repository pattern
-- **[Codebase Analysis](../CODEBASE_ANALYSIS.md)** - Complete codebase overview (updated)
-- **[Opinion Dynamics](OPINION_DYNAMICS.md)** - Add opinion-based behaviors to new actions
-- **[Action Logging](ACTION_LOGGING.md)** - Ensure new actions are properly logged
+- **[Configuration Guide](../configuration/CONFIG.md)** - Configure simulation parameters and agent behaviors
+- **[Architecture Overview](../architecture/ARCHITECTURE.md)** - Understand the system architecture (updated with new layers)
+- **[Repository Pattern Guide](../architecture/REPOSITORY_PATTERN.md)** - NEW: Detailed documentation on the repository pattern
+- **[Codebase Analysis](CODEBASE_ANALYSIS.md)** - Complete codebase overview (updated)
+- **[Opinion Dynamics](../features/OPINION_DYNAMICS.md)** - Add opinion-based behaviors to new actions
+- **[Action Logging](../logging/ACTION_LOGGING.md)** - Ensure new actions are properly logged

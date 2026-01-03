@@ -8,11 +8,11 @@
 
 ## 📚 Documentation Navigation
 
-- **[← Documentation Index](INDEX.md)** - Complete documentation guide
-- **[Configuration Guide](CONFIG.md)** - Configure recommendation strategies
-- **[Redis Integration](RECSYS_REDIS_SUPPORT.md)** - Redis support details
-- **[Database & Storage](REDIS_DATABASE_ANALYSIS.md)** - Performance and data structures
-- **[Architecture Overview](ARCHITECTURE.md)** - System architecture
+- **[← Documentation Index](../getting-started/INDEX.md)** - Complete documentation guide
+- **[Configuration Guide](../configuration/CONFIG.md)** - Configure recommendation strategies
+- **[Redis Integration](../data-storage/RECSYS_REDIS_SUPPORT.md)** - Redis support details
+- **[Database & Storage](../data-storage/REDIS_DATABASE_ANALYSIS.md)** - Performance and data structures
+- **[Architecture Overview](../architecture/ARCHITECTURE.md)** - System architecture
 
 ---
 
@@ -1201,10 +1201,10 @@ def test_content_recommendation_endpoint():
 
 ## References
 
-- [RECSYS_REDIS_SUPPORT.md](RECSYS_REDIS_SUPPORT.md) - Redis implementation details
-- [REDIS_DATABASE_ANALYSIS.md](REDIS_DATABASE_ANALYSIS.md) - Redis data structures
-- [ARCHITECTURE.md](ARCHITECTURE.md) - YSimulator architecture overview
-- [CONFIG.md](CONFIG.md) - Configuration reference
+- [RECSYS_REDIS_SUPPORT.md](../data-storage/RECSYS_REDIS_SUPPORT.md) - Redis implementation details
+- [REDIS_DATABASE_ANALYSIS.md](../data-storage/REDIS_DATABASE_ANALYSIS.md) - Redis data structures
+- [ARCHITECTURE.md](../architecture/ARCHITECTURE.md) - YSimulator architecture overview
+- [CONFIG.md](../configuration/CONFIG.md) - Configuration reference
 
 ---
 

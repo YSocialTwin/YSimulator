@@ -122,8 +122,8 @@ Create an original social media post.
 ```
 
 **Related Documentation**:
-- Interest-based posting: [INTERESTS.md](INTERESTS.md)
-- Opinion dynamics in posts: [OPINION_DYNAMICS.md](OPINION_DYNAMICS.md)
+- Interest-based posting: [INTERESTS.md](../features/INTERESTS.md)
+- Opinion dynamics in posts: [OPINION_DYNAMICS.md](../features/OPINION_DYNAMICS.md)
 
 ---
 
@@ -178,8 +178,8 @@ Create a comment or reply on an existing post.
 ```
 
 **Related Documentation**:
-- Opinion evolution via comments: [OPINION_DYNAMICS.md](OPINION_DYNAMICS.md)
-- Interest learning via comments: [INTERESTS.md](INTERESTS.md)
+- Opinion evolution via comments: [OPINION_DYNAMICS.md](../features/OPINION_DYNAMICS.md)
+- Interest learning via comments: [INTERESTS.md](../features/INTERESTS.md)
 
 ---
 
@@ -233,8 +233,8 @@ Discover posts via recommendation system and react to them.
 ```
 
 **Related Documentation**:
-- Content recommendation: [RECOMMENDATION_SYSTEMS.md](RECOMMENDATION_SYSTEMS.md)
-- Secondary follow after read: [ARCHITECTURE.md](ARCHITECTURE.md#secondary-follow-mechanism)
+- Content recommendation: [RECOMMENDATION_SYSTEMS.md](../features/RECOMMENDATION_SYSTEMS.md)
+- Secondary follow after read: [ARCHITECTURE.md](../architecture/ARCHITECTURE.md#secondary-follow-mechanism)
 
 ---
 
@@ -310,7 +310,7 @@ YSimulator supports three ways agents establish follow relationships:
 
 1. **Primary Follow Action**: Explicit FOLLOW action in action_likelihood
 2. **Daily Follow Evaluation**: End-of-day follow suggestions (see [AGENT_TEMPORAL_ACTIVITIES.md](AGENT_TEMPORAL_ACTIVITIES.md))
-3. **Secondary Follow**: After reading/commenting on posts (see [ARCHITECTURE.md](ARCHITECTURE.md#secondary-follow-mechanism))
+3. **Secondary Follow**: After reading/commenting on posts (see [ARCHITECTURE.md](../architecture/ARCHITECTURE.md#secondary-follow-mechanism))
 
 #### Configuration
 
@@ -329,8 +329,8 @@ YSimulator supports three ways agents establish follow relationships:
 ```
 
 **Related Documentation**:
-- Follow recommendation algorithms: [RECOMMENDATION_SYSTEMS.md](RECOMMENDATION_SYSTEMS.md#follow-recommendation-system)
-- Network dynamics: [ARCHITECTURE.md](ARCHITECTURE.md#dynamic-social-network)
+- Follow recommendation algorithms: [RECOMMENDATION_SYSTEMS.md](../features/RECOMMENDATION_SYSTEMS.md#follow-recommendation-system)
+- Network dynamics: [ARCHITECTURE.md](../architecture/ARCHITECTURE.md#dynamic-social-network)
 
 ---
 
@@ -361,7 +361,7 @@ Break a follow relationship with another user.
 }
 ```
 
-**Related Documentation**: [ARCHITECTURE.md](ARCHITECTURE.md#secondary-follow-mechanism)
+**Related Documentation**: [ARCHITECTURE.md](../architecture/ARCHITECTURE.md#secondary-follow-mechanism)
 
 ---
 
@@ -420,7 +420,7 @@ Share an image from RSS feeds with personalized commentary.
 
 **Note**: Set image: 0.0 to disable if no vision LLM is available.
 
-**Related Documentation**: [CONFIG.md](CONFIG.md#vision-llm-configuration)
+**Related Documentation**: [CONFIG.md](../configuration/CONFIG.md#vision-llm-configuration)
 
 ---
 
@@ -475,7 +475,7 @@ Share news articles from RSS feeds (page agents only).
 
 **Related Documentation**:
 - Page agents: [AGENT_TYPES.md](AGENT_TYPES.md#page-agents)
-- RSS feed configuration: [CONFIG.md](CONFIG.md#page-agents)
+- RSS feed configuration: [CONFIG.md](../configuration/CONFIG.md#page-agents)
 
 ---
 
@@ -521,7 +521,7 @@ Search for posts by topic and engage with results.
 **Archetype Availability**: Primarily Explorers, can be used by other archetypes if enabled
 
 **Related Documentation**:
-- Interest-based search: [INTERESTS.md](INTERESTS.md)
+- Interest-based search: [INTERESTS.md](../features/INTERESTS.md)
 - Explorer archetype: [AGENT_TYPES.md](AGENT_TYPES.md#explorer-archetype)
 
 ---
@@ -621,7 +621,7 @@ annotations = annotate_text(content)
 - Sentiment analysis for emotion tracking
 - Toxicity detection for content moderation
 
-**Related Documentation**: [ANNOTATION_IMPLEMENTATION.md](ANNOTATION_IMPLEMENTATION.md)
+**Related Documentation**: [ANNOTATION_IMPLEMENTATION.md](../features/ANNOTATION_IMPLEMENTATION.md)
 
 ### Opinion Updates (Comments Only)
 
@@ -633,7 +633,7 @@ action.updated_opinions = {
 }
 ```
 
-**Related Documentation**: [OPINION_DYNAMICS.md](OPINION_DYNAMICS.md)
+**Related Documentation**: [OPINION_DYNAMICS.md](../features/OPINION_DYNAMICS.md)
 
 ---
 
@@ -706,12 +706,12 @@ action.updated_opinions = {
 
 - **[AGENT_TYPES.md](AGENT_TYPES.md)**: Agent types, archetypes, and LLM vs rule-based behavior
 - **[AGENT_TEMPORAL_ACTIVITIES.md](AGENT_TEMPORAL_ACTIVITIES.md)**: When agents act (hourly_activity, round_actions, activity_profiles)
-- **[INTERESTS.md](INTERESTS.md)**: Interest-based posting and learning
-- **[OPINION_DYNAMICS.md](OPINION_DYNAMICS.md)**: Opinion evolution through interactions
-- **[RECOMMENDATION_SYSTEMS.md](RECOMMENDATION_SYSTEMS.md)**: Content and follow recommendation algorithms
-- **[EXTENDING.md](EXTENDING.md)**: How to add new action types
-- **[CONFIG.md](CONFIG.md)**: Complete configuration reference
-- **[ARCHITECTURE.md](ARCHITECTURE.md)**: System architecture and action flow
+- **[INTERESTS.md](../features/INTERESTS.md)**: Interest-based posting and learning
+- **[OPINION_DYNAMICS.md](../features/OPINION_DYNAMICS.md)**: Opinion evolution through interactions
+- **[RECOMMENDATION_SYSTEMS.md](../features/RECOMMENDATION_SYSTEMS.md)**: Content and follow recommendation algorithms
+- **[EXTENDING.md](../development/EXTENDING.md)**: How to add new action types
+- **[CONFIG.md](../configuration/CONFIG.md)**: Complete configuration reference
+- **[ARCHITECTURE.md](../architecture/ARCHITECTURE.md)**: System architecture and action flow
 
 ---
 

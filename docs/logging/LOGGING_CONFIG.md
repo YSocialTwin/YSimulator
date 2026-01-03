@@ -391,7 +391,7 @@ Disable all file logging, use only console output:
 
 - **[SERVER_LOGGING.md](SERVER_LOGGING.md)** - Detailed server request log format and analysis
 - **[ACTION_LOGGING.md](ACTION_LOGGING.md)** - Client action log format and summaries
-- **[CONFIG.md](CONFIG.md)** - Complete configuration guide for all YSimulator settings
+- **[CONFIG.md](../configuration/CONFIG.md)** - Complete configuration guide for all YSimulator settings
 
 ---
 

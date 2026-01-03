@@ -508,10 +508,10 @@ open htmlcov/index.html
 
 ## 9. Related Documentation
 
-- [CODEBASE_ANALYSIS.md](./CODEBASE_ANALYSIS.md) - Comprehensive code quality analysis
-- [ARCHITECTURE.md](./ARCHITECTURE.md) - System architecture overview
-- [CONFIG.md](./CONFIG.md) - Configuration options
-- [EXTENDING.md](./EXTENDING.md) - Extension guidelines
+- [CODEBASE_ANALYSIS.md](../development/CODEBASE_ANALYSIS.md) - Comprehensive code quality analysis
+- [ARCHITECTURE.md](../architecture/ARCHITECTURE.md) - System architecture overview
+- [CONFIG.md](../configuration/CONFIG.md) - Configuration options
+- [EXTENDING.md](../development/EXTENDING.md) - Extension guidelines
 
 ---
 
