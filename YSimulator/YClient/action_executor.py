@@ -9,6 +9,8 @@ import random
 
 import ray
 
+from YSimulator.YClient.classes.ray_models import ActionDTO
+
 from YSimulator.YClient.actions import (
     generate_image_post_async,
     generate_llm_follow_async,
