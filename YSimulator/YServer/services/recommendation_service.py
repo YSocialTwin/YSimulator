@@ -57,12 +57,15 @@ class RecommendationService:
             
         Returns:
             Round ID
+            
+        Raises:
+            RuntimeError: If unable to create or retrieve round from repository
         """
         try:
             return self.rec_repo.get_or_create_round(day, hour)
         except Exception as e:
             self.logger.error(f"Error in recommendation service get_or_create_round: {e}")
-            return None
+            raise
     
     def add_follow_relationship(self, follower_id: str, followee_id: str) -> bool:
         """

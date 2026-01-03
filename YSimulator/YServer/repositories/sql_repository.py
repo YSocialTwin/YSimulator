@@ -17,9 +17,11 @@ from YSimulator.YServer.classes.models import (
     Follow,
     Interest,
     Post,
+    PostTopic,
     Reaction,
     Round,
     User_mgmt,
+    UserInterest,
 )
 from .base_repository import (
     ArticleRepository,
@@ -368,8 +370,6 @@ class SQLPostRepository(PostRepository):
     def add_post_topic(self, post_id: str, topic_id: str) -> bool:
         """Associate a topic with a post."""
         try:
-            from YSimulator.YServer.classes.models import PostTopic
-            
             session = Session(self.engine)
             try:
                 post_topic = PostTopic(post_id=post_id, topic_id=topic_id)
@@ -387,8 +387,6 @@ class SQLPostRepository(PostRepository):
     def get_post_topics(self, post_id: str) -> List[str]:
         """Get all topics associated with a post."""
         try:
-            from YSimulator.YServer.classes.models import PostTopic
-            
             session = Session(self.engine)
             try:
                 topics = (
@@ -408,8 +406,6 @@ class SQLPostRepository(PostRepository):
     def search_posts_by_topic(self, topic_id: str, agent_id: str, limit: int = 10) -> List[str]:
         """Search posts by topic."""
         try:
-            from YSimulator.YServer.classes.models import PostTopic
-            
             session = Session(self.engine)
             try:
                 posts = (
@@ -612,8 +608,6 @@ class SQLInterestRepository(InterestRepository):
     def add_user_interest(self, user_id: str, interest_id: str, round_id: str) -> bool:
         """Add a user interest."""
         try:
-            from YSimulator.YServer.classes.models import UserInterest
-            
             session = Session(self.engine)
             try:
                 user_interest = UserInterest(
@@ -687,8 +681,6 @@ class SQLInterestRepository(InterestRepository):
     ) -> List[str]:
         """Get user interests within a time window."""
         try:
-            from YSimulator.YServer.classes.models import UserInterest
-            
             session = Session(self.engine)
             try:
                 interests = (
@@ -730,7 +722,19 @@ class SQLRecommendationRepository(RecommendationRepository):
             return False
     
     def get_or_create_round(self, day: int, hour: int) -> str:
-        """Get or create a round ID."""
+        """
+        Get or create a round ID.
+        
+        Args:
+            day: Day number
+            hour: Hour/slot number
+            
+        Returns:
+            Round ID (UUID string)
+            
+        Raises:
+            RuntimeError: If unable to create or retrieve round
+        """
         try:
             session = Session(self.engine)
             try:
@@ -752,7 +756,7 @@ class SQLRecommendationRepository(RecommendationRepository):
             self.logger.error(
                 f"Error getting or creating round: {e}", extra={"extra_data": {"error": str(e)}}
             )
-            return None
+            raise RuntimeError(f"Failed to get or create round for day={day}, hour={hour}: {e}")
     
     def cleanup_old_posts_from_redis(self, current_day: int, current_slot: int) -> Dict[str, int]:
         """Cleanup old posts (not applicable for SQL)."""

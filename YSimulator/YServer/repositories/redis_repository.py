@@ -684,7 +684,19 @@ class RedisRecommendationRepository(RecommendationRepository):
             return False
     
     def get_or_create_round(self, day: int, hour: int) -> str:
-        """Get or create a round ID."""
+        """
+        Get or create a round ID.
+        
+        Args:
+            day: Day number
+            hour: Hour/slot number
+            
+        Returns:
+            Round ID (UUID string)
+            
+        Raises:
+            RuntimeError: If unable to create or retrieve round
+        """
         try:
             # Check if round exists
             key = self._redis_key("rounds", f"{day}:{hour}")
@@ -708,7 +720,7 @@ class RedisRecommendationRepository(RecommendationRepository):
                 f"Error getting or creating round in Redis: {e}",
                 extra={"extra_data": {"error": str(e)}},
             )
-            return None
+            raise RuntimeError(f"Failed to get or create round for day={day}, hour={hour}: {e}")
     
     def cleanup_old_posts_from_redis(self, current_day: int, current_slot: int) -> Dict[str, int]:
         """
@@ -719,12 +731,13 @@ class RedisRecommendationRepository(RecommendationRepository):
         2. Calculate the visibility window based on current_day and current_slot
         3. Only delete posts that fall outside the visibility window
         
-        For now, this returns a status indicating the operation is not fully implemented.
+        For now, this returns a status indicating the operation requires implementation.
         """
         try:
             return {
-                "status": "not_fully_implemented",
-                "message": "Cleanup logic requires post timestamp indexing",
+                "status": "requires_implementation",
+                "message": "Cleanup logic requires post timestamp indexing. "
+                           "Posts should be stored with round information for time-based cleanup.",
                 "current_day": current_day,
                 "current_slot": current_slot,
             }
