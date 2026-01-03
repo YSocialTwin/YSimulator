@@ -13,6 +13,7 @@ from YSimulator.YClient.actions import (
     generate_image_post_async,
     generate_llm_follow_async,
     generate_llm_post_async,
+    generate_llm_read_async,
     generate_llm_search_action_async,
     generate_news_post_async,
     generate_rule_based_comment,

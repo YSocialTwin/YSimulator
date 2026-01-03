@@ -148,6 +148,9 @@ class SimulationClient(ActionExecutorMixin):
         # Store simulation config for logging configuration
         self.simulation_config = simulation_config if simulation_config else {}
 
+        # Set up logging early so it's available for initialization methods
+        self._setup_logging()
+
         # Load simulation configuration with defaults
         if simulation_config is None:
             simulation_config = {
@@ -221,9 +224,6 @@ class SimulationClient(ActionExecutorMixin):
 
         # Connect to the Named Server Actor
         self.server = ray.get_actor("Orchestrator")
-
-        # Set up logging first (before any logging attempts)
-        self._setup_logging()
 
         # Register page agent feeds with news service
         if self.news_service:
