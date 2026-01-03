@@ -1,0 +1,759 @@
+"""
+Unit tests for YServer/server.py
+
+Tests the Orchestrator Server functionality with comprehensive mocking.
+"""
+
+import pytest
+from unittest.mock import Mock, MagicMock, patch, call, PropertyMock
+from pathlib import Path
+import tempfile
+import json
+import time
+from datetime import datetime, timezone
+
+
+class TestLogServerRequestDecorator:
+    """Test log_server_request decorator."""
+    
+    def test_decorator_logs_successful_request(self):
+        """Test decorator logs successful request."""
+        from YSimulator.YServer.server import log_server_request
+        
+        # Create a mock function
+        @log_server_request
+        def mock_method(self, client_id):
+            return "success"
+        
+        # Create mock server instance
+        mock_server = Mock()
+        mock_server.logger = Mock()
+        mock_server.current_round_id = "round_1"
+        mock_server.day = 1
+        mock_server.slot = 1
+        
+        # Call the decorated function
+        result = mock_method(mock_server, "client_1")
+        
+        # Verify result
+        assert result == "success"
+        
+        # Verify logging was called
+        assert mock_server.logger.info.called
+    
+    def test_decorator_logs_failed_request(self):
+        """Test decorator logs failed request with status 500."""
+        from YSimulator.YServer.server import log_server_request
+        
+        @log_server_request
+        def mock_method(self, client_id):
+            raise ValueError("Test error")
+        
+        mock_server = Mock()
+        mock_server.logger = Mock()
+        mock_server.current_round_id = "round_1"
+        mock_server.day = 1
+        mock_server.slot = 1
+        
+        # Call should raise the exception
+        with pytest.raises(ValueError):
+            mock_method(mock_server, "client_1")
+        
+        # Verify logging was still called
+        assert mock_server.logger.info.called
+    
+    def test_decorator_extracts_client_id_from_kwargs(self):
+        """Test decorator extracts client_id from kwargs."""
+        from YSimulator.YServer.server import log_server_request
+        
+        @log_server_request
+        def mock_method(self, agent_id, client_id=None):
+            return client_id
+        
+        mock_server = Mock()
+        mock_server.logger = Mock()
+        mock_server.current_round_id = "round_1"
+        mock_server.day = 1
+        mock_server.slot = 1
+        
+        result = mock_method(mock_server, "agent_1", client_id="client_1")
+        
+        assert result == "client_1"
+        assert mock_server.logger.info.called
+
+
+class TestCompressRotatedLog:
+    """Test compress_rotated_log function."""
+    
+    def test_compress_rotated_log(self):
+        """Test log compression functionality."""
+        from YSimulator.YServer.server import compress_rotated_log
+        import gzip
+        
+        with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.log') as source_file:
+            source_file.write("Test log content\n")
+            source_path = source_file.name
+        
+        dest_path = source_path + '.gz'
+        
+        try:
+            # Compress the log
+            compress_rotated_log(source_path, dest_path)
+            
+            # Verify compressed file exists
+            assert Path(dest_path).exists()
+            
+            # Verify content can be decompressed
+            with gzip.open(dest_path, 'rt') as f:
+                content = f.read()
+            
+            assert "Test log content" in content
+            
+        finally:
+            # Clean up
+            Path(source_path).unlink(missing_ok=True)
+            Path(dest_path).unlink(missing_ok=True)
+
+
+class TestOrchestratorServerInit:
+    """Test OrchestratorServer initialization."""
+    
+    @patch('YSimulator.YServer.server.DatabaseMiddleware')
+    @patch('YSimulator.YServer.server.InterestManager')
+    def test_init_basic(self, mock_interest_mgr_class, mock_db_class):
+        """Test basic server initialization."""
+        from YSimulator.YServer.server import OrchestratorServer
+        
+        # Mock database middleware
+        mock_db = Mock()
+        mock_db.use_redis = False
+        mock_db.get_or_create_round.return_value = "round_1"
+        mock_db.initialize_emotions_table.return_value = None
+        mock_db_class.return_value = mock_db
+        
+        # Mock interest manager
+        mock_interest_mgr = Mock()
+        mock_interest_mgr_class.return_value = mock_interest_mgr
+        
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_config = {"type": "sqlite", "sqlite": {"filename": ":memory:"}}
+            
+            server = OrchestratorServer(
+                db_config=db_config,
+                config_path=tmpdir,
+                min_to_start=2,
+                server_name="test_server"
+            )
+            
+            # Verify initialization
+            assert server.min_to_start == 2
+            assert server.server_name == "test_server"
+            assert server.day == 1
+            assert server.slot == 1
+            assert server.current_round_id == "round_1"
+            assert len(server.registered_clients) == 0
+            
+            # Verify database was initialized
+            mock_db_class.assert_called_once()
+            mock_db.get_or_create_round.assert_called_with(1, 1)
+            mock_db.initialize_emotions_table.assert_called_once()
+    
+    @patch('YSimulator.YServer.server.DatabaseMiddleware')
+    @patch('YSimulator.YServer.server.InterestManager')
+    def test_init_with_redis(self, mock_interest_mgr_class, mock_db_class):
+        """Test server initialization with Redis config."""
+        from YSimulator.YServer.server import OrchestratorServer
+        
+        mock_db = Mock()
+        mock_db.use_redis = True
+        mock_db.get_or_create_round.return_value = "round_1"
+        mock_db.initialize_emotions_table.return_value = None
+        mock_db_class.return_value = mock_db
+        
+        mock_interest_mgr = Mock()
+        mock_interest_mgr_class.return_value = mock_interest_mgr
+        
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_config = {"type": "sqlite", "sqlite": {"filename": ":memory:"}}
+            redis_config = {"host": "localhost", "port": 6379}
+            
+            server = OrchestratorServer(
+                db_config=db_config,
+                config_path=tmpdir,
+                redis_config=redis_config
+            )
+            
+            # Verify redis is enabled
+            assert server.db.use_redis == True
+    
+    @patch('YSimulator.YServer.server.DatabaseMiddleware')
+    @patch('YSimulator.YServer.server.InterestManager')
+    def test_init_with_archetype_config(self, mock_interest_mgr_class, mock_db_class):
+        """Test server initialization with archetype configuration."""
+        from YSimulator.YServer.server import OrchestratorServer
+        
+        mock_db = Mock()
+        mock_db.use_redis = False
+        mock_db.get_or_create_round.return_value = "round_1"
+        mock_db.initialize_emotions_table.return_value = None
+        mock_db_class.return_value = mock_db
+        
+        mock_interest_mgr = Mock()
+        mock_interest_mgr_class.return_value = mock_interest_mgr
+        
+        simulation_config = {
+            "agent_archetypes": {
+                "enabled": True,
+                "distribution": {"casual": 0.7, "activist": 0.3},
+                "transitions": {"casual": {"activist": 0.1}}
+            }
+        }
+        
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_config = {"type": "sqlite", "sqlite": {"filename": ":memory:"}}
+            
+            server = OrchestratorServer(
+                db_config=db_config,
+                config_path=tmpdir,
+                simulation_config=simulation_config
+            )
+            
+            # Verify archetype config
+            assert server.archetypes_enabled == True
+            assert server.archetype_distribution == {"casual": 0.7, "activist": 0.3}
+
+
+class TestValidateAndExtractInterests:
+    """Test _validate_and_extract_interests method."""
+    
+    @patch('YSimulator.YServer.server.DatabaseMiddleware')
+    @patch('YSimulator.YServer.server.InterestManager')
+    def test_validate_dict_interests(self, mock_interest_mgr_class, mock_db_class):
+        """Test validation of dict interests."""
+        from YSimulator.YServer.server import OrchestratorServer
+        
+        mock_db = Mock()
+        mock_db.get_or_create_round.return_value = "round_1"
+        mock_db.initialize_emotions_table.return_value = None
+        mock_db_class.return_value = mock_db
+        
+        mock_interest_mgr = Mock()
+        mock_interest_mgr_class.return_value = mock_interest_mgr
+        
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_config = {"type": "sqlite", "sqlite": {"filename": ":memory:"}}
+            server = OrchestratorServer(db_config=db_config, config_path=tmpdir)
+            
+            interests = {"technology": 0.8, "sports": 0.5}
+            result = server._validate_and_extract_interests(interests)
+            
+            assert result == interests
+    
+    @patch('YSimulator.YServer.server.DatabaseMiddleware')
+    @patch('YSimulator.YServer.server.InterestManager')
+    def test_validate_list_interests(self, mock_interest_mgr_class, mock_db_class):
+        """Test validation of list interests."""
+        from YSimulator.YServer.server import OrchestratorServer
+        
+        mock_db = Mock()
+        mock_db.get_or_create_round.return_value = "round_1"
+        mock_db.initialize_emotions_table.return_value = None
+        mock_db_class.return_value = mock_db
+        
+        mock_interest_mgr = Mock()
+        mock_interest_mgr_class.return_value = mock_interest_mgr
+        
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_config = {"type": "sqlite", "sqlite": {"filename": ":memory:"}}
+            server = OrchestratorServer(db_config=db_config, config_path=tmpdir)
+            
+            interests = ["technology", "sports"]
+            result = server._validate_and_extract_interests(interests)
+            
+            # Should convert to dict with default values
+            assert isinstance(result, dict)
+            assert "technology" in result
+            assert "sports" in result
+
+
+class TestReactionToSentiment:
+    """Test _reaction_to_sentiment method."""
+    
+    @patch('YSimulator.YServer.server.DatabaseMiddleware')
+    @patch('YSimulator.YServer.server.InterestManager')
+    def test_reaction_like_sentiment(self, mock_interest_mgr_class, mock_db_class):
+        """Test sentiment for 'like' reaction."""
+        from YSimulator.YServer.server import OrchestratorServer
+        
+        mock_db = Mock()
+        mock_db.get_or_create_round.return_value = "round_1"
+        mock_db.initialize_emotions_table.return_value = None
+        mock_db_class.return_value = mock_db
+        
+        mock_interest_mgr = Mock()
+        mock_interest_mgr_class.return_value = mock_interest_mgr
+        
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_config = {"type": "sqlite", "sqlite": {"filename": ":memory:"}}
+            server = OrchestratorServer(db_config=db_config, config_path=tmpdir)
+            
+            result = server._reaction_to_sentiment("like")
+            
+            assert result is not None
+            assert "valence" in result
+            assert result["valence"] > 0  # Positive sentiment
+    
+    @patch('YSimulator.YServer.server.DatabaseMiddleware')
+    @patch('YSimulator.YServer.server.InterestManager')
+    def test_reaction_dislike_sentiment(self, mock_interest_mgr_class, mock_db_class):
+        """Test sentiment for 'dislike' reaction."""
+        from YSimulator.YServer.server import OrchestratorServer
+        
+        mock_db = Mock()
+        mock_db.get_or_create_round.return_value = "round_1"
+        mock_db.initialize_emotions_table.return_value = None
+        mock_db_class.return_value = mock_db
+        
+        mock_interest_mgr = Mock()
+        mock_interest_mgr_class.return_value = mock_interest_mgr
+        
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_config = {"type": "sqlite", "sqlite": {"filename": ":memory:"}}
+            server = OrchestratorServer(db_config=db_config, config_path=tmpdir)
+            
+            result = server._reaction_to_sentiment("dislike")
+            
+            assert result is not None
+            assert "valence" in result
+            assert result["valence"] < 0  # Negative sentiment
+    
+    @patch('YSimulator.YServer.server.DatabaseMiddleware')
+    @patch('YSimulator.YServer.server.InterestManager')
+    def test_reaction_unknown_sentiment(self, mock_interest_mgr_class, mock_db_class):
+        """Test sentiment for unknown reaction."""
+        from YSimulator.YServer.server import OrchestratorServer
+        
+        mock_db = Mock()
+        mock_db.get_or_create_round.return_value = "round_1"
+        mock_db.initialize_emotions_table.return_value = None
+        mock_db_class.return_value = mock_db
+        
+        mock_interest_mgr = Mock()
+        mock_interest_mgr_class.return_value = mock_interest_mgr
+        
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_config = {"type": "sqlite", "sqlite": {"filename": ":memory:"}}
+            server = OrchestratorServer(db_config=db_config, config_path=tmpdir)
+            
+            result = server._reaction_to_sentiment("unknown_reaction")
+            
+            assert result is None
+
+
+class TestGetArticleTopics:
+    """Test get_article_topics method."""
+    
+    @patch('YSimulator.YServer.server.DatabaseMiddleware')
+    @patch('YSimulator.YServer.server.InterestManager')
+    def test_get_article_topics(self, mock_interest_mgr_class, mock_db_class):
+        """Test retrieving article topics."""
+        from YSimulator.YServer.server import OrchestratorServer
+        
+        mock_db = Mock()
+        mock_db.get_or_create_round.return_value = "round_1"
+        mock_db.initialize_emotions_table.return_value = None
+        mock_db_class.return_value = mock_db
+        
+        mock_interest_mgr = Mock()
+        mock_interest_mgr.get_article_topics.return_value = ["technology", "AI"]
+        mock_interest_mgr_class.return_value = mock_interest_mgr
+        
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_config = {"type": "sqlite", "sqlite": {"filename": ":memory:"}}
+            server = OrchestratorServer(db_config=db_config, config_path=tmpdir)
+            
+            result = server.get_article_topics("article_1")
+            
+            assert result == ["technology", "AI"]
+            mock_interest_mgr.get_article_topics.assert_called_once_with("article_1")
+
+
+class TestStoreArticleTopics:
+    """Test store_article_topics method."""
+    
+    @patch('YSimulator.YServer.server.DatabaseMiddleware')
+    @patch('YSimulator.YServer.server.InterestManager')
+    def test_store_article_topics(self, mock_interest_mgr_class, mock_db_class):
+        """Test storing article topics."""
+        from YSimulator.YServer.server import OrchestratorServer
+        
+        mock_db = Mock()
+        mock_db.get_or_create_round.return_value = "round_1"
+        mock_db.initialize_emotions_table.return_value = None
+        mock_db_class.return_value = mock_db
+        
+        mock_interest_mgr = Mock()
+        mock_interest_mgr.store_article_topics.return_value = ["topic_1", "topic_2"]
+        mock_interest_mgr_class.return_value = mock_interest_mgr
+        
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_config = {"type": "sqlite", "sqlite": {"filename": ":memory:"}}
+            server = OrchestratorServer(db_config=db_config, config_path=tmpdir)
+            
+            result = server.store_article_topics("article_1", ["tech", "AI"])
+            
+            assert result == ["topic_1", "topic_2"]
+            mock_interest_mgr.store_article_topics.assert_called_once_with("article_1", ["tech", "AI"])
+
+
+class TestGetFirstRoundId:
+    """Test get_first_round_id method."""
+    
+    @patch('YSimulator.YServer.server.DatabaseMiddleware')
+    @patch('YSimulator.YServer.server.InterestManager')
+    def test_get_first_round_id_returns_current(self, mock_interest_mgr_class, mock_db_class):
+        """Test get_first_round_id returns current round when day=1, slot=1."""
+        from YSimulator.YServer.server import OrchestratorServer
+        
+        mock_db = Mock()
+        mock_db.get_or_create_round.return_value = "round_1"
+        mock_db.initialize_emotions_table.return_value = None
+        mock_db_class.return_value = mock_db
+        
+        mock_interest_mgr = Mock()
+        mock_interest_mgr_class.return_value = mock_interest_mgr
+        
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_config = {"type": "sqlite", "sqlite": {"filename": ":memory:"}}
+            server = OrchestratorServer(db_config=db_config, config_path=tmpdir)
+            
+            # Server starts at day=1, slot=1
+            result = server.get_first_round_id()
+            
+            assert result == "round_1"
+    
+    @patch('YSimulator.YServer.server.DatabaseMiddleware')
+    @patch('YSimulator.YServer.server.InterestManager')
+    def test_get_first_round_id_creates_round(self, mock_interest_mgr_class, mock_db_class):
+        """Test get_first_round_id creates round if needed."""
+        from YSimulator.YServer.server import OrchestratorServer
+        
+        mock_db = Mock()
+        mock_db.get_or_create_round.side_effect = ["round_1", "round_initial"]
+        mock_db.initialize_emotions_table.return_value = None
+        mock_db_class.return_value = mock_db
+        
+        mock_interest_mgr = Mock()
+        mock_interest_mgr_class.return_value = mock_interest_mgr
+        
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_config = {"type": "sqlite", "sqlite": {"filename": ":memory:"}}
+            server = OrchestratorServer(db_config=db_config, config_path=tmpdir)
+            
+            # Advance to day 2
+            server.day = 2
+            server.slot = 5
+            
+            result = server.get_first_round_id()
+            
+            # Should call get_or_create_round with day=1, slot=1
+            assert mock_db.get_or_create_round.call_count == 2  # One in __init__, one in method
+
+
+class TestCheckFollowRelationship:
+    """Test check_follow_relationship method."""
+    
+    @patch('YSimulator.YServer.server.DatabaseMiddleware')
+    @patch('YSimulator.YServer.server.InterestManager')
+    def test_check_follow_relationship_exists(self, mock_interest_mgr_class, mock_db_class):
+        """Test checking existing follow relationship."""
+        from YSimulator.YServer.server import OrchestratorServer
+        
+        mock_db = Mock()
+        mock_db.get_or_create_round.return_value = "round_1"
+        mock_db.initialize_emotions_table.return_value = None
+        mock_db.check_follow_exists.return_value = True
+        mock_db_class.return_value = mock_db
+        
+        mock_interest_mgr = Mock()
+        mock_interest_mgr_class.return_value = mock_interest_mgr
+        
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_config = {"type": "sqlite", "sqlite": {"filename": ":memory:"}}
+            server = OrchestratorServer(db_config=db_config, config_path=tmpdir)
+            
+            result = server.check_follow_relationship("user1", "user2")
+            
+            assert result == True
+            mock_db.check_follow_exists.assert_called_once_with("user1", "user2")
+    
+    @patch('YSimulator.YServer.server.DatabaseMiddleware')
+    @patch('YSimulator.YServer.server.InterestManager')
+    def test_check_follow_relationship_not_exists(self, mock_interest_mgr_class, mock_db_class):
+        """Test checking non-existing follow relationship."""
+        from YSimulator.YServer.server import OrchestratorServer
+        
+        mock_db = Mock()
+        mock_db.get_or_create_round.return_value = "round_1"
+        mock_db.initialize_emotions_table.return_value = None
+        mock_db.check_follow_exists.return_value = False
+        mock_db_class.return_value = mock_db
+        
+        mock_interest_mgr = Mock()
+        mock_interest_mgr_class.return_value = mock_interest_mgr
+        
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_config = {"type": "sqlite", "sqlite": {"filename": ":memory:"}}
+            server = OrchestratorServer(db_config=db_config, config_path=tmpdir)
+            
+            result = server.check_follow_relationship("user1", "user3")
+            
+            assert result == False
+
+
+class TestGetCurrentDay:
+    """Test get_current_day method."""
+    
+    @patch('YSimulator.YServer.server.DatabaseMiddleware')
+    @patch('YSimulator.YServer.server.InterestManager')
+    def test_get_current_day(self, mock_interest_mgr_class, mock_db_class):
+        """Test getting current simulation day."""
+        from YSimulator.YServer.server import OrchestratorServer
+        
+        mock_db = Mock()
+        mock_db.get_or_create_round.return_value = "round_1"
+        mock_db.initialize_emotions_table.return_value = None
+        mock_db_class.return_value = mock_db
+        
+        mock_interest_mgr = Mock()
+        mock_interest_mgr_class.return_value = mock_interest_mgr
+        
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_config = {"type": "sqlite", "sqlite": {"filename": ":memory:"}}
+            server = OrchestratorServer(db_config=db_config, config_path=tmpdir)
+            
+            # Default is day 1
+            assert server.get_current_day() == 1
+            
+            # Change day
+            server.day = 5
+            assert server.get_current_day() == 5
+
+
+class TestGetCurrentRoundId:
+    """Test get_current_round_id method."""
+    
+    @patch('YSimulator.YServer.server.DatabaseMiddleware')
+    @patch('YSimulator.YServer.server.InterestManager')
+    def test_get_current_round_id(self, mock_interest_mgr_class, mock_db_class):
+        """Test getting current round ID."""
+        from YSimulator.YServer.server import OrchestratorServer
+        
+        mock_db = Mock()
+        mock_db.get_or_create_round.return_value = "round_123"
+        mock_db.initialize_emotions_table.return_value = None
+        mock_db_class.return_value = mock_db
+        
+        mock_interest_mgr = Mock()
+        mock_interest_mgr_class.return_value = mock_interest_mgr
+        
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_config = {"type": "sqlite", "sqlite": {"filename": ":memory:"}}
+            server = OrchestratorServer(db_config=db_config, config_path=tmpdir)
+            
+            assert server.get_current_round_id() == "round_123"
+
+
+class TestHeartbeat:
+    """Test heartbeat method."""
+    
+    @patch('YSimulator.YServer.server.DatabaseMiddleware')
+    @patch('YSimulator.YServer.server.InterestManager')
+    def test_heartbeat_updates_timestamp(self, mock_interest_mgr_class, mock_db_class):
+        """Test heartbeat updates client timestamp."""
+        from YSimulator.YServer.server import OrchestratorServer
+        
+        mock_db = Mock()
+        mock_db.get_or_create_round.return_value = "round_1"
+        mock_db.initialize_emotions_table.return_value = None
+        mock_db_class.return_value = mock_db
+        
+        mock_interest_mgr = Mock()
+        mock_interest_mgr_class.return_value = mock_interest_mgr
+        
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_config = {"type": "sqlite", "sqlite": {"filename": ":memory:"}}
+            server = OrchestratorServer(db_config=db_config, config_path=tmpdir)
+            
+            # Register a client
+            server.registered_clients.add("client_1")
+            
+            # Send heartbeat
+            result = server.heartbeat("client_1")
+            
+            assert result == True
+            assert "client_1" in server.last_heartbeat
+            assert isinstance(server.last_heartbeat["client_1"], float)
+    
+    @patch('YSimulator.YServer.server.DatabaseMiddleware')
+    @patch('YSimulator.YServer.server.InterestManager')
+    def test_heartbeat_unregistered_client(self, mock_interest_mgr_class, mock_db_class):
+        """Test heartbeat for unregistered client returns False."""
+        from YSimulator.YServer.server import OrchestratorServer
+        
+        mock_db = Mock()
+        mock_db.get_or_create_round.return_value = "round_1"
+        mock_db.initialize_emotions_table.return_value = None
+        mock_db_class.return_value = mock_db
+        
+        mock_interest_mgr = Mock()
+        mock_interest_mgr_class.return_value = mock_interest_mgr
+        
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_config = {"type": "sqlite", "sqlite": {"filename": ":memory:"}}
+            server = OrchestratorServer(db_config=db_config, config_path=tmpdir)
+            
+            # Send heartbeat without registering
+            result = server.heartbeat("unknown_client")
+            
+            assert result == False
+
+
+class TestGetActiveClients:
+    """Test _get_active_clients method."""
+    
+    @patch('YSimulator.YServer.server.DatabaseMiddleware')
+    @patch('YSimulator.YServer.server.InterestManager')
+    def test_get_active_clients_all_active(self, mock_interest_mgr_class, mock_db_class):
+        """Test getting active clients when all are active."""
+        from YSimulator.YServer.server import OrchestratorServer
+        
+        mock_db = Mock()
+        mock_db.get_or_create_round.return_value = "round_1"
+        mock_db.initialize_emotions_table.return_value = None
+        mock_db_class.return_value = mock_db
+        
+        mock_interest_mgr = Mock()
+        mock_interest_mgr_class.return_value = mock_interest_mgr
+        
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_config = {"type": "sqlite", "sqlite": {"filename": ":memory:"}}
+            server = OrchestratorServer(db_config=db_config, config_path=tmpdir)
+            
+            # Register clients
+            server.registered_clients = {"client_1", "client_2"}
+            server.completed_clients = set()
+            
+            active = server._get_active_clients()
+            
+            assert active == {"client_1", "client_2"}
+    
+    @patch('YSimulator.YServer.server.DatabaseMiddleware')
+    @patch('YSimulator.YServer.server.InterestManager')
+    def test_get_active_clients_some_completed(self, mock_interest_mgr_class, mock_db_class):
+        """Test getting active clients when some have completed."""
+        from YSimulator.YServer.server import OrchestratorServer
+        
+        mock_db = Mock()
+        mock_db.get_or_create_round.return_value = "round_1"
+        mock_db.initialize_emotions_table.return_value = None
+        mock_db_class.return_value = mock_db
+        
+        mock_interest_mgr = Mock()
+        mock_interest_mgr_class.return_value = mock_interest_mgr
+        
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_config = {"type": "sqlite", "sqlite": {"filename": ":memory:"}}
+            server = OrchestratorServer(db_config=db_config, config_path=tmpdir)
+            
+            # Register clients
+            server.registered_clients = {"client_1", "client_2", "client_3"}
+            server.completed_clients = {"client_2"}
+            
+            active = server._get_active_clients()
+            
+            assert active == {"client_1", "client_3"}
+
+
+class TestCalculateVisibilityParams:
+    """Test _calculate_visibility_params method."""
+    
+    @patch('YSimulator.YServer.server.DatabaseMiddleware')
+    @patch('YSimulator.YServer.server.InterestManager')
+    def test_calculate_visibility_params(self, mock_interest_mgr_class, mock_db_class):
+        """Test calculating visibility parameters."""
+        from YSimulator.YServer.server import OrchestratorServer
+        
+        mock_db = Mock()
+        mock_db.get_or_create_round.return_value = "round_1"
+        mock_db.initialize_emotions_table.return_value = None
+        mock_db_class.return_value = mock_db
+        
+        mock_interest_mgr = Mock()
+        mock_interest_mgr_class.return_value = mock_interest_mgr
+        
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_config = {"type": "sqlite", "sqlite": {"filename": ":memory:"}}
+            server = OrchestratorServer(db_config=db_config, config_path=tmpdir)
+            
+            # Set num_slots_per_day
+            server.num_slots_per_day = 24
+            server.day = 3
+            server.slot = 10
+            
+            visibility_rounds = 48  # 2 days
+            visibility_day, visibility_slot = server._calculate_visibility_params(visibility_rounds)
+            
+            # Should calculate correct day and slot
+            assert isinstance(visibility_day, int)
+            assert isinstance(visibility_slot, int)
+            assert visibility_day <= server.day
+
+
+class TestEdgeCases:
+    """Test edge cases and error handling."""
+    
+    @patch('YSimulator.YServer.server.DatabaseMiddleware')
+    @patch('YSimulator.YServer.server.InterestManager')
+    def test_empty_client_list(self, mock_interest_mgr_class, mock_db_class):
+        """Test handling empty client list."""
+        from YSimulator.YServer.server import OrchestratorServer
+        
+        mock_db = Mock()
+        mock_db.get_or_create_round.return_value = "round_1"
+        mock_db.initialize_emotions_table.return_value = None
+        mock_db_class.return_value = mock_db
+        
+        mock_interest_mgr = Mock()
+        mock_interest_mgr_class.return_value = mock_interest_mgr
+        
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_config = {"type": "sqlite", "sqlite": {"filename": ":memory:"}}
+            server = OrchestratorServer(db_config=db_config, config_path=tmpdir)
+            
+            active = server._get_active_clients()
+            assert active == set()
+    
+    @patch('YSimulator.YServer.server.DatabaseMiddleware')
+    @patch('YSimulator.YServer.server.InterestManager')
+    def test_zero_visibility_rounds(self, mock_interest_mgr_class, mock_db_class):
+        """Test calculate visibility with zero rounds."""
+        from YSimulator.YServer.server import OrchestratorServer
+        
+        mock_db = Mock()
+        mock_db.get_or_create_round.return_value = "round_1"
+        mock_db.initialize_emotions_table.return_value = None
+        mock_db_class.return_value = mock_db
+        
+        mock_interest_mgr = Mock()
+        mock_interest_mgr_class.return_value = mock_interest_mgr
+        
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_config = {"type": "sqlite", "sqlite": {"filename": ":memory:"}}
+            server = OrchestratorServer(db_config=db_config, config_path=tmpdir)
+            
+            visibility_day, visibility_slot = server._calculate_visibility_params(0)
+            
+            # Should handle zero visibility
+            assert visibility_day == server.day
+            assert visibility_slot == server.slot
