@@ -38,11 +38,13 @@ class TestContentRecsysRead:
         from YSimulator.YServer.recsys import content_recsys
         
         # Mock the Round query to return current round
-        with patch.object(content_recsys.Round, 'query') as mock_query:
+        with patch('YSimulator.YServer.recsys.content_recsys.Round') as MockRound:
+            mock_query = Mock()
+            MockRound.query = mock_query
             mock_query.order_by.return_value.first.return_value = mock_round
             
             # Mock db.session
-            with patch('YSimulator.YServer.recsys.content_recsys.db') as mock_db:
+            with patch('YSimulator.YServer.recsys.content_recsys.db', create=True) as mock_db:
                 mock_posts = [Mock(id=f"post-{i}") for i in range(5)]
                 mock_db.session.query.return_value.filter.return_value.order_by.return_value.limit.return_value.all.return_value = mock_posts
                 
@@ -62,14 +64,18 @@ class TestContentRecsysRead:
         """Test read function with article filtering."""
         from YSimulator.YServer.recsys import content_recsys
         
-        with patch.object(content_recsys.Round, 'query') as mock_round_query:
+        with patch('YSimulator.YServer.recsys.content_recsys.Round') as MockRound:
+            mock_round_query = Mock()
+            MockRound.query = mock_round_query
             mock_round_query.order_by.return_value.first.return_value = mock_round
             
-            with patch.object(content_recsys.User_mgmt, 'query') as mock_user_query:
+            with patch('YSimulator.YServer.recsys.content_recsys.User_mgmt') as MockUserMgmt:
+                mock_user_query = Mock()
+                MockUserMgmt.query = mock_user_query
                 mock_user_query.filter_by.return_value.first.return_value = mock_user
                 mock_user_query.filter_by.return_value.all.return_value = []
                 
-                with patch('YSimulator.YServer.recsys.content_recsys.db') as mock_db:
+                with patch('YSimulator.YServer.recsys.content_recsys.db', create=True) as mock_db:
                     mock_db.session.query.return_value.filter.return_value.order_by.return_value.limit.return_value.all.return_value = []
                     
                     result = content_recsys.read(
@@ -88,10 +94,12 @@ class TestContentRecsysRead:
         """Test read function with popularity-based ordering."""
         from YSimulator.YServer.recsys import content_recsys
         
-        with patch.object(content_recsys.Round, 'query') as mock_query:
+        with patch('YSimulator.YServer.recsys.content_recsys.Round') as MockRound:
+            mock_query = Mock()
+            MockRound.query = mock_query
             mock_query.order_by.return_value.first.return_value = mock_round
             
-            with patch('YSimulator.YServer.recsys.content_recsys.db') as mock_db:
+            with patch('YSimulator.YServer.recsys.content_recsys.db', create=True) as mock_db:
                 mock_posts = [Mock(id=f"post-{i}", reaction_count=i) for i in range(5)]
                 mock_db.session.query.return_value.filter.return_value.order_by.return_value.limit.return_value.all.return_value = mock_posts
                 
@@ -110,10 +118,12 @@ class TestContentRecsysRead:
         """Test read function with followers ratio parameter."""
         from YSimulator.YServer.recsys import content_recsys
         
-        with patch.object(content_recsys.Round, 'query') as mock_query:
+        with patch('YSimulator.YServer.recsys.content_recsys.Round') as MockRound:
+            mock_query = Mock()
+            MockRound.query = mock_query
             mock_query.order_by.return_value.first.return_value = mock_round
             
-            with patch('YSimulator.YServer.recsys.content_recsys.db') as mock_db:
+            with patch('YSimulator.YServer.recsys.content_recsys.db', create=True) as mock_db:
                 mock_db.session.query.return_value.filter.return_value.order_by.return_value.limit.return_value.all.return_value = []
                 
                 # Test with followers_ratio < 1
@@ -136,10 +146,12 @@ class TestContentRecsysRead:
         visibility_rounds = 20
         expected_visibility = 100 - 20  # = 80
         
-        with patch.object(content_recsys.Round, 'query') as mock_query:
+        with patch('YSimulator.YServer.recsys.content_recsys.Round') as MockRound:
+            mock_query = Mock()
+            MockRound.query = mock_query
             mock_query.order_by.return_value.first.return_value = mock_round
             
-            with patch('YSimulator.YServer.recsys.content_recsys.db') as mock_db:
+            with patch('YSimulator.YServer.recsys.content_recsys.db', create=True) as mock_db:
                 mock_db.session.query.return_value.filter.return_value.order_by.return_value.limit.return_value.all.return_value = []
                 
                 result = content_recsys.read(

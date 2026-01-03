@@ -22,7 +22,9 @@ class TestGetFollows:
             Mock(follower_id="follower-3")
         ]
         
-        with patch.object(utils.Follow, 'query') as mock_query:
+        with patch('YSimulator.YServer.recsys.utils.Follow') as MockFollow:
+            mock_query = Mock()
+            MockFollow.query = mock_query
             mock_query.filter.return_value.group_by.return_value.having.return_value.all.return_value = mock_follows
             
             result = utils.get_follows("user-123")
@@ -35,7 +37,9 @@ class TestGetFollows:
         """Test get_follows when user has no followers."""
         from YSimulator.YServer.recsys import utils
         
-        with patch.object(utils.Follow, 'query') as mock_query:
+        with patch('YSimulator.YServer.recsys.utils.Follow') as MockFollow:
+            mock_query = Mock()
+            MockFollow.query = mock_query
             mock_query.filter.return_value.group_by.return_value.having.return_value.all.return_value = []
             
             result = utils.get_follows("user-123")
@@ -48,7 +52,9 @@ class TestGetFollows:
         from YSimulator.YServer.recsys import utils
         
         # Mock Follow query that filters out user_id != follower_id
-        with patch.object(utils.Follow, 'query') as mock_query:
+        with patch('YSimulator.YServer.recsys.utils.Follow') as MockFollow:
+            mock_query = Mock()
+            MockFollow.query = mock_query
             # Verify filter is called with correct parameters
             mock_query.filter.return_value.group_by.return_value.having.return_value.all.return_value = []
             
@@ -65,7 +71,9 @@ class TestGetFollows:
         uid = "valid-user-id"
         mock_follows = [Mock(follower_id=f"follower-{i}") for i in range(5)]
         
-        with patch.object(utils.Follow, 'query') as mock_query:
+        with patch('YSimulator.YServer.recsys.utils.Follow') as MockFollow:
+            mock_query = Mock()
+            MockFollow.query = mock_query
             mock_query.filter.return_value.group_by.return_value.having.return_value.all.return_value = mock_follows
             
             result = utils.get_follows(uid)
@@ -80,7 +88,7 @@ class TestFetchCommonInterestPosts:
         """Test that function returns expected structure."""
         from YSimulator.YServer.recsys import utils
         
-        with patch('YSimulator.YServer.recsys.utils.db') as mock_db:
+        with patch('YSimulator.YServer.recsys.utils.db', create=True) as mock_db:
             with patch.object(utils, 'get_follows', return_value=[]):
                 mock_db.session.query.return_value.filter_by.return_value.distinct.return_value = []
                 mock_db.session.query.return_value.join.return_value.filter.return_value.filter.return_value.group_by.return_value.order_by.return_value.limit.return_value.all.return_value = []
@@ -94,7 +102,7 @@ class TestFetchCommonInterestPosts:
         
         follower_ids = ["follower-1", "follower-2", "follower-3"]
         
-        with patch('YSimulator.YServer.recsys.utils.db') as mock_db:
+        with patch('YSimulator.YServer.recsys.utils.db', create=True) as mock_db:
             with patch.object(utils, 'get_follows', return_value=follower_ids):
                 mock_db.session.query.return_value.filter_by.return_value.distinct.return_value = []
                 mock_db.session.query.return_value.join.return_value.filter.return_value.filter.return_value.group_by.return_value.order_by.return_value.limit.return_value.all.return_value = []
@@ -173,7 +181,9 @@ class TestRecsysUtilsIntegration:
         from YSimulator.YServer.recsys import utils
         
         # get_follows should be callable and return list
-        with patch.object(utils.Follow, 'query') as mock_query:
+        with patch('YSimulator.YServer.recsys.utils.Follow') as MockFollow:
+            mock_query = Mock()
+            MockFollow.query = mock_query
             mock_query.filter.return_value.group_by.return_value.having.return_value.all.return_value = []
             
             followers = utils.get_follows("user-123")
@@ -203,7 +213,9 @@ class TestUtilsErrorHandling:
         
         # Should handle None gracefully or raise appropriate error
         try:
-            with patch.object(utils.Follow, 'query') as mock_query:
+            with patch('YSimulator.YServer.recsys.utils.Follow') as MockFollow:
+                mock_query = Mock()
+                MockFollow.query = mock_query
                 mock_query.filter.return_value.group_by.return_value.having.return_value.all.return_value = []
                 result = utils.get_follows(None)
                 assert isinstance(result, list) or result is None
@@ -215,7 +227,9 @@ class TestUtilsErrorHandling:
         """Test get_follows with empty string uid."""
         from YSimulator.YServer.recsys import utils
         
-        with patch.object(utils.Follow, 'query') as mock_query:
+        with patch('YSimulator.YServer.recsys.utils.Follow') as MockFollow:
+            mock_query = Mock()
+            MockFollow.query = mock_query
             mock_query.filter.return_value.group_by.return_value.having.return_value.all.return_value = []
             
             result = utils.get_follows("")
