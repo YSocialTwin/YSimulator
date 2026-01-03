@@ -22,12 +22,17 @@ from sqlalchemy.orm import Session
 class TestSearchAction(unittest.TestCase):
     """Test search action implementation."""
     
+    # Class-level counter to ensure unique day/hour combinations across all tests
+    _round_counter = 6000  # Start at 6000 to avoid collision with other test classes
+    
     def setUp(self):
         """Set up test fixtures."""
         # Create an in-memory SQLite database for testing
         self.db_config = {
             "type": "sqlite",
-            "database": ":memory:"
+            "sqlite": {
+                "filename": ":memory:"
+            }
         }
         
         # Initialize database middleware
@@ -43,9 +48,12 @@ class TestSearchAction(unittest.TestCase):
         
         # Create test fixtures
         with Session(self.db.engine) as session:
-            # Create round
+            # Create round with unique day/hour to avoid UNIQUE constraint violations
+            TestSearchAction._round_counter += 1
+            day = TestSearchAction._round_counter // 24
+            hour = TestSearchAction._round_counter % 24
             self.round_id = str(uuid.uuid4())
-            round_obj = Round(id=self.round_id, day=random.randint(1, 100), hour=random.randint(0, 23))
+            round_obj = Round(id=self.round_id, day=day, hour=hour)
             session.add(round_obj)
             
             # Create test users
@@ -218,10 +226,8 @@ def test_llm_search_function():
         # Check that it's a function
         if not callable(generate_llm_search_action_async):
             print(f"  ✗ generate_llm_search_action_async is not callable")
-            return False
         
         print(f"  ✓ Function is callable")
-        return True
     except ImportError as e:
         print(f"\n=== Test 5: LLM Search Function ===")
         print(f"  ! Skipping test (missing dependency: {e})")
@@ -236,11 +242,9 @@ def test_imports_in_init():
         print("\n=== Test 6: Imports in __init__.py ===")
         print(f"  ✓ generate_llm_search_action_async is exported")
         
-        return True
     except ImportError as e:
         print(f"\n=== Test 6: Imports in __init__.py ===")
         print(f"  ! Skipping test (missing dependency: {e})")
-        return True
 
 
 def test_client_imports():
@@ -250,10 +254,8 @@ def test_client_imports():
     try:
         from YSimulator.YClient.client import SimulationClient
         print(f"  ✓ client.py imports successfully")
-        return True
     except ImportError as e:
         print(f"  ! Skipping test (missing dependency: {e})")
-        return True
 
 
 def run_tests():

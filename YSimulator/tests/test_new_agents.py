@@ -43,7 +43,6 @@ def test_new_agents_configuration():
     assert new_agents_config["percentage_new_agents"] == 0.01
     
     print("✓ New agents configuration structure is valid")
-    return True
 
 
 def test_new_agents_config_in_all_examples():
@@ -53,13 +52,11 @@ def test_new_agents_config_in_all_examples():
     
     if not example_dir.exists():
         print("⚠ Example directory not found, skipping this test")
-        return True
     
     config_files = list(example_dir.glob("*/simulation_config.json"))
     
     if not config_files:
         print("⚠ No simulation_config.json files found, skipping this test")
-        return True
     
     for config_file in config_files:
         with open(config_file, 'r') as f:
@@ -74,7 +71,6 @@ def test_new_agents_config_in_all_examples():
         assert "percentage_new_agents" in new_agents_config, f"Missing 'percentage_new_agents' in {config_file}"
     
     print(f"✓ All {len(config_files)} example configs have valid new_agents configuration")
-    return True
 
 
 def test_new_agent_count_calculation():
@@ -95,7 +91,6 @@ def test_new_agent_count_calculation():
         assert x == expected_x, f"Expected {expected_x} for {non_churned_count} * {percentage}, got {x}"
     
     print("✓ New agent count calculation logic is correct")
-    return True
 
 
 def test_new_agent_probability_application():
@@ -122,7 +117,6 @@ def test_new_agent_probability_application():
     assert 0 <= new_agents_added <= x
     
     print("✓ New agent probability application logic is correct")
-    return True
 
 
 def test_new_agent_template_selection():
@@ -145,7 +139,6 @@ def test_new_agent_template_selection():
     assert template["left_on"] is None
     
     print("✓ New agent template selection logic is correct")
-    return True
 
 
 if __name__ == '__main__':

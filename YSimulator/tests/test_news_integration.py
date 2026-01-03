@@ -25,12 +25,17 @@ from sqlalchemy.orm import Session
 class TestNewsIntegration(unittest.TestCase):
     """Test news feed integration step by step."""
     
+    # Class-level counter to ensure unique day/hour combinations across all tests
+    _round_counter = 4000  # Start at 4000 to avoid collision with other test classes
+    
     def setUp(self):
         """Set up test fixtures."""
         # Create an in-memory SQLite database for testing
         self.db_config = {
             "type": "sqlite",
-            "database": ":memory:"
+            "sqlite": {
+                "filename": ":memory:"
+            }
         }
         
         # Initialize database middleware
@@ -277,9 +282,12 @@ class TestNewsIntegration(unittest.TestCase):
         # Step 3: Create user for post
         from YSimulator.YServer.classes.models import User_mgmt, Round
         with Session(self.db.engine) as session:
-            # Create round
+            # Create round with unique day/hour to avoid UNIQUE constraint violations
+            TestNewsIntegration._round_counter += 1
+            day = TestNewsIntegration._round_counter // 24
+            hour = TestNewsIntegration._round_counter % 24
             round_id = str(uuid.uuid4())
-            round_obj = Round(id=round_id, day=1, hour=0)
+            round_obj = Round(id=round_id, day=day, hour=hour)
             session.add(round_obj)
             
             # Create user with unique username

@@ -144,7 +144,7 @@ class TestInterestManager:
             from YSimulator.YServer.classes.db_middleware import DatabaseMiddleware
             
             # Create mock db_middleware
-            db_config = {"type": "sqlite", "database": ":memory:"}
+            db_config = {"type": "sqlite", "sqlite": {"filename": ":memory:"}}
             db_middleware = DatabaseMiddleware(db_config=db_config, config_path=".", redis_config=None)
             
             manager = InterestManager(db_middleware=db_middleware, attention_window=336)
@@ -158,7 +158,7 @@ class TestInterestManager:
             from YSimulator.YServer.interests_modeling.interest_manager import InterestManager
             from YSimulator.YServer.classes.db_middleware import DatabaseMiddleware
             
-            db_config = {"type": "sqlite", "database": ":memory:"}
+            db_config = {"type": "sqlite", "sqlite": {"filename": ":memory:"}}
             db_middleware = DatabaseMiddleware(db_config=db_config, config_path=".", redis_config=None)
             
             manager = InterestManager(db_middleware=db_middleware, attention_window=336)
@@ -182,7 +182,7 @@ class TestInterestManager:
             from YSimulator.YServer.interests_modeling.interest_manager import InterestManager
             from YSimulator.YServer.classes.db_middleware import DatabaseMiddleware
             
-            db_config = {"type": "sqlite", "database": ":memory:"}
+            db_config = {"type": "sqlite", "sqlite": {"filename": ":memory:"}}
             db_middleware = DatabaseMiddleware(db_config=db_config, config_path=".", redis_config=None)
             
             manager = InterestManager(db_middleware=db_middleware, attention_window=336)
@@ -206,7 +206,7 @@ class TestInterestManager:
             from YSimulator.YServer.interests_modeling.interest_manager import InterestManager
             from YSimulator.YServer.classes.db_middleware import DatabaseMiddleware
             
-            db_config = {"type": "sqlite", "database": ":memory:"}
+            db_config = {"type": "sqlite", "sqlite": {"filename": ":memory:"}}
             db_middleware = DatabaseMiddleware(db_config=db_config, config_path=".", redis_config=None)
             
             manager = InterestManager(db_middleware=db_middleware, attention_window=336)

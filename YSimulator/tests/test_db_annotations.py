@@ -29,11 +29,9 @@ def test_db_method_signatures():
     for method_name in required_methods:
         if not hasattr(DatabaseMiddleware, method_name):
             print(f"✗ Missing method: {method_name}")
-            return False
         else:
             print(f"✓ Method exists: {method_name}")
     
-    return True
 
 
 def test_annotation_processing():
@@ -58,7 +56,6 @@ def test_annotation_processing():
     print(f"  - Mentions: {sample_annotations['mentions']}")
     print(f"  - Sentiment: compound={sample_annotations['sentiment']['compound']}")
     
-    return True
 
 
 def test_action_dto_with_annotations():
@@ -88,10 +85,8 @@ def test_action_dto_with_annotations():
         print(f"  - Content: {action.content}")
         print(f"  - Hashtags: {action.annotations['hashtags']}")
         print(f"  - Mentions: {action.annotations['mentions']}")
-        return True
     else:
         print("\n✗ ActionDTO annotations are None")
-        return False
 
 
 def test_text_annotation_flow():
@@ -120,7 +115,6 @@ def test_text_annotation_flow():
         print(f"  Mentions: {annotations['mentions']}")
         print(f"  Sentiment: {annotations['sentiment']['compound']:.3f}")
     
-    return True
 
 
 if __name__ == "__main__":

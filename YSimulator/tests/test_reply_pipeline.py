@@ -27,11 +27,9 @@ def test_db_middleware_methods():
     for method_name in required_methods:
         if not hasattr(DatabaseMiddleware, method_name):
             print(f"  ✗ Missing method: {method_name}")
-            return False
         else:
             print(f"  ✓ Method exists: {method_name}")
     
-    return True
 
 
 def test_server_methods():
@@ -49,11 +47,9 @@ def test_server_methods():
     for method_name in required_methods:
         if not hasattr(OrchestratorServer, method_name):
             print(f"  ✗ Missing method: {method_name}")
-            return False
         else:
             print(f"  ✓ Method exists: {method_name}")
     
-    return True
 
 
 def test_client_reply_handler():
@@ -65,11 +61,9 @@ def test_client_reply_handler():
     print("\n3. Testing SimulationClient reply handler...")
     if not hasattr(SimulationClient, '_handle_reply_to_mention'):
         print(f"  ✗ Missing method: _handle_reply_to_mention")
-        return False
     else:
         print(f"  ✓ Method exists: _handle_reply_to_mention")
     
-    return True
 
 
 def test_mention_data_structure():
@@ -91,13 +85,11 @@ def test_mention_data_structure():
     for key in required_keys:
         if key not in sample_mention:
             print(f"  ✗ Missing key in mention structure: {key}")
-            return False
     
     print(f"  ✓ Mention structure is valid:")
     print(f"    - Keys: {list(sample_mention.keys())}")
     print(f"    - answered field: {sample_mention['answered']}")
     
-    return True
 
 
 def test_reply_pipeline_integration():
@@ -119,7 +111,6 @@ def test_reply_pipeline_integration():
     print("    4. Mark mention as replied (answered=1)")
     print("    5. Continue with normal agent actions")
     
-    return True
 
 
 def test_page_agent_exclusion():
@@ -134,7 +125,6 @@ def test_page_agent_exclusion():
     print("  ✓ Page agents are excluded from reply pipeline")
     print("    - Check: if agent.is_page == 1: return None")
     
-    return True
 
 
 def test_llm_vs_rule_based_handling():
@@ -148,7 +138,6 @@ def test_llm_vs_rule_based_handling():
     print("    - Rule-based agents: Use generate_rule_based_comment")
     print("    - Both mark mention as replied after action created")
     
-    return True
 
 
 if __name__ == "__main__":

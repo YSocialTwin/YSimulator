@@ -31,7 +31,9 @@ class TestImageExtraction(unittest.TestCase):
         # Create an in-memory SQLite database for testing
         self.db_config = {
             "type": "sqlite",
-            "database": ":memory:"
+            "sqlite": {
+                "filename": ":memory:"
+            }
         }
         
         # Initialize database middleware

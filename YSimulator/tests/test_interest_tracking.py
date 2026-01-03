@@ -21,12 +21,17 @@ from sqlalchemy.orm import Session
 class TestInterestTracking(unittest.TestCase):
     """Test interest tracking functionality."""
     
+    # Class-level counter to ensure unique day/hour combinations across all tests
+    _round_counter = 1000  # Start at 1000 to avoid collision with other test classes
+    
     def setUp(self):
         """Set up test fixtures."""
         # Create an in-memory SQLite database for testing
         self.db_config = {
             "type": "sqlite",
-            "database": ":memory:"
+            "sqlite": {
+                "filename": ":memory:"
+            }
         }
         
         # Initialize database middleware
@@ -41,11 +46,13 @@ class TestInterestTracking(unittest.TestCase):
         Base.metadata.create_all(self.db.engine)
         
         # Create test fixtures
-        import random
         with Session(self.db.engine) as session:
-            # Create round
+            # Create round with unique day/hour to avoid UNIQUE constraint violations
+            TestInterestTracking._round_counter += 1
+            day = TestInterestTracking._round_counter // 24
+            hour = TestInterestTracking._round_counter % 24
             self.round_id = str(uuid.uuid4())
-            round_obj = Round(id=self.round_id, day=random.randint(1, 100), hour=random.randint(0, 23))
+            round_obj = Round(id=self.round_id, day=day, hour=hour)
             session.add(round_obj)
             
             # Create test user with unique username each time

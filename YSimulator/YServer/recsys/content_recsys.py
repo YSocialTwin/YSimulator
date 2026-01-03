@@ -5,6 +5,7 @@ from YSimulator.YServer.classes.models import (
     Post,
     PostTopic,
     Reaction,
+    Recommendation,
     Round,
     User_mgmt,
 )
@@ -27,7 +28,7 @@ def read(db_session, limit, mode, visibility_rounds, uid, followers_ratio=1, art
     uid = uid
     fratio = followers_ratio
 
-    if article in True:
+    if article is True:
         # get the user
         us = User_mgmt.query.filter_by(id=uid).first()
         # get news pages ids having the same user leaning
