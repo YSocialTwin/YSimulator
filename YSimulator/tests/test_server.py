@@ -321,13 +321,13 @@ class TestReactionToSentiment:
             result = server._reaction_to_sentiment("like")
             
             assert result is not None
-            assert "valence" in result
-            assert result["valence"] > 0  # Positive sentiment
+            assert "compound" in result  # VADER sentiment uses compound, not valence
+            assert result["compound"] > 0  # Positive sentiment
     
     @patch('YSimulator.YServer.classes.db_middleware.DatabaseMiddleware')
     @patch('YSimulator.YServer.interests_modeling.InterestManager')
     def test_reaction_dislike_sentiment(self, mock_interest_mgr_class, mock_db_class):
-        """Test sentiment for 'dislike' reaction."""
+        """Test sentiment for negative reaction."""
         from YSimulator.YServer.server import OrchestratorServer
         
         mock_db = Mock()
@@ -342,11 +342,12 @@ class TestReactionToSentiment:
             db_config = {"type": "sqlite", "sqlite": {"filename": ":memory:"}}
             server = OrchestratorServer(db_config=db_config, config_path=tmpdir)
             
-            result = server._reaction_to_sentiment("dislike")
+            # Use ANGRY which is a supported negative reaction
+            result = server._reaction_to_sentiment("ANGRY")
             
             assert result is not None
-            assert "valence" in result
-            assert result["valence"] < 0  # Negative sentiment
+            assert "compound" in result  # VADER sentiment uses compound, not valence
+            assert result["compound"] < 0  # Negative sentiment
     
     @patch('YSimulator.YServer.classes.db_middleware.DatabaseMiddleware')
     @patch('YSimulator.YServer.interests_modeling.InterestManager')
