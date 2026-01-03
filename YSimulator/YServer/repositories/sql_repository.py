@@ -214,7 +214,20 @@ class SQLPostRepository(PostRepository):
         try:
             session = Session(self.engine)
             try:
-                post = Post(**post_data)
+                # Map common field names to actual model field names
+                mapped_data = {
+                    "id": post_data.get("id"),
+                    "tweet": post_data.get("text") or post_data.get("tweet"),
+                    "user_id": post_data.get("author") or post_data.get("user_id"),
+                    "round": post_data.get("round"),
+                    "comment_to": post_data.get("parent_post") or post_data.get("comment_to", -1),
+                    "thread_id": post_data.get("root_post") or post_data.get("thread_id"),
+                    "reaction_count": post_data.get("num_reactions") or post_data.get("reaction_count", 0),
+                }
+                # Filter out None values
+                mapped_data = {k: v for k, v in mapped_data.items() if v is not None}
+                
+                post = Post(**mapped_data)
                 session.add(post)
                 session.commit()
                 return post.id
@@ -237,12 +250,12 @@ class SQLPostRepository(PostRepository):
                 
                 return {
                     "id": post.id,
-                    "author": post.author,
-                    "text": post.text,
+                    "author": post.user_id,  # Map user_id to author
+                    "text": post.tweet,  # Map tweet to text
                     "round": post.round,
-                    "parent_post": post.parent_post,
-                    "root_post": post.root_post,
-                    "num_reactions": post.num_reactions,
+                    "parent_post": post.comment_to,  # Map comment_to to parent_post
+                    "root_post": post.thread_id,  # Map thread_id to root_post
+                    "num_reactions": post.reaction_count,  # Map reaction_count to num_reactions
                 }
             finally:
                 session.close()
@@ -287,15 +300,15 @@ class SQLPostRepository(PostRepository):
                     
                     thread.append({
                         "id": post.id,
-                        "author": post.author,
-                        "text": post.text,
-                        "parent_post": post.parent_post,
+                        "author": post.user_id,  # Map user_id to author
+                        "text": post.tweet,  # Map tweet to text
+                        "parent_post": post.comment_to,  # Map comment_to to parent_post
                     })
                     
-                    if not post.parent_post:
+                    if not post.comment_to or post.comment_to == -1 or post.comment_to == "-1":
                         break
                     
-                    current_id = post.parent_post
+                    current_id = post.comment_to
                 
                 return list(reversed(thread))
             finally:
@@ -332,10 +345,10 @@ class SQLPostRepository(PostRepository):
                 if not post:
                     return False
                 
-                if post.num_reactions is None:
-                    post.num_reactions = 1
+                if post.reaction_count is None:  # Model uses reaction_count
+                    post.reaction_count = 1
                 else:
-                    post.num_reactions += 1
+                    post.reaction_count += 1
                 
                 session.commit()
                 return True
@@ -399,7 +412,7 @@ class SQLPostRepository(PostRepository):
                     session.query(Post.id)
                     .join(PostTopic, Post.id == PostTopic.post_id)
                     .filter(PostTopic.topic_id == topic_id)
-                    .filter(Post.author != agent_id)
+                    .filter(Post.user_id != agent_id)  # Model uses user_id not author
                     .order_by(Post.round.desc())
                     .limit(limit)
                     .all()
@@ -439,7 +452,20 @@ class SQLFollowRepository(FollowRepository):
         try:
             session = Session(self.engine)
             try:
-                follow = Follow(**follow_data)
+                # Map field names - Follow model uses user_id and follower_id
+                # where user_id is the one being followed (followee)
+                import uuid
+                mapped_data = {
+                    "id": follow_data.get("id", str(uuid.uuid4())),
+                    "user_id": follow_data.get("followee_id") or follow_data.get("user_id"),
+                    "follower_id": follow_data.get("follower_id"),
+                    "action": follow_data.get("action"),
+                    "round": follow_data.get("round"),
+                }
+                # Filter out None values
+                mapped_data = {k: v for k, v in mapped_data.items() if v is not None}
+                
+                follow = Follow(**mapped_data)
                 session.add(follow)
                 session.commit()
                 return True
@@ -609,11 +635,14 @@ class SQLInterestRepository(InterestRepository):
         try:
             session = Session(self.engine)
             try:
+                import uuid
+                # Agent_Opinion model uses 'tid' for round_id
                 agent_opinion = Agent_Opinion(
+                    id=str(uuid.uuid4()),
                     agent_id=agent_id,
                     topic_id=topic_id,
                     opinion=opinion,
-                    round_id=round_id
+                    tid=round_id  # Note: model uses 'tid' not 'round_id'
                 )
                 session.add(agent_opinion)
                 session.commit()
@@ -634,7 +663,7 @@ class SQLInterestRepository(InterestRepository):
                 opinion = (
                     session.query(Agent_Opinion)
                     .filter_by(agent_id=agent_id, topic_id=topic_id)
-                    .order_by(Agent_Opinion.round_id.desc())
+                    .order_by(Agent_Opinion.tid.desc())  # Note: model uses 'tid' not 'round_id'
                     .first()
                 )
                 if not opinion:
