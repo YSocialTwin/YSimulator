@@ -287,6 +287,9 @@ class SQLPostRepository(PostRepository):
     
     def get_thread_context(self, post_id: str, max_length: int = 5) -> List[Dict[str, Any]]:
         """Get thread context for a post."""
+        # Constant for "no parent" value used in the database
+        NO_PARENT_MARKERS = (-1, "-1", None)
+        
         try:
             session = Session(self.engine)
             try:
@@ -305,7 +308,8 @@ class SQLPostRepository(PostRepository):
                         "parent_post": post.comment_to,  # Map comment_to to parent_post
                     })
                     
-                    if not post.comment_to or post.comment_to == -1 or post.comment_to == "-1":
+                    # Check if this is a root post (no parent)
+                    if post.comment_to in NO_PARENT_MARKERS:
                         break
                     
                     current_id = post.comment_to

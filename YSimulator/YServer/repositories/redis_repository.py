@@ -573,9 +573,20 @@ class RedisInterestRepository(InterestRepository):
     def add_user_interest(self, user_id: str, interest_id: str, round_id: str) -> bool:
         """Add a user interest."""
         try:
-            # Store as a sorted set with round_id as score for time-based queries
+            # Store as a sorted set with a numeric score for time-based queries
+            # If round_id is a UUID string, hash it to get a numeric value
+            # If it's already numeric, use it directly
             key = self._redis_key("user_interests", user_id)
-            self.redis_client.zadd(key, {interest_id: float(round_id)})
+            
+            try:
+                # Try to use round_id as a number
+                score = float(round_id)
+            except (ValueError, TypeError):
+                # If round_id is a UUID string, use a hash for ordering
+                import hashlib
+                score = int(hashlib.md5(round_id.encode()).hexdigest()[:8], 16)
+            
+            self.redis_client.zadd(key, {interest_id: score})
             return True
         except Exception as e:
             self.logger.error(
@@ -700,32 +711,23 @@ class RedisRecommendationRepository(RecommendationRepository):
             return None
     
     def cleanup_old_posts_from_redis(self, current_day: int, current_slot: int) -> Dict[str, int]:
-        """Cleanup old posts from Redis."""
+        """
+        Cleanup old posts from Redis based on visibility window.
+        
+        This is a placeholder implementation. In a production system, you would:
+        1. Store post timestamps or round information with each post
+        2. Calculate the visibility window based on current_day and current_slot
+        3. Only delete posts that fall outside the visibility window
+        
+        For now, this returns a status indicating the operation is not fully implemented.
+        """
         try:
-            # This is a placeholder - actual implementation would depend on
-            # how posts are indexed by day/slot in Redis
-            deleted_count = 0
-            
-            # Get all post IDs
-            post_ids = self.redis_client.smembers(self._redis_key("posts", "ids"))
-            
-            for post_id in post_ids:
-                if isinstance(post_id, bytes):
-                    post_id = post_id.decode()
-                
-                # Get post data to check round
-                post_key = self._redis_key("posts", post_id)
-                post_data = self.redis_client.hgetall(post_key)
-                
-                # Implement cleanup logic based on your requirements
-                # This is a simplified version
-                if post_data:
-                    # Delete old posts (example logic)
-                    self.redis_client.delete(post_key)
-                    self.redis_client.srem(self._redis_key("posts", "ids"), post_id)
-                    deleted_count += 1
-            
-            return {"deleted": deleted_count, "status": "success"}
+            return {
+                "status": "not_fully_implemented",
+                "message": "Cleanup logic requires post timestamp indexing",
+                "current_day": current_day,
+                "current_slot": current_slot,
+            }
         except Exception as e:
             self.logger.error(
                 f"Error cleaning up old posts from Redis: {e}",

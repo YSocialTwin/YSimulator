@@ -3,6 +3,18 @@ Tests for repository layer implementations.
 
 This test suite validates the SQL and Redis repository implementations
 against their abstract interfaces.
+
+Note on Field Name Mappings:
+The repository layer handles translation between API field names and database model field names:
+- API 'author' <-> Model 'user_id'
+- API 'text' <-> Model 'tweet'
+- API 'parent_post' <-> Model 'comment_to'
+- API 'root_post' <-> Model 'thread_id'
+- API 'num_reactions' <-> Model 'reaction_count'
+- API 'followee_id' <-> Model 'user_id' (in Follow model)
+- API 'round_id' <-> Model 'tid' (in Agent_Opinion model)
+
+For complete mapping documentation, see docs/REPOSITORY_PATTERN.md
 """
 
 import pytest
