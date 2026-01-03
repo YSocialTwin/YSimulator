@@ -275,56 +275,56 @@ Logging System
 ## 🚀 Recommended Reading Paths
 
 ### Path 1: New User
-1. [README](../README.md) - Overview and quick start
-2. [Configuration Guide](CONFIG.md) - Set up your simulation
-3. [Agent Actions](AGENT_ACTIONS.md) - Learn what agents can do
-4. [Agent Types](AGENT_TYPES.md) - Understand agent differences
-5. [Architecture Overview](ARCHITECTURE.md) - Understand the system
-6. [Logging Configuration](LOGGING_CONFIG.md) - Monitor your simulation
+1. [README](../../README.md) - Overview and quick start
+2. [Configuration Guide](../configuration/CONFIG.md) - Set up your simulation
+3. [Agent Actions](../agents/AGENT_ACTIONS.md) - Learn what agents can do
+4. [Agent Types](../agents/AGENT_TYPES.md) - Understand agent differences
+5. [Architecture Overview](../architecture/ARCHITECTURE.md) - Understand the system
+6. [Logging Configuration](../logging/LOGGING_CONFIG.md) - Monitor your simulation
 
 ### Path 2: Researcher
-1. [Architecture Overview](ARCHITECTURE.md) - System design
-2. [Agent Actions](AGENT_ACTIONS.md) - Available agent behaviors
-3. [Agent Types](AGENT_TYPES.md) - Agent types and archetypes
-4. [Agent Temporal Activities](AGENT_TEMPORAL_ACTIVITIES.md) - Temporal patterns
-5. [Recommendation Systems](RECOMMENDATION_SYSTEMS.md) - Algorithms and strategies
-6. [Opinion Dynamics](OPINION_DYNAMICS.md) - Models and theory
-7. [Database & Storage](REDIS_DATABASE_ANALYSIS.md) - Data structures
-8. [Configuration Guide](CONFIG.md) - Experiment configuration
+1. [Architecture Overview](../architecture/ARCHITECTURE.md) - System design
+2. [Agent Actions](../agents/AGENT_ACTIONS.md) - Available agent behaviors
+3. [Agent Types](../agents/AGENT_TYPES.md) - Agent types and archetypes
+4. [Agent Temporal Activities](../agents/AGENT_TEMPORAL_ACTIVITIES.md) - Temporal patterns
+5. [Recommendation Systems](../features/RECOMMENDATION_SYSTEMS.md) - Algorithms and strategies
+6. [Opinion Dynamics](../features/OPINION_DYNAMICS.md) - Models and theory
+7. [Database & Storage](../data-storage/REDIS_DATABASE_ANALYSIS.md) - Data structures
+8. [Configuration Guide](../configuration/CONFIG.md) - Experiment configuration
 
 ### Path 3: Developer
-1. [Architecture Overview](ARCHITECTURE.md) - Component design
-2. [System Diagrams](DIAGRAMS.md) - Visual architecture
-3. [Agent Actions](AGENT_ACTIONS.md) - Action implementations
-4. [Extending YSimulator](EXTENDING.md) - Add features
-5. [Code Formatting](FORMATTING.md) - Development standards
-6. [Database & Storage](REDIS_DATABASE_ANALYSIS.md) - Data layer
+1. [Architecture Overview](../architecture/ARCHITECTURE.md) - Component design
+2. [System Diagrams](../architecture/DIAGRAMS.md) - Visual architecture
+3. [Agent Actions](../agents/AGENT_ACTIONS.md) - Action implementations
+4. [Extending YSimulator](../development/EXTENDING.md) - Add features
+5. [Code Formatting](../development/FORMATTING.md) - Development standards
+6. [Database & Storage](../data-storage/REDIS_DATABASE_ANALYSIS.md) - Data layer
 
 ### Path 4: Performance Engineer
-1. [Database & Storage](REDIS_DATABASE_ANALYSIS.md) - Redis coverage
-2. [Redis Integration](RECSYS_REDIS_SUPPORT.md) - Caching strategy
-3. [Recommendation Systems](RECOMMENDATION_SYSTEMS.md) - Performance benchmarks
-4. [Agent Types](AGENT_TYPES.md) - Agent downcast optimization
-5. [Configuration Guide](CONFIG.md) - Optimization options
-6. [Architecture Overview](ARCHITECTURE.md) - System bottlenecks
+1. [Database & Storage](../data-storage/REDIS_DATABASE_ANALYSIS.md) - Redis coverage
+2. [Redis Integration](../data-storage/RECSYS_REDIS_SUPPORT.md) - Caching strategy
+3. [Recommendation Systems](../features/RECOMMENDATION_SYSTEMS.md) - Performance benchmarks
+4. [Agent Types](../agents/AGENT_TYPES.md) - Agent downcast optimization
+5. [Configuration Guide](../configuration/CONFIG.md) - Optimization options
+6. [Architecture Overview](../architecture/ARCHITECTURE.md) - System bottlenecks
 
 ### Path 5: System Administrator
-1. [Configuration Guide](CONFIG.md) - Setup and deployment
-2. [Logging Configuration](LOGGING_CONFIG.md) - Monitoring setup
-3. [Server Logging](SERVER_LOGGING.md) - Log analysis
-4. [Architecture Overview](ARCHITECTURE.md) - System components
-5. [Redis Integration](RECSYS_REDIS_SUPPORT.md) - Redis deployment
+1. [Configuration Guide](../configuration/CONFIG.md) - Setup and deployment
+2. [Logging Configuration](../logging/LOGGING_CONFIG.md) - Monitoring setup
+3. [Server Logging](../logging/SERVER_LOGGING.md) - Log analysis
+4. [Architecture Overview](../architecture/ARCHITECTURE.md) - System components
+5. [Redis Integration](../data-storage/RECSYS_REDIS_SUPPORT.md) - Redis deployment
 
 ---
 
 ## 🔧 Configuration Files Reference
 
 ### Core Configuration
-- `server_config.json` → [Configuration Guide](CONFIG.md#server-configuration)
-- `simulation_config.json` → [Configuration Guide](CONFIG.md#client-configuration)
-- `agent_population.json` → [Configuration Guide](CONFIG.md#agent-population-configuration)
-- `llm_prompts.json` → [Configuration Guide](CONFIG.md#llm-prompts-configuration)
-- `network.csv` → [Configuration Guide](CONFIG.md#social-network-topology)
+- `server_config.json` → [Configuration Guide](../configuration/CONFIG.md#server-configuration)
+- `simulation_config.json` → [Configuration Guide](../configuration/CONFIG.md#client-configuration)
+- `agent_population.json` → [Configuration Guide](../configuration/CONFIG.md#agent-population-configuration)
+- `llm_prompts.json` → [Configuration Guide](../configuration/CONFIG.md#llm-prompts-configuration)
+- `network.csv` → [Configuration Guide](../configuration/CONFIG.md#social-network-topology)
 
 ### Configuration Examples
 - `example/rule_population_100/` → Rule-based agents
