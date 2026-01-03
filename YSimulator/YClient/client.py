@@ -19,6 +19,7 @@ from typing import Optional
 
 import ray
 
+from YSimulator.YClient.action_executor import ActionExecutorMixin
 from YSimulator.YClient.actions import (
     generate_image_post_async,
     generate_llm_follow_async,
@@ -106,7 +107,7 @@ def compress_rotated_log(source: str, dest: str) -> None:
 
 
 @ray.remote
-class SimulationClient:
+class SimulationClient(ActionExecutorMixin):
     """
     Simulation client actor that manages agent behaviors and actions.
 
@@ -329,247 +330,28 @@ class SimulationClient:
     def _parse_activity_profiles(self, activity_profiles_config):
         """
         Parse activity profiles from configuration.
-
-        Converts string representations like "0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23"
-        into lists of integers representing active hours.
-
-        Args:
-            activity_profiles_config: Dictionary mapping profile names to hour strings
-
-        Returns:
-            dict: Dictionary mapping profile names to lists of active hours (0-23)
+        Delegates to activity_selector module.
         """
-        parsed_profiles = {}
-        for profile_name, hours_str in activity_profiles_config.items():
-            if isinstance(hours_str, str):
-                hours = [int(h.strip()) for h in hours_str.split(",")]
-                # Validate that all hours are in valid range 0-23
-                valid_hours = [h for h in hours if 0 <= h <= 23]
-                if len(valid_hours) != len(hours):
-                    self.logger.warning(
-                        f"Invalid hours found in activity profile '{profile_name}', filtered to valid range 0-23"
-                    )
-                parsed_profiles[profile_name] = valid_hours
-            elif isinstance(hours_str, list):
-                # Validate list hours as well
-                valid_hours = [h for h in hours_str if isinstance(h, int) and 0 <= h <= 23]
-                parsed_profiles[profile_name] = valid_hours
-            else:
-                self.logger.warning(
-                    f"Invalid activity profile format for '{profile_name}': {hours_str}"
-                )
-                parsed_profiles[profile_name] = list(range(24))  # Default to always active
-        return parsed_profiles
+        from YSimulator.YClient.activity_selector import parse_activity_profiles
+        return parse_activity_profiles(activity_profiles_config, self.logger)
 
     def _sample_agents_by_archetype(self, available_agents, num_active):
         """
         Sample agents according to archetype distribution.
-
-        Ensures that active agents are composed using the archetype distribution
-        from the configuration. If a percentage is > 0, at least one agent of that
-        archetype is always selected (if available).
-
-        Args:
-            available_agents: List of agents available for selection
-            num_active: Total number of agents to activate
-
-        Returns:
-            list: List of selected agents respecting archetype distribution
+        Delegates to activity_selector module.
         """
-        # Group agents by archetype
-        agents_by_archetype = {}
-        agents_without_archetype = []
-
-        for agent in available_agents:
-            archetype = agent.archetype
-            # Normalize archetype to lowercase for comparison
-            if archetype:
-                archetype_key = archetype.lower()
-                if archetype_key not in agents_by_archetype:
-                    agents_by_archetype[archetype_key] = []
-                agents_by_archetype[archetype_key].append(agent)
-            else:
-                # Track agents without archetype separately
-                agents_without_archetype.append(agent)
-
-        selected_agents = []
-        remaining_slots = num_active
-
-        # Count how many archetypes have distribution > 0 and are available
-        available_archetypes = [
-            arch
-            for arch, pct in self.archetype_distribution.items()
-            if pct > 0 and arch in agents_by_archetype
-        ]
-
-        # First pass: ensure at least 1 agent per archetype if distribution > 0
-        if num_active >= len(available_archetypes):
-            # We have enough slots to give at least 1 to each archetype
-            for archetype in available_archetypes:
-                if remaining_slots > 0:
-                    available_for_archetype = agents_by_archetype[archetype]
-                    if available_for_archetype:
-                        selected = random.choice(available_for_archetype)
-                        selected_agents.append(selected)
-                        agents_by_archetype[archetype].remove(selected)
-                        remaining_slots -= 1
-
-            # Second pass: distribute remaining slots according to distribution
-            if remaining_slots > 0:
-                for archetype, percentage in self.archetype_distribution.items():
-                    if archetype in agents_by_archetype and remaining_slots > 0:
-                        available_for_archetype = agents_by_archetype[archetype]
-                        # Calculate additional agents for this archetype (beyond the guaranteed 1)
-                        additional = round(remaining_slots * percentage)
-                        num_to_select = min(
-                            additional, len(available_for_archetype), remaining_slots
-                        )
-
-                        if num_to_select > 0:
-                            selected = random.sample(available_for_archetype, k=num_to_select)
-                            selected_agents.extend(selected)
-                            remaining_slots -= num_to_select
-                            for agent in selected:
-                                agents_by_archetype[archetype].remove(agent)
-        else:
-            # Not enough slots for all archetypes, use strict proportional distribution
-            for archetype, percentage in self.archetype_distribution.items():
-                if archetype in agents_by_archetype and remaining_slots > 0:
-                    available_for_archetype = agents_by_archetype[archetype]
-                    target = round(num_active * percentage)
-                    num_to_select = min(target, len(available_for_archetype), remaining_slots)
-
-                    if num_to_select > 0:
-                        selected = random.sample(available_for_archetype, k=num_to_select)
-                        selected_agents.extend(selected)
-                        remaining_slots -= num_to_select
-                        for agent in selected:
-                            agents_by_archetype[archetype].remove(agent)
-
-        # Fill any remaining slots with any available agents (including those without archetype)
-        if remaining_slots > 0:
-            all_remaining = agents_without_archetype.copy()
-            for agents_list in agents_by_archetype.values():
-                all_remaining.extend(agents_list)
-
-            if all_remaining:
-                additional_needed = min(remaining_slots, len(all_remaining))
-                if additional_needed > 0:
-                    additional = random.sample(all_remaining, k=additional_needed)
-                    selected_agents.extend(additional)
-
-        return selected_agents
+        from YSimulator.YClient.activity_selector import sample_agents_by_archetype
+        return sample_agents_by_archetype(
+            available_agents, num_active, self.archetype_distribution, self.logger
+        )
 
     def _create_agents_from_config(self, agent_config):
         """
         Create agent profiles from configuration.
-        Combines predefined agents with generated agents.
+        Delegates to agent_manager module.
         """
-        agents = []
-
-        # Load predefined agents
-        if "agents" in agent_config:
-            for agent_data in agent_config["agents"]:
-                profile = AgentProfile(
-                    id=agent_data.get("id"),
-                    username=agent_data.get("username"),
-                    email=agent_data.get("email", ""),
-                    password=agent_data.get("password", "simulation_agent"),
-                    leaning=agent_data.get("leaning", "neutral"),
-                    user_type=agent_data.get("user_type", "agent"),
-                    age=agent_data.get("age", 0),
-                    oe=agent_data.get("oe"),
-                    co=agent_data.get("co"),
-                    ex=agent_data.get("ex"),
-                    ag=agent_data.get("ag"),
-                    ne=agent_data.get("ne"),
-                    language=agent_data.get("language", "en"),
-                    education_level=agent_data.get("education_level"),
-                    joined_on=agent_data.get("joined_on"),  # Should be Round UUID or None
-                    gender=agent_data.get("gender"),
-                    nationality=agent_data.get("nationality"),
-                    profession=agent_data.get("profession", ""),
-                    activity_profile=agent_data.get("activity_profile", "Always On"),
-                    archetype=agent_data.get("archetype"),
-                    cluster=agent_data.get("cluster", 0),
-                    llm=agent_data.get("llm", False),
-                    toxicity=agent_data.get("toxicity", "no"),
-                    daily_activity_level=agent_data.get("daily_activity_level", 1),
-                    round_actions=agent_data.get("round_actions", 3),
-                    is_page=agent_data.get("is_page", 0),
-                    feed_url=agent_data.get("feed_url"),  # RSS feed for page agents
-                    interests=agent_data.get("interests"),  # Interest topics and counts
-                    opinions=agent_data.get("opinions"),  # Opinion values for topics
-                )
-                agents.append(profile)
-
-        # Generate additional agents if specified
-        if "generation_config" in agent_config:
-            gen_config = agent_config["generation_config"]
-            num_additional = gen_config.get("num_additional_agents", 0)
-            cluster_weights = gen_config["cluster_distribution"]["weights"]
-            llm_prob = gen_config.get("llm_enabled_probability", 0.1)
-            defaults = gen_config.get("default_settings", {})
-            age_range = gen_config.get("age_range", [18, 65])
-
-            # Generate UUIDs for additional agents using the same namespace
-            import uuid
-
-            AGENT_UUID_NAMESPACE = uuid.UUID("12345678-1234-5678-1234-567812345678")
-
-            # Find the starting index for generated agents
-            # If we have predefined agents, start after them; otherwise start at 1
-            if agents:
-                # Try to extract numeric part from existing IDs for indexing
-                # For UUIDs, we'll just start from a high number to avoid conflicts
-                start_index = 10000
-            else:
-                start_index = 1
-
-            archetypes = ["validator", "broadcaster", "explorer"]
-            activity_profiles = ["Always On", "Morning Active", "Evening Active", "Weekend Warrior"]
-            professions = ["Engineer", "Teacher", "Designer", "Writer", "Analyst", "Manager"]
-            genders = ["male", "female", "non-binary"]
-            nationalities = ["US", "UK", "CA", "AU", "EU"]
-            education_levels = ["high_school", "college", "graduate", "phd"]
-
-            for i in range(num_additional):
-                agent_index = start_index + i
-                # Generate deterministic UUID for generated agents
-                agent_id = str(uuid.uuid5(AGENT_UUID_NAMESPACE, f"generated_agent_{agent_index}"))
-                cluster = random.choices([0, 1, 2], weights=cluster_weights)[0]
-
-                profile = AgentProfile(
-                    id=agent_id,
-                    username=f"agent_{agent_index:04d}",
-                    email=f"agent{agent_index}@simulation.local",
-                    password=defaults.get("password", "simulation_agent"),
-                    leaning=defaults.get("leaning", "neutral"),
-                    user_type=defaults.get("user_type", "agent"),
-                    age=random.randint(age_range[0], age_range[1]),
-                    oe=random.choice(["low", "medium", "high"]),
-                    co=random.choice(["low", "medium", "high"]),
-                    ex=random.choice(["low", "medium", "high"]),
-                    ag=random.choice(["low", "medium", "high"]),
-                    ne=random.choice(["low", "medium", "high"]),
-                    language=defaults.get("language", "en"),
-                    education_level=random.choice(education_levels),
-                    joined_on=None,  # Will be set by server to current round on registration
-                    gender=random.choice(genders),
-                    nationality=random.choice(nationalities),
-                    profession=random.choice(professions),
-                    activity_profile=random.choice(activity_profiles),
-                    archetype=archetypes[cluster],
-                    cluster=cluster,
-                    llm=random.random() < llm_prob,
-                    toxicity=defaults.get("toxicity", "no"),
-                    daily_activity_level=random.randint(1, 4),
-                    round_actions=defaults.get("round_actions", 3),
-                    is_page=defaults.get("is_page", 0),
-                )
-                agents.append(profile)
-
-        return agents
+        from YSimulator.YClient.agent_manager import create_agents_from_config
+        return create_agents_from_config(agent_config, self.logger)
 
     def _parse_network_edges(self, network_csv_path: Path) -> list:
         """
@@ -1085,234 +867,49 @@ class SimulationClient:
     def __select_action(self, agent_profile: AgentProfile, recent_posts: list) -> tuple:
         """
         Determine which action an agent should perform.
-
-        This method implements the action selection logic based on:
-        - actions_likelihood from simulation config (weighted action selection)
-        - Agent's archetype (filters available actions)
-        - Availability of recent posts (for comment/reaction actions)
-        - Agent type (LLM vs rule-based)
-        - Page agents can ONLY perform share_link action
-
-        Args:
-            agent_profile: Agent profile containing behavior settings
-            recent_posts: List of recent post UUIDs available for reactions
-
-        Returns:
-            tuple: (action_type, agent_type, target_post_id) where:
-                - action_type: "post", "comment", "read", "image", "share_link", "share", "search", "cast", or None
-                - agent_type: "llm" or "rule_based"
-                - target_post_id: UUID string for comment/read/share actions, None for posts/no-action
-
-        Example:
-            >>> action_type, agent_type, target = self.__select_action(profile, posts)
-            >>> if action_type == "post":
-            ...     # Generate post action
-            >>> elif action_type == "comment":
-            ...     # Generate comment to target post
+        Delegates to activity_selector module.
         """
-        # Page agents can ONLY perform share_link action
-        if agent_profile.is_page == 1:
-            agent_type = self._determine_agent_type(agent_profile)
-            return "share_link", agent_type, None
-
-        # Define archetype-to-action mappings
-        # This filters which actions are available based on archetype
-        # NOTE: Future enhancement - these mappings could be moved to simulation_config.json
-        # for easier customization without code changes
-        archetype_actions = {
-            "validator": [
-                "share",
-                "read",
-                "share_link",
-            ],  # Validators react and share content: they are active content consumers
-            "broadcaster": [
-                "post",
-                "image",
-                "share",
-                "comment",
-                "search",
-            ],  # Broadcasters post, comment and share contents and images: they are content producers
-            "explorer": [
-                "follow",
-            ],  # Explorers follow and search to grow network: they are lurkers
-        }
-
-        # Get archetype-specific action weights with safe fallback
-        archetype = agent_profile.archetype
-
-        # If agent has no archetype (archetypes disabled), all actions are available
-        if not archetype:
-            # Get all action types from actions_likelihood
-            available_actions = list(self.actions_likelihood.keys())
-        elif archetype in archetype_actions:
-            # Use archetype-specific actions
-            available_actions = archetype_actions[archetype]
-        else:
-            # Unknown archetype - use all available actions as fallback
-            available_actions = list(self.actions_likelihood.keys())
-
-        # Filter actions_likelihood to only include available actions
-        filtered_likelihood = {
-            action: weight
-            for action, weight in self.actions_likelihood.items()
-            if action in available_actions and weight > 0
-        }
-
-        # If no valid actions, return no action
-        if not filtered_likelihood:
-            return None, None, None
-
-        # Select action based on weighted probabilities
-        actions = list(filtered_likelihood.keys())
-        weights = list(filtered_likelihood.values())
-
-        # random.choices can work directly with unnormalized weights
-        selected_action = random.choices(actions, weights=weights)[0]
-
-        # Determine agent type
-        agent_type = self._determine_agent_type(agent_profile)
-
-        # Actions that require a target post
-        target_required_actions = ["comment", "read", "share"]
-
-        # If action requires a target but no posts available, return no action
-        if selected_action in target_required_actions and not recent_posts:
-            return None, None, None
-
-        # Select target post if needed
-        target = random.choice(recent_posts) if selected_action in target_required_actions else None
-
-        return selected_action, agent_type, target
+        from YSimulator.YClient.activity_selector import select_action
+        return select_action(
+            agent_profile,
+            recent_posts,
+            self.actions_likelihood,
+            self.logger,
+        )
 
     def _extract_agent_attrs(self, agent) -> dict:
         """
         Extract agent attributes for dynamic persona building.
-
-        Args:
-            agent: AgentProfile object
-
-        Returns:
-            dict: Agent attributes for persona template
+        Delegates to agent_manager module.
         """
-        # Sample a topic from agent's interests if available
-        selected_topic = None
-        topics, counts = self._validate_and_extract_interests(agent.interests)
-        if topics and counts:
-            # Weight topics by their interaction counts
-            import random
-
-            selected_topic = random.choices(topics, weights=counts, k=1)[0]
-
-        # Get opinion on the selected topic if available (only if opinion dynamics is enabled)
-        topic_opinion = None
-        topic_opinion_label = None
-        if (
-            self._is_opinion_dynamics_enabled()
-            and selected_topic
-            and agent.opinions
-            and selected_topic in agent.opinions
-        ):
-            topic_opinion = agent.opinions[selected_topic]
-            topic_opinion_label = self._map_opinion_to_group(topic_opinion)
-
-        attrs = {
-            "name": agent.username,
-            "age": agent.age if agent.age else "unknown",
-            "gender": agent.gender if agent.gender else "person",
-            "nationality": agent.nationality if agent.nationality else "citizen",
-            "profession": agent.profession if agent.profession else "individual",
-            "political_leaning": agent.leaning if agent.leaning else "neutral",
-            "oe": agent.oe if agent.oe else "average in openness",
-            "co": agent.co if agent.co else "average in conscientiousness",
-            "ex": agent.ex if agent.ex else "average in extraversion",
-            "ag": agent.ag if agent.ag else "average in agreeableness",
-            "ne": agent.ne if agent.ne else "average in neuroticism",
-            "toxicity": agent.toxicity if agent.toxicity and agent.toxicity != "" else "no",
-            "topic": selected_topic,  # Include the sampled topic
-        }
-
-        # Add opinion information if available and opinion dynamics is enabled
-        if topic_opinion is not None and topic_opinion_label:
-            attrs["topic_opinion"] = topic_opinion_label
-            attrs["topic_opinion_value"] = topic_opinion
-
-        return attrs
+        from YSimulator.YClient.agent_manager import extract_agent_attrs
+        return extract_agent_attrs(
+            agent,
+            self._validate_and_extract_interests,
+            self._is_opinion_dynamics_enabled,
+            self._map_opinion_to_group,
+        )
 
     def _save_updated_agent_population(self, updated_interests: dict):
         """
         Save updated agent interests to agent_population.json at end of day.
-        Respects client-specific naming convention (e.g., client_1_agent_population.json).
-
-        Args:
-            updated_interests: Dict of {agent_id: {"topics": [...], "counts": [...]}}
+        Delegates to agent_manager module.
         """
-        # Find agent_population.json file using client-specific naming convention
-        # Try client-specific file first, then fall back to generic
-        client_specific_file = self.config_path / f"{self.client_id}_agent_population.json"
-        generic_file = self.config_path / "agent_population.json"
-
-        if client_specific_file.exists():
-            agent_config_file = client_specific_file
-        else:
-            agent_config_file = generic_file
-
-        if not agent_config_file.exists():
-            self.logger.warning(
-                f"Agent config file not found at {agent_config_file}, skipping interests update"
-            )
-            return
-
-        try:
-            # Load current agent_population.json
-            with open(agent_config_file, "r") as f:
-                agent_data = json.load(f)
-
-            # Update interests for each agent
-            if "agents" in agent_data:
-                for agent in agent_data["agents"]:
-                    agent_id = agent.get("id")
-                    if agent_id and str(agent_id) in updated_interests:
-                        interests_data = updated_interests[str(agent_id)]
-                        # Update the interests field with current topics and counts
-                        agent["interests"] = [interests_data["topics"], interests_data["counts"]]
-
-            # Write updated data back to file
-            with open(agent_config_file, "w") as f:
-                json.dump(agent_data, f, indent=2)
-
-            self.logger.info(
-                f"Updated {agent_config_file.name} with current interests for {len(updated_interests)} agents"
-            )
-
-        except Exception as e:
-            self.logger.error(
-                f"Error updating agent population file: {e}",
-                extra={"extra_data": {"error": str(e), "file": str(agent_config_file)}},
-            )
+        from YSimulator.YClient.agent_manager import save_updated_agent_population
+        save_updated_agent_population(
+            updated_interests,
+            self.config_path,
+            self.client_id,
+            self.logger,
+        )
 
     def _validate_and_extract_interests(self, interests):
         """
         Validate interests structure and extract topics and counts.
-
-        Args:
-            interests: Interest data in format [["Topic1", "Topic2"], [1, 2]]
-
-        Returns:
-            tuple: (topics, counts) or (None, None) if invalid
+        Delegates to agent_manager module.
         """
-        if not interests or not isinstance(interests, (list, tuple)) or len(interests) != 2:
-            return None, None
-
-        topics = interests[0]
-        counts = interests[1]
-
-        if not topics or not counts or not isinstance(topics, list) or not isinstance(counts, list):
-            return None, None
-
-        if len(topics) == 0:
-            return None, None
-
-        return topics, counts
+        from YSimulator.YClient.agent_manager import validate_and_extract_interests
+        return validate_and_extract_interests(interests)
 
     def _log_action(
         self,
@@ -2325,135 +1922,22 @@ class SimulationClient:
     def _handle_reply_to_mention(self, agent, agent_type, pending_llm_reactions, actions):
         """
         Handle reply to mention for an agent.
-
-        This method checks if the agent has unreplied mentions, randomly selects one,
-        and creates a comment action (reply) using the reply-specific action functions.
-        After creating the reply action, marks the mention as replied.
-
-        Args:
-            agent: AgentProfile of the agent
-            agent_type: "llm" or "rule_based"
-            pending_llm_reactions: List to append pending LLM comment futures
-            actions: List to append immediate (rule-based) actions
-
-        Returns:
-            str or None: mention_id if a reply was generated, None otherwise
+        Delegates to reply_handler module.
         """
-        # Page agents do not reply to mentions
-        if agent.is_page == 1:
-            self.logger.debug(
-                f"[REPLY] Agent {agent.username} is a page agent - skipping reply pipeline"
-            )
-            return None
-
-        # Get unreplied mentions for this agent
-        try:
-            self.logger.debug(
-                f"[REPLY] Checking unreplied mentions for agent {agent.username} (ID: {agent.id})"
-            )
-            unreplied_mentions = ray.get(
-                self.server.get_unreplied_mentions.remote(agent.id, client_id=self.client_id)
-            )
-
-            if not unreplied_mentions:
-                self.logger.debug(f"[REPLY] No unreplied mentions found for agent {agent.username}")
-                return None  # No mentions to reply to
-
-            self.logger.info(
-                f"[REPLY] Agent {agent.username} has {len(unreplied_mentions)} unreplied mention(s)"
-            )
-
-            # Randomly select one mention to reply to
-            selected_mention = random.choice(unreplied_mentions)
-            mention_id = selected_mention["id"]
-            post_id = selected_mention["post_id"]
-
-            self.logger.info(
-                f"[REPLY] Agent {agent.username} ({agent_type}) selected mention {mention_id} in post {post_id}"
-            )
-
-            # Get the post content to reply to
-            post_data = ray.get(self.server.get_post.remote(post_id, client_id=self.client_id))
-            if not post_data:
-                self.logger.warning(
-                    f"[REPLY] Post {post_id} not found for mention {mention_id} - cannot reply"
-                )
-                return None
-
-            post_content = post_data.get("tweet", "")
-            author_id = post_data.get("user_id")
-
-            self.logger.debug(
-                f"[REPLY] Post content preview: '{post_content[:50]}...' (author: {author_id})"
-            )
-
-            # Get author username
-            author_username = "Someone"
-            if author_id:
-                author_user = ray.get(
-                    self.server.get_user.remote(author_id, client_id=self.client_id)
-                )
-                if author_user:
-                    author_username = author_user.get("username", "Someone")
-
-            self.logger.info(
-                f"[REPLY] Agent {agent.username} will reply to @{author_username}'s post"
-            )
-
-            # Generate reply using the reply-specific action functions
-            if agent_type == "llm":
-                # Get thread context (preceding posts/comments in chronological order)
-                thread_context = ray.get(
-                    self.server.get_thread_context.remote(
-                        post_id, self.max_length_thread_reading, client_id=self.client_id
-                    )
-                )
-                self.logger.debug(
-                    f"[REPLY] Retrieved thread context: {len(thread_context)} previous posts/comments"
-                )
-
-                # Fire off async LLM call to generate reply
-                agent_attrs = self._extract_agent_attrs(agent)
-                future = generate_llm_reply_to_mention_async(
-                    self.llm,
-                    agent.cluster,
-                    post_content,
-                    agent_attrs,
-                    author_username,
-                    thread_context,
-                )
-                # Store the mention_id with the pending reaction so we can mark it as replied later
-                pending_llm_reactions.append((agent.id, agent.cluster, post_id, future, mention_id))
-                self.logger.info(
-                    f"[REPLY] LLM reply request queued for agent {agent.username} (mention: {mention_id})"
-                )
-            else:
-                # Rule-based: Generate reply with @username mention
-                action = generate_rule_based_reply_to_mention(
-                    agent.id, agent.cluster, post_id, author_username
-                )
-                # Annotate rule-based comment
-                self._annotate_action_content(action)
-                actions.append(action)
-                self.logger.info(
-                    f"[REPLY] Rule-based reply created: '{action.content}' for agent {agent.username}"
-                )
-
-                # Mark mention as replied immediately for rule-based agents
-                ray.get(self.server.mark_mention_replied.remote(mention_id))
-                self.logger.info(f"[REPLY] Marked mention {mention_id} as replied (rule-based)")
-
-            return mention_id
-
-        except Exception as e:
-            self.logger.error(
-                f"[REPLY] Error handling reply to mention for agent {agent.username}: {e}",
-                extra={"extra_data": {"error": str(e), "agent_id": agent.id}},
-            )
-            import traceback
-
-            self.logger.error(f"[REPLY] Traceback: {traceback.format_exc()}")
-            return None
+        from YSimulator.YClient.reply_handler import handle_reply_to_mention
+        return handle_reply_to_mention(
+            agent,
+            agent_type,
+            pending_llm_reactions,
+            actions,
+            self.server,
+            self.client_id,
+            self.llm,
+            self.max_length_thread_reading,
+            self.logger,
+            self._extract_agent_attrs,
+            self._annotate_action_content,
+        )
 
     def _simulate(self, day: int, slot: int, recent_posts: list) -> list:
         """
@@ -3409,193 +2893,20 @@ class SimulationClient:
     def _evaluate_churn(self) -> dict[str, int]:
         """
         Evaluate and process churn at the end of a day (client-side).
-
-        This method:
-        1. Gets current day and round from server
-        2. Identifies inactive agents based on inactivity_threshold
-        3. Selects a percentage of them based on churn_percentage
-        4. Flags them as churned based on churn_probability
-
-        Returns:
-            Dictionary with churn statistics
+        Delegates to churn_manager module.
         """
-        self.logger.info(
-            f"Starting churn evaluation (client-side): enabled={self.churn_enabled}, threshold={self.inactivity_threshold}"
+        from YSimulator.YClient.churn_manager import evaluate_churn
+        return evaluate_churn(
+            self.server,
+            self.client_id,
+            self.agent_profiles,
+            self.churn_enabled,
+            self.churn_probability,
+            self.inactivity_threshold,
+            self.churn_percentage,
+            self.logger,
         )
 
-        if not self.churn_enabled:
-            self.logger.info("Churn disabled, skipping evaluation")
-            return {"inactive_agents": 0, "candidates": 0, "churned": 0}
-
-        # Get current day and round ID from server
-        try:
-            current_day = ray.get(self.server.get_current_day.remote())
-            current_round_id = ray.get(self.server.get_current_round_id.remote())
-        except Exception as e:
-            self.logger.error(f"Failed to get current day/round from server: {e}")
-            return {"inactive_agents": 0, "candidates": 0, "churned": 0}
-
-        # Get inactive agents from server database
-        try:
-            inactive_agents = ray.get(
-                self.server.get_inactive_agents.remote(current_day, self.inactivity_threshold)
-            )
-        except Exception as e:
-            self.logger.error(f"Failed to get inactive agents: {e}")
-            return {"inactive_agents": 0, "candidates": 0, "churned": 0}
-
-        self.logger.info(
-            f"Found {len(inactive_agents)} inactive agents (threshold={self.inactivity_threshold} days)"
-        )
-
-        if not inactive_agents:
-            self.logger.info("No inactive agents found, skipping churn")
-            return {"inactive_agents": 0, "candidates": 0, "churned": 0}
-
-        # Select percentage of inactive agents as churn candidates
-        num_candidates = max(1, int(len(inactive_agents) * self.churn_percentage))
-        churn_candidates = random.sample(inactive_agents, min(num_candidates, len(inactive_agents)))
-
-        self.logger.info(
-            f"Selected {len(churn_candidates)} churn candidates (percentage={self.churn_percentage})"
-        )
-
-        # Churn agents based on probability
-        churned_count = 0
-        agents_to_churn = []  # Collect agents to churn for batch operation
-
-        for agent_id in churn_candidates:
-            # Use random for stochastic churn decision
-            if random.random() < self.churn_probability:
-                agents_to_churn.append(agent_id)
-
-        # Batch churn all selected agents in a single server call
-        if agents_to_churn:
-            try:
-                self.logger.info(
-                    f"Batch churning {len(agents_to_churn)} agents at round {current_round_id}"
-                )
-                churned_count = ray.get(
-                    self.server.set_agents_churned_batch.remote(agents_to_churn, current_round_id)
-                )
-
-                self.logger.info(
-                    f"Successfully churned {churned_count} agents in batch",
-                    extra={
-                        "extra_data": {
-                            "churned_agent_ids": agents_to_churn,
-                            "day": current_day,
-                            "round_id": current_round_id,
-                        }
-                    },
-                )
-
-                # Update local agent profiles for all churned agents
-                for agent_id in agents_to_churn:
-                    for agent in self.agent_profiles:
-                        if agent.id == agent_id:
-                            agent.left_on = current_round_id
-                            break
-
-            except Exception as e:
-                self.logger.error(
-                    f"Failed to batch churn {len(agents_to_churn)} agents: {e}",
-                    extra={"extra_data": {"error": str(e), "num_agents": len(agents_to_churn)}},
-                )
-                churned_count = 0
-
-        result = {
-            "inactive_agents": len(inactive_agents),
-            "candidates": len(churn_candidates),
-            "churned": churned_count,
-        }
-
-        self.logger.info(f"Churn evaluation completed: {result}")
-
-        return result
-
-    def _evaluate_new_agents(self, current_round_id: str) -> int:
-        """
-        Evaluate and add new agents at the end of a day.
-
-        This method:
-        1. Counts non-churned agents
-        2. Calculates x = percentage_new_agents * non_churned_agents
-        3. Adds x new agents, each with probability probability_new_agents
-        4. New agent is a copy of an existing agent with unique name
-        5. Adds to database and agent_population.json
-        6. Sets joined_on to current round
-
-        Args:
-            current_round_id: Current round ID (UUID string)
-
-        Returns:
-            int: Number of new agents added
-        """
-        self.logger.info(
-            f"Starting new agents evaluation: enabled={self.new_agents_enabled}, probability={self.probability_new_agents}, percentage={self.percentage_new_agents}"
-        )
-
-        if not self.new_agents_enabled:
-            self.logger.info("New agents disabled, skipping evaluation")
-            return 0
-
-        # Get non-churned agents (agents without left_on set)
-        non_churned_agents = [agent for agent in self.agent_profiles if agent.left_on is None]
-
-        self.logger.info(
-            f"Non-churned agents: {len(non_churned_agents)} out of {len(self.agent_profiles)} total (churned: {len(self.agent_profiles) - len(non_churned_agents)})"
-        )
-
-        if not non_churned_agents:
-            self.logger.warning(
-                "No non-churned agents available to use as templates for new agents"
-            )
-            return 0
-
-        # Calculate x = percentage_new_agents * non_churned_agents
-        x = int(len(non_churned_agents) * self.percentage_new_agents)
-
-        self.logger.info(
-            f"Calculated x={x} new agent slots (percentage={self.percentage_new_agents} * {len(non_churned_agents)})"
-        )
-
-        if x == 0:
-            self.logger.info("x=0, no new agents will be added")
-            return 0
-
-        new_agents_added = 0
-        new_agents_to_register = []  # Collect all new agents for batch registration
-
-        self.logger.info(
-            f"Attempting to add up to {x} new agents with probability {self.probability_new_agents}"
-        )
-
-        # Add x new agents, each with probability probability_new_agents
-        for i in range(x):
-            # With probability_new_agents, add a new agent
-            roll = random.random()
-            self.logger.debug(
-                f"New agent slot {i+1}/{x}: roll={roll:.4f}, threshold={self.probability_new_agents}"
-            )
-
-            if roll < self.probability_new_agents:
-                self.logger.info(
-                    f"Creating new agent {i+1}/{x} (roll {roll:.4f} < {self.probability_new_agents})"
-                )
-
-                # Select a random existing agent as template
-                template_agent = random.choice(non_churned_agents)
-
-                # Generate unique ID and name using Faker
-                import uuid
-
-                from faker import Faker
-
-                fake = Faker()
-                new_agent_id = str(uuid.uuid4())
-
-                # Generate name based on gender
                 gender = template_agent.gender
                 if gender and gender.lower() in ["male", "m"]:
                     new_username = fake.name_male()
@@ -3715,76 +3026,15 @@ class SimulationClient:
     def _add_agent_to_population_file(self, agent: AgentProfile):
         """
         Add a new agent to the agent_population.json file.
-
-        Args:
-            agent: AgentProfile to add to the file
+        Delegates to agent_manager module.
         """
-        # Find agent_population.json file using client-specific naming convention
-        client_specific_file = self.config_path / f"{self.client_id}_agent_population.json"
-        generic_file = self.config_path / "agent_population.json"
-
-        if client_specific_file.exists():
-            agent_config_file = client_specific_file
-        else:
-            agent_config_file = generic_file
-
-        if not agent_config_file.exists():
-            self.logger.warning(
-                f"Agent config file not found at {agent_config_file}, skipping agent addition to file"
-            )
-            return
-
-        try:
-            # Load current agent_population.json
-            with open(agent_config_file, "r") as f:
-                agent_data = json.load(f)
-
-            # Create agent dict
-            agent_dict = {
-                "id": agent.id,
-                "username": agent.username,
-                "email": agent.email,
-                "password": agent.password,
-                "leaning": agent.leaning,
-                "user_type": agent.user_type,
-                "age": agent.age,
-                "oe": agent.oe,
-                "co": agent.co,
-                "ex": agent.ex,
-                "ag": agent.ag,
-                "ne": agent.ne,
-                "language": agent.language,
-                "education_level": agent.education_level,
-                "joined_on": agent.joined_on,
-                "gender": agent.gender,
-                "nationality": agent.nationality,
-                "profession": agent.profession,
-                "activity_profile": agent.activity_profile,
-                "archetype": agent.archetype,
-                "cluster": agent.cluster,
-                "llm": agent.llm,
-                "toxicity": agent.toxicity,
-                "daily_activity_level": agent.daily_activity_level,
-                "round_actions": agent.round_actions,
-                "is_page": agent.is_page,
-            }
-
-            # Add to agents list
-            if "agents" not in agent_data:
-                agent_data["agents"] = []
-            agent_data["agents"].append(agent_dict)
-
-            # Write updated data back to file
-            with open(agent_config_file, "w") as f:
-                json.dump(agent_data, f, indent=2)
-
-            self.logger.info(f"Added agent {agent.username} to {agent_config_file.name}")
-
-        except Exception as e:
-            self.logger.error(
-                f"Error adding agent to population file: {e}",
-                extra={"extra_data": {"error": str(e), "file": str(agent_config_file)}},
-            )
+        from YSimulator.YClient.agent_manager import add_agent_to_population_file
+        add_agent_to_population_file(
+            agent,
+            self.config_path,
+            self.client_id,
+            self.logger,
+        )
 
     def shutdown(self) -> None:
         ray.get(self.server.deregister_client.remote(self.client_id))
