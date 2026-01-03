@@ -394,10 +394,13 @@ class TestGetArticleTopics:
             db_config = {"type": "sqlite", "sqlite": {"filename": ":memory:"}}
             server = OrchestratorServer(db_config=db_config, config_path=tmpdir)
             
+            # The server created its own InterestManager instance, so we need to configure it
+            server.interest_manager.get_article_topics = Mock(return_value=["technology", "AI"])
+            
             result = server.get_article_topics("article_1")
             
             assert result == ["technology", "AI"]
-            mock_interest_mgr.get_article_topics.assert_called_once_with("article_1")
+            server.interest_manager.get_article_topics.assert_called_once_with("article_1")
 
 
 class TestStoreArticleTopics:
@@ -422,10 +425,13 @@ class TestStoreArticleTopics:
             db_config = {"type": "sqlite", "sqlite": {"filename": ":memory:"}}
             server = OrchestratorServer(db_config=db_config, config_path=tmpdir)
             
+            # The server created its own InterestManager instance, so we need to configure it
+            server.interest_manager.store_article_topics = Mock(return_value=["topic_1", "topic_2"])
+            
             result = server.store_article_topics("article_1", ["tech", "AI"])
             
             assert result == ["topic_1", "topic_2"]
-            mock_interest_mgr.store_article_topics.assert_called_once_with("article_1", ["tech", "AI"])
+            server.interest_manager.store_article_topics.assert_called_once_with("article_1", ["tech", "AI"])
 
 
 class TestGetFirstRoundId:
@@ -487,18 +493,26 @@ class TestCheckFollowRelationship:
     
     @patch('YSimulator.YServer.classes.db_middleware.DatabaseMiddleware')
     @patch('YSimulator.YServer.interests_modeling.InterestManager')
-    def test_check_follow_relationship_exists(self, mock_interest_mgr_class, mock_db_class):
+    @patch('sqlalchemy.orm.Session')
+    def test_check_follow_relationship_exists(self, mock_session_class, mock_interest_mgr_class, mock_db_class):
         """Test checking existing follow relationship."""
         from YSimulator.YServer.server import OrchestratorServer
         
         mock_db = Mock()
         mock_db.get_or_create_round.return_value = "round_1"
         mock_db.initialize_emotions_table.return_value = None
-        mock_db.check_follow_exists.return_value = True
         mock_db_class.return_value = mock_db
         
         mock_interest_mgr = Mock()
         mock_interest_mgr_class.return_value = mock_interest_mgr
+        
+        # Mock the SQLAlchemy session and query
+        mock_session = Mock()
+        mock_session_class.return_value.__enter__.return_value = mock_session
+        
+        mock_follow = Mock()
+        mock_follow.action = "follow"
+        mock_session.query.return_value.filter_by.return_value.order_by.return_value.first.return_value = mock_follow
         
         with tempfile.TemporaryDirectory() as tmpdir:
             db_config = {"type": "sqlite", "sqlite": {"filename": ":memory:"}}
@@ -507,22 +521,26 @@ class TestCheckFollowRelationship:
             result = server.check_follow_relationship("user1", "user2")
             
             assert result == True
-            mock_db.check_follow_exists.assert_called_once_with("user1", "user2")
     
     @patch('YSimulator.YServer.classes.db_middleware.DatabaseMiddleware')
     @patch('YSimulator.YServer.interests_modeling.InterestManager')
-    def test_check_follow_relationship_not_exists(self, mock_interest_mgr_class, mock_db_class):
+    @patch('sqlalchemy.orm.Session')
+    def test_check_follow_relationship_not_exists(self, mock_session_class, mock_interest_mgr_class, mock_db_class):
         """Test checking non-existing follow relationship."""
         from YSimulator.YServer.server import OrchestratorServer
         
         mock_db = Mock()
         mock_db.get_or_create_round.return_value = "round_1"
         mock_db.initialize_emotions_table.return_value = None
-        mock_db.check_follow_exists.return_value = False
         mock_db_class.return_value = mock_db
         
         mock_interest_mgr = Mock()
         mock_interest_mgr_class.return_value = mock_interest_mgr
+        
+        # Mock the SQLAlchemy session and query to return None
+        mock_session = Mock()
+        mock_session_class.return_value.__enter__.return_value = mock_session
+        mock_session.query.return_value.filter_by.return_value.order_by.return_value.first.return_value = None
         
         with tempfile.TemporaryDirectory() as tmpdir:
             db_config = {"type": "sqlite", "sqlite": {"filename": ":memory:"}}

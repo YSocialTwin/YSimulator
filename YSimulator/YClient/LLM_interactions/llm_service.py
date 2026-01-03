@@ -1,10 +1,14 @@
 import random
 from typing import Any, Dict, List, Optional
+import logging
 
 import ray
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_ollama import ChatOllama
+
+# Initialize logger
+logger = logging.getLogger(__name__)
 
 # Constants
 DEFAULT_FALLBACK_REACTION = "LIKE"
@@ -455,9 +459,6 @@ class LLMService:
         # Validate templates are configured
         if not system_template or not user_template:
             # Log warning and return default fallback
-            import logging
-
-            logger = logging.getLogger(__name__)
             logger.warning(
                 "decide_search_action prompts not configured in llm_prompts.json, using default fallback"
             )

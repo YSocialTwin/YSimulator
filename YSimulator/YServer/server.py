@@ -1058,7 +1058,7 @@ class OrchestratorServer:
                 )
 
                 # Return True if latest action is "follow", False otherwise
-                return latest_follow and latest_follow.action == "follow"
+                return bool(latest_follow and latest_follow.action == "follow")
 
         except Exception as e:
             self.logger.error(
@@ -1215,11 +1215,12 @@ class OrchestratorServer:
             client_id: Unique identifier for the client
 
         Returns:
-            bool: True if heartbeat recorded
+            bool: True if heartbeat recorded, False if client not registered
         """
         if client_id in self.registered_clients:
             self.last_heartbeat[client_id] = time.time()
-        return True
+            return True
+        return False
 
     def _get_active_clients(self) -> set:
         """
