@@ -204,24 +204,36 @@ class TestRecommendRchronoFollowers(unittest.TestCase):
             mock_desc.return_value = Mock()
             
             mock_session = Mock(spec=Session)
-            mock_query = Mock()
-            mock_session.query.return_value = mock_query
             
-            mock_query.distinct.return_value = mock_query
-            mock_query.join.return_value = mock_query
-            mock_query.filter.return_value = mock_query
-            mock_query.order_by.return_value = mock_query
-            mock_query.limit.return_value = mock_query
-            mock_query.all.return_value = [("post1",), ("post2",), ("post3",)]
+            # First query for follower posts (limit=3 from 5*0.6)
+            mock_query1 = Mock()
+            mock_query1.distinct.return_value = mock_query1
+            mock_query1.join.return_value = mock_query1
+            mock_query1.filter.return_value = mock_query1
+            mock_query1.order_by.return_value = mock_query1
+            mock_query1.limit.return_value = mock_query1
+            mock_query1.all.return_value = [("post1",), ("post2",), ("post3",)]
+            
+            # Second query for additional posts (since 3 < 5, will get 2 more)
+            mock_query2 = Mock()
+            mock_query2.join.return_value = mock_query2
+            mock_query2.filter.return_value = mock_query2
+            mock_query2.order_by.return_value = mock_query2
+            mock_query2.limit.return_value = mock_query2
+            mock_query2.all.return_value = [("post4",), ("post5",)]
+            
+            mock_session.query.side_effect = [mock_query1, mock_query2]
             
             result = recommend_rchrono_followers(
                 mock_session, "agent1", 1, 0, 5, 0.6
             )
             
-            assert len(result) == 3
+            assert len(result) == 5
             assert "post1" in result
             assert "post2" in result
             assert "post3" in result
+            assert "post4" in result
+            assert "post5" in result
     
     def test_rchrono_followers_ratio_calculation(self):
         """Test followers_ratio is used for limit calculation."""
@@ -331,30 +343,61 @@ class TestRecommendRchronoFollowersPopularity(unittest.TestCase):
                 mock_func.coalesce.return_value = Mock()
                 
                 mock_session = Mock(spec=Session)
-                mock_query = Mock()
+                
+                # First query for reaction count subquery
                 mock_subquery = Mock()
                 mock_subquery.c = Mock()
                 mock_subquery.c.post_id = Mock()
                 mock_subquery.c.reaction_count = Mock()
                 
-                mock_session.query.return_value = mock_query
-                mock_query.group_by.return_value = mock_query
-                mock_query.subquery.return_value = mock_subquery
-                mock_query.distinct.return_value = mock_query
-                mock_query.join.return_value = mock_query
-                mock_query.outerjoin.return_value = mock_query
-                mock_query.filter.return_value = mock_query
-                mock_query.order_by.return_value = mock_query
-                mock_query.limit.return_value = mock_query
-                mock_query.all.return_value = [("post1",), ("post2",)]
+                mock_query1 = Mock()
+                mock_query1.group_by.return_value = mock_query1
+                mock_query1.subquery.return_value = mock_subquery
+                
+                # Second query for follower posts (with limit=3 from 5*0.6)
+                mock_query2 = Mock()
+                mock_query2.distinct.return_value = mock_query2
+                mock_query2.join.return_value = mock_query2
+                mock_query2.outerjoin.return_value = mock_query2
+                mock_query2.filter.return_value = mock_query2
+                mock_query2.order_by.return_value = mock_query2
+                mock_query2.limit.return_value = mock_query2
+                mock_query2.all.return_value = [("post1",), ("post2",), ("post3",)]
+                
+                # Third query for second reaction count subquery (for additional posts)
+                mock_subquery2 = Mock()
+                mock_subquery2.c = Mock()
+                mock_subquery2.c.post_id = Mock()
+                mock_subquery2.c.reaction_count = Mock()
+                
+                mock_query3 = Mock()
+                mock_query3.group_by.return_value = mock_query3
+                mock_query3.subquery.return_value = mock_subquery2
+                
+                # Fourth query for additional posts (since 3 < 5, will get 2 more)
+                mock_query4 = Mock()
+                mock_query4.join.return_value = mock_query4
+                mock_query4.outerjoin.return_value = mock_query4
+                mock_query4.filter.return_value = mock_query4
+                mock_query4.order_by.return_value = mock_query4
+                mock_query4.limit.return_value = mock_query4
+                mock_query4.all.return_value = [("post4",), ("post5",)]
+                
+                mock_session.query.side_effect = [mock_query1, mock_query2, mock_query3, mock_query4]
                 
                 result = recommend_rchrono_followers_popularity(
                     mock_session, "agent1", 1, 0, 5, 0.6
                 )
                 
-                assert len(result) == 2
+                assert len(result) == 5
+                assert "post1" in result
+                assert "post2" in result
+                assert "post3" in result
+                assert "post4" in result
+                assert "post5" in result
                 # Verify subquery was created for reaction counts
-                assert mock_query.subquery.called
+                assert mock_query1.subquery.called
+                assert mock_query3.subquery.called
     
     def test_rchrono_followers_popularity_fills_additional(self):
         """Test filling with additional posts when needed."""
@@ -368,7 +411,7 @@ class TestRecommendRchronoFollowersPopularity(unittest.TestCase):
                 
                 mock_session = Mock(spec=Session)
                 
-                # First query - follower posts
+                # First query - reaction count subquery
                 mock_query1 = Mock()
                 mock_subquery1 = Mock()
                 mock_subquery1.c = Mock()
@@ -377,39 +420,51 @@ class TestRecommendRchronoFollowersPopularity(unittest.TestCase):
                 
                 mock_query1.group_by.return_value = mock_query1
                 mock_query1.subquery.return_value = mock_subquery1
-                mock_query1.distinct.return_value = mock_query1
-                mock_query1.join.return_value = mock_query1
-                mock_query1.outerjoin.return_value = mock_query1
-                mock_query1.filter.return_value = mock_query1
-                mock_query1.order_by.return_value = mock_query1
-                mock_query1.limit.return_value = mock_query1
-                mock_query1.all.return_value = [("post1",)]
                 
-                # Second and third queries for subquery + additional posts
+                # Second query - follower posts (limit=3 from 5*0.6)
                 mock_query2 = Mock()
+                mock_query2.distinct.return_value = mock_query2
+                mock_query2.join.return_value = mock_query2
+                mock_query2.outerjoin.return_value = mock_query2
+                mock_query2.filter.return_value = mock_query2
+                mock_query2.order_by.return_value = mock_query2
+                mock_query2.limit.return_value = mock_query2
+                mock_query2.all.return_value = [("post1",)]
+                
+                # Third query - second reaction count subquery (for additional posts)
+                mock_query3 = Mock()
                 mock_subquery2 = Mock()
                 mock_subquery2.c = Mock()
                 mock_subquery2.c.post_id = Mock()
                 mock_subquery2.c.reaction_count = Mock()
                 
-                mock_query2.group_by.return_value = mock_query2
-                mock_query2.subquery.return_value = mock_subquery2
+                mock_query3.group_by.return_value = mock_query3
+                mock_query3.subquery.return_value = mock_subquery2
                 
-                mock_query3 = Mock()
-                mock_query3.join.return_value = mock_query3
-                mock_query3.outerjoin.return_value = mock_query3
-                mock_query3.filter.return_value = mock_query3
-                mock_query3.order_by.return_value = mock_query3
-                mock_query3.limit.return_value = mock_query3
-                mock_query3.all.return_value = [("post2",), ("post3",)]
+                # Fourth query - additional posts (since 1 < 5, get 4 more)
+                mock_query4 = Mock()
+                mock_query4.join.return_value = mock_query4
+                mock_query4.outerjoin.return_value = mock_query4
+                mock_query4.filter.return_value = mock_query4
+                mock_query4.order_by.return_value = mock_query4
+                mock_query4.limit.return_value = mock_query4
+                mock_query4.all.return_value = [("post2",), ("post3",), ("post4",), ("post5",)]
                 
-                mock_session.query.side_effect = [mock_query1, mock_query2, mock_query3]
+                mock_session.query.side_effect = [mock_query1, mock_query2, mock_query3, mock_query4]
                 
                 result = recommend_rchrono_followers_popularity(
                     mock_session, "agent1", 1, 0, 5, 0.6
                 )
                 
-                assert len(result) == 3
+                assert len(result) == 5
+                assert "post1" in result
+                assert "post2" in result
+                assert "post3" in result
+                assert "post4" in result
+                assert "post5" in result
+                # Verify subquery was created for reaction counts
+                assert mock_query1.subquery.called
+                assert mock_query3.subquery.called
                 assert "post1" in result
                 assert "post2" in result
                 assert "post3" in result
@@ -494,24 +549,41 @@ class TestRecommendCommonInterests(unittest.TestCase):
                 mock_func.count.return_value = Mock()
                 
                 mock_session = Mock(spec=Session)
-                mock_query = Mock()
-                mock_session.query.return_value = mock_query
                 
-                mock_query.distinct.return_value = mock_query
-                mock_query.join.return_value = mock_query
-                mock_query.filter.return_value = mock_query
-                mock_query.group_by.return_value = mock_query
-                mock_query.order_by.return_value = mock_query
-                mock_query.limit.return_value = mock_query
-                mock_query.all.return_value = [("post1",), ("post2",)]
+                # First query for posts from followers with common interests (limit=3)
+                mock_query1 = Mock()
+                mock_query1.distinct.return_value = mock_query1
+                mock_query1.join.return_value = mock_query1
+                mock_query1.filter.return_value = mock_query1
+                mock_query1.group_by.return_value = mock_query1
+                mock_query1.order_by.return_value = mock_query1
+                mock_query1.limit.return_value = mock_query1
+                mock_query1.all.return_value = [("post1",), ("post2",)]
+                
+                # Second query for additional posts with common interests (since 2 < 5, get 3 more)
+                mock_query2 = Mock()
+                mock_query2.distinct.return_value = mock_query2
+                mock_query2.join.return_value = mock_query2
+                mock_query2.filter.return_value = mock_query2
+                mock_query2.group_by.return_value = mock_query2
+                mock_query2.order_by.return_value = mock_query2
+                mock_query2.limit.return_value = mock_query2
+                mock_query2.all.return_value = [("post3",), ("post4",), ("post5",)]
+                
+                mock_session.query.side_effect = [mock_query1, mock_query2]
                 
                 result = recommend_common_interests(
                     mock_session, "agent1", 1, 0, 5, 0.6
                 )
                 
-                assert len(result) == 2
+                assert len(result) == 5
+                assert "post1" in result
+                assert "post2" in result
+                assert "post3" in result
+                assert "post4" in result
+                assert "post5" in result
                 # Verify joins for PostTopic, UserInterest, Follow
-                assert mock_query.join.call_count >= 3
+                assert mock_query1.join.call_count >= 3
     
     def test_common_interests_fills_additional(self):
         """Test filling with additional posts when follower posts insufficient."""
@@ -569,30 +641,46 @@ class TestRecommendCommonUserInterests(unittest.TestCase):
                     mock_desc.return_value = Mock()
                     mock_func.count.return_value = Mock()
                     
-                    # Mock aliased to return different mocks for UserInterest1 and UserInterest2
-                    mock_aliased.side_effect = [Mock(), Mock()]
+                    # Mock aliased to return mocks for UserInterest1, UserInterest2, and additional aliases
+                    # Function calls aliased 4 times: 2 for first query + 2 for additional query
+                    mock_aliased.side_effect = [Mock(), Mock(), Mock(), Mock()]
                     
                     mock_session = Mock(spec=Session)
-                    mock_query = Mock()
-                    mock_session.query.return_value = mock_query
                     
-                    mock_query.distinct.return_value = mock_query
-                    mock_query.join.return_value = mock_query
-                    mock_query.filter.return_value = mock_query
-                    mock_query.group_by.return_value = mock_query
-                    mock_query.order_by.return_value = mock_query
-                    mock_query.limit.return_value = mock_query
-                    mock_query.all.return_value = [("post1", 5), ("post2", 3)]
+                    # First query for posts from followers with common interests (limit=3)
+                    mock_query1 = Mock()
+                    mock_query1.distinct.return_value = mock_query1
+                    mock_query1.join.return_value = mock_query1
+                    mock_query1.filter.return_value = mock_query1
+                    mock_query1.group_by.return_value = mock_query1
+                    mock_query1.order_by.return_value = mock_query1
+                    mock_query1.limit.return_value = mock_query1
+                    mock_query1.all.return_value = [("post1", 5), ("post2", 3)]
+                    
+                    # Second query for additional posts (since 2 < 5, get 3 more)
+                    mock_query2 = Mock()
+                    mock_query2.distinct.return_value = mock_query2
+                    mock_query2.join.return_value = mock_query2
+                    mock_query2.filter.return_value = mock_query2
+                    mock_query2.group_by.return_value = mock_query2
+                    mock_query2.order_by.return_value = mock_query2
+                    mock_query2.limit.return_value = mock_query2
+                    mock_query2.all.return_value = [("post3", 2), ("post4", 1), ("post5", 1)]
+                    
+                    mock_session.query.side_effect = [mock_query1, mock_query2]
                     
                     result = recommend_common_user_interests(
                         mock_session, "agent1", 1, 0, 5, 0.6
                     )
                     
-                    assert len(result) == 2
+                    assert len(result) == 5
                     assert "post1" in result
                     assert "post2" in result
-                    # Verify aliased was called for UserInterest aliases
-                    assert mock_aliased.call_count >= 2
+                    assert "post3" in result
+                    assert "post4" in result
+                    assert "post5" in result
+                    # Verify aliased was called 4 times (2 for first query, 2 for additional)
+                    assert mock_aliased.call_count == 4
     
     def test_common_user_interests_fills_additional(self):
         """Test filling with additional posts from non-followers."""
