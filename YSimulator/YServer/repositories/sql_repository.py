@@ -159,13 +159,14 @@ class SQLUserRepository(UserRepository):
                 if not user:
                     return None
                 
+                # Convert SQLAlchemy model to dict - use getattr for optional fields
                 return {
                     "id": user.id,
                     "username": user.username,
-                    "leaning": user.leaning,
-                    "archetype": user.archetype,
-                    "is_llm": user.is_llm,
-                    "model_name": user.model_name,
+                    "email": getattr(user, "email", None),
+                    "leaning": getattr(user, "leaning", None),
+                    "archetype": getattr(user, "archetype", None),
+                    "user_type": getattr(user, "user_type", None),
                 }
             finally:
                 session.close()
@@ -185,10 +186,10 @@ class SQLUserRepository(UserRepository):
                     {
                         "id": user.id,
                         "username": user.username,
-                        "leaning": user.leaning,
-                        "archetype": user.archetype,
-                        "is_llm": user.is_llm,
-                        "model_name": user.model_name,
+                        "email": getattr(user, "email", None),
+                        "leaning": getattr(user, "leaning", None),
+                        "archetype": getattr(user, "archetype", None),
+                        "user_type": getattr(user, "user_type", None),
                     }
                     for user in users
                 ]
@@ -232,10 +233,10 @@ class SQLUserRepository(UserRepository):
                 return {
                     "id": user.id,
                     "username": user.username,
-                    "leaning": user.leaning,
-                    "archetype": user.archetype,
-                    "is_llm": user.is_llm,
-                    "model_name": user.model_name,
+                    "email": getattr(user, "email", None),
+                    "leaning": getattr(user, "leaning", None),
+                    "archetype": getattr(user, "archetype", None),
+                    "user_type": getattr(user, "user_type", None),
                 }
             finally:
                 session.close()
