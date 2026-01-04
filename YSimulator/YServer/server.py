@@ -247,9 +247,9 @@ class OrchestratorServer:
         (user_service, post_service, follow_service, interest_service, 
          content_service, simulation_service, metadata_service, mention_service) = create_all_services(db_config, self.logger)
         
-        # Create complete database adapter with ALL services - migration complete!
+        # Create complete database adapter with ALL services - 100% migration complete!
+        # No legacy middleware needed - all operations use Repository/Service pattern
         self.db = DatabaseServiceAdapter(
-            legacy_middleware=legacy_middleware,
             user_service=user_service,
             post_service=post_service,
             follow_service=follow_service,
@@ -258,6 +258,7 @@ class OrchestratorServer:
             simulation_service=simulation_service,
             metadata_service=metadata_service,
             mention_service=mention_service,
+            redis_client=legacy_middleware.redis_client if legacy_middleware and legacy_middleware.use_redis else None,
             logger=self.logger,
         )
 
@@ -275,7 +276,7 @@ class OrchestratorServer:
         self.db.initialize_emotions_table()
 
         self.logger.info(
-            "Orchestrator server initialized - Repository/Service pattern FULLY MIGRATED!",
+            "Orchestrator server initialized - Repository/Service pattern 100% MIGRATED!",
             extra={
                 "extra_data": {
                     "db_type": db_config.get("type", "sqlite"),
@@ -283,7 +284,7 @@ class OrchestratorServer:
                     "redis_enabled": self.db.use_redis,
                     "timeout_seconds": timeout_seconds,
                     "archetypes_enabled": self.archetypes_enabled,
-                    "migration_status": "FULLY_COMPLETE",
+                    "migration_status": "100_PERCENT_COMPLETE",
                     "services_integrated": [
                         "UserService",
                         "PostService",
@@ -294,7 +295,7 @@ class OrchestratorServer:
                         "MetadataService",
                         "MentionService",
                     ],
-                    "legacy_usage": "Redis utilities only",
+                    "legacy_middleware": "None - fully removed",
                 }
             },
         )

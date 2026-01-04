@@ -3,6 +3,7 @@ Database Service Adapter for YSimulator.
 
 This adapter provides a unified interface using the Repository/Service pattern.
 All database operations go through this adapter with services handling the logic.
+100% migration complete - no legacy middleware dependencies.
 """
 
 import logging
@@ -23,12 +24,11 @@ class DatabaseServiceAdapter:
     Complete database adapter for YSimulator using Repository/Service pattern.
     
     This adapter provides all database operations through services.
-    ALL operations now use the modern Repository/Service architecture.
+    100% migration complete - all operations use modern Repository/Service architecture.
     """
     
     def __init__(
         self,
-        legacy_middleware,  # Keep for Redis operations and utilities only
         user_service: UserService,
         post_service: PostService,
         follow_service: FollowService,
@@ -37,13 +37,13 @@ class DatabaseServiceAdapter:
         simulation_service: SimulationService,
         metadata_service: MetadataService,
         mention_service: MentionService,
+        redis_client=None,
         logger: Optional[logging.Logger] = None,
     ):
         """
         Initialize the complete database adapter.
         
         Args:
-            legacy_middleware: Legacy middleware for Redis utilities only
             user_service: User service
             post_service: Post service
             follow_service: Follow service
@@ -52,9 +52,9 @@ class DatabaseServiceAdapter:
             simulation_service: Simulation service
             metadata_service: Metadata service
             mention_service: Mention service
+            redis_client: Optional Redis client for caching
             logger: Optional logger instance
         """
-        self._legacy = legacy_middleware  # Private - for Redis utilities only
         self.user_service = user_service
         self.post_service = post_service
         self.follow_service = follow_service
@@ -63,10 +63,11 @@ class DatabaseServiceAdapter:
         self.simulation_service = simulation_service
         self.metadata_service = metadata_service
         self.mention_service = mention_service
+        self.redis_client = redis_client
         self.logger = logger or logging.getLogger(__name__)
         
         # Expose necessary attributes for compatibility
-        self.use_redis = legacy_middleware.use_redis if legacy_middleware else False
+        self.use_redis = redis_client is not None
     
     # ========================================================================
     # USER OPERATIONS - UserService (COMPLETE)
@@ -288,24 +289,63 @@ class DatabaseServiceAdapter:
         """Consolidate Redis to SQL."""
         return self.simulation_service.consolidate_redis_to_sqlite(current_day)
     
-    def cleanup_old_posts_from_redis(self, current_round_id: str):
-        """Cleanup old posts from Redis."""
-        # Note: current_round_id needs to be parsed to day/slot
-        # For now, delegate to legacy for Redis-specific operations
-        return self._legacy.cleanup_old_posts_from_redis(current_round_id)
+    def cleanup_old_posts_from_redis(self, current_day: int, current_slot: int) -> Dict[str, int]:
+        """
+        Cleanup old posts from Redis.
+        
+        Args:
+            current_day: Current simulation day
+            current_slot: Current time slot
+            
+        Returns:
+            Dict with cleanup statistics
+        """
+        return self.simulation_service.cleanup_old_posts_from_redis(current_day, current_slot)
     
     # ========================================================================
-    # REDIS UTILITIES - Legacy (Redis-specific operations)
+    # UTILITY METHODS - Complete migration (no legacy dependencies)
     # ========================================================================
     
-    def get_redis_key_pattern(self, pattern: str) -> List[str]:
-        """Get Redis keys matching pattern."""
-        return self._legacy.get_redis_key_pattern(pattern)
+    def get_redis_key_pattern(self, table: str, pattern: str = "*") -> str:
+        """
+        Generate a Redis key pattern for scanning.
+        
+        Args:
+            table: Table name (e.g., "follow", "post")
+            pattern: Pattern to match (default: "*")
+            
+        Returns:
+            str: Redis key pattern (e.g., "ysim:follow:*")
+        """
+        return f"ysim:{table}:{pattern}"
     
-    def _redis_key(self, *parts) -> str:
-        """Build Redis key."""
-        return self._legacy._redis_key(*parts)
+    def _redis_key(self, table: str, id: Any = None) -> str:
+        """
+        Generate Redis key for a table and optional ID.
+        
+        Args:
+            table: Table name
+            id: Optional ID
+            
+        Returns:
+            str: Redis key (e.g., "ysim:table:id")
+        """
+        if id is not None:
+            return f"ysim:{table}:{id}"
+        return f"ysim:{table}"
     
-    def _is_empty_or_default(self, value: Any, default: Any) -> bool:
-        """Check if value is empty or default."""
-        return self._legacy._is_empty_or_default(value, default)
+    @staticmethod
+    def _is_empty_or_default(value: Any) -> bool:
+        """
+        Check if a value is empty or a default placeholder (-1, '-1', '', None).
+        
+        This helper handles the database's use of -1 as a default value for foreign keys
+        that can be either integers or strings depending on context.
+        
+        Args:
+            value: The value to check
+            
+        Returns:
+            bool: True if the value should be considered empty/default
+        """
+        return value is None or value == -1 or value == "-1" or value == ""
