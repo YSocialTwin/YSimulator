@@ -231,7 +231,7 @@ class OrchestratorServer:
         # Set up logging first
         self._setup_logging()
 
-        # Initialize legacy middleware for operations still using it
+        # Initialize legacy middleware for specialized operations
         legacy_middleware = DatabaseMiddleware(
             db_config=db_config,
             config_path=str(self.config_path),
@@ -240,18 +240,22 @@ class OrchestratorServer:
             simulation_config=simulation_config,
         )
         
-        # Initialize Repository/Service pattern components
-        from YSimulator.YServer.service_factory import create_services
+        # Initialize all Repository/Service pattern components
+        from YSimulator.YServer.service_factory import create_all_services
         from YSimulator.YServer.database_adapter import DatabaseServiceAdapter
         
-        user_service, post_service = create_services(db_config, self.logger)
+        (user_service, post_service, follow_service, interest_service, 
+         content_service, simulation_service) = create_all_services(db_config, self.logger)
         
-        # Create complete database adapter (migration complete!)
-        # The adapter provides all database operations through a unified interface
+        # Create complete database adapter with all services
         self.db = DatabaseServiceAdapter(
             legacy_middleware=legacy_middleware,
             user_service=user_service,
             post_service=post_service,
+            follow_service=follow_service,
+            interest_service=interest_service,
+            content_service=content_service,
+            simulation_service=simulation_service,
             logger=self.logger,
         )
 
@@ -269,7 +273,7 @@ class OrchestratorServer:
         self.db.initialize_emotions_table()
 
         self.logger.info(
-            "Orchestrator server initialized - Repository/Service pattern migration COMPLETE",
+            "Orchestrator server initialized - All services integrated!",
             extra={
                 "extra_data": {
                     "db_type": db_config.get("type", "sqlite"),
@@ -277,9 +281,14 @@ class OrchestratorServer:
                     "redis_enabled": self.db.use_redis,
                     "timeout_seconds": timeout_seconds,
                     "archetypes_enabled": self.archetypes_enabled,
-                    "migration_status": "COMPLETE",
-                    "user_ops": "UserService",
-                    "post_ops": "PostService",
+                    "services_integrated": [
+                        "UserService",
+                        "PostService",
+                        "FollowService",
+                        "InterestService",
+                        "ContentService",
+                        "SimulationService",
+                    ],
                 }
             },
         )

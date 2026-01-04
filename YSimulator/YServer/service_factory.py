@@ -16,9 +16,16 @@ from YSimulator.YServer.repositories.sql_repository import (
     SQLPostRepository,
     SQLFollowRepository,
     SQLInterestRepository,
+    SQLArticleRepository,
+    SQLImageRepository,
+    SQLRecommendationRepository,
 )
 from YSimulator.YServer.services.user_service import UserService
 from YSimulator.YServer.services.post_service import PostService
+from YSimulator.YServer.services.follow_service import FollowService
+from YSimulator.YServer.services.interest_service import InterestService
+from YSimulator.YServer.services.content_service import ContentService
+from YSimulator.YServer.services.simulation_service import SimulationService
 
 
 def create_database_engine(db_config: Dict[str, Any]) -> Engine:
@@ -65,19 +72,19 @@ def create_database_engine(db_config: Dict[str, Any]) -> Engine:
     return engine
 
 
-def create_services(
+def create_all_services(
     db_config: Dict[str, Any],
     logger: Optional[logging.Logger] = None,
-) -> Tuple[UserService, PostService]:
+) -> Tuple[UserService, PostService, FollowService, InterestService, ContentService, SimulationService]:
     """
-    Create service instances with repository dependencies.
+    Create all service instances with repository dependencies.
     
     Args:
         db_config: Database configuration dict
         logger: Optional logger instance
     
     Returns:
-        Tuple of (UserService, PostService)
+        Tuple of (UserService, PostService, FollowService, InterestService, ContentService, SimulationService)
     """
     if logger is None:
         logger = logging.getLogger(__name__)
@@ -85,13 +92,16 @@ def create_services(
     # Create database engine
     engine = create_database_engine(db_config)
     
-    # Create repositories
+    # Create all repositories
     user_repo = SQLUserRepository(engine, logger)
     post_repo = SQLPostRepository(engine, logger)
     follow_repo = SQLFollowRepository(engine, logger)
     interest_repo = SQLInterestRepository(engine, logger)
+    article_repo = SQLArticleRepository(engine, logger)
+    image_repo = SQLImageRepository(engine, logger)
+    recommendation_repo = SQLRecommendationRepository(engine, logger)
     
-    # Create services
+    # Create all services
     user_service = UserService(
         user_repository=user_repo,
         interest_repository=interest_repo,
@@ -104,4 +114,46 @@ def create_services(
         logger=logger,
     )
     
-    return user_service, post_service
+    follow_service = FollowService(
+        follow_repository=follow_repo,
+        logger=logger,
+    )
+    
+    interest_service = InterestService(
+        interest_repository=interest_repo,
+        logger=logger,
+    )
+    
+    content_service = ContentService(
+        article_repository=article_repo,
+        image_repository=image_repo,
+        logger=logger,
+    )
+    
+    simulation_service = SimulationService(
+        recommendation_repository=recommendation_repo,
+        logger=logger,
+    )
+    
+    return user_service, post_service, follow_service, interest_service, content_service, simulation_service
+
+
+def create_services(
+    db_config: Dict[str, Any],
+    logger: Optional[logging.Logger] = None,
+) -> Tuple[UserService, PostService]:
+    """
+    Create basic service instances with repository dependencies.
+    
+    DEPRECATED: Use create_all_services() instead.
+    
+    Args:
+        db_config: Database configuration dict
+        logger: Optional logger instance
+    
+    Returns:
+        Tuple of (UserService, PostService)
+    """
+    # This function is kept for backward compatibility
+    all_services = create_all_services(db_config, logger)
+    return all_services[0], all_services[1]  # Return only UserService and PostService
