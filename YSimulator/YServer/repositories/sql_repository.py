@@ -381,7 +381,7 @@ class SQLPostRepository(PostRepository):
             session.close()
     
     def get_post(self, post_id: str) -> Optional[Dict[str, Any]]:
-        """Get post by ID."""
+        """Get post by ID - returns same fields as old middleware."""
         try:
             session = Session(self.engine)
             try:
@@ -389,14 +389,16 @@ class SQLPostRepository(PostRepository):
                 if not post:
                     return None
                 
+                # Return exact same fields as old middleware
                 return {
                     "id": post.id,
-                    "author": post.user_id,  # Map user_id to author
-                    "text": post.tweet,  # Map tweet to text
+                    "thread_id": post.thread_id,
+                    "news_id": post.news_id,
+                    "comment_to": post.comment_to,
+                    "shared_from": post.shared_from,
+                    "user_id": post.user_id,
+                    "tweet": post.tweet,
                     "round": post.round,
-                    "parent_post": post.comment_to,  # Map comment_to to parent_post
-                    "root_post": post.thread_id,  # Map thread_id to root_post
-                    "num_reactions": post.reaction_count,  # Map reaction_count to num_reactions
                 }
             finally:
                 session.close()
@@ -467,12 +469,20 @@ class SQLPostRepository(PostRepository):
     def add_interaction(self, interaction_data: Dict[str, Any]) -> bool:
         """Add a reaction/interaction to a post."""
         try:
+            import uuid
             session = Session(self.engine)
             try:
+                # Generate UUID if not provided
+                if "id" not in interaction_data:
+                    interaction_data["id"] = str(uuid.uuid4())
+                
                 reaction = Reaction(**interaction_data)
                 session.add(reaction)
                 session.commit()
                 return True
+            except Exception as e:
+                session.rollback()
+                raise
             finally:
                 session.close()
         except Exception as e:

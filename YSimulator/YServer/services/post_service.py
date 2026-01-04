@@ -123,6 +123,34 @@ class PostService:
             self.logger.error(f"Error in post service add_reaction: {e}")
             return False
     
+    def add_interaction(self, interaction_data: Dict[str, Any]) -> bool:
+        """
+        Add an interaction - alias for add_reaction for backwards compatibility.
+        
+        Args:
+            interaction_data: Interaction information dictionary
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        return self.add_reaction(interaction_data)
+    
+    def increment_post_reaction_count(self, post_id: str) -> bool:
+        """
+        Increment the reaction count for a post.
+        
+        Args:
+            post_id: Post identifier
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            return self.post_repo.increment_post_reaction_count(post_id)
+        except Exception as e:
+            self.logger.error(f"Error incrementing post reaction count: {e}")
+            return False
+    
     def add_post_topic(self, post_id: str, topic_id: str) -> bool:
         """
         Associate a topic with a post.
