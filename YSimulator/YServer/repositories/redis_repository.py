@@ -6,6 +6,7 @@ using Redis for high-performance caching operations.
 """
 
 import logging
+import uuid
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 try:
@@ -505,8 +506,6 @@ class RedisFollowRepository(FollowRepository):
     def add_follow(self, follow_data: Dict[str, Any]) -> bool:
         """Add a follow relationship."""
         try:
-            import uuid
-            
             # Generate UUID for follow record
             follow_id = str(uuid.uuid4())
             follow_data["id"] = follow_id
@@ -530,8 +529,6 @@ class RedisFollowRepository(FollowRepository):
             return 0
         
         try:
-            import uuid
-            
             # Generate UUIDs for all follow records
             for follow_data in follows_data:
                 follow_data["id"] = str(uuid.uuid4())
@@ -613,7 +610,6 @@ class RedisInterestRepository(InterestRepository):
                 return existing_id.decode() if isinstance(existing_id, bytes) else existing_id
             
             # Create new interest
-            import uuid
             interest_id = str(uuid.uuid4())
             key = self._redis_key("interests", interest_id)
             
@@ -797,7 +793,6 @@ class RedisRecommendationRepository(RecommendationRepository):
                 return round_id.decode() if isinstance(round_id, bytes) else round_id
             
             # Create new round
-            import uuid
             round_id = str(uuid.uuid4())
             self.redis_client.set(key, round_id)
             
