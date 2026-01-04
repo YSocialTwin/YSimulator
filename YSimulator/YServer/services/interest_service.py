@@ -44,21 +44,20 @@ class InterestService:
             self.logger.error(f"Error adding/getting interest: {e}")
             return None
     
-    def add_user_interest(self, user_id: str, interest_id: str, count: int = 1) -> bool:
+    def add_user_interest(self, user_id: str, interest_id: str, round_id: str) -> bool:
         """
         Add a user interest.
         
         Args:
             user_id: User ID
             interest_id: Interest ID
-            count: Count/weight of interest
+            round_id: Round ID (UUID string)
             
         Returns:
             True if successful, False otherwise
         """
         try:
-            # Note: count parameter needs to be handled - for now using round_id as placeholder
-            return self.interest_repo.add_user_interest(user_id, interest_id, str(count))
+            return self.interest_repo.add_user_interest(user_id, interest_id, round_id)
         except Exception as e:
             self.logger.error(f"Error adding user interest: {e}")
             return False
@@ -115,23 +114,31 @@ class InterestService:
             return None
     
     def add_agent_opinion(
-        self, agent_id: str, topic_id: str, opinion_value: float, round_id: str
+        self, 
+        agent_id: str, 
+        round_id: str, 
+        topic_id: str, 
+        opinion: float,
+        id_interacted_with: Optional[str] = None,
+        id_post: Optional[str] = None
     ) -> bool:
         """
         Add an agent opinion on a topic.
         
         Args:
             agent_id: Agent ID
-            topic_id: Topic ID
-            opinion_value: Opinion value
             round_id: Round ID
+            topic_id: Topic ID
+            opinion: Opinion value
+            id_interacted_with: Optional UUID of agent interacted with
+            id_post: Optional UUID of post
             
         Returns:
             True if successful, False otherwise
         """
         try:
             return self.interest_repo.add_agent_opinion(
-                agent_id, topic_id, opinion_value, round_id
+                agent_id, round_id, topic_id, opinion, id_interacted_with, id_post
             )
         except Exception as e:
             self.logger.error(f"Error adding agent opinion: {e}")

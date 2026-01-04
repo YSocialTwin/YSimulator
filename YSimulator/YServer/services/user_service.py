@@ -209,36 +209,32 @@ class UserService:
             self.logger.error(f"Error updating last active day for agent {agent_id}: {e}")
             return False
     
-    def get_churned_agents(self, day: int = None, inactivity_threshold: int = None) -> List[str]:
+    def get_churned_agents(self) -> List[str]:
         """
-        Get list of churned agents.
+        Get list of churned agents - matches old middleware signature.
         
-        Args:
-            day: Optional current day
-            inactivity_threshold: Optional threshold for inactivity
-            
         Returns:
             List of churned agent IDs
         """
         try:
-            return self.user_repo.get_churned_agents(day, inactivity_threshold)
+            return self.user_repo.get_churned_agents()
         except Exception as e:
             self.logger.error(f"Error getting churned agents: {e}")
             return []
     
-    def set_agent_churned(self, agent_id: str, churn_day: int) -> bool:
+    def set_agent_churned(self, agent_id: str, round_id: str) -> bool:
         """
-        Mark an agent as churned.
+        Mark an agent as churned by setting left_on field - matches old middleware signature.
         
         Args:
-            agent_id: Agent ID
-            churn_day: Day when agent churned
+            agent_id: Agent ID (UUID string)
+            round_id: Round ID when agent churned (UUID string)
             
         Returns:
             True if successful, False otherwise
         """
         try:
-            return self.user_repo.set_agent_churned(agent_id, churn_day)
+            return self.user_repo.set_agent_churned(agent_id, round_id)
         except Exception as e:
             self.logger.error(f"Error setting agent {agent_id} as churned: {e}")
             return False
