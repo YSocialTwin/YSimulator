@@ -294,6 +294,54 @@ class DatabaseServiceAdapter:
         """Get latest agent opinion."""
         return self.interest_service.get_latest_agent_opinion(agent_id, topic_id)
     
+    def get_user_interests_in_window(
+        self, user_id: str, current_round_id: str, attention_window: int
+    ) -> List[Dict[str, str]]:
+        """
+        Get user interests within attention window (old middleware signature).
+        
+        Args:
+            user_id: User UUID
+            current_round_id: Current round UUID
+            attention_window: Number of rounds to look back
+            
+        Returns:
+            List[Dict]: List of user interest records with interest_id and round_id
+        """
+        # This method needs to query the Round table to convert round_id to day/hour
+        # Then calculate the window and query UserInterest
+        # For now, delegate to the interest repository directly
+        return self.interest_service.interest_repo.get_user_interests_in_window_old(
+            user_id, current_round_id, attention_window
+        )
+    
+    def compute_interest_counts_in_window(
+        self, user_id: str, current_round_id: str, attention_window: int
+    ) -> Dict[str, int]:
+        """
+        Compute interest counts for a user within the attention window.
+        
+        Args:
+            user_id: User UUID
+            current_round_id: Current round UUID
+            attention_window: Number of rounds to look back
+            
+        Returns:
+            Dict[str, int]: Map of interest_id to count within the window
+        """
+        interests_in_window = self.get_user_interests_in_window(
+            user_id, current_round_id, attention_window
+        )
+        
+        # Count occurrences of each interest
+        interest_counts = {}
+        for entry in interests_in_window:
+            interest_id = entry.get("interest_id")
+            if interest_id:
+                interest_counts[interest_id] = interest_counts.get(interest_id, 0) + 1
+        
+        return interest_counts
+    
     # ========================================================================
     # MENTION OPERATIONS - MentionService (COMPLETE)
     # ========================================================================
@@ -350,6 +398,20 @@ class DatabaseServiceAdapter:
     def get_article_topics(self, article_id: str) -> List[str]:
         """Get article topics."""
         return self.content_service.get_article_topics(article_id)
+    
+    def add_article_topic(self, article_id: str, topic_id: str) -> bool:
+        """
+        Add article topic association (old middleware signature).
+        
+        Args:
+            article_id: Article UUID
+            topic_id: Topic UUID
+            
+        Returns:
+            bool: True if successful, False otherwise
+        """
+        # Delegate to article repository directly
+        return self.content_service.article_repo.add_article_topic(article_id, topic_id)
     
     def add_image(self, image_data: Dict[str, Any]) -> str:
         """Add image."""

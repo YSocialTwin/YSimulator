@@ -1288,6 +1288,67 @@ class SQLInterestRepository(InterestRepository):
                 extra={"extra_data": {"error": str(e)}},
             )
             return []
+    
+    def get_user_interests_in_window_old(
+        self, user_id: str, current_round_id: str, attention_window: int
+    ) -> List[Dict[str, str]]:
+        """
+        Get user interests within attention window (old middleware signature).
+        
+        This method matches the old db_middleware.get_user_interests_in_window signature.
+        It converts round_id to day/hour and calculates the sliding window.
+        
+        Args:
+            user_id: User UUID
+            current_round_id: Current round UUID
+            attention_window: Number of rounds to look back
+            
+        Returns:
+            List[Dict]: List of user interest records with interest_id and round_id
+        """
+        try:
+            session = Session(self.engine)
+            try:
+                # Get current round details
+                current_round = session.query(Round).filter(Round.id == current_round_id).first()
+                if not current_round:
+                    return []
+
+                current_day = current_round.day
+                current_hour = current_round.hour
+
+                # Calculate the round number (day * 24 + hour)
+                current_round_num = (current_day - 1) * 24 + current_hour
+                cutoff_round_num = max(0, current_round_num - attention_window)
+
+                # Calculate cutoff day and hour
+                cutoff_day = (cutoff_round_num // 24) + 1
+                cutoff_hour = cutoff_round_num % 24
+
+                # Query user interests within the window
+                user_interests = (
+                    session.query(UserInterest, Round)
+                    .join(Round, UserInterest.round_id == Round.id)
+                    .filter(UserInterest.user_id == user_id)
+                    .filter(
+                        (Round.day > cutoff_day)
+                        | ((Round.day == cutoff_day) & (Round.hour >= cutoff_hour))
+                    )
+                    .all()
+                )
+
+                return [
+                    {"interest_id": ui.interest_id, "round_id": ui.round_id} 
+                    for ui, _ in user_interests
+                ]
+            finally:
+                session.close()
+        except Exception as e:
+            self.logger.error(
+                f"Error getting user interests in window (old): {e}",
+                extra={"extra_data": {"error": str(e), "user_id": user_id}},
+            )
+            return []
 
 
 class SQLRecommendationRepository(RecommendationRepository):
@@ -1573,6 +1634,43 @@ class SQLArticleRepository(ArticleRepository):
                 f"Error getting article topics: {e}", extra={"extra_data": {"error": str(e)}}
             )
             return []
+    
+    def add_article_topic(self, article_id: str, topic_id: str) -> bool:
+        """Add article topic association."""
+        try:
+            session = Session(self.engine)
+            try:
+                import uuid
+                # Check if already exists
+                existing = (
+                    session.query(ArticleTopic)
+                    .filter_by(article_id=article_id, topic_id=topic_id)
+                    .first()
+                )
+                
+                if existing:
+                    return True  # Already exists
+                
+                # Create article topic record
+                article_topic = ArticleTopic(
+                    id=str(uuid.uuid4()),
+                    article_id=article_id,
+                    topic_id=topic_id
+                )
+                session.add(article_topic)
+                session.commit()
+                return True
+            except Exception as e:
+                session.rollback()
+                raise
+            finally:
+                session.close()
+        except Exception as e:
+            self.logger.error(
+                f"Error adding article topic: {e}",
+                extra={"extra_data": {"error": str(e), "article_id": article_id, "topic_id": topic_id}}
+            )
+            return False
 
 
 class SQLImageRepository(ImageRepository):
