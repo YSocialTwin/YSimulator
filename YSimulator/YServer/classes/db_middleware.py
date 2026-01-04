@@ -754,7 +754,7 @@ class DatabaseMiddleware:
                         user_id = post_dict.get("user_id")
                         username = DEFAULT_USERNAME
                         if user_id:
-                            user_key = self._redis_key("users", user_id)
+                            user_key = self._redis_key("user_mgmt", user_id)
                             user_data = self.redis_client.hgetall(user_key)
                             if user_data:
                                 username_bytes = user_data.get(b"username") or user_data.get(

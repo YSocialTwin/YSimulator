@@ -181,6 +181,31 @@ class RedisUserRepository(UserRepository):
                 extra={"extra_data": {"error": str(e)}},
             )
             return False
+    
+    def get_user_by_username(self, username: str) -> Optional[Dict[str, Any]]:
+        """Get user by username - stub implementation."""
+        self.logger.warning("get_user_by_username not fully implemented in RedisUserRepository")
+        return None
+    
+    def update_agent_last_active_day(self, agent_id: str, day: int) -> bool:
+        """Update agent's last active day - stub implementation."""
+        self.logger.warning("update_agent_last_active_day not fully implemented in RedisUserRepository")
+        return False
+    
+    def get_churned_agents(self, day: int = None, inactivity_threshold: int = None) -> List[str]:
+        """Get churned agents - stub implementation."""
+        self.logger.warning("get_churned_agents not fully implemented in RedisUserRepository")
+        return []
+    
+    def set_agent_churned(self, agent_id: str, churned: bool) -> bool:
+        """Set agent churned status - stub implementation."""
+        self.logger.warning("set_agent_churned not fully implemented in RedisUserRepository")
+        return False
+    
+    def get_inactive_agents(self, inactivity_threshold: int) -> List[str]:
+        """Get inactive agents - stub implementation."""
+        self.logger.warning("get_inactive_agents not fully implemented in RedisUserRepository")
+        return []
 
 
 class RedisPostRepository(PostRepository):
@@ -221,8 +246,9 @@ class RedisPostRepository(PostRepository):
             
             # Store post data
             self.redis_client.hset(key, mapping=redis_data)
-            # Add to post IDs set
-            self.redis_client.sadd(self._redis_key("posts", "ids"), post_id)
+            # Add to posts list (no limit - will be cleaned by visibility_rounds at day end)
+            # Using lpush to maintain chronological order (most recent first)
+            self.redis_client.lpush(self._redis_key("posts", "recent"), post_id)
             
             return post_id
         except Exception as e:
@@ -255,14 +281,12 @@ class RedisPostRepository(PostRepository):
     def get_recent_posts(self, limit: int = 50) -> List[str]:
         """Get recent post IDs."""
         try:
-            # Redis stores posts in sets, so we need a different approach
-            # This is a simplified version - in production, use sorted sets with timestamps
-            post_ids = self.redis_client.smembers(self._redis_key("posts", "ids"))
-            post_ids = [
-                pid.decode() if isinstance(pid, bytes) else pid
-                for pid in post_ids
-            ]
-            return post_ids[:limit]
+            # Use lrange to get posts from the list (most recent first)
+            post_ids = self.redis_client.lrange(
+                self._redis_key("posts", "recent"), 0, limit - 1
+            )
+            # Properly decode bytes
+            return [pid.decode() if isinstance(pid, bytes) else str(pid) for pid in post_ids]
         except Exception as e:
             self.logger.error(
                 f"Error getting recent posts from Redis: {e}",
@@ -300,13 +324,13 @@ class RedisPostRepository(PostRepository):
     def add_interaction(self, interaction_data: Dict[str, Any]) -> bool:
         """Add a reaction/interaction to a post."""
         try:
-            reaction_id = interaction_data.get("id")
-            key = self._redis_key("reactions", reaction_id)
+            interaction_id = interaction_data.get("id")
+            key = self._redis_key("interactions", interaction_id)
             
             # Filter out None values
             redis_data = {k: str(v) if v is not None else "" for k, v in interaction_data.items()}
             
-            # Store reaction data
+            # Store interaction data
             self.redis_client.hset(key, mapping=redis_data)
             return True
         except Exception as e:
@@ -323,8 +347,11 @@ class RedisPostRepository(PostRepository):
             if not self.redis_client.exists(key):
                 return False
             
-            # Increment num_reactions field
-            self.redis_client.hincrby(key, "num_reactions", 1)
+            # Get current count, increment, and set
+            # This matches the db_middleware implementation
+            current_count = self.redis_client.hget(key, "reaction_count")
+            new_count = int(current_count or 0) + 1
+            self.redis_client.hset(key, "reaction_count", new_count)
             return True
         except Exception as e:
             self.logger.error(
@@ -366,9 +393,8 @@ class RedisPostRepository(PostRepository):
     def search_posts_by_topic(self, topic_id: str, agent_id: str, limit: int = 10) -> List[str]:
         """Search posts by topic."""
         try:
-            # This is a simplified implementation
-            # In production, use Redis search or maintain topic->posts index
-            all_post_ids = self.redis_client.smembers(self._redis_key("posts", "ids"))
+            # Get all recent post IDs from the list
+            all_post_ids = self.redis_client.lrange(self._redis_key("posts", "recent"), 0, -1)
             matching_posts = []
             
             for post_id in all_post_ids:
@@ -390,6 +416,63 @@ class RedisPostRepository(PostRepository):
                 extra={"extra_data": {"error": str(e)}},
             )
             return []
+    
+    # Metadata methods - stub implementations
+    def add_post_emotion(self, post_id: str, emotion_id: str) -> bool:
+        """Add emotion to a post - stub implementation."""
+        self.logger.warning("add_post_emotion not fully implemented in RedisPostRepository")
+        return False
+    
+    def get_emotion_by_name(self, emotion_name: str) -> Optional[str]:
+        """Get emotion ID by name - stub implementation."""
+        self.logger.warning("get_emotion_by_name not fully implemented in RedisPostRepository")
+        return None
+    
+    def initialize_emotions_table(self):
+        """Initialize emotions table - stub implementation."""
+        self.logger.warning("initialize_emotions_table not fully implemented in RedisPostRepository")
+        pass
+    
+    def add_post_sentiment(self, post_id: str, sentiment_score: float) -> bool:
+        """Add sentiment score to a post - stub implementation."""
+        self.logger.warning("add_post_sentiment not fully implemented in RedisPostRepository")
+        return False
+    
+    def get_post_sentiment(self, post_id: str) -> Optional[float]:
+        """Get sentiment score for a post - stub implementation."""
+        self.logger.warning("get_post_sentiment not fully implemented in RedisPostRepository")
+        return None
+    
+    def add_post_toxicity(self, post_id: str, toxicity_score: float) -> bool:
+        """Add toxicity score to a post - stub implementation."""
+        self.logger.warning("add_post_toxicity not fully implemented in RedisPostRepository")
+        return False
+    
+    def add_or_get_hashtag(self, hashtag: str) -> Optional[str]:
+        """Add or get hashtag ID - stub implementation."""
+        self.logger.warning("add_or_get_hashtag not fully implemented in RedisPostRepository")
+        return None
+    
+    def add_post_hashtag(self, post_id: str, hashtag_id: str) -> bool:
+        """Add hashtag to a post - stub implementation."""
+        self.logger.warning("add_post_hashtag not fully implemented in RedisPostRepository")
+        return False
+    
+    # Mention methods - stub implementations
+    def add_mention(self, post_id: str, mentioned_user_id: str) -> bool:
+        """Add a mention to a post - stub implementation."""
+        self.logger.warning("add_mention not fully implemented in RedisPostRepository")
+        return False
+    
+    def get_unreplied_mentions(self, user_id: str) -> List[Dict[str, Any]]:
+        """Get unreplied mentions for a user - stub implementation."""
+        self.logger.warning("get_unreplied_mentions not fully implemented in RedisPostRepository")
+        return []
+    
+    def mark_mention_replied(self, post_id: str, mentioned_user_id: str) -> bool:
+        """Mark a mention as replied - stub implementation."""
+        self.logger.warning("mark_mention_replied not fully implemented in RedisPostRepository")
+        return False
 
 
 class RedisFollowRepository(FollowRepository):

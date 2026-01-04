@@ -513,7 +513,8 @@ class TestRedisPostRepository:
         
         assert result == "post1"
         mock_redis.hset.assert_called_once()
-        mock_redis.sadd.assert_called_once()
+        # Changed from sadd to lpush to align with db_middleware
+        mock_redis.lpush.assert_called_once()
     
     def test_get_post_success(self, repository, mock_redis):
         """Test getting a post by ID."""
@@ -534,13 +535,17 @@ class TestRedisPostRepository:
         post_id = "post1"
         
         mock_redis.exists.return_value = True
+        # Mock the hget to return current count
+        mock_redis.hget.return_value = b"5"
         result = repository.increment_post_reaction_count(post_id)
         
         assert result is True
-        mock_redis.hincrby.assert_called_once_with(
+        # Changed from hincrby to hget+hset to align with db_middleware
+        mock_redis.hget.assert_called_once()
+        mock_redis.hset.assert_called_once_with(
             repository._redis_key("posts", post_id),
-            "num_reactions",
-            1
+            "reaction_count",  # Changed from num_reactions to reaction_count
+            6
         )
 
 
