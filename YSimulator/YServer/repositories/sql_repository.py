@@ -1244,24 +1244,35 @@ class SQLInterestRepository(InterestRepository):
             return False
     
     def add_agent_opinion(
-        self, agent_id: str, topic_id: str, opinion: float, round_id: str
+        self, 
+        agent_id: str, 
+        round_id: str, 
+        topic_id: str, 
+        opinion: float,
+        id_interacted_with: Optional[str] = None,
+        id_post: Optional[str] = None
     ) -> bool:
         """Add an agent opinion on a topic."""
         try:
+            import uuid
             session = Session(self.engine)
             try:
-                import uuid
                 # Agent_Opinion model uses 'tid' for round_id
                 agent_opinion = Agent_Opinion(
                     id=str(uuid.uuid4()),
                     agent_id=agent_id,
+                    tid=round_id,  # Note: model uses 'tid' not 'round_id'
                     topic_id=topic_id,
                     opinion=opinion,
-                    tid=round_id  # Note: model uses 'tid' not 'round_id'
+                    id_interacted_with=id_interacted_with,
+                    id_post=id_post
                 )
                 session.add(agent_opinion)
                 session.commit()
                 return True
+            except Exception as e:
+                session.rollback()
+                raise
             finally:
                 session.close()
         except Exception as e:
@@ -1278,7 +1289,7 @@ class SQLInterestRepository(InterestRepository):
                 opinion = (
                     session.query(Agent_Opinion)
                     .filter_by(agent_id=agent_id, topic_id=topic_id)
-                    .order_by(Agent_Opinion.tid.desc())  # Note: model uses 'tid' not 'round_id'
+                    .order_by(Agent_Opinion.tid.desc(), Agent_Opinion.id.desc())  # Order by round then id for insertion order
                     .first()
                 )
                 if not opinion:

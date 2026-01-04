@@ -286,9 +286,32 @@ class DatabaseServiceAdapter:
         """Get topic name from ID."""
         return self.interest_service.get_topic_name_from_id(topic_id)
     
-    def add_agent_opinion(self, agent_id: str, topic_id: str, opinion_value: float, round_id: str) -> bool:
-        """Add agent opinion."""
-        return self.interest_service.add_agent_opinion(agent_id, topic_id, opinion_value, round_id)
+    def add_agent_opinion(
+        self, 
+        agent_id: str, 
+        round_id: str, 
+        topic_id: str, 
+        opinion: float,
+        id_interacted_with: Optional[str] = None,
+        id_post: Optional[str] = None
+    ) -> bool:
+        """
+        Add agent opinion - matches old middleware signature.
+        
+        Args:
+            agent_id: Agent UUID
+            round_id: Round UUID
+            topic_id: Topic UUID
+            opinion: Opinion value
+            id_interacted_with: Optional UUID of agent interacted with
+            id_post: Optional UUID of post
+            
+        Returns:
+            bool: True if successful
+        """
+        return self.interest_service.add_agent_opinion(
+            agent_id, round_id, topic_id, opinion, id_interacted_with, id_post
+        )
     
     def get_latest_agent_opinion(self, agent_id: str, topic_id: str) -> Optional[float]:
         """Get latest agent opinion."""

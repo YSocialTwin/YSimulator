@@ -114,23 +114,31 @@ class InterestService:
             return None
     
     def add_agent_opinion(
-        self, agent_id: str, topic_id: str, opinion_value: float, round_id: str
+        self, 
+        agent_id: str, 
+        round_id: str, 
+        topic_id: str, 
+        opinion: float,
+        id_interacted_with: Optional[str] = None,
+        id_post: Optional[str] = None
     ) -> bool:
         """
         Add an agent opinion on a topic.
         
         Args:
             agent_id: Agent ID
-            topic_id: Topic ID
-            opinion_value: Opinion value
             round_id: Round ID
+            topic_id: Topic ID
+            opinion: Opinion value
+            id_interacted_with: Optional UUID of agent interacted with
+            id_post: Optional UUID of post
             
         Returns:
             True if successful, False otherwise
         """
         try:
             return self.interest_repo.add_agent_opinion(
-                agent_id, topic_id, opinion_value, round_id
+                agent_id, round_id, topic_id, opinion, id_interacted_with, id_post
             )
         except Exception as e:
             self.logger.error(f"Error adding agent opinion: {e}")
