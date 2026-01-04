@@ -1227,9 +1227,35 @@ class SQLArticleRepository(ArticleRepository):
         try:
             import uuid
             
-            # Check for existing websites by both ID and RSS to avoid duplicates
-            website_ids = [w.get("id") for w in websites_data if w.get("id")]
-            rss_urls = [w.get("rss") for w in websites_data if w.get("rss")]
+            # First, deduplicate within the batch itself by ID and RSS
+            seen_ids = set()
+            seen_rss = set()
+            deduplicated = []
+            
+            for website in websites_data:
+                website_id = website.get("id")
+                website_rss = website.get("rss")
+                
+                # Skip if we've seen this ID or RSS in this batch
+                if website_id and website_id in seen_ids:
+                    continue
+                if website_rss and website_rss in seen_rss:
+                    continue
+                
+                # Mark as seen
+                if website_id:
+                    seen_ids.add(website_id)
+                if website_rss:
+                    seen_rss.add(website_rss)
+                
+                deduplicated.append(website)
+            
+            if not deduplicated:
+                return 0
+            
+            # Now check for existing websites in database by both ID and RSS
+            website_ids = [w.get("id") for w in deduplicated if w.get("id")]
+            rss_urls = [w.get("rss") for w in deduplicated if w.get("rss")]
             
             existing_ids = set()
             existing_rss = set()
@@ -1244,9 +1270,9 @@ class SQLArticleRepository(ArticleRepository):
                     row[0] for row in session.query(Website.rss).filter(Website.rss.in_(rss_urls)).all()
                 }
             
-            # Filter out websites that already exist (by ID or RSS)
+            # Filter out websites that already exist in database
             new_websites = [
-                w for w in websites_data 
+                w for w in deduplicated
                 if w.get("id") not in existing_ids and w.get("rss") not in existing_rss
             ]
             
