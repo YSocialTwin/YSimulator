@@ -1080,11 +1080,26 @@ class SQLFollowRepository(FollowRepository):
             return 0
         
         try:
+            import uuid
             session = Session(self.engine)
             try:
-                session.bulk_insert_mappings(Follow, follows_data)
+                # Map field names for each follow (same logic as add_follow)
+                mapped_follows = []
+                for follow_data in follows_data:
+                    mapped_data = {
+                        "id": follow_data.get("id", str(uuid.uuid4())),
+                        "user_id": follow_data.get("followee_id") or follow_data.get("user_id"),
+                        "follower_id": follow_data.get("follower_id"),
+                        "action": follow_data.get("action"),
+                        "round": follow_data.get("round"),
+                    }
+                    # Filter out None values
+                    mapped_data = {k: v for k, v in mapped_data.items() if v is not None}
+                    mapped_follows.append(mapped_data)
+                
+                session.bulk_insert_mappings(Follow, mapped_follows)
                 session.commit()
-                return len(follows_data)
+                return len(mapped_follows)
             except Exception as e:
                 session.rollback()
                 self.logger.error(
@@ -1205,9 +1220,11 @@ class SQLInterestRepository(InterestRepository):
     def add_user_interest(self, user_id: str, interest_id: str, round_id: str) -> bool:
         """Add a user interest."""
         try:
+            import uuid
             session = Session(self.engine)
             try:
                 user_interest = UserInterest(
+                    id=str(uuid.uuid4()),  # Generate UUID for id field
                     user_id=user_id,
                     interest_id=interest_id,
                     round_id=round_id
@@ -1215,6 +1232,9 @@ class SQLInterestRepository(InterestRepository):
                 session.add(user_interest)
                 session.commit()
                 return True
+            except Exception as e:
+                session.rollback()
+                raise
             finally:
                 session.close()
         except Exception as e:
@@ -1448,19 +1468,36 @@ class SQLArticleRepository(ArticleRepository):
     def add_website(self, website_data: Dict[str, Any]) -> Optional[str]:
         """Add a website."""
         try:
+            import uuid
             session = Session(self.engine)
             try:
-                import uuid
+                # Generate UUID if not provided
                 website_id = website_data.get("id", str(uuid.uuid4()))
+
+                # Check if website already exists by RSS URL
+                rss = website_data.get("rss")
+                if rss:
+                    existing = session.query(Website).filter(Website.rss == rss).first()
+                    if existing:
+                        return existing.id
+
+                # Create new website with all fields matching the model
                 website = Website(
                     id=website_id,
                     name=website_data.get("name"),
-                    url=website_data.get("url"),
-                    rss_url=website_data.get("rss_url"),
+                    rss=website_data.get("rss"),  # Model uses 'rss' not 'rss_url'
+                    leaning=website_data.get("leaning"),
+                    category=website_data.get("category"),
+                    country=website_data.get("country"),
+                    language=website_data.get("language"),
+                    last_fetched=website_data.get("last_fetched", str(uuid.uuid4())),
                 )
                 session.add(website)
                 session.commit()
                 return website_id
+            except Exception as e:
+                session.rollback()
+                raise
             finally:
                 session.close()
         except Exception as e:
@@ -1553,21 +1590,26 @@ class SQLArticleRepository(ArticleRepository):
     def add_article(self, article_data: Dict[str, Any]) -> Optional[str]:
         """Add an article."""
         try:
+            import uuid
             session = Session(self.engine)
             try:
-                import uuid
                 article_id = article_data.get("id", str(uuid.uuid4()))
+                
+                # Article model fields: id, title, summary, website_id, fetched_on, link
                 article = Article(
                     id=article_id,
                     title=article_data.get("title"),
-                    url=article_data.get("url"),
-                    content=article_data.get("content"),
+                    summary=article_data.get("summary"),  # Model uses 'summary' not 'content'
                     website_id=article_data.get("website_id"),
-                    round_id=article_data.get("round_id"),
+                    fetched_on=article_data.get("fetched_on", str(uuid.uuid4())),  # Model uses 'fetched_on' not 'round_id'
+                    link=article_data.get("link"),  # Model uses 'link' not 'url'
                 )
                 session.add(article)
                 session.commit()
                 return article_id
+            except Exception as e:
+                session.rollback()
+                raise
             finally:
                 session.close()
         except Exception as e:
@@ -1585,13 +1627,14 @@ class SQLArticleRepository(ArticleRepository):
                 if not article:
                     return None
                 
+                # Return dict with model field names
                 return {
                     "id": article.id,
                     "title": article.title,
-                    "url": article.url,
-                    "content": article.content,
+                    "summary": article.summary,  # Model uses 'summary' not 'content'
                     "website_id": article.website_id,
-                    "round_id": article.round_id,
+                    "fetched_on": article.fetched_on,  # Model uses 'fetched_on' not 'round_id'
+                    "link": article.link,  # Model uses 'link' not 'url'
                 }
             finally:
                 session.close()
@@ -1606,15 +1649,21 @@ class SQLArticleRepository(ArticleRepository):
         try:
             session = Session(self.engine)
             try:
-                website = session.query(Website).filter_by(rss_url=rss_url).first()
+                # Model uses 'rss' not 'rss_url'
+                website = session.query(Website).filter_by(rss=rss_url).first()
                 if not website:
                     return None
                 
+                # Return dict with all model fields
                 return {
                     "id": website.id,
                     "name": website.name,
-                    "url": website.url,
-                    "rss_url": website.rss_url,
+                    "rss": website.rss,  # Model uses 'rss' not 'rss_url'
+                    "leaning": website.leaning,
+                    "category": website.category,
+                    "country": website.country,
+                    "language": website.language,
+                    "last_fetched": website.last_fetched,
                 }
             finally:
                 session.close()

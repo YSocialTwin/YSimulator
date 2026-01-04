@@ -270,9 +270,9 @@ class DatabaseServiceAdapter:
         """Add or get interest."""
         return self.interest_service.add_or_get_interest(interest_name)
     
-    def add_user_interest(self, user_id: str, interest_id: str, count: int = 1) -> bool:
-        """Add user interest."""
-        return self.interest_service.add_user_interest(user_id, interest_id, count)
+    def add_user_interest(self, user_id: str, interest_id: str, round_id: str) -> bool:
+        """Add user interest - matches old middleware signature."""
+        return self.interest_service.add_user_interest(user_id, interest_id, round_id)
     
     def get_interest_by_id(self, interest_ids: List[str]) -> List[str]:
         """Get interests by IDs."""
