@@ -8,29 +8,40 @@ with appropriate repository implementations based on configuration.
 import logging
 from typing import Dict, Any, Optional, Tuple
 
-from sqlalchemy import create_engine
-from sqlalchemy.engine import Engine
+try:
+    from sqlalchemy import create_engine
+    from sqlalchemy.engine import Engine
+    SQLALCHEMY_AVAILABLE = True
+except ImportError:
+    SQLALCHEMY_AVAILABLE = False
+    create_engine = None
+    Engine = None
 
-from YSimulator.YServer.repositories.sql_repository import (
-    SQLUserRepository,
-    SQLPostRepository,
-    SQLFollowRepository,
-    SQLInterestRepository,
-    SQLArticleRepository,
-    SQLImageRepository,
-    SQLRecommendationRepository,
-)
-from YSimulator.YServer.services.user_service import UserService
-from YSimulator.YServer.services.post_service import PostService
-from YSimulator.YServer.services.follow_service import FollowService
-from YSimulator.YServer.services.interest_service import InterestService
-from YSimulator.YServer.services.content_service import ContentService
-from YSimulator.YServer.services.simulation_service import SimulationService
-from YSimulator.YServer.services.metadata_service import MetadataService
-from YSimulator.YServer.services.mention_service import MentionService
+try:
+    from YSimulator.YServer.repositories.sql_repository import (
+        SQLUserRepository,
+        SQLPostRepository,
+        SQLFollowRepository,
+        SQLInterestRepository,
+        SQLArticleRepository,
+        SQLImageRepository,
+        SQLRecommendationRepository,
+    )
+    from YSimulator.YServer.services.user_service import UserService
+    from YSimulator.YServer.services.post_service import PostService
+    from YSimulator.YServer.services.follow_service import FollowService
+    from YSimulator.YServer.services.interest_service import InterestService
+    from YSimulator.YServer.services.content_service import ContentService
+    from YSimulator.YServer.services.simulation_service import SimulationService
+    from YSimulator.YServer.services.metadata_service import MetadataService
+    from YSimulator.YServer.services.mention_service import MentionService
+    SERVICES_AVAILABLE = True
+except ImportError as e:
+    SERVICES_AVAILABLE = False
+    import_error = e
 
 
-def create_database_engine(db_config: Dict[str, Any]) -> Engine:
+def create_database_engine(db_config: Dict[str, Any]):
     """
     Create SQLAlchemy engine from database configuration.
     
@@ -42,6 +53,11 @@ def create_database_engine(db_config: Dict[str, Any]) -> Engine:
     Returns:
         SQLAlchemy Engine instance
     """
+    if not SQLALCHEMY_AVAILABLE:
+        raise ImportError(
+            "SQLAlchemy is not installed. Please install it with: pip install sqlalchemy>=2.0.0"
+        )
+    
     db_type = db_config.get("type", "sqlite")
     
     if db_type == "sqlite":
@@ -77,7 +93,7 @@ def create_database_engine(db_config: Dict[str, Any]) -> Engine:
 def create_all_services(
     db_config: Dict[str, Any],
     logger: Optional[logging.Logger] = None,
-) -> Tuple[UserService, PostService, FollowService, InterestService, ContentService, SimulationService, MetadataService, MentionService]:
+):
     """
     Create all service instances with repository dependencies.
     
@@ -88,6 +104,12 @@ def create_all_services(
     Returns:
         Tuple of (UserService, PostService, FollowService, InterestService, ContentService, SimulationService, MetadataService, MentionService)
     """
+    if not SERVICES_AVAILABLE:
+        raise ImportError(
+            f"Required dependencies are not installed. Please install with: pip install -r requirements.txt\n"
+            f"Error: {import_error if 'import_error' in globals() else 'Unknown import error'}"
+        )
+    
     if logger is None:
         logger = logging.getLogger(__name__)
     
@@ -154,7 +176,7 @@ def create_all_services(
 def create_services(
     db_config: Dict[str, Any],
     logger: Optional[logging.Logger] = None,
-) -> Tuple[UserService, PostService]:
+):
     """
     Create basic service instances with repository dependencies.
     

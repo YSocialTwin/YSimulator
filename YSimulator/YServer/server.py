@@ -241,11 +241,35 @@ class OrchestratorServer:
         )
         
         # Initialize ALL Repository/Service pattern components
-        from YSimulator.YServer.service_factory import create_all_services
-        from YSimulator.YServer.database_adapter import DatabaseServiceAdapter
+        try:
+            from YSimulator.YServer.service_factory import create_all_services
+            from YSimulator.YServer.database_adapter import DatabaseServiceAdapter
+        except ImportError as e:
+            error_msg = (
+                f"Failed to import required modules for Repository/Service pattern: {e}\n\n"
+                "Please ensure all dependencies are installed:\n"
+                "  pip install -r requirements.txt\n\n"
+                "Required packages:\n"
+                "  - sqlalchemy>=2.0.0\n"
+                "  - ray>=2.0.0\n"
+                "  - redis>=4.0.0\n"
+            )
+            self.logger.error(error_msg)
+            raise ImportError(error_msg) from e
         
-        (user_service, post_service, follow_service, interest_service, 
-         content_service, simulation_service, metadata_service, mention_service) = create_all_services(db_config, self.logger)
+        try:
+            (user_service, post_service, follow_service, interest_service, 
+             content_service, simulation_service, metadata_service, mention_service) = create_all_services(db_config, self.logger)
+        except Exception as e:
+            error_msg = (
+                f"Failed to create services: {e}\n\n"
+                "This might be due to:\n"
+                "  1. Missing dependencies (run: pip install -r requirements.txt)\n"
+                "  2. Database connection issues\n"
+                "  3. Configuration errors\n"
+            )
+            self.logger.error(error_msg)
+            raise RuntimeError(error_msg) from e
         
         # Create complete database adapter with ALL services - 100% migration complete!
         # No legacy middleware needed - all operations use Repository/Service pattern
