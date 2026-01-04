@@ -572,7 +572,8 @@ class TestRedisFollowRepository:
         result = repository.add_follow(follow_data)
         
         assert result is True
-        assert mock_redis.sadd.call_count == 2  # Called twice for bidirectional index
+        # Changed from bidirectional sadd to single hset to align with db_middleware
+        mock_redis.hset.assert_called_once()
 
 
 class TestRedisInterestRepository:

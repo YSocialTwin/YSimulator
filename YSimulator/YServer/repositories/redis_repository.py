@@ -505,20 +505,17 @@ class RedisFollowRepository(FollowRepository):
     def add_follow(self, follow_data: Dict[str, Any]) -> bool:
         """Add a follow relationship."""
         try:
-            follower_id = follow_data["follower_id"]
-            followee_id = follow_data["followee_id"]
+            import uuid
             
-            # Store follower -> followees
-            self.redis_client.sadd(
-                self._redis_key("follows:following", follower_id),
-                followee_id
-            )
+            # Generate UUID for follow record
+            follow_id = str(uuid.uuid4())
+            follow_data["id"] = follow_id
             
-            # Store followee -> followers
-            self.redis_client.sadd(
-                self._redis_key("follows:followers", followee_id),
-                follower_id
-            )
+            # Store follow relationship in Redis as a hash
+            key = self._redis_key("follow", follow_id)
+            # Filter out None values for Redis
+            redis_data = {k: str(v) if v is not None else "" for k, v in follow_data.items()}
+            self.redis_client.hset(key, mapping=redis_data)
             
             return True
         except Exception as e:
@@ -533,10 +530,21 @@ class RedisFollowRepository(FollowRepository):
             return 0
         
         try:
+            import uuid
+            
+            # Generate UUIDs for all follow records
+            for follow_data in follows_data:
+                follow_data["id"] = str(uuid.uuid4())
+            
+            # Store follow relationships in Redis
             count = 0
             for follow_data in follows_data:
-                if self.add_follow(follow_data):
-                    count += 1
+                key = self._redis_key("follow", follow_data["id"])
+                # Filter out None values for Redis
+                redis_data = {k: str(v) if v is not None else "" for k, v in follow_data.items()}
+                self.redis_client.hset(key, mapping=redis_data)
+                count += 1
+            
             return count
         except Exception as e:
             self.logger.error(
