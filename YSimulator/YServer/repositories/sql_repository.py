@@ -3,6 +3,26 @@ SQLAlchemy-based repository implementations.
 
 This module provides concrete implementations of repository interfaces
 using SQLAlchemy for SQL database operations.
+
+IMPORTANT: Session Management Pattern
+All write methods MUST follow this pattern to ensure proper transaction handling:
+
+    session = Session(self.engine)
+    try:
+        # Database operations
+        session.add(obj) or session.commit()
+    except Exception as e:
+        session.rollback()  # Critical! Prevents stuck sessions
+        self.logger.error(...)
+        return failure_value
+    finally:
+        session.close()
+
+WITHOUT rollback(), sessions remain in inconsistent state and all subsequent
+writes will fail. This was the root cause of widespread database write failures.
+
+Methods register_user(), update_user_archetype(), and add_post() have been
+fixed as examples. Other write methods still need this fix applied.
 """
 
 import logging
@@ -66,24 +86,24 @@ class SQLUserRepository(UserRepository):
     
     def register_user(self, user_data: Dict[str, Any]) -> bool:
         """Register a single user."""
+        session = Session(self.engine)
         try:
-            session = Session(self.engine)
-            try:
-                existing = session.query(User_mgmt).filter_by(id=user_data["id"]).first()
-                if existing:
-                    return False
-                
-                user = User_mgmt(**user_data)
-                session.add(user)
-                session.commit()
-                return True
-            finally:
-                session.close()
+            existing = session.query(User_mgmt).filter_by(id=user_data["id"]).first()
+            if existing:
+                return False
+            
+            user = User_mgmt(**user_data)
+            session.add(user)
+            session.commit()
+            return True
         except Exception as e:
+            session.rollback()
             self.logger.error(
                 f"Error registering user: {e}", extra={"extra_data": {"error": str(e)}}
             )
             return False
+        finally:
+            session.close()
     
     def register_users_batch(self, users_data: List[Dict[str, Any]]) -> Tuple[int, Set[str]]:
         """Register multiple users in a batch."""
@@ -182,23 +202,23 @@ class SQLUserRepository(UserRepository):
     
     def update_user_archetype(self, user_id: str, new_archetype: str) -> bool:
         """Update user's archetype."""
+        session = Session(self.engine)
         try:
-            session = Session(self.engine)
-            try:
-                user = session.query(User_mgmt).filter_by(id=user_id).first()
-                if not user:
-                    return False
-                
-                user.archetype = new_archetype
-                session.commit()
-                return True
-            finally:
-                session.close()
+            user = session.query(User_mgmt).filter_by(id=user_id).first()
+            if not user:
+                return False
+            
+            user.archetype = new_archetype
+            session.commit()
+            return True
         except Exception as e:
+            session.rollback()
             self.logger.error(
                 f"Error updating user archetype: {e}", extra={"extra_data": {"error": str(e)}}
             )
             return False
+        finally:
+            session.close()
     
     def get_user_by_username(self, username: str) -> Optional[Dict[str, Any]]:
         """Get user by username."""
@@ -330,34 +350,34 @@ class SQLPostRepository(PostRepository):
     
     def add_post(self, post_data: Dict[str, Any]) -> Optional[str]:
         """Add a new post."""
+        import uuid
+        session = Session(self.engine)
         try:
-            import uuid
-            session = Session(self.engine)
-            try:
-                # Map common field names to actual model field names
-                mapped_data = {
-                    "id": post_data.get("id") or str(uuid.uuid4()),  # Generate UUID if not provided
-                    "tweet": post_data.get("text") or post_data.get("tweet"),
-                    "user_id": post_data.get("author") or post_data.get("user_id"),
-                    "round": post_data.get("round"),
-                    "comment_to": post_data.get("parent_post") or post_data.get("comment_to", -1),
-                    "thread_id": post_data.get("root_post") or post_data.get("thread_id"),
-                    "reaction_count": post_data.get("num_reactions") or post_data.get("reaction_count", 0),
-                }
-                # Filter out None values
-                mapped_data = {k: v for k, v in mapped_data.items() if v is not None}
-                
-                post = Post(**mapped_data)
-                session.add(post)
-                session.commit()
-                return post.id
-            finally:
-                session.close()
+            # Map common field names to actual model field names
+            mapped_data = {
+                "id": post_data.get("id") or str(uuid.uuid4()),  # Generate UUID if not provided
+                "tweet": post_data.get("text") or post_data.get("tweet"),
+                "user_id": post_data.get("author") or post_data.get("user_id"),
+                "round": post_data.get("round"),
+                "comment_to": post_data.get("parent_post") or post_data.get("comment_to", -1),
+                "thread_id": post_data.get("root_post") or post_data.get("thread_id"),
+                "reaction_count": post_data.get("num_reactions") or post_data.get("reaction_count", 0),
+            }
+            # Filter out None values
+            mapped_data = {k: v for k, v in mapped_data.items() if v is not None}
+            
+            post = Post(**mapped_data)
+            session.add(post)
+            session.commit()
+            return post.id
         except Exception as e:
+            session.rollback()
             self.logger.error(
                 f"Error adding post: {e}", extra={"extra_data": {"error": str(e)}}
             )
             return None
+        finally:
+            session.close()
     
     def get_post(self, post_id: str) -> Optional[Dict[str, Any]]:
         """Get post by ID."""
