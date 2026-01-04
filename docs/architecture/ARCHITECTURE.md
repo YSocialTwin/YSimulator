@@ -55,8 +55,8 @@ YSimulator is a **distributed social media simulation framework** designed to mo
 │              │  │  Sync    │  │                                     │
 │              │  └──────────┘  │                                     │
 │              │                │                                     │
-│              │  ┌──────────┐  │  NEW: Layered Architecture         │
-│              │  │ Service  │  │  ═══════════════════════════       │
+│              │  ┌──────────┐  │  Modern Architecture (100%)        │
+│              │  │ Service  │  │  ══════════════════════════        │
 │              │  │  Layer   │  │  ┌────────────────────┐            │
 │              │  └────┬─────┘  │  │ UserService        │            │
 │              │       │        │  │ PostService        │            │
@@ -66,8 +66,8 @@ YSimulator is a **distributed social media simulation framework** designed to mo
 │              │  └────┬─────┘  │  │ SQL Repositories   │            │
 │              │       │        │  │ Redis Repositories │            │
 │              │  ┌────▼─────┐  │  └────────────────────┘            │
-│              │  │ Database │  │  (Legacy: db_middleware)           │
-│              │  │Middleware│  │                                     │
+│              │  │ Database │  │                                     │
+│              │  │  Adapter │  │                                     │
 │              │  └──────────┘  │                                     │
 │              └───────┬────────┘                                    │
 │                      │                                              │
@@ -82,9 +82,9 @@ YSimulator is a **distributed social media simulation framework** designed to mo
 └───────────────────────────────────────────────────────────────────┘
 ```
 
-### Layered Architecture (NEW)
+### Layered Architecture (100% Modern)
 
-The system now implements a **clean layered architecture** with separation of concerns:
+The system implements a **clean layered architecture** with complete separation of concerns:
 
 1. **Presentation Layer** (Ray Actors)
    - YServer: HTTP API endpoints via Ray
@@ -94,6 +94,9 @@ The system now implements a **clean layered architecture** with separation of co
    - **UserService**: User management, registration, interests
    - **PostService**: Post creation, reactions, thread context
    - **RecommendationService**: Rounds, follows, agent opinions
+   - **InterestService**: Interest/topic tracking and management
+   - **MetadataService**: Emotions, sentiment, toxicity tracking
+   - **MentionService**: User mentions and reply tracking
    
 3. **Repository Layer** (Data Access)
    - **Abstract Interfaces**: Define contracts for data operations
@@ -245,48 +248,58 @@ get_article_topics()                       # Retrieve article topics
 - **Topic Mapping**: Efficient UUID-to-name lookups
 - **Article Topics**: LLM-extracted topics from news articles
 
-#### DatabaseMiddleware
-**Location**: `classes/db_middleware.py`
+#### DatabaseServiceAdapter
+**Location**: `YServer/database_adapter.py`
 
-**Status**: Legacy (maintained for backward compatibility)
+**Purpose**: Unified interface to the service layer for the orchestrator server
 
 **Responsibilities**:
-- Abstract storage backend (SQL vs Redis)
-- Provide unified API for data operations
-- Manage Redis sliding window consolidation
-- Handle SQLAlchemy session management
-- Build appropriate connection strings
-- Support interest/topic database operations
+- Provide consistent API for all database operations
+- Coordinate between multiple services
+- Expose compatibility attributes (use_redis, engine)
+- Log all data operations
 
-**Current Status**:
-- Still functional and fully supported
-- Used by existing code not yet migrated
-- Provides comprehensive database operations
-- Being gradually superseded by Repository/Service pattern
+**Architecture**:
+```
+DatabaseServiceAdapter
+├── UserService → UserRepository (SQL/Redis)
+├── PostService → PostRepository (SQL/Redis)
+├── FollowService → FollowRepository (SQL/Redis)
+├── InterestService → InterestRepository (SQL/Redis)
+├── ContentService → ArticleRepository + ImageRepository
+├── SimulationService → RecommendationRepository
+├── MetadataService → Emotions, Sentiment, Toxicity tracking
+└── MentionService → Mention tracking and replies
+```
 
 **Key Methods**:
 ```python
-register_user()                            # Store agent profile in User_mgmt table
-add_post()                                 # Store social media post
-add_interaction()                          # Store interaction (like, comment, etc.)
-get_user()                                 # Retrieve user profile
-get_recent_posts()                         # Query recent posts
-consolidate_day()                          # Move Redis data to SQL (daily)
-add_or_get_interest()                      # Store/retrieve topic
-add_user_interest()                        # Record user-topic interaction
-add_post_topic()                           # Link post to topic
-get_post_topics()                          # Get topics for a post
-get_user_interests_in_window()             # Query interests in temporal window
-compute_interest_counts_in_window()        # Count interests in window
+# User operations
+register_users_batch()                      # Batch user registration
+get_user()                                  # Retrieve user profile
+update_user_archetype()                     # Update user archetype
+
+# Post operations
+add_post()                                  # Store social media post
+add_interaction()                           # Store interaction (like, comment, etc.)
+get_recent_posts()                          # Query recent posts
+
+# Interest operations
+add_or_get_interest()                       # Store/retrieve topic
+add_user_interest()                         # Record user-topic interaction
+get_user_interests_in_window()              # Query interests in temporal window
+
+# Round operations
+get_or_create_round()                       # Get/create simulation round
 ```
 
-**Storage Strategy**:
-- **Redis**: High-speed cache for recent data (if enabled)
-- **SQL**: Persistent storage for all data
-- **Sliding Window**: Automatic pruning of old Redis data
-- **Dual Write**: Write to both Redis and SQL for durability
+**Benefits**:
+- **Clean Architecture**: Complete separation of concerns
+- **Testability**: Services can be tested in isolation
+- **Flexibility**: Easy to swap implementations (SQL ↔ Redis)
+- **Maintainability**: Single responsibility per service
 
-#### Repository Layer (NEW)
+#### Repository Layer
 **Location**: `YServer/repositories/`
 
 **Purpose**: Abstract data access from business logic using the Repository Pattern
@@ -341,7 +354,7 @@ post_id = post_service.create_post({
 })
 ```
 
-#### Service Layer (NEW)
+#### Service Layer
 **Location**: `YServer/services/`
 
 **Purpose**: Implement business logic coordinating multiple repositories
@@ -372,11 +385,10 @@ post_id = post_service.create_post({
 - **Maintainability**: Clear separation of concerns
 - **Extensibility**: Easy to add new storage backends
 
-**Migration Path**:
-- Existing code using db_middleware continues to work
-- New code can use Repository/Service layers
-- Gradual migration strategy documented
-- Full backward compatibility maintained
+**Migration Status**:
+- **100% Complete**: All production code uses the service layer
+- **Clean Architecture**: No legacy middleware dependencies
+- **Modern Pattern**: Repository/Service throughout
 
 ### 3. Data Models
 
@@ -551,7 +563,7 @@ For each client (parallel):
     │   │   │   │       └─ Create FOLLOW/UNFOLLOW action if needed
     │   │   │   ├─ Generate content (via LLM for LLM agents)
     │   │   │   └─ Submit action to server
-    │   │   │       └─→ Server stores via DatabaseMiddleware
+    │   │   │       └─→ Server stores via Service Layer
     │   │   └─ Complete
     │   │
     │   ├─ Submit completion to server (barrier counter++)
@@ -575,7 +587,7 @@ Agent decides to post
             ├─ Add temporal context (day, slot)
             ├─ Generate UUID for post
             │
-            └─ DatabaseMiddleware.add_post()
+            └─ DatabaseServiceAdapter.add_post()
                 │
                 ├─ If Redis enabled:
                 │   ├─ Store in Redis (fast cache)
@@ -871,8 +883,7 @@ Track active agents → End of day → Evaluate with probability → Get suggest
 - ✅ Manage client registration and lifecycle
 - ✅ Enforce barrier synchronization
 - ✅ Track heartbeats and detect failures
-- ✅ Store actions via DatabaseMiddleware
-- ✅ Trigger daily Redis consolidation
+- ✅ Store actions via Service Layer
 - ✅ Provide starting point to clients
 - ✅ Compute content recommendations (posts to read)
 - ✅ Compute follow recommendations (users to follow)
@@ -906,25 +917,7 @@ Track active agents → End of day → Evaluate with probability → Get suggest
 - ❌ Store data (delegates to server)
 - ❌ Track other clients' state
 
-### What the DatabaseMiddleware Does
-- ✅ Abstract storage backend selection (Legacy)
-- ✅ Provide unified API for operations (Legacy)
-- ✅ Build appropriate connection strings
-- ✅ Manage SQLAlchemy sessions
-- ✅ Handle Redis sliding window
-- ✅ Consolidate Redis to SQL daily
-
-**Note**: DatabaseMiddleware is being superseded by the Repository/Service pattern for new code, but remains fully functional for backward compatibility.
-
-### What the Repository Layer Does (NEW)
-- ✅ Define abstract interfaces for data operations
-- ✅ Implement SQL-based data access (SQLAlchemy)
-- ✅ Implement Redis-based caching
-- ✅ Handle field name mapping automatically
-- ✅ Manage transactions and session cleanup
-- ✅ Support multiple storage backends
-
-### What the Service Layer Does (NEW)
+### What the Service Layer Does
 - ✅ Coordinate business logic across repositories
 - ✅ Implement user management operations
 - ✅ Implement post and interaction operations
@@ -932,19 +925,22 @@ Track active agents → End of day → Evaluate with probability → Get suggest
 - ✅ Provide health check functionality
 - ✅ Abstract repository details from callers
 
-### What the DatabaseMiddleware Does NOT Do
-- ❌ Implement business logic
-- ❌ Coordinate clients
-- ❌ Manage simulation time
+### What the Repository Layer Does
+- ✅ Define abstract interfaces for data operations
+- ✅ Implement SQL-based data access (SQLAlchemy)
+- ✅ Implement Redis-based caching
+- ✅ Handle field name mapping automatically
+- ✅ Manage transactions and session cleanup
+- ✅ Support multiple storage backends
 
 ## Conclusion
 
-YSimulator's architecture follows a **coordinator-worker pattern** with **layered design**:
+YSimulator's architecture follows a **coordinator-worker pattern** with **modern layered design**:
 - **Server** coordinates temporal progression and manages barriers
 - **Clients** independently execute simulations and manage local state
-- **Service Layer** (NEW) implements business logic and coordination
-- **Repository Layer** (NEW) abstracts storage for flexibility
-- **DatabaseMiddleware** (Legacy) provides backward compatibility
+- **Service Layer** implements business logic and coordination
+- **Repository Layer** abstracts storage for flexibility
+- **DatabaseServiceAdapter** provides unified interface to services
 - **Ray** enables distributed execution without manual networking code
 
 This design provides:

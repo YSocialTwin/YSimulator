@@ -51,6 +51,7 @@ omit = [
     "*/test_*.py",
     "*/__pycache__/*",
     "*/site-packages/*",
+    "*/classes/db_middleware.py",
 ]
 
 [tool.coverage.report]
