@@ -507,20 +507,25 @@ class SQLPostRepository(PostRepository):
     
     def add_post_topic(self, post_id: str, topic_id: str) -> bool:
         """Associate a topic with a post."""
+        session = Session(self.engine)
         try:
-            session = Session(self.engine)
-            try:
-                post_topic = PostTopic(post_id=post_id, topic_id=topic_id)
-                session.add(post_topic)
-                session.commit()
-                return True
-            finally:
-                session.close()
+            # Generate UUID for PostTopic id
+            post_topic = PostTopic(
+                id=str(uuid.uuid4()),
+                post_id=post_id, 
+                topic_id=topic_id
+            )
+            session.add(post_topic)
+            session.commit()
+            return True
         except Exception as e:
+            session.rollback()
             self.logger.error(
                 f"Error adding post topic: {e}", extra={"extra_data": {"error": str(e)}}
             )
             return False
+        finally:
+            session.close()
     
     def get_post_topics(self, post_id: str) -> List[str]:
         """Get all topics associated with a post."""
@@ -888,6 +893,11 @@ class SQLFollowRepository(FollowRepository):
         """Add multiple follow relationships in a batch."""
         if not follows_data:
             return 0
+        
+        # Generate IDs for follows that don't have them
+        for follow in follows_data:
+            if "id" not in follow or not follow["id"]:
+                follow["id"] = str(uuid.uuid4())
         
         try:
             session = Session(self.engine)
