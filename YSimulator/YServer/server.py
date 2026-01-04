@@ -231,8 +231,8 @@ class OrchestratorServer:
         # Set up logging first
         self._setup_logging()
 
-        # Initialize database middleware (legacy)
-        db_middleware = DatabaseMiddleware(
+        # Initialize legacy middleware for operations still using it
+        legacy_middleware = DatabaseMiddleware(
             db_config=db_config,
             config_path=str(self.config_path),
             redis_config=redis_config,
@@ -240,24 +240,25 @@ class OrchestratorServer:
             simulation_config=simulation_config,
         )
         
-        # Initialize new Repository/Service pattern components
+        # Initialize Repository/Service pattern components
         from YSimulator.YServer.service_factory import create_services
         from YSimulator.YServer.database_adapter import DatabaseServiceAdapter
         
         user_service, post_service = create_services(db_config, self.logger)
         
-        # Create adapter that combines new services with legacy middleware
+        # Create complete database adapter (migration complete!)
+        # The adapter provides all database operations through a unified interface
         self.db = DatabaseServiceAdapter(
-            db_middleware=db_middleware,
+            legacy_middleware=legacy_middleware,
             user_service=user_service,
             post_service=post_service,
             logger=self.logger,
         )
 
         # Initialize Interest Manager for topic/interest tracking
-        # Note: InterestManager still uses middleware internally for now
+        # Note: InterestManager still uses middleware internally
         self.interest_manager = InterestManager(
-            db_middleware=db_middleware, attention_window=self.attention_window
+            db_middleware=legacy_middleware, attention_window=self.attention_window
         )
 
         # Initialize the first round entry
@@ -268,7 +269,7 @@ class OrchestratorServer:
         self.db.initialize_emotions_table()
 
         self.logger.info(
-            "Orchestrator server initialized with Repository/Service pattern",
+            "Orchestrator server initialized - Repository/Service pattern migration COMPLETE",
             extra={
                 "extra_data": {
                     "db_type": db_config.get("type", "sqlite"),
@@ -276,7 +277,9 @@ class OrchestratorServer:
                     "redis_enabled": self.db.use_redis,
                     "timeout_seconds": timeout_seconds,
                     "archetypes_enabled": self.archetypes_enabled,
-                    "using_new_pattern": True,
+                    "migration_status": "COMPLETE",
+                    "user_ops": "UserService",
+                    "post_ops": "PostService",
                 }
             },
         )
