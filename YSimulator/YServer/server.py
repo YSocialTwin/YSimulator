@@ -179,8 +179,6 @@ class OrchestratorServer:
             timeout_seconds: Seconds before considering a client stale (default: 60)
             simulation_config: Simulation configuration dict (optional)
         """
-        from YSimulator.YServer.classes.db_middleware import DatabaseMiddleware
-
         # Server configuration
         self.min_to_start = min_to_start
         self.server_name = server_name
@@ -231,88 +229,73 @@ class OrchestratorServer:
         # Set up logging first
         self._setup_logging()
 
-        # Initialize legacy middleware
-        legacy_middleware = DatabaseMiddleware(
-            db_config=db_config,
-            config_path=str(self.config_path),
-            redis_config=redis_config,
-            logger=self.logger,
-            simulation_config=simulation_config,
-        )
+        # Initialize Redis client if configured
+        redis_client = None
+        if redis_config and isinstance(redis_config, dict) and redis_config.get("enabled", False):
+            redis_client = self._create_redis_client(redis_config)
         
-        # Try to use Repository/Service pattern, fallback to legacy middleware if unavailable
+        # Initialize services using Repository/Service pattern
         use_new_pattern = False
         try:
             from YSimulator.YServer.service_factory import create_all_services, SERVICES_AVAILABLE
             from YSimulator.YServer.database_adapter import DatabaseServiceAdapter
             
             if not SERVICES_AVAILABLE:
-                self.logger.warning(
-                    "Repository/Service pattern dependencies not available. "
-                    "Using legacy DatabaseMiddleware. "
-                    "To enable the modern pattern, install: pip install sqlalchemy>=2.0.0"
-                )
-                self.db = legacy_middleware
-            else:
-                try:
-                    (user_service, post_service, follow_service, interest_service, 
-                     content_service, simulation_service, metadata_service, mention_service) = create_all_services(
-                        db_config, 
-                        str(self.config_path),  # Pass config_path to use correct database location
-                        self.logger
-                    )
-                    
-                    # Create complete database adapter with ALL services - 100% migration complete!
-                    self.db = DatabaseServiceAdapter(
-                        user_service=user_service,
-                        post_service=post_service,
-                        follow_service=follow_service,
-                        interest_service=interest_service,
-                        content_service=content_service,
-                        simulation_service=simulation_service,
-                        metadata_service=metadata_service,
-                        mention_service=mention_service,
-                        redis_client=legacy_middleware.redis_client if legacy_middleware.use_redis else None,
-                        logger=self.logger,
-                    )
-                    use_new_pattern = True
-                    self.logger.info(
-                        "Orchestrator server initialized - Repository/Service pattern 100% MIGRATED!",
-                        extra={
-                            "migration_status": "100_PERCENT_COMPLETE",
-                            "services": "User, Post, Follow, Interest, Content, Simulation, Metadata, Mention",
-                            "legacy_middleware": "None - fully removed from adapter"
-                        }
-                    )
-                except Exception as e:
-                    self.logger.warning(
-                        f"Failed to create services ({e}), falling back to legacy middleware. "
-                        "This might be due to missing dependencies or database issues."
-                    )
-                    self.db = legacy_middleware
-        except ImportError as e:
-            self.logger.warning(
-                f"Repository/Service pattern not available ({e}), using legacy DatabaseMiddleware. "
-                "To enable the modern pattern, install: pip install sqlalchemy>=2.0.0"
+                raise ImportError("Repository/Service pattern dependencies not available")
+            
+            (user_service, post_service, follow_service, interest_service, 
+             content_service, simulation_service, metadata_service, mention_service) = create_all_services(
+                db_config, 
+                str(self.config_path),
+                self.logger
             )
-            self.db = legacy_middleware
+            
+            # Create complete database adapter with ALL services
+            self.db = DatabaseServiceAdapter(
+                user_service=user_service,
+                post_service=post_service,
+                follow_service=follow_service,
+                interest_service=interest_service,
+                content_service=content_service,
+                simulation_service=simulation_service,
+                metadata_service=metadata_service,
+                mention_service=mention_service,
+                redis_client=redis_client,
+                logger=self.logger,
+            )
+            use_new_pattern = True
+            self.logger.info(
+                "Orchestrator server initialized - Repository/Service pattern 100% MIGRATED!",
+                extra={
+                    "migration_status": "100_PERCENT_COMPLETE",
+                    "services": "User, Post, Follow, Interest, Content, Simulation, Metadata, Mention",
+                    "legacy_middleware": "None - fully eliminated"
+                }
+            )
+        except Exception as e:
+            self.logger.error(
+                f"Failed to create services: {e}. "
+                "Unable to start server without service layer."
+            )
+            raise RuntimeError(
+                f"Service layer initialization failed: {e}. "
+                "Please ensure all dependencies are installed: pip install sqlalchemy>=2.0.0"
+            )
 
-        # Initialize Interest Manager for topic/interest tracking
-        # Note: InterestManager still uses middleware internally
+        # Initialize Interest Manager using the database adapter
         self.interest_manager = InterestManager(
-            db_middleware=legacy_middleware, attention_window=self.attention_window
+            db_service=self.db, attention_window=self.attention_window
         )
 
         # Initialize the first round entry
         self.current_round_id = self.db.get_or_create_round(self.day, self.slot)
         self.interest_manager.set_current_round(self.current_round_id)
 
-        # Initialize emotions table with GoEmotions taxonomy (if using new pattern)
-        if use_new_pattern:
-            self.db.initialize_emotions_table()
+        # Initialize emotions table
+        self.db.initialize_emotions_table()
 
         self.logger.info(
-            "Orchestrator server initialized - Repository/Service pattern 100% MIGRATED!",
+            "Orchestrator server fully initialized - 100% modern architecture!",
             extra={
                 "extra_data": {
                     "db_type": db_config.get("type", "sqlite"),
@@ -335,6 +318,58 @@ class OrchestratorServer:
                 }
             },
         )
+
+    def _create_redis_client(self, redis_config: dict):
+        """
+        Create and initialize a Redis client.
+        
+        Args:
+            redis_config: Redis configuration dict with host, port, db, password, enabled
+            
+        Returns:
+            Redis client instance or None if connection fails
+        """
+        try:
+            import redis
+        except ImportError:
+            self.logger.warning(
+                "Redis is enabled but redis module is not installed. "
+                "Install with: pip install redis"
+            )
+            return None
+        
+        if not redis_config.get("host"):
+            self.logger.info(
+                "Redis is enabled but no host specified in config, skipping Redis initialization"
+            )
+            return None
+        
+        try:
+            redis_client = redis.Redis(
+                host=redis_config.get("host"),
+                port=redis_config.get("port", 6379),
+                db=redis_config.get("db", 0),
+                password=redis_config.get("password"),
+                decode_responses=True,
+            )
+            # Test connection
+            redis_client.ping()
+            self.logger.info(
+                "Redis connection established",
+                extra={
+                    "extra_data": {
+                        "host": redis_config.get("host"),
+                        "port": redis_config.get("port", 6379),
+                    }
+                },
+            )
+            return redis_client
+        except Exception as e:
+            self.logger.warning(
+                f"Redis connection failed: {e}",
+                extra={"extra_data": {"error": str(e)}},
+            )
+            return None
 
     def _setup_logging(self):
         """Set up JSON logging for the server actor with gzip compression."""

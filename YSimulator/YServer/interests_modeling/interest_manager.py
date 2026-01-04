@@ -6,7 +6,7 @@ for agent interest modeling in YSimulator.
 """
 
 import logging
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from sqlalchemy.orm import Session
 
@@ -25,15 +25,15 @@ class InterestManager:
     - Agent interest state management
     """
 
-    def __init__(self, db_middleware, attention_window: int = 336):
+    def __init__(self, db_service: Any, attention_window: int = 336):
         """
         Initialize the Interest Manager.
 
         Args:
-            db_middleware: Database middleware instance for database operations
+            db_service: Database service adapter or middleware instance for database operations
             attention_window: Number of rounds to consider for interest decay (default: 336 = 14 days)
         """
-        self.db = db_middleware
+        self.db = db_service
         self.attention_window = attention_window
         self.logger = logging.getLogger(__name__)
 
