@@ -69,13 +69,27 @@ YSimulator/
 │   │   └── utils.py            # Shared utilities
 │   └── interests_modeling/     # Interest tracking and modeling
 ├── YClient/                    # Client-side agent simulation (~8,000 lines)
-│   ├── client.py               # Main agent actor (2,924 lines)
-│   ├── actions/                # Agent action implementations
+│   ├── client.py               # Main agent actor (extends ActionExecutorMixin)
+│   ├── action_executor.py      # Action handling mixin (all _handle_*_action methods)
+│   ├── agent_manager.py        # Agent lifecycle and population management
+│   ├── activity_selector.py    # Action type selection logic
+│   ├── churn_manager.py        # Agent churn and new agent handling
+│   ├── reply_handler.py        # Mention/reply processing
+│   ├── actions/                # Modular action implementations
+│   │   ├── llm_actions.py      # LLM-based action generators (async)
+│   │   └── rule_based_actions.py # Rule-based action generators
 │   ├── LLM_interactions/       # LLM integration for agent behavior
+│   │   └── llm_service.py      # LLM API communication
 │   ├── news_feeds/             # RSS feed processing
+│   │   └── news_service.py     # News article extraction
 │   ├── opinion_dynamics/       # Opinion formation models
+│   │   ├── confidence_bound.py # Bounded confidence model
+│   │   └── llm_evaluation.py   # LLM opinion evaluation
 │   ├── recsys/                 # Client-side recommendation handling
+│   │   ├── ContentRecSys.py    # Content recommendation system
+│   │   └── FollowRecSysRay.py  # Follow recommendation system
 │   └── text_support/           # Text processing utilities
+│       └── text_annotator.py   # Emotion annotation
 ├── utils/                      # Shared utilities
 │   └── init_db.py              # Database initialization (242 lines)
 └── tests/                      # Comprehensive test suite (~15,000 lines)
