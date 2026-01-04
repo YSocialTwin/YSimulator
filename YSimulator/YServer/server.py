@@ -256,7 +256,11 @@ class OrchestratorServer:
             else:
                 try:
                     (user_service, post_service, follow_service, interest_service, 
-                     content_service, simulation_service, metadata_service, mention_service) = create_all_services(db_config, self.logger)
+                     content_service, simulation_service, metadata_service, mention_service) = create_all_services(
+                        db_config, 
+                        str(self.config_path),  # Pass config_path to use correct database location
+                        self.logger
+                    )
                     
                     # Create complete database adapter with ALL services - 100% migration complete!
                     self.db = DatabaseServiceAdapter(

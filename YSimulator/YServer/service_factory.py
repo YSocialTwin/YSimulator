@@ -41,7 +41,7 @@ except ImportError as e:
     import_error = e
 
 
-def create_database_engine(db_config: Dict[str, Any], logger: Optional[logging.Logger] = None):
+def create_database_engine(db_config: Dict[str, Any], config_path: str = ".", logger: Optional[logging.Logger] = None):
     """
     Create SQLAlchemy engine from database configuration and initialize database tables.
     
@@ -49,11 +49,14 @@ def create_database_engine(db_config: Dict[str, Any], logger: Optional[logging.L
         db_config: Database configuration dict with:
             - type: "sqlite", "postgresql", or "mysql"
             - Additional connection parameters
+        config_path: Path to configuration directory (for SQLite database file)
         logger: Optional logger instance
     
     Returns:
         SQLAlchemy Engine instance with tables created
     """
+    from pathlib import Path
+    
     if not SQLALCHEMY_AVAILABLE:
         raise ImportError(
             "SQLAlchemy is not installed. Please install it with: pip install sqlalchemy>=2.0.0"
@@ -65,7 +68,14 @@ def create_database_engine(db_config: Dict[str, Any], logger: Optional[logging.L
     db_type = db_config.get("type", "sqlite")
     
     if db_type == "sqlite":
-        db_path = db_config.get("path", "simulation.db")
+        # Support both old and new config formats
+        # Old format: {"type": "sqlite", "sqlite": {"filename": "simulation.db"}}
+        # New format: {"type": "sqlite", "path": "simulation.db"}
+        sqlite_config = db_config.get("sqlite", {})
+        filename = sqlite_config.get("filename") or db_config.get("path", "simulation.db")
+        
+        # Create database file in config directory (same as old middleware)
+        db_path = Path(config_path) / filename
         connection_string = f"sqlite:///{db_path}"
     elif db_type == "postgresql":
         host = db_config.get("host", "localhost")
@@ -105,6 +115,7 @@ def create_database_engine(db_config: Dict[str, Any], logger: Optional[logging.L
 
 def create_all_services(
     db_config: Dict[str, Any],
+    config_path: str = ".",
     logger: Optional[logging.Logger] = None,
 ):
     """
@@ -112,6 +123,7 @@ def create_all_services(
     
     Args:
         db_config: Database configuration dict
+        config_path: Path to configuration directory (for SQLite database file)
         logger: Optional logger instance
     
     Returns:
@@ -127,7 +139,7 @@ def create_all_services(
         logger = logging.getLogger(__name__)
     
     # Create database engine and initialize tables
-    engine = create_database_engine(db_config, logger)
+    engine = create_database_engine(db_config, config_path, logger)
     
     # Create all repositories
     user_repo = SQLUserRepository(engine, logger)
@@ -188,6 +200,7 @@ def create_all_services(
 
 def create_services(
     db_config: Dict[str, Any],
+    config_path: str = ".",
     logger: Optional[logging.Logger] = None,
 ):
     """
@@ -197,11 +210,12 @@ def create_services(
     
     Args:
         db_config: Database configuration dict
+        config_path: Path to configuration directory (for SQLite database file)
         logger: Optional logger instance
     
     Returns:
         Tuple of (UserService, PostService)
     """
     # This function is kept for backward compatibility
-    all_services = create_all_services(db_config, logger)
+    all_services = create_all_services(db_config, config_path, logger)
     return all_services[0], all_services[1]  # Return only UserService and PostService
