@@ -94,6 +94,47 @@ class PostRepository(BaseRepository):
     def search_posts_by_topic(self, topic_id: str, agent_id: str, limit: int = 10) -> List[str]:
         """Search posts by topic."""
         pass
+    
+    # Metadata methods
+    @abstractmethod
+    def add_post_emotion(self, post_id: str, emotion_id: str) -> bool:
+        """Add emotion to a post."""
+        pass
+    
+    @abstractmethod
+    def get_emotion_by_name(self, emotion_name: str) -> Optional[str]:
+        """Get emotion ID by name."""
+        pass
+    
+    @abstractmethod
+    def initialize_emotions_table(self):
+        """Initialize emotions table with standard emotions."""
+        pass
+    
+    @abstractmethod
+    def add_post_sentiment(self, post_id: str, sentiment_score: float) -> bool:
+        """Add sentiment score to a post."""
+        pass
+    
+    @abstractmethod
+    def get_post_sentiment(self, post_id: str) -> Optional[float]:
+        """Get sentiment score for a post."""
+        pass
+    
+    @abstractmethod
+    def add_post_toxicity(self, post_id: str, toxicity_score: float) -> bool:
+        """Add toxicity score to a post."""
+        pass
+    
+    @abstractmethod
+    def add_or_get_hashtag(self, hashtag: str) -> Optional[str]:
+        """Add or get hashtag ID."""
+        pass
+    
+    @abstractmethod
+    def add_post_hashtag(self, post_id: str, hashtag_id: str) -> bool:
+        """Add hashtag to a post."""
+        pass
 
 
 class FollowRepository(BaseRepository):

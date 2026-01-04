@@ -16,11 +16,17 @@ from YSimulator.YServer.classes.models import (
     Agent_Opinion,
     Article,
     ArticleTopic,
+    Emotion,
     Follow,
+    Hashtag,
     Image,
     Interest,
     Post,
+    PostEmotion,
+    PostHashtag,
+    PostSentiment,
     PostTopic,
+    PostToxicity,
     Reaction,
     Round,
     User_mgmt,
@@ -429,6 +435,196 @@ class SQLPostRepository(PostRepository):
                 f"Error searching posts by topic: {e}", extra={"extra_data": {"error": str(e)}}
             )
             return []
+    
+    # Metadata methods
+    def add_post_emotion(self, post_id: str, emotion_id: str) -> bool:
+        """Add emotion to a post."""
+        try:
+            session = Session(self.engine)
+            try:
+                import uuid
+                post_emotion = PostEmotion(
+                    id=str(uuid.uuid4()),
+                    post_id=post_id,
+                    emotion_id=emotion_id
+                )
+                session.add(post_emotion)
+                session.commit()
+                return True
+            finally:
+                session.close()
+        except Exception as e:
+            self.logger.error(
+                f"Error adding post emotion: {e}", extra={"extra_data": {"error": str(e)}}
+            )
+            return False
+    
+    def get_emotion_by_name(self, emotion_name: str) -> Optional[str]:
+        """Get emotion ID by name."""
+        try:
+            session = Session(self.engine)
+            try:
+                emotion = session.query(Emotion).filter_by(emotion=emotion_name).first()
+                return emotion.id if emotion else None
+            finally:
+                session.close()
+        except Exception as e:
+            self.logger.error(
+                f"Error getting emotion by name: {e}", extra={"extra_data": {"error": str(e)}}
+            )
+            return None
+    
+    def initialize_emotions_table(self):
+        """Initialize emotions table with standard emotions."""
+        try:
+            session = Session(self.engine)
+            try:
+                # Check if emotions already exist
+                count = session.query(func.count(Emotion.id)).scalar()
+                if count > 0:
+                    return True
+                
+                # Standard emotions with IDs and icons
+                import uuid
+                emotions = [
+                    {"id": str(uuid.uuid4()), "emotion": "joy", "icon": "😊"},
+                    {"id": str(uuid.uuid4()), "emotion": "sadness", "icon": "😢"},
+                    {"id": str(uuid.uuid4()), "emotion": "anger", "icon": "😠"},
+                    {"id": str(uuid.uuid4()), "emotion": "fear", "icon": "😨"},
+                    {"id": str(uuid.uuid4()), "emotion": "surprise", "icon": "😲"},
+                    {"id": str(uuid.uuid4()), "emotion": "disgust", "icon": "🤢"},
+                ]
+                
+                for emotion_data in emotions:
+                    emotion = Emotion(**emotion_data)
+                    session.add(emotion)
+                
+                session.commit()
+                return True
+            finally:
+                session.close()
+        except Exception as e:
+            self.logger.error(
+                f"Error initializing emotions table: {e}", extra={"extra_data": {"error": str(e)}}
+            )
+            return False
+    
+    def add_post_sentiment(self, post_id: str, sentiment_score: float) -> bool:
+        """Add sentiment score to a post."""
+        try:
+            session = Session(self.engine)
+            try:
+                import uuid
+                # Get post to extract required fields
+                post = session.query(Post).filter_by(id=post_id).first()
+                if not post:
+                    return False
+                
+                post_sentiment = PostSentiment(
+                    id=str(uuid.uuid4()),
+                    post_id=post_id,
+                    compound=sentiment_score,
+                    user_id=post.user_id,
+                    round=post.round,
+                    topic_id="0",  # Default topic
+                    is_post=1,
+                    is_comment=0 if post.comment_to in (-1, "-1", None) else 1,
+                    is_reaction=0
+                )
+                session.add(post_sentiment)
+                session.commit()
+                return True
+            finally:
+                session.close()
+        except Exception as e:
+            self.logger.error(
+                f"Error adding post sentiment: {e}", extra={"extra_data": {"error": str(e)}}
+            )
+            return False
+    
+    def get_post_sentiment(self, post_id: str) -> Optional[float]:
+        """Get sentiment score for a post."""
+        try:
+            session = Session(self.engine)
+            try:
+                sentiment = session.query(PostSentiment).filter_by(post_id=post_id).first()
+                return sentiment.compound if sentiment else None
+            finally:
+                session.close()
+        except Exception as e:
+            self.logger.error(
+                f"Error getting post sentiment: {e}", extra={"extra_data": {"error": str(e)}}
+            )
+            return None
+    
+    def add_post_toxicity(self, post_id: str, toxicity_score: float) -> bool:
+        """Add toxicity score to a post."""
+        try:
+            session = Session(self.engine)
+            try:
+                import uuid
+                post_toxicity = PostToxicity(
+                    id=str(uuid.uuid4()),
+                    post_id=post_id,
+                    toxicity=toxicity_score
+                )
+                session.add(post_toxicity)
+                session.commit()
+                return True
+            finally:
+                session.close()
+        except Exception as e:
+            self.logger.error(
+                f"Error adding post toxicity: {e}", extra={"extra_data": {"error": str(e)}}
+            )
+            return False
+    
+    def add_or_get_hashtag(self, hashtag: str) -> Optional[str]:
+        """Add or get hashtag ID."""
+        try:
+            session = Session(self.engine)
+            try:
+                # Try to get existing hashtag
+                existing = session.query(Hashtag).filter_by(hashtag=hashtag).first()
+                if existing:
+                    return existing.id
+                
+                # Create new hashtag
+                import uuid
+                hashtag_id = str(uuid.uuid4())
+                new_hashtag = Hashtag(id=hashtag_id, hashtag=hashtag)
+                session.add(new_hashtag)
+                session.commit()
+                return hashtag_id
+            finally:
+                session.close()
+        except Exception as e:
+            self.logger.error(
+                f"Error adding/getting hashtag: {e}", extra={"extra_data": {"error": str(e)}}
+            )
+            return None
+    
+    def add_post_hashtag(self, post_id: str, hashtag_id: str) -> bool:
+        """Add hashtag to a post."""
+        try:
+            session = Session(self.engine)
+            try:
+                import uuid
+                post_hashtag = PostHashtag(
+                    id=str(uuid.uuid4()),
+                    post_id=post_id,
+                    hashtag_id=hashtag_id
+                )
+                session.add(post_hashtag)
+                session.commit()
+                return True
+            finally:
+                session.close()
+        except Exception as e:
+            self.logger.error(
+                f"Error adding post hashtag: {e}", extra={"extra_data": {"error": str(e)}}
+            )
+            return False
 
 
 class SQLFollowRepository(FollowRepository):
