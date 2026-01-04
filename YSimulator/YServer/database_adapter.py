@@ -14,6 +14,8 @@ from YSimulator.YServer.services.follow_service import FollowService
 from YSimulator.YServer.services.interest_service import InterestService
 from YSimulator.YServer.services.content_service import ContentService
 from YSimulator.YServer.services.simulation_service import SimulationService
+from YSimulator.YServer.services.metadata_service import MetadataService
+from YSimulator.YServer.services.mention_service import MentionService
 
 
 class DatabaseServiceAdapter:
@@ -21,47 +23,53 @@ class DatabaseServiceAdapter:
     Complete database adapter for YSimulator using Repository/Service pattern.
     
     This adapter provides all database operations through services.
-    All operations now use the modern Repository/Service architecture.
+    ALL operations now use the modern Repository/Service architecture.
     """
     
     def __init__(
         self,
-        legacy_middleware,  # Keep for specialized operations not yet in services
+        legacy_middleware,  # Keep for Redis operations and utilities only
         user_service: UserService,
         post_service: PostService,
         follow_service: FollowService,
         interest_service: InterestService,
         content_service: ContentService,
         simulation_service: SimulationService,
+        metadata_service: MetadataService,
+        mention_service: MentionService,
         logger: Optional[logging.Logger] = None,
     ):
         """
         Initialize the complete database adapter.
         
         Args:
-            legacy_middleware: Legacy middleware for specialized operations
+            legacy_middleware: Legacy middleware for Redis utilities only
             user_service: User service
             post_service: Post service
             follow_service: Follow service
             interest_service: Interest service
             content_service: Content service
             simulation_service: Simulation service
+            metadata_service: Metadata service
+            mention_service: Mention service
             logger: Optional logger instance
         """
-        self._legacy = legacy_middleware  # Private - for specialized operations only
+        self._legacy = legacy_middleware  # Private - for Redis utilities only
         self.user_service = user_service
         self.post_service = post_service
         self.follow_service = follow_service
         self.interest_service = interest_service
         self.content_service = content_service
         self.simulation_service = simulation_service
+        self.metadata_service = metadata_service
+        self.mention_service = mention_service
         self.logger = logger or logging.getLogger(__name__)
         
         # Expose necessary attributes for compatibility
         self.use_redis = legacy_middleware.use_redis if legacy_middleware else False
     
     # ========================================================================
-    # USER OPERATIONS - UserService
+    # USER OPERATIONS - UserService (COMPLETE)
     # ========================================================================
     
     def register_users_batch(self, users_data: List[Dict[str, Any]]) -> Tuple[int, Set[str]]:
@@ -74,7 +82,7 @@ class DatabaseServiceAdapter:
     
     def get_user_by_username(self, username: str) -> Optional[Dict[str, Any]]:
         """Get user by username."""
-        return self._legacy.get_user_by_username(username)
+        return self.user_service.get_user_by_username(username)
     
     def get_all_users(self) -> List[Dict[str, Any]]:
         """Get all users."""
@@ -86,24 +94,22 @@ class DatabaseServiceAdapter:
     
     def update_agent_last_active_day(self, agent_id: str, day: int) -> bool:
         """Update agent last active day."""
-        return self._legacy.update_agent_last_active_day(agent_id, day)
+        return self.user_service.update_agent_last_active_day(agent_id, day)
     
     def get_churned_agents(self, day: int = None, inactivity_threshold: int = None) -> List[str]:
         """Get churned agents."""
-        if day is None or inactivity_threshold is None:
-            return self._legacy.get_churned_agents()
-        return self._legacy.get_churned_agents(day, inactivity_threshold)
+        return self.user_service.get_churned_agents(day, inactivity_threshold)
     
     def set_agent_churned(self, agent_id: str, churn_day: int) -> bool:
         """Set agent as churned."""
-        return self._legacy.set_agent_churned(agent_id, churn_day)
+        return self.user_service.set_agent_churned(agent_id, churn_day)
     
     def get_inactive_agents(self, current_day: int, inactivity_days: int = 7) -> List[str]:
         """Get inactive agents."""
-        return self._legacy.get_inactive_agents(current_day, inactivity_days)
+        return self.user_service.get_inactive_agents(current_day, inactivity_days)
     
     # ========================================================================
-    # POST OPERATIONS - PostService
+    # POST OPERATIONS - PostService (COMPLETE)
     # ========================================================================
     
     def add_post(self, post_data: Dict[str, Any]) -> Optional[str]:
@@ -138,37 +144,44 @@ class DatabaseServiceAdapter:
         """Search posts by topic."""
         return self.post_service.search_posts_by_topic(topic_id, agent_id, limit)
     
-    # Post metadata operations - using legacy for now
+    # ========================================================================
+    # POST METADATA OPERATIONS - MetadataService (COMPLETE)
+    # ========================================================================
+    
     def add_post_emotion(self, post_id: str, emotion_id: str) -> bool:
         """Add post emotion."""
-        return self._legacy.add_post_emotion(post_id, emotion_id)
+        return self.metadata_service.add_post_emotion(post_id, emotion_id)
     
     def add_post_sentiment(self, post_id: str, sentiment_score: float) -> bool:
         """Add post sentiment."""
-        return self._legacy.add_post_sentiment(post_id, sentiment_score)
+        return self.metadata_service.add_post_sentiment(post_id, sentiment_score)
     
     def add_post_toxicity(self, post_id: str, toxicity_score: float) -> bool:
         """Add post toxicity."""
-        return self._legacy.add_post_toxicity(post_id, toxicity_score)
+        return self.metadata_service.add_post_toxicity(post_id, toxicity_score)
     
     def add_post_hashtag(self, post_id: str, hashtag_id: str) -> bool:
         """Add post hashtag."""
-        return self._legacy.add_post_hashtag(post_id, hashtag_id)
+        return self.metadata_service.add_post_hashtag(post_id, hashtag_id)
     
     def add_or_get_hashtag(self, hashtag: str) -> str:
         """Add or get hashtag."""
-        return self._legacy.add_or_get_hashtag(hashtag)
+        return self.metadata_service.add_or_get_hashtag(hashtag)
     
     def get_post_sentiment(self, post_id: str) -> Optional[float]:
         """Get post sentiment."""
-        return self._legacy.get_post_sentiment(post_id)
+        return self.metadata_service.get_post_sentiment(post_id)
     
     def get_emotion_by_name(self, emotion_name: str) -> Optional[str]:
         """Get emotion by name."""
-        return self._legacy.get_emotion_by_name(emotion_name)
+        return self.metadata_service.get_emotion_by_name(emotion_name)
+    
+    def initialize_emotions_table(self):
+        """Initialize emotions table."""
+        return self.metadata_service.initialize_emotions_table()
     
     # ========================================================================
-    # FOLLOW OPERATIONS - FollowService
+    # FOLLOW OPERATIONS - FollowService (COMPLETE)
     # ========================================================================
     
     def add_follow(self, follower_id: str, followee_id: str, round_id: str) -> bool:
@@ -180,7 +193,7 @@ class DatabaseServiceAdapter:
         return self.follow_service.add_follows_batch(follows_data)
     
     # ========================================================================
-    # INTEREST/TOPIC OPERATIONS - InterestService
+    # INTEREST/TOPIC OPERATIONS - InterestService (COMPLETE)
     # ========================================================================
     
     def add_or_get_interest(self, interest_name: str) -> str:
@@ -203,7 +216,6 @@ class DatabaseServiceAdapter:
         """Get topic name from ID."""
         return self.interest_service.get_topic_name_from_id(topic_id)
     
-    # Opinion operations - InterestService
     def add_agent_opinion(self, agent_id: str, topic_id: str, opinion_value: float, round_id: str) -> bool:
         """Add agent opinion."""
         return self.interest_service.add_agent_opinion(agent_id, topic_id, opinion_value, round_id)
@@ -213,23 +225,23 @@ class DatabaseServiceAdapter:
         return self.interest_service.get_latest_agent_opinion(agent_id, topic_id)
     
     # ========================================================================
-    # MENTION OPERATIONS - Legacy (specialized)
+    # MENTION OPERATIONS - MentionService (COMPLETE)
     # ========================================================================
     
     def add_mention(self, post_id: str, mentioned_user_id: str) -> bool:
         """Add mention."""
-        return self._legacy.add_mention(post_id, mentioned_user_id)
+        return self.mention_service.add_mention(post_id, mentioned_user_id)
     
     def get_unreplied_mentions(self, user_id: str) -> List[Dict[str, Any]]:
         """Get unreplied mentions."""
-        return self._legacy.get_unreplied_mentions(user_id)
+        return self.mention_service.get_unreplied_mentions(user_id)
     
     def mark_mention_replied(self, post_id: str, mentioned_user_id: str) -> bool:
         """Mark mention as replied."""
-        return self._legacy.mark_mention_replied(post_id, mentioned_user_id)
+        return self.mention_service.mark_mention_replied(post_id, mentioned_user_id)
     
     # ========================================================================
-    # CONTENT OPERATIONS - ContentService
+    # CONTENT OPERATIONS - ContentService (COMPLETE)
     # ========================================================================
     
     def add_article(self, article_data: Dict[str, Any]) -> str:
@@ -265,16 +277,12 @@ class DatabaseServiceAdapter:
         return self.content_service.get_website_by_rss(rss_url)
     
     # ========================================================================
-    # SIMULATION STATE OPERATIONS - SimulationService
+    # SIMULATION STATE OPERATIONS - SimulationService (COMPLETE)
     # ========================================================================
     
     def get_or_create_round(self, day: int, slot: int) -> str:
         """Get or create simulation round."""
         return self.simulation_service.get_or_create_round(day, slot)
-    
-    def initialize_emotions_table(self):
-        """Initialize emotions table."""
-        return self._legacy.initialize_emotions_table()
     
     def consolidate_redis_to_sqlite(self, current_day: int):
         """Consolidate Redis to SQL."""
@@ -283,8 +291,12 @@ class DatabaseServiceAdapter:
     def cleanup_old_posts_from_redis(self, current_round_id: str):
         """Cleanup old posts from Redis."""
         # Note: current_round_id needs to be parsed to day/slot
-        # For now, delegate to legacy
+        # For now, delegate to legacy for Redis-specific operations
         return self._legacy.cleanup_old_posts_from_redis(current_round_id)
+    
+    # ========================================================================
+    # REDIS UTILITIES - Legacy (Redis-specific operations)
+    # ========================================================================
     
     def get_redis_key_pattern(self, pattern: str) -> List[str]:
         """Get Redis keys matching pattern."""

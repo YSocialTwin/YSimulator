@@ -175,3 +175,87 @@ class UserService:
         except Exception as e:
             self.logger.error(f"Error in user service health_check: {e}")
             return False
+    
+    def get_user_by_username(self, username: str) -> Optional[Dict[str, Any]]:
+        """
+        Get user by username.
+        
+        Args:
+            username: Username
+            
+        Returns:
+            User data dict or None if not found
+        """
+        try:
+            return self.user_repo.get_user_by_username(username)
+        except Exception as e:
+            self.logger.error(f"Error getting user by username {username}: {e}")
+            return None
+    
+    def update_agent_last_active_day(self, agent_id: str, day: int) -> bool:
+        """
+        Update agent's last active day.
+        
+        Args:
+            agent_id: Agent ID
+            day: Simulation day
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            return self.user_repo.update_agent_last_active_day(agent_id, day)
+        except Exception as e:
+            self.logger.error(f"Error updating last active day for agent {agent_id}: {e}")
+            return False
+    
+    def get_churned_agents(self, day: int = None, inactivity_threshold: int = None) -> List[str]:
+        """
+        Get list of churned agents.
+        
+        Args:
+            day: Optional current day
+            inactivity_threshold: Optional threshold for inactivity
+            
+        Returns:
+            List of churned agent IDs
+        """
+        try:
+            return self.user_repo.get_churned_agents(day, inactivity_threshold)
+        except Exception as e:
+            self.logger.error(f"Error getting churned agents: {e}")
+            return []
+    
+    def set_agent_churned(self, agent_id: str, churn_day: int) -> bool:
+        """
+        Mark an agent as churned.
+        
+        Args:
+            agent_id: Agent ID
+            churn_day: Day when agent churned
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            return self.user_repo.set_agent_churned(agent_id, churn_day)
+        except Exception as e:
+            self.logger.error(f"Error setting agent {agent_id} as churned: {e}")
+            return False
+    
+    def get_inactive_agents(self, current_day: int, inactivity_days: int = 7) -> List[str]:
+        """
+        Get list of inactive agents.
+        
+        Args:
+            current_day: Current simulation day
+            inactivity_days: Number of days of inactivity to consider
+            
+        Returns:
+            List of inactive agent IDs
+        """
+        try:
+            return self.user_repo.get_inactive_agents(current_day, inactivity_days)
+        except Exception as e:
+            self.logger.error(f"Error getting inactive agents: {e}")
+            return []

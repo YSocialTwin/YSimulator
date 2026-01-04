@@ -231,7 +231,7 @@ class OrchestratorServer:
         # Set up logging first
         self._setup_logging()
 
-        # Initialize legacy middleware for specialized operations
+        # Initialize legacy middleware for Redis utilities only
         legacy_middleware = DatabaseMiddleware(
             db_config=db_config,
             config_path=str(self.config_path),
@@ -240,14 +240,14 @@ class OrchestratorServer:
             simulation_config=simulation_config,
         )
         
-        # Initialize all Repository/Service pattern components
+        # Initialize ALL Repository/Service pattern components
         from YSimulator.YServer.service_factory import create_all_services
         from YSimulator.YServer.database_adapter import DatabaseServiceAdapter
         
         (user_service, post_service, follow_service, interest_service, 
-         content_service, simulation_service) = create_all_services(db_config, self.logger)
+         content_service, simulation_service, metadata_service, mention_service) = create_all_services(db_config, self.logger)
         
-        # Create complete database adapter with all services
+        # Create complete database adapter with ALL services - migration complete!
         self.db = DatabaseServiceAdapter(
             legacy_middleware=legacy_middleware,
             user_service=user_service,
@@ -256,6 +256,8 @@ class OrchestratorServer:
             interest_service=interest_service,
             content_service=content_service,
             simulation_service=simulation_service,
+            metadata_service=metadata_service,
+            mention_service=mention_service,
             logger=self.logger,
         )
 
@@ -273,7 +275,7 @@ class OrchestratorServer:
         self.db.initialize_emotions_table()
 
         self.logger.info(
-            "Orchestrator server initialized - All services integrated!",
+            "Orchestrator server initialized - Repository/Service pattern FULLY MIGRATED!",
             extra={
                 "extra_data": {
                     "db_type": db_config.get("type", "sqlite"),
@@ -281,6 +283,7 @@ class OrchestratorServer:
                     "redis_enabled": self.db.use_redis,
                     "timeout_seconds": timeout_seconds,
                     "archetypes_enabled": self.archetypes_enabled,
+                    "migration_status": "FULLY_COMPLETE",
                     "services_integrated": [
                         "UserService",
                         "PostService",
@@ -288,7 +291,10 @@ class OrchestratorServer:
                         "InterestService",
                         "ContentService",
                         "SimulationService",
+                        "MetadataService",
+                        "MentionService",
                     ],
+                    "legacy_usage": "Redis utilities only",
                 }
             },
         )

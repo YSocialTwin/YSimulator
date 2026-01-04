@@ -26,6 +26,8 @@ from YSimulator.YServer.services.follow_service import FollowService
 from YSimulator.YServer.services.interest_service import InterestService
 from YSimulator.YServer.services.content_service import ContentService
 from YSimulator.YServer.services.simulation_service import SimulationService
+from YSimulator.YServer.services.metadata_service import MetadataService
+from YSimulator.YServer.services.mention_service import MentionService
 
 
 def create_database_engine(db_config: Dict[str, Any]) -> Engine:
@@ -75,7 +77,7 @@ def create_database_engine(db_config: Dict[str, Any]) -> Engine:
 def create_all_services(
     db_config: Dict[str, Any],
     logger: Optional[logging.Logger] = None,
-) -> Tuple[UserService, PostService, FollowService, InterestService, ContentService, SimulationService]:
+) -> Tuple[UserService, PostService, FollowService, InterestService, ContentService, SimulationService, MetadataService, MentionService]:
     """
     Create all service instances with repository dependencies.
     
@@ -84,7 +86,7 @@ def create_all_services(
         logger: Optional logger instance
     
     Returns:
-        Tuple of (UserService, PostService, FollowService, InterestService, ContentService, SimulationService)
+        Tuple of (UserService, PostService, FollowService, InterestService, ContentService, SimulationService, MetadataService, MentionService)
     """
     if logger is None:
         logger = logging.getLogger(__name__)
@@ -135,7 +137,18 @@ def create_all_services(
         logger=logger,
     )
     
-    return user_service, post_service, follow_service, interest_service, content_service, simulation_service
+    metadata_service = MetadataService(
+        post_repository=post_repo,
+        logger=logger,
+    )
+    
+    mention_service = MentionService(
+        post_repository=post_repo,
+        logger=logger,
+    )
+    
+    return (user_service, post_service, follow_service, interest_service, 
+            content_service, simulation_service, metadata_service, mention_service)
 
 
 def create_services(
