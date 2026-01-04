@@ -24,29 +24,60 @@ Adding a new action requires modifications to:
 
 ## Architecture Review
 
-### Client Architecture
+### Client Architecture (Updated)
 ```
-SimulationClient (Ray Actor)
+SimulationClient (Ray Actor) extends ActionExecutorMixin
 ├── run() - Main simulation loop
 ├── _execute_slot() - Execute one time slot
-├── _perform_agent_actions() - Coordinate agent actions
-└── Agent instances - Individual agent logic
+├── ActionExecutorMixin - Action handling methods
+│   ├── _handle_post_action()
+│   ├── _handle_read_action()
+│   ├── _handle_comment_action()
+│   ├── _handle_share_action()
+│   └── _handle_follow_action()
+├── actions/ - Action implementation modules
+│   ├── llm_actions.py - LLM-powered action generation
+│   └── rule_based_actions.py - Rule-based action generation
+├── agent_manager.py - Agent lifecycle management
+├── activity_selector.py - Action type selection
+└── churn_manager.py - Population dynamics
 ```
 
-### Server Architecture
+### Server Architecture (Updated)
 ```
 OrchestratorServer (Ray Actor)
-├── get_instruction() - Provide time coordination
-├── submit_action() - Receive and process actions
-├── register_agents() - Store agent profiles
-└── DatabaseMiddleware - Abstract storage layer
+├── Coordination Methods
+│   ├── get_instruction() - Provide time coordination
+│   ├── register_client() - Client registration
+│   └── heartbeat() - Client liveness tracking
+├── Action Handlers
+│   ├── submit_action() - Receive and process actions
+│   └── submit_actions_batch() - Batch processing
+├── Data Access Layers (Choose One)
+│   ├── DatabaseMiddleware - Legacy pattern (still supported)
+│   └── Repository/Service Pattern - Modern approach (recommended)
+│       ├── services/ - Business logic
+│       │   ├── user_service.py
+│       │   ├── post_service.py
+│       │   └── recommendation_service.py
+│       └── repositories/ - Data access
+│           ├── sql_repository.py
+│           └── redis_repository.py
+└── interests_modeling/ - Interest tracking
+    └── interest_manager.py
 ```
 
-### Action Flow
+### Action Flow (Modern)
 ```
-Client Agent → submit_action() → Server → DatabaseMiddleware → Database
-                                    ↓
-                              Consolidation (if Redis)
+Client Agent → ActionExecutorMixin → submit_action() → Server
+                                                         ↓
+                                            Service Layer (Optional)
+                                                         ↓
+                                            Repository Layer (Optional)
+                                                         ↓
+                                            DatabaseMiddleware (Legacy)
+                                                         ↓
+                                            Database (SQL + Redis)
 ```
 
 ## Using the Repository Pattern (NEW)
@@ -462,63 +493,277 @@ def submit_share(self, client_id: str, share_data: dict) -> dict:
 - Log with execution time metrics
 - Return structured response
 
-### Step 5: Implement Client-Side Logic
+### Step 5: Implement Client-Side Logic (Modern Approach)
 
-Add agent action in your agent class or `YClient/client.py`:
+With the modular action system, implement your action in the appropriate module:
+
+#### Option A: Add to ActionExecutorMixin (for complex actions)
+
+In `YClient/action_executor.py`, add a handler method:
 
 ```python
-def share_post(self, agent_id: int, post_id: str, comment: str = ""):
-    """
-    Agent shares a post with optional comment.
-    
-    Args:
-        agent_id: ID of the agent sharing
-        post_id: ID of the post to share
-        comment: Optional comment to add
-    """
-    try:
-        share_data = {
-            "user_id": agent_id,
-            "post_id": post_id,
-            "share_comment": comment
-        }
+def _handle_share_action(self, agent, agent_type, day, slot, pending_llm_shares, actions):
+    """Handle share action for an agent."""
+    if agent_type == "llm":
+        # LLM: Fire off async call for intelligent share decision
+        agent_attrs = self._extract_agent_attrs(agent)
+        post_to_share = self._select_post_to_share(agent)
         
-        # Call server
-        response = ray.get(self.server.submit_share.remote(
-            self.client_id,
-            share_data
-        ))
-        
-        if response.get("success"):
-            self.logger.info(
-                f"Agent {agent_id} shared post {post_id}",
-                extra={"share_id": response.get("share_id")}
+        if post_to_share:
+            future = generate_llm_share_async(
+                self.llm, 
+                agent.cluster, 
+                post_to_share["content"],
+                agent_attrs
             )
-        else:
-            self.logger.error(
-                f"Failed to share post: {response.get('error')}"
+            pending_llm_shares.append((agent.id, agent.cluster, post_to_share["id"], future))
+    else:
+        # Rule-based: Immediate decision
+        post_to_share = self._select_post_to_share(agent)
+        if post_to_share:
+            share_comment = generate_rule_based_share(
+                agent.cluster, 
+                post_to_share["content"]
             )
-            
-    except Exception as e:
-        self.logger.error(f"Error sharing post: {e}", exc_info=True)
+            actions.append(ActionDTO(
+                agent_id=agent.id,
+                cluster_id=agent.cluster,
+                action_type="SHARE",
+                content=share_comment,
+                target_post_id=post_to_share["id"]
+            ))
 ```
 
-### Step 6: Integrate into Action Loop
+#### Option B: Add Action Generation Functions
 
-Update `_perform_agent_actions()` in `YClient/client.py`:
+**For LLM-based actions**, add to `YClient/actions/llm_actions.py`:
 
 ```python
-def _perform_agent_actions(self):
-    """Execute actions for all agents in current time slot."""
+def generate_llm_share_async(
+    llm_handle: Any,
+    cluster_id: int,
+    post_content: str,
+    agent_attrs: Optional[Dict[str, Any]] = None,
+) -> ray.ObjectRef:
+    """
+    Initiate async LLM share comment generation.
+
+    Args:
+        llm_handle: Ray actor handle for the LLM service
+        cluster_id: Cluster/group the agent belongs to
+        post_content: Content of the post being shared
+        agent_attrs: Optional dict with agent attributes
+
+    Returns:
+        Ray ObjectRef: Future that will resolve to share comment (str)
+    """
+    return llm_handle.generate_share_comment.remote(
+        cluster_id, post_content, agent_attrs
+    )
+```
+
+**For rule-based actions**, add to `YClient/actions/rule_based_actions.py`:
+
+```python
+def generate_rule_based_share(cluster_id: int, post_content: str) -> str:
+    """
+    Generate a simple rule-based share comment.
+
+    Args:
+        cluster_id: Cluster/group the agent belongs to
+        post_content: Content of the post being shared
+
+    Returns:
+        Share comment text (str)
+    """
+    templates = [
+        "Check this out!",
+        "Interesting perspective",
+        "Worth reading",
+        "Sharing this",
+    ]
+    return random.choice(templates)
+```
+
+#### Option C: Integrate into Activity Selector
+
+If your action needs custom selection logic, update `YClient/activity_selector.py`:
+
+```python
+def select_action_for_agent(
+    agent: AgentProfile,
+    config: dict,
+    current_day: int,
+    current_slot: int
+) -> str:
+    """
+    Select an action type for an agent based on configuration and context.
+    
+    Args:
+        agent: Agent profile
+        config: Simulation configuration
+        current_day: Current simulation day
+        current_slot: Current time slot
+        
+    Returns:
+        Action type: "POST", "READ", "COMMENT", "SHARE", "FOLLOW", "SEARCH"
+    """
+    # Get action probabilities from config
+    action_probs = config.get("action_likelihoods", {})
+    
+    # Apply archetype-specific adjustments
+    if agent.archetype == "broadcaster":
+        action_probs["POST"] *= 2.0  # Broadcasters post more
+        action_probs["SHARE"] *= 1.5  # And share more
+    elif agent.archetype == "validator":
+        action_probs["COMMENT"] *= 2.0  # Validators comment more
+        action_probs["SHARE"] *= 0.5  # But share less
+    
+    # Normalize and select
+    total = sum(action_probs.values())
+    normalized = {k: v/total for k, v in action_probs.items()}
+    
+    return random.choices(
+        list(normalized.keys()),
+        weights=list(normalized.values())
+    )[0]
+```
+
+### Step 6: Integrate into Main Execution Loop
+
+The client now uses a modular action execution system. Integrate your new action:
+
+#### In `YClient/client.py` - Main execution loop:
+
+```python
+def _execute_slot(self, day: int, slot: int):
+    """Execute one time slot of the simulation."""
+    actions = []
+    pending_llm_posts = []
+    pending_llm_reads = []
+    pending_llm_shares = []  # Add for your new action
+    
+    # Phase 1: Select actions for each agent
+    for agent in self.agents:
+        # Determine if agent is active this slot
+        if not self._is_agent_active(agent, slot):
+            continue
+        
+        # Select action type using activity selector
+        action_type = select_action_for_agent(
+            agent, self.simulation_config, day, slot
+        )
+        
+        # Determine agent type (LLM or rule-based)
+        agent_type = "llm" if agent.llm else "rule"
+        
+        # Route to appropriate handler
+        if action_type == "POST":
+            self._handle_post_action(agent, agent_type, day, slot, pending_llm_posts, actions)
+        elif action_type == "READ":
+            self._handle_read_action(agent, agent_type, day, slot, pending_llm_reads, actions)
+        elif action_type == "SHARE":
+            self._handle_share_action(agent, agent_type, day, slot, pending_llm_shares, actions)
+        # ... other action types ...
+    
+    # Phase 2: Gather LLM results (scatter-gather pattern)
+    if pending_llm_posts:
+        post_contents = ray.get([f[2] for f in pending_llm_posts])
+        for i, content in enumerate(post_contents):
+            agent_id, cluster_id, _ = pending_llm_posts[i]
+            actions.append(ActionDTO(agent_id, cluster_id, "POST", content=content))
+    
+    if pending_llm_shares:
+        share_comments = ray.get([f[3] for f in pending_llm_shares])
+        for i, comment in enumerate(share_comments):
+            agent_id, cluster_id, post_id, _ = pending_llm_shares[i]
+            actions.append(ActionDTO(
+                agent_id, cluster_id, "SHARE", 
+                content=comment, target_post_id=post_id
+            ))
+    
+    # Phase 3: Submit all actions to server
+    if actions:
+        self._submit_actions_batch(actions, day, slot)
+```
+
+#### Key Integration Points:
+
+1. **ActionExecutorMixin**: Your handler method (`_handle_share_action`)
+2. **Action modules**: Your generation functions (LLM and rule-based)
+3. **Activity selector**: Update action probabilities/logic if needed
+4. **Main loop**: Add routing to your handler in `_execute_slot()`
+
+#### Example: Complete Share Action Integration
+
+```python
+# 1. In action_executor.py (ActionExecutorMixin)
+def _handle_share_action(self, agent, agent_type, day, slot, pending_llm_shares, actions):
+    """Handle share action for an agent."""
+    # Get recommended posts
+    posts = self._get_recommended_posts(agent)
+    if not posts:
+        return
+    
+    # Select post to share (first one for simplicity)
+    post_to_share = posts[0]
+    
+    if agent_type == "llm":
+        # Async LLM call
+        agent_attrs = self._extract_agent_attrs(agent)
+        future = generate_llm_share_async(
+            self.llm, agent.cluster, post_to_share["content"], agent_attrs
+        )
+        pending_llm_shares.append((
+            agent.id, agent.cluster, post_to_share["id"], future
+        ))
+    else:
+        # Rule-based: immediate
+        comment = generate_rule_based_share(agent.cluster, post_to_share["content"])
+        actions.append(ActionDTO(
+            agent_id=agent.id,
+            cluster_id=agent.cluster,
+            action_type="SHARE",
+            content=comment,
+            target_post_id=post_to_share["id"]
+        ))
+
+# 2. In actions/llm_actions.py
+def generate_llm_share_async(llm_handle, cluster_id, content, attrs):
+    """Generate LLM share comment asynchronously."""
+    return llm_handle.generate_share_comment.remote(cluster_id, content, attrs)
+
+# 3. In actions/rule_based_actions.py  
+def generate_rule_based_share(cluster_id, content):
+    """Generate simple share comment."""
+    return random.choice(["Check this out!", "Interesting!", "Worth reading"])
+
+# 4. In client.py - main loop
+def _execute_slot(self, day, slot):
+    actions = []
+    pending_llm_shares = []
     
     for agent in self.agents:
-        # ... existing action logic ...
+        action_type = self._select_action_type(agent)
+        agent_type = "llm" if agent.llm else "rule"
         
-        # New share action
-        if should_share_post(agent):  # Your logic here
-            post_to_share = select_post_to_share(agent)  # Your logic
-            comment = generate_share_comment(agent, post_to_share)  # Your logic
-            self.share_post(agent.id, post_to_share.id, comment)
+        if action_type == "SHARE":
+            self._handle_share_action(
+                agent, agent_type, day, slot, pending_llm_shares, actions
+            )
+    
+    # Gather LLM results
+    if pending_llm_shares:
+        comments = ray.get([f[3] for f in pending_llm_shares])
+        for i, comment in enumerate(comments):
+            agent_id, cluster_id, post_id, _ = pending_llm_shares[i]
+            actions.append(ActionDTO(
+                agent_id, cluster_id, "SHARE", 
+                content=comment, target_post_id=post_id
+            ))
+    
+    # Submit batch
+    self._submit_actions_batch(actions, day, slot)
 ```
 
 ## Example: Adding a "Share" Action
@@ -572,37 +817,226 @@ def share_post(self, agent_id: int, post_id: str):
 
 ## Testing Your Extension
 
-### 1. Database Migration
-After adding models, create tables:
-```bash
-python
->>> from run_server import db
->>> db.create_all()
-```
+### 1. Unit Tests for Action Functions
 
-### 2. Unit Tests
-Create tests for your new methods:
-```python
-def test_add_share():
-    middleware = DatabaseMiddleware(...)
-    share_id = middleware.add_share(
-        user_id=1,
-        post_id="post-123",
-        day=5
-    )
-    assert share_id is not None
-    assert len(share_id) == 36  # UUID length
-```
+Test your action generation functions in isolation:
 
-### 3. Integration Tests
-Test the full flow:
 ```python
-def test_share_flow():
-    # Start server
-    server = OrchestratorServer.remote(...)
+# tests/test_actions.py
+import pytest
+from YSimulator.YClient.actions.rule_based_actions import generate_rule_based_share
+from YSimulator.YClient.actions.llm_actions import generate_llm_share_async
+import ray
+
+def test_rule_based_share():
+    """Test rule-based share comment generation."""
+    comment = generate_rule_based_share(cluster_id=1, post_content="Test post")
+    assert isinstance(comment, str)
+    assert len(comment) > 0
+
+@pytest.mark.asyncio
+async def test_llm_share_async():
+    """Test LLM share comment generation."""
+    # Mock LLM handle
+    @ray.remote
+    class MockLLMService:
+        def generate_share_comment(self, cluster_id, content, attrs):
+            return "Interesting perspective on this topic!"
     
-    # Submit share
-    response = ray.get(server.submit_share.remote("client1", 1, "post-123"))
+    llm_handle = MockLLMService.remote()
+    future = generate_llm_share_async(
+        llm_handle, 
+        cluster_id=1, 
+        content="Test post",
+        attrs={"name": "TestAgent"}
+    )
+    
+    result = ray.get(future)
+    assert isinstance(result, str)
+    assert len(result) > 0
+```
+
+### 2. Integration Tests with Repository/Service Pattern
+
+Test the full data flow with mocked dependencies:
+
+```python
+# tests/test_share_service.py
+import pytest
+from unittest.mock import Mock, MagicMock
+from YSimulator.YServer.services import PostService
+from YSimulator.YServer.repositories import SQLPostRepository
+
+def test_share_action_service():
+    """Test share action through service layer."""
+    # Mock repository
+    mock_repo = Mock(spec=SQLPostRepository)
+    mock_repo.add_share.return_value = "share-uuid-123"
+    
+    # Create service with mock
+    post_service = PostService(mock_repo)
+    
+    # Test share creation
+    share_id = post_service.create_share({
+        "user_id": "user-1",
+        "post_id": "post-123",
+        "comment": "Great post!",
+        "day": 5,
+        "slot": 10
+    })
+    
+    # Verify
+    assert share_id == "share-uuid-123"
+    mock_repo.add_share.assert_called_once()
+```
+
+### 3. Client-Server Integration Tests
+
+Test the complete flow through Ray actors:
+
+```python
+# tests/test_client_server_integration.py
+import pytest
+import ray
+from YSimulator.YServer.server import OrchestratorServer
+from YSimulator.YClient.client import SimulationClient
+
+@pytest.fixture
+def setup_ray():
+    """Initialize Ray for testing."""
+    if not ray.is_initialized():
+        ray.init(ignore_reinit_error=True)
+    yield
+    ray.shutdown()
+
+def test_share_action_flow(setup_ray):
+    """Test complete share action flow from client to server."""
+    # Create server
+    server_config = {
+        "database_type": "sqlite",
+        "database_path": ":memory:",
+        "use_redis": False
+    }
+    server = OrchestratorServer.remote(server_config)
+    
+    # Create client with mock LLM
+    @ray.remote
+    class MockLLM:
+        def generate_share_comment(self, cluster_id, content, attrs):
+            return "Test share comment"
+    
+    llm = MockLLM.remote()
+    client_config = {
+        "action_likelihoods": {"SHARE": 1.0},
+        "recsys_type": "random"
+    }
+    agent_config = {
+        "agents": [{
+            "id": "agent-1",
+            "username": "test_agent",
+            "llm": False,
+            "archetype": "broadcaster"
+        }]
+    }
+    
+    client = SimulationClient.remote(
+        "client-1", llm, agent_config, client_config
+    )
+    
+    # Register and execute
+    ray.get(server.register_client.remote("client-1", 1))
+    ray.get(client.register_agents.remote(server))
+    
+    # Execute slot (will generate share action)
+    ray.get(client._execute_slot.remote(0, 0))
+    
+    # Verify action was submitted (check server logs or database)
+    # This is a simplified example - real test would verify database state
+```
+
+### 4. End-to-End Testing
+
+Test with actual configuration files:
+
+```bash
+# Create test configuration
+mkdir -p test_config
+cp example/rule_population_100/server_config.json test_config/
+cp example/rule_population_100/simulation_config.json test_config/
+
+# Modify simulation_config.json to add SHARE action
+# "action_likelihoods": {"SHARE": 5.0, "POST": 3.0, ...}
+
+# Run simulation
+python run_server.py --config test_config &
+sleep 5  # Wait for server to start
+python run_client.py --config test_config
+
+# Check logs for share actions
+grep "SHARE" test_config/logs/*.log
+```
+
+### 5. Database Testing
+
+Test database schema and migrations:
+
+```python
+# tests/test_database.py
+import pytest
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+from YSimulator.YServer.classes.models import Base, ShareModel
+
+def test_share_model_creation():
+    """Test ShareModel can be created and saved."""
+    # In-memory SQLite for testing
+    engine = create_engine("sqlite:///:memory:")
+    Base.metadata.create_all(engine)
+    Session = sessionmaker(bind=engine)
+    session = Session()
+    
+    # Create share
+    share = ShareModel(
+        id="test-share-uuid",
+        user_id="user-1",
+        post_id="post-123",
+        share_comment="Test comment",
+        day=5,
+        slot=10,
+        timestamp=1234567890
+    )
+    
+    session.add(share)
+    session.commit()
+    
+    # Retrieve and verify
+    retrieved = session.query(ShareModel).filter_by(
+        id="test-share-uuid"
+    ).first()
+    
+    assert retrieved is not None
+    assert retrieved.user_id == "user-1"
+    assert retrieved.post_id == "post-123"
+    assert retrieved.share_comment == "Test comment"
+    
+    session.close()
+```
+
+### 6. Running Tests
+
+```bash
+# Run all tests
+pytest YSimulator/tests/
+
+# Run specific test file
+pytest YSimulator/tests/test_actions.py
+
+# Run with coverage
+pytest --cov=YSimulator --cov-report=html YSimulator/tests/
+
+# Run specific test function
+pytest YSimulator/tests/test_actions.py::test_rule_based_share -v
+```
     assert response["success"]
     
     # Verify in database
@@ -671,9 +1105,59 @@ self.logger.info(
 - **Provide examples** in docstrings
 - **Update this guide** with lessons learned
 
-## Common Pitfalls
+## Common Pitfalls and Modern Solutions
 
-### 1. Forgetting Temporal Context
+### 1. Not Using the Scatter-Gather Pattern for LLM Calls
+
+```python
+# BAD - Sequential LLM calls (slow)
+for agent in agents:
+    if agent.llm:
+        content = ray.get(llm.generate_post.remote(agent.cluster))
+        actions.append(ActionDTO(agent.id, agent.cluster, "POST", content=content))
+
+# GOOD - Parallel LLM calls (fast)
+# Scatter phase - fire off all LLM calls
+futures = []
+for agent in agents:
+    if agent.llm:
+        future = generate_llm_post_async(llm, agent.cluster, day, slot)
+        futures.append((agent.id, agent.cluster, future))
+
+# Gather phase - wait for all at once
+contents = ray.get([f[2] for f in futures])
+for i, content in enumerate(contents):
+    agent_id, cluster_id, _ = futures[i]
+    actions.append(ActionDTO(agent_id, cluster_id, "POST", content=content))
+```
+
+### 2. Mixing LLM and Rule-Based Logic
+
+```python
+# BAD - Intermixing different agent types
+def handle_action(agent):
+    if agent.llm:
+        # Complex LLM logic
+        content = generate_with_llm(agent)
+    else:
+        # Simple rule logic
+        content = generate_with_rules(agent)
+    return content
+
+# GOOD - Separate handler methods
+def _handle_action_llm(self, agent, pending_futures):
+    """Handler for LLM-based agents."""
+    future = generate_llm_action_async(self.llm, agent.cluster)
+    pending_futures.append((agent.id, agent.cluster, future))
+
+def _handle_action_rule(self, agent, actions):
+    """Handler for rule-based agents."""
+    content = generate_rule_based_action(agent.cluster)
+    actions.append(ActionDTO(agent.id, agent.cluster, "ACTION", content=content))
+```
+
+### 3. Forgetting Temporal Context
+
 ```python
 # BAD - no day/slot info
 share_data = {"user_id": 1, "post_id": "123"}
@@ -687,7 +1171,8 @@ share_data = {
 }
 ```
 
-### 2. Not Using UUIDs
+### 4. Not Using UUIDs for Distributed Systems
+
 ```python
 # BAD - auto-increment can conflict in distributed systems
 id = db.Column(db.Integer, primary_key=True, autoincrement=True)
@@ -697,7 +1182,52 @@ id = db.Column(db.String(36), primary_key=True)
 # Generate with: str(uuid.uuid4())
 ```
 
-### 3. Ignoring Redis Consolidation
+### 5. Ignoring Repository Pattern Benefits
+
+```python
+# BAD - Direct database access in business logic
+def create_share(self, user_id, post_id):
+    session = Session(self.engine)
+    share = ShareModel(id=str(uuid.uuid4()), user_id=user_id, post_id=post_id)
+    session.add(share)
+    session.commit()
+    session.close()
+    # Hard to test, tightly coupled to database
+
+# GOOD - Using repository pattern
+def create_share(self, user_id, post_id):
+    return self.share_repository.add_share({
+        "user_id": user_id,
+        "post_id": post_id
+    })
+    # Easy to test with mock repository, decoupled from storage
+```
+
+### 6. Not Handling Agent Archetypes
+
+```python
+# BAD - Treating all agents the same
+action_type = random.choice(["POST", "READ", "COMMENT"])
+
+# GOOD - Respecting archetype behaviors
+if agent.archetype == "broadcaster":
+    # Broadcasters post and share more
+    action_probs = {"POST": 0.4, "SHARE": 0.3, "READ": 0.2, "COMMENT": 0.1}
+elif agent.archetype == "validator":
+    # Validators comment and engage more
+    action_probs = {"COMMENT": 0.4, "READ": 0.3, "POST": 0.2, "SHARE": 0.1}
+else:  # explorer
+    # Explorers read and search more
+    action_probs = {"READ": 0.4, "SEARCH": 0.3, "POST": 0.2, "COMMENT": 0.1}
+
+action_type = random.choices(
+    list(action_probs.keys()),
+    weights=list(action_probs.values())
+)[0]
+```
+
+### 7. Ignoring Redis Consolidation
+
 ```python
 # BAD - Redis data is lost when sliding window expires
 def add_share(self, data):
@@ -705,14 +1235,20 @@ def add_share(self, data):
         self.redis_client.hset(f"share:{id}", data)
     # Missing: SQL storage and day indexing
 
-# GOOD - Always persist to SQL
+# GOOD - Always persist to SQL + index for consolidation
 def add_share(self, data):
+    share_id = str(uuid.uuid4())
+    
     if self.use_redis:
-        self.redis_client.hset(f"share:{id}", data)
-        self.redis_client.sadd(f"shares:day:{day}", id)
-    # Also store in SQL
-    self.session.add(ShareModel(**data))
+        self.redis_client.hset(f"share:{share_id}", mapping=data)
+        self.redis_client.sadd(f"shares:day:{data['day']}", share_id)
+    
+    # Always store in SQL for durability
+    share = ShareModel(id=share_id, **data)
+    self.session.add(share)
     self.session.commit()
+    
+    return share_id
 ```
 
 ### 4. Blocking the Event Loop
@@ -1183,32 +1719,81 @@ def test_search_action_flow():
 
 ## Conclusion
 
-Adding new actions to YSimulator follows a consistent pattern:
-1. Define the data model
-2. Implement storage in middleware OR repository layer (recommended)
-3. Add server handler
-4. Implement client logic
-5. Test thoroughly
+YSimulator has evolved to support a modern, modular architecture for extending agent actions. The current system provides two approaches:
 
-**Recommended Approach**: Use the Repository/Service pattern for new extensions to benefit from:
-- Better testability with mocked repositories
-- Clearer separation of concerns
-- Easier maintenance and refactoring
-- Support for multiple storage backends
+### Modern Approach (Recommended)
 
-**Legacy Approach**: DatabaseMiddleware is still fully supported for backward compatibility.
+1. **Client Side**: Use modular action system
+   - Add action generation functions to `actions/llm_actions.py` or `actions/rule_based_actions.py`
+   - Create handler method in `ActionExecutorMixin` (`action_executor.py`)
+   - Integrate into main execution loop in `client.py`
+   - Use scatter-gather pattern for parallel LLM calls
 
-Follow the patterns established in existing actions (posts, interactions) and refer to this guide when adding new capabilities.
+2. **Server Side**: Use Repository/Service pattern
+   - Define interface in `repositories/base_repository.py`
+   - Implement SQL version in `repositories/sql_repository.py`
+   - Implement Redis version in `repositories/redis_repository.py` (optional)
+   - Create service in `services/` for business logic
+   - Use service in server handler methods
 
-For detailed Repository Pattern documentation, see [REPOSITORY_PATTERN.md](../architecture/REPOSITORY_PATTERN.md).
+3. **Benefits**:
+   - ✅ Better testability with mocked dependencies
+   - ✅ Clear separation of concerns
+   - ✅ Parallel LLM execution (10x faster for large populations)
+   - ✅ Support for multiple storage backends
+   - ✅ Easier to maintain and extend
+   - ✅ Archetype-aware action selection
 
-For questions or improvements to this guide, please open an issue on GitHub.
+### Legacy Approach (Still Supported)
+
+1. **Database Model**: Define in `classes/models.py`
+2. **Middleware**: Add methods to `classes/db_middleware.py`
+3. **Server**: Add handler to `YServer/server.py`
+4. **Client**: Implement action logic directly in `client.py`
+
+**Note**: The legacy approach is fully functional and maintained for backward compatibility. New code should use the modern approach for better architecture.
+
+### Key Architectural Improvements
+
+- **Modular Actions**: Separate LLM and rule-based implementations
+- **ActionExecutorMixin**: Centralized action handling
+- **Scatter-Gather Pattern**: Parallel LLM calls for performance
+- **Repository Pattern**: Abstracted data access
+- **Agent Manager**: Dedicated agent lifecycle management
+- **Activity Selector**: Intelligent action type selection
+- **Churn Manager**: Dynamic population management
+
+### Development Workflow
+
+1. **Design**: Plan your action and data requirements
+2. **Implement**: Follow the step-by-step guide above
+3. **Test**: Write unit, integration, and end-to-end tests
+4. **Document**: Update configuration and documentation
+5. **Deploy**: Test in example configurations
+
+### Getting Help
+
+- **Architecture Questions**: See [Architecture Overview](../architecture/ARCHITECTURE.md)
+- **Repository Pattern**: See [Repository Pattern Guide](../architecture/REPOSITORY_PATTERN.md)
+- **Code Examples**: Check existing actions in `YClient/actions/`
+- **Testing**: See test examples in `YSimulator/tests/`
 
 ## Related Documentation
 
 - **[Configuration Guide](../configuration/CONFIG.md)** - Configure simulation parameters and agent behaviors
-- **[Architecture Overview](../architecture/ARCHITECTURE.md)** - Understand the system architecture (updated with new layers)
-- **[Repository Pattern Guide](../architecture/REPOSITORY_PATTERN.md)** - NEW: Detailed documentation on the repository pattern
-- **[Codebase Analysis](CODEBASE_ANALYSIS.md)** - Complete codebase overview (updated)
-- **[Opinion Dynamics](../features/OPINION_DYNAMICS.md)** - Add opinion-based behaviors to new actions
+- **[Architecture Overview](../architecture/ARCHITECTURE.md)** - Understand the layered system architecture
+- **[Repository Pattern Guide](../architecture/REPOSITORY_PATTERN.md)** - Detailed data access pattern documentation
+- **[Agent Actions](../agents/AGENT_ACTIONS.md)** - Complete reference of all agent actions
+- **[Agent Types](../agents/AGENT_TYPES.md)** - Understanding agent archetypes and behaviors
+- **[Codebase Analysis](CODEBASE_ANALYSIS.md)** - Complete codebase overview with statistics
+- **[Opinion Dynamics](../features/OPINION_DYNAMICS.md)** - Add opinion-based behaviors to actions
 - **[Action Logging](../logging/ACTION_LOGGING.md)** - Ensure new actions are properly logged
+- **[Code Formatting](FORMATTING.md)** - Follow project code standards
+
+---
+
+**Last Updated**: January 2026  
+**Version**: 2.1 (Updated for modular architecture)  
+**Contributors**: YSimulator Development Team
+
+For questions or improvements to this guide, please open an issue on GitHub.
