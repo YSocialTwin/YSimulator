@@ -1219,37 +1219,59 @@ class SQLArticleRepository(ArticleRepository):
             return None
     
     def add_websites_batch(self, websites_data: List[Dict[str, Any]]) -> int:
-        """Add multiple websites in a batch."""
+        """Add multiple websites in a batch, skipping duplicates."""
         if not websites_data:
             return 0
         
+        session = Session(self.engine)
         try:
-            session = Session(self.engine)
-            try:
-                import uuid
-                # Ensure each website has an ID
-                for website in websites_data:
-                    if "id" not in website:
-                        website["id"] = str(uuid.uuid4())
-                
-                session.bulk_insert_mappings(Website, websites_data)
-                session.commit()
-                return len(websites_data)
-            except Exception as e:
-                session.rollback()
-                self.logger.error(
-                    f"Error in batch website insertion: {e}",
-                    extra={"extra_data": {"error": str(e), "batch_size": len(websites_data)}},
-                )
-                raise
-            finally:
-                session.close()
+            import uuid
+            
+            # Check for existing websites by both ID and RSS to avoid duplicates
+            website_ids = [w.get("id") for w in websites_data if w.get("id")]
+            rss_urls = [w.get("rss") for w in websites_data if w.get("rss")]
+            
+            existing_ids = set()
+            existing_rss = set()
+            
+            if website_ids:
+                existing_ids = {
+                    row[0] for row in session.query(Website.id).filter(Website.id.in_(website_ids)).all()
+                }
+            
+            if rss_urls:
+                existing_rss = {
+                    row[0] for row in session.query(Website.rss).filter(Website.rss.in_(rss_urls)).all()
+                }
+            
+            # Filter out websites that already exist (by ID or RSS)
+            new_websites = [
+                w for w in websites_data 
+                if w.get("id") not in existing_ids and w.get("rss") not in existing_rss
+            ]
+            
+            if not new_websites:
+                return 0
+            
+            # Ensure all websites have IDs
+            for website in new_websites:
+                if "id" not in website or not website["id"]:
+                    website["id"] = str(uuid.uuid4())
+                if "last_fetched" not in website:
+                    website["last_fetched"] = str(uuid.uuid4())
+            
+            session.bulk_insert_mappings(Website, new_websites)
+            session.commit()
+            return len(new_websites)
         except Exception as e:
+            session.rollback()
             self.logger.error(
                 f"Error adding websites in batch: {e}",
                 extra={"extra_data": {"error": str(e), "batch_size": len(websites_data)}},
             )
             return 0
+        finally:
+            session.close()
     
     def add_article(self, article_data: Dict[str, Any]) -> Optional[str]:
         """Add an article."""
