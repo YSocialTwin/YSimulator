@@ -511,10 +511,18 @@ class SQLPostRepository(PostRepository):
         try:
             session = Session(self.engine)
             try:
-                post_topic = PostTopic(post_id=post_id, topic_id=topic_id)
+                import uuid
+                post_topic = PostTopic(
+                    id=str(uuid.uuid4()),
+                    post_id=post_id,
+                    topic_id=topic_id
+                )
                 session.add(post_topic)
                 session.commit()
                 return True
+            except Exception as e:
+                session.rollback()
+                raise
             finally:
                 session.close()
         except Exception as e:
