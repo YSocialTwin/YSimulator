@@ -266,16 +266,19 @@ class SQLUserRepository(UserRepository):
             )
             return False
     
-    def get_churned_agents(self, day: int = None, inactivity_threshold: int = None) -> List[str]:
-        """Get churned agents."""
+    def get_churned_agents(self) -> List[str]:
+        """
+        Get all churned agents (agents with left_on set).
+        Matches old middleware signature.
+        
+        Returns:
+            List of agent IDs (UUID strings) that are churned
+        """
         try:
             session = Session(self.engine)
             try:
-                query = session.query(User_mgmt).filter(User_mgmt.churned == True)
-                if day is not None and inactivity_threshold is not None:
-                    query = query.filter(User_mgmt.last_active_day < day - inactivity_threshold)
-                
-                users = query.all()
+                # Agent is churned if left_on is set (not null)
+                users = session.query(User_mgmt).filter(User_mgmt.left_on.isnot(None)).all()
                 return [user.id for user in users]
             finally:
                 session.close()
@@ -285,18 +288,32 @@ class SQLUserRepository(UserRepository):
             )
             return []
     
-    def set_agent_churned(self, agent_id: str, churned: bool) -> bool:
-        """Set agent churned status."""
+    def set_agent_churned(self, agent_id: str, round_id: str) -> bool:
+        """
+        Mark an agent as churned by setting the left_on field to the current round.
+        Matches old middleware signature.
+        
+        Args:
+            agent_id: Agent ID (UUID string)
+            round_id: Round ID when agent churned (UUID string)
+            
+        Returns:
+            bool: True if successful, False otherwise
+        """
         try:
             session = Session(self.engine)
             try:
-                user = session.query(User_mgmt).filter_by(id=agent_id).first()
-                if not user:
-                    return False
-                
-                user.churned = churned
+                # Set left_on field to round_id to mark as churned
+                result = session.query(User_mgmt).filter_by(id=agent_id).update({"left_on": round_id})
                 session.commit()
-                return True
+                return result > 0
+            except Exception as e:
+                session.rollback()
+                self.logger.error(
+                    f"Error setting left_on for agent {agent_id}: {e}",
+                    extra={"extra_data": {"agent_id": agent_id, "error": str(e)}},
+                )
+                return False
             finally:
                 session.close()
         except Exception as e:

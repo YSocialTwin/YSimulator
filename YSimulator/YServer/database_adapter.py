@@ -105,13 +105,13 @@ class DatabaseServiceAdapter:
         """Update agent last active day."""
         return self.user_service.update_agent_last_active_day(agent_id, day)
     
-    def get_churned_agents(self, day: int = None, inactivity_threshold: int = None) -> List[str]:
-        """Get churned agents."""
-        return self.user_service.get_churned_agents(day, inactivity_threshold)
+    def get_churned_agents(self) -> List[str]:
+        """Get churned agents - matches old middleware signature."""
+        return self.user_service.get_churned_agents()
     
-    def set_agent_churned(self, agent_id: str, churn_day: int) -> bool:
-        """Set agent as churned."""
-        return self.user_service.set_agent_churned(agent_id, churn_day)
+    def set_agent_churned(self, agent_id: str, round_id: str) -> bool:
+        """Set agent as churned - matches old middleware signature."""
+        return self.user_service.set_agent_churned(agent_id, round_id)
     
     def get_inactive_agents(self, current_day: int, inactivity_days: int = 7) -> List[str]:
         """Get inactive agents."""
