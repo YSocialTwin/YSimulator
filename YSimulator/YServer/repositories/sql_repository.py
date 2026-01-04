@@ -14,7 +14,10 @@ from sqlalchemy.orm import Session
 
 from YSimulator.YServer.classes.models import (
     Agent_Opinion,
+    Article,
+    ArticleTopic,
     Follow,
+    Image,
     Interest,
     Post,
     PostTopic,
@@ -22,6 +25,7 @@ from YSimulator.YServer.classes.models import (
     Round,
     User_mgmt,
     UserInterest,
+    Website,
 )
 from .base_repository import (
     ArticleRepository,
@@ -765,3 +769,242 @@ class SQLRecommendationRepository(RecommendationRepository):
     def consolidate_redis_to_sqlite(self, day: int) -> Dict[str, Any]:
         """Consolidate Redis data to SQLite (not applicable for SQL)."""
         return {"status": "not_applicable", "method": "sql"}
+
+
+class SQLArticleRepository(ArticleRepository):
+    """SQLAlchemy implementation of ArticleRepository."""
+    
+    def __init__(self, engine: Engine, logger: Optional[logging.Logger] = None):
+        """Initialize SQL article repository."""
+        self.engine = engine
+        self.logger = logger or logging.getLogger(__name__)
+    
+    def health_check(self) -> bool:
+        """Check if database connection is healthy."""
+        try:
+            session = Session(self.engine)
+            try:
+                session.execute("SELECT 1")
+                return True
+            finally:
+                session.close()
+        except Exception:
+            return False
+    
+    def add_website(self, website_data: Dict[str, Any]) -> Optional[str]:
+        """Add a website."""
+        try:
+            session = Session(self.engine)
+            try:
+                import uuid
+                website_id = website_data.get("id", str(uuid.uuid4()))
+                website = Website(
+                    id=website_id,
+                    name=website_data.get("name"),
+                    url=website_data.get("url"),
+                    rss_url=website_data.get("rss_url"),
+                )
+                session.add(website)
+                session.commit()
+                return website_id
+            finally:
+                session.close()
+        except Exception as e:
+            self.logger.error(
+                f"Error adding website: {e}", extra={"extra_data": {"error": str(e)}}
+            )
+            return None
+    
+    def add_websites_batch(self, websites_data: List[Dict[str, Any]]) -> int:
+        """Add multiple websites in a batch."""
+        if not websites_data:
+            return 0
+        
+        try:
+            session = Session(self.engine)
+            try:
+                import uuid
+                # Ensure each website has an ID
+                for website in websites_data:
+                    if "id" not in website:
+                        website["id"] = str(uuid.uuid4())
+                
+                session.bulk_insert_mappings(Website, websites_data)
+                session.commit()
+                return len(websites_data)
+            except Exception as e:
+                session.rollback()
+                self.logger.error(
+                    f"Error in batch website insertion: {e}",
+                    extra={"extra_data": {"error": str(e), "batch_size": len(websites_data)}},
+                )
+                raise
+            finally:
+                session.close()
+        except Exception as e:
+            self.logger.error(
+                f"Error adding websites in batch: {e}",
+                extra={"extra_data": {"error": str(e), "batch_size": len(websites_data)}},
+            )
+            return 0
+    
+    def add_article(self, article_data: Dict[str, Any]) -> Optional[str]:
+        """Add an article."""
+        try:
+            session = Session(self.engine)
+            try:
+                import uuid
+                article_id = article_data.get("id", str(uuid.uuid4()))
+                article = Article(
+                    id=article_id,
+                    title=article_data.get("title"),
+                    url=article_data.get("url"),
+                    content=article_data.get("content"),
+                    website_id=article_data.get("website_id"),
+                    round_id=article_data.get("round_id"),
+                )
+                session.add(article)
+                session.commit()
+                return article_id
+            finally:
+                session.close()
+        except Exception as e:
+            self.logger.error(
+                f"Error adding article: {e}", extra={"extra_data": {"error": str(e)}}
+            )
+            return None
+    
+    def get_article(self, article_id: str) -> Optional[Dict[str, Any]]:
+        """Get an article by ID."""
+        try:
+            session = Session(self.engine)
+            try:
+                article = session.query(Article).filter_by(id=article_id).first()
+                if not article:
+                    return None
+                
+                return {
+                    "id": article.id,
+                    "title": article.title,
+                    "url": article.url,
+                    "content": article.content,
+                    "website_id": article.website_id,
+                    "round_id": article.round_id,
+                }
+            finally:
+                session.close()
+        except Exception as e:
+            self.logger.error(
+                f"Error getting article: {e}", extra={"extra_data": {"error": str(e)}}
+            )
+            return None
+    
+    def get_website_by_rss(self, rss_url: str) -> Optional[Dict[str, Any]]:
+        """Get website by RSS URL."""
+        try:
+            session = Session(self.engine)
+            try:
+                website = session.query(Website).filter_by(rss_url=rss_url).first()
+                if not website:
+                    return None
+                
+                return {
+                    "id": website.id,
+                    "name": website.name,
+                    "url": website.url,
+                    "rss_url": website.rss_url,
+                }
+            finally:
+                session.close()
+        except Exception as e:
+            self.logger.error(
+                f"Error getting website by RSS: {e}", extra={"extra_data": {"error": str(e)}}
+            )
+            return None
+    
+    def get_article_topics(self, article_id: str) -> List[str]:
+        """Get topics associated with an article."""
+        try:
+            session = Session(self.engine)
+            try:
+                topics = (
+                    session.query(ArticleTopic.topic_id)
+                    .filter_by(article_id=article_id)
+                    .all()
+                )
+                return [topic[0] for topic in topics]
+            finally:
+                session.close()
+        except Exception as e:
+            self.logger.error(
+                f"Error getting article topics: {e}", extra={"extra_data": {"error": str(e)}}
+            )
+            return []
+
+
+class SQLImageRepository(ImageRepository):
+    """SQLAlchemy implementation of ImageRepository."""
+    
+    def __init__(self, engine: Engine, logger: Optional[logging.Logger] = None):
+        """Initialize SQL image repository."""
+        self.engine = engine
+        self.logger = logger or logging.getLogger(__name__)
+    
+    def health_check(self) -> bool:
+        """Check if database connection is healthy."""
+        try:
+            session = Session(self.engine)
+            try:
+                session.execute("SELECT 1")
+                return True
+            finally:
+                session.close()
+        except Exception:
+            return False
+    
+    def add_image(self, image_data: Dict[str, Any]) -> Optional[str]:
+        """Add an image."""
+        try:
+            session = Session(self.engine)
+            try:
+                import uuid
+                image_id = image_data.get("id", str(uuid.uuid4()))
+                image = Image(
+                    id=image_id,
+                    url=image_data.get("url"),
+                    description=image_data.get("description"),
+                )
+                session.add(image)
+                session.commit()
+                return image_id
+            finally:
+                session.close()
+        except Exception as e:
+            self.logger.error(
+                f"Error adding image: {e}", extra={"extra_data": {"error": str(e)}}
+            )
+            return None
+    
+    def get_random_image(self) -> Optional[Dict[str, Any]]:
+        """Get a random image."""
+        try:
+            session = Session(self.engine)
+            try:
+                # Get a random image using SQL random function
+                image = session.query(Image).order_by(func.random()).first()
+                if not image:
+                    return None
+                
+                return {
+                    "id": image.id,
+                    "url": image.url,
+                    "description": image.description,
+                }
+            finally:
+                session.close()
+        except Exception as e:
+            self.logger.error(
+                f"Error getting random image: {e}", extra={"extra_data": {"error": str(e)}}
+            )
+            return None
+

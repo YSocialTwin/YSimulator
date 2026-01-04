@@ -196,6 +196,11 @@ class ArticleRepository(BaseRepository):
         pass
     
     @abstractmethod
+    def get_article(self, article_id: str) -> Optional[Dict[str, Any]]:
+        """Get an article by ID."""
+        pass
+    
+    @abstractmethod
     def get_website_by_rss(self, rss_url: str) -> Optional[Dict[str, Any]]:
         """Get website by RSS URL."""
         pass
