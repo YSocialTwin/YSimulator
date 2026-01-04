@@ -45,6 +45,31 @@ class UserRepository(BaseRepository):
     def update_user_archetype(self, user_id: str, new_archetype: str) -> bool:
         """Update user's archetype."""
         pass
+    
+    @abstractmethod
+    def get_user_by_username(self, username: str) -> Optional[Dict[str, Any]]:
+        """Get user by username."""
+        pass
+    
+    @abstractmethod
+    def update_agent_last_active_day(self, agent_id: str, day: int) -> bool:
+        """Update agent's last active day."""
+        pass
+    
+    @abstractmethod
+    def get_churned_agents(self, day: int = None, inactivity_threshold: int = None) -> List[str]:
+        """Get churned agents."""
+        pass
+    
+    @abstractmethod
+    def set_agent_churned(self, agent_id: str, churned: bool) -> bool:
+        """Set agent churned status."""
+        pass
+    
+    @abstractmethod
+    def get_inactive_agents(self, inactivity_threshold: int) -> List[str]:
+        """Get inactive agents."""
+        pass
 
 
 class PostRepository(BaseRepository):
@@ -134,6 +159,22 @@ class PostRepository(BaseRepository):
     @abstractmethod
     def add_post_hashtag(self, post_id: str, hashtag_id: str) -> bool:
         """Add hashtag to a post."""
+        pass
+    
+    # Mention methods
+    @abstractmethod
+    def add_mention(self, post_id: str, mentioned_user_id: str) -> bool:
+        """Add a mention to a post."""
+        pass
+    
+    @abstractmethod
+    def get_unreplied_mentions(self, user_id: str) -> List[Dict[str, Any]]:
+        """Get unreplied mentions for a user."""
+        pass
+    
+    @abstractmethod
+    def mark_mention_replied(self, post_id: str, mentioned_user_id: str) -> bool:
+        """Mark a mention as replied."""
         pass
 
 

@@ -62,15 +62,35 @@ class FollowService:
             Number of follows added
         """
         try:
-            # Convert tuples to dicts
-            follow_dicts = [
-                {
-                    "follower_id": follower_id,
-                    "followee_id": followee_id,
-                    "round_id": round_id,
-                }
-                for follower_id, followee_id, round_id in follows_data
-            ]
+            # Convert tuples or lists to dicts
+            follow_dicts = []
+            for item in follows_data:
+                if isinstance(item, dict):
+                    # Already a dict
+                    follow_dicts.append(item)
+                elif isinstance(item, (tuple, list)):
+                    # Convert tuple/list to dict
+                    if len(item) == 2:
+                        # (follower_id, followee_id)
+                        follow_dicts.append({
+                            "follower_id": item[0],
+                            "followee_id": item[1],
+                            "round_id": None,
+                        })
+                    elif len(item) == 3:
+                        # (follower_id, followee_id, round_id)
+                        follow_dicts.append({
+                            "follower_id": item[0],
+                            "followee_id": item[1],
+                            "round_id": item[2],
+                        })
+                    else:
+                        self.logger.warning(f"Unexpected follow data format: {item}")
+                        continue
+                else:
+                    self.logger.warning(f"Unexpected follow data type: {type(item)}")
+                    continue
+                    
             return self.follow_repo.add_follows_batch(follow_dicts)
         except Exception as e:
             self.logger.error(f"Error adding follows batch: {e}")

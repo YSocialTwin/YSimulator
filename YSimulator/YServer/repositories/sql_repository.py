@@ -199,6 +199,113 @@ class SQLUserRepository(UserRepository):
                 f"Error updating user archetype: {e}", extra={"extra_data": {"error": str(e)}}
             )
             return False
+    
+    def get_user_by_username(self, username: str) -> Optional[Dict[str, Any]]:
+        """Get user by username."""
+        try:
+            session = Session(self.engine)
+            try:
+                user = session.query(User_mgmt).filter_by(username=username).first()
+                if not user:
+                    return None
+                
+                return {
+                    "id": user.id,
+                    "username": user.username,
+                    "leaning": user.leaning,
+                    "archetype": user.archetype,
+                    "is_llm": user.is_llm,
+                    "model_name": user.model_name,
+                }
+            finally:
+                session.close()
+        except Exception as e:
+            self.logger.error(
+                f"Error getting user by username: {e}", extra={"extra_data": {"error": str(e)}}
+            )
+            return None
+    
+    def update_agent_last_active_day(self, agent_id: str, day: int) -> bool:
+        """Update agent's last active day."""
+        try:
+            session = Session(self.engine)
+            try:
+                user = session.query(User_mgmt).filter_by(id=agent_id).first()
+                if not user:
+                    return False
+                
+                user.last_active_day = day
+                session.commit()
+                return True
+            finally:
+                session.close()
+        except Exception as e:
+            self.logger.error(
+                f"Error updating agent last active day: {e}", extra={"extra_data": {"error": str(e)}}
+            )
+            return False
+    
+    def get_churned_agents(self, day: int = None, inactivity_threshold: int = None) -> List[str]:
+        """Get churned agents."""
+        try:
+            session = Session(self.engine)
+            try:
+                query = session.query(User_mgmt).filter(User_mgmt.churned == True)
+                if day is not None and inactivity_threshold is not None:
+                    query = query.filter(User_mgmt.last_active_day < day - inactivity_threshold)
+                
+                users = query.all()
+                return [user.id for user in users]
+            finally:
+                session.close()
+        except Exception as e:
+            self.logger.error(
+                f"Error getting churned agents: {e}", extra={"extra_data": {"error": str(e)}}
+            )
+            return []
+    
+    def set_agent_churned(self, agent_id: str, churned: bool) -> bool:
+        """Set agent churned status."""
+        try:
+            session = Session(self.engine)
+            try:
+                user = session.query(User_mgmt).filter_by(id=agent_id).first()
+                if not user:
+                    return False
+                
+                user.churned = churned
+                session.commit()
+                return True
+            finally:
+                session.close()
+        except Exception as e:
+            self.logger.error(
+                f"Error setting agent churned: {e}", extra={"extra_data": {"error": str(e)}}
+            )
+            return False
+    
+    def get_inactive_agents(self, inactivity_threshold: int) -> List[str]:
+        """Get inactive agents."""
+        try:
+            session = Session(self.engine)
+            try:
+                from datetime import datetime, timedelta
+                
+                # Get current day (you may need to adjust this based on your simulation logic)
+                current_day = 1  # This should be passed from somewhere
+                cutoff_day = current_day - inactivity_threshold
+                
+                users = session.query(User_mgmt).filter(
+                    User_mgmt.last_active_day < cutoff_day
+                ).all()
+                return [user.id for user in users]
+            finally:
+                session.close()
+        except Exception as e:
+            self.logger.error(
+                f"Error getting inactive agents: {e}", extra={"extra_data": {"error": str(e)}}
+            )
+            return []
 
 
 class SQLPostRepository(PostRepository):
@@ -224,11 +331,12 @@ class SQLPostRepository(PostRepository):
     def add_post(self, post_data: Dict[str, Any]) -> Optional[str]:
         """Add a new post."""
         try:
+            import uuid
             session = Session(self.engine)
             try:
                 # Map common field names to actual model field names
                 mapped_data = {
-                    "id": post_data.get("id"),
+                    "id": post_data.get("id") or str(uuid.uuid4()),  # Generate UUID if not provided
                     "tweet": post_data.get("text") or post_data.get("tweet"),
                     "user_id": post_data.get("author") or post_data.get("user_id"),
                     "round": post_data.get("round"),
@@ -623,6 +731,85 @@ class SQLPostRepository(PostRepository):
         except Exception as e:
             self.logger.error(
                 f"Error adding post hashtag: {e}", extra={"extra_data": {"error": str(e)}}
+            )
+            return False
+
+
+    # Mention methods
+    def add_mention(self, post_id: str, mentioned_user_id: str) -> bool:
+        """Add a mention to a post."""
+        try:
+            from YSimulator.YServer.classes.models import Mention
+            import uuid
+            session = Session(self.engine)
+            try:
+                mention = Mention(
+                    id=str(uuid.uuid4()),
+                    post_id=post_id,
+                    mentioned_user_id=mentioned_user_id,
+                    replied=False
+                )
+                session.add(mention)
+                session.commit()
+                return True
+            finally:
+                session.close()
+        except Exception as e:
+            self.logger.error(
+                f"Error adding mention: {e}", extra={"extra_data": {"error": str(e)}}
+            )
+            return False
+    
+    def get_unreplied_mentions(self, user_id: str) -> List[Dict[str, Any]]:
+        """Get unreplied mentions for a user."""
+        try:
+            from YSimulator.YServer.classes.models import Mention
+            session = Session(self.engine)
+            try:
+                mentions = session.query(Mention).filter(
+                    Mention.mentioned_user_id == user_id,
+                    Mention.replied == False
+                ).all()
+                
+                return [
+                    {
+                        "id": mention.id,
+                        "post_id": mention.post_id,
+                        "mentioned_user_id": mention.mentioned_user_id,
+                        "replied": mention.replied
+                    }
+                    for mention in mentions
+                ]
+            finally:
+                session.close()
+        except Exception as e:
+            self.logger.error(
+                f"Error getting unreplied mentions: {e}", extra={"extra_data": {"error": str(e)}}
+            )
+            return []
+    
+    def mark_mention_replied(self, post_id: str, mentioned_user_id: str) -> bool:
+        """Mark a mention as replied."""
+        try:
+            from YSimulator.YServer.classes.models import Mention
+            session = Session(self.engine)
+            try:
+                mention = session.query(Mention).filter(
+                    Mention.post_id == post_id,
+                    Mention.mentioned_user_id == mentioned_user_id
+                ).first()
+                
+                if not mention:
+                    return False
+                
+                mention.replied = True
+                session.commit()
+                return True
+            finally:
+                session.close()
+        except Exception as e:
+            self.logger.error(
+                f"Error marking mention replied: {e}", extra={"extra_data": {"error": str(e)}}
             )
             return False
 

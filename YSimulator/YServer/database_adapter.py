@@ -69,6 +69,14 @@ class DatabaseServiceAdapter:
         # Expose necessary attributes for compatibility
         self.use_redis = redis_client is not None
     
+    @property
+    def engine(self):
+        """
+        Provide access to the database engine for compatibility with server code.
+        Returns the engine from the user service's repository.
+        """
+        return self.user_service.user_repo.engine
+    
     # ========================================================================
     # USER OPERATIONS - UserService (COMPLETE)
     # ========================================================================
