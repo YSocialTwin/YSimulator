@@ -235,7 +235,7 @@ Invalid interest data is silently ignored, and the agent operates without intere
 
 ```python
 # Initialize interest manager (done by server)
-interest_manager = InterestManager(db_middleware, attention_window=336)
+interest_manager = InterestManager(service layer, attention_window=336)
 
 # Validate and extract interests
 topics, counts = interest_manager.validate_and_extract_interests(agent.interests)

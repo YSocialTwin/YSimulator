@@ -249,7 +249,7 @@ class MongoDBUserRepository(UserRepository):
 
 ### For New Code
 
-Use the new repository and service pattern:
+Use the repository and service pattern (standard approach):
 
 ```python
 # 1. Initialize repositories
@@ -265,19 +265,11 @@ user_service.register_user(user_data)
 post_service.create_post(post_data)
 ```
 
-### For Existing Code
+### Architecture
 
-The existing `db_middleware.py` continues to work and is not affected by these changes. You can gradually migrate code to use the new pattern:
+YSimulator uses a clean layered architecture with complete separation between business logic and data access:
 
-**Before:**
-```python
-from YSimulator.YServer.classes.db_middleware import DatabaseMiddleware
-
-middleware = DatabaseMiddleware(db_config, redis_config)
-middleware.register_user(user_data)
-```
-
-**After:**
+**Current Architecture:**
 ```python
 from YSimulator.YServer.services import UserService
 from YSimulator.YServer.repositories import SQLUserRepository
@@ -286,6 +278,12 @@ user_repo = SQLUserRepository(engine, logger)
 user_service = UserService(user_repo)
 user_service.register_user(user_data)
 ```
+
+**Benefits:**
+- Clean separation of concerns
+- Easy to test with mocked repositories
+- Flexible storage backend switching
+- Modern software design patterns
 
 ## Testing
 

@@ -53,9 +53,8 @@ OrchestratorServer (Ray Actor)
 ├── Action Handlers
 │   ├── submit_action() - Receive and process actions
 │   └── submit_actions_batch() - Batch processing
-├── Data Access Layers (Choose One)
-│   ├── DatabaseMiddleware - Legacy pattern (still supported)
-│   └── Repository/Service Pattern - Modern approach (recommended)
+├── Data Access Layer
+│   └── Repository/Service Pattern - Modern architecture (100% complete)
 │       ├── services/ - Business logic
 │       │   ├── user_service.py
 │       │   ├── post_service.py
@@ -67,22 +66,22 @@ OrchestratorServer (Ray Actor)
     └── interest_manager.py
 ```
 
-### Action Flow (Modern)
+### Action Flow (Modern Architecture)
 ```
 Client Agent → ActionExecutorMixin → submit_action() → Server
                                                          ↓
-                                            Service Layer (Optional)
+                                            DatabaseServiceAdapter
                                                          ↓
-                                            Repository Layer (Optional)
+                                              Service Layer
                                                          ↓
-                                            DatabaseMiddleware (Legacy)
+                                             Repository Layer
                                                          ↓
-                                            Database (SQL + Redis)
+                                             Database (SQL + Redis)
 ```
 
-## Using the Repository Pattern (NEW)
+## Using the Repository Pattern
 
-YSimulator now supports the **Repository Pattern** for better separation of concerns and testability. This pattern is recommended for all new extensions.
+YSimulator uses the **Repository Pattern** for complete separation of concerns and testability. This is the standard approach for all code.
 
 ### Benefits of Repository Pattern
 
@@ -306,24 +305,69 @@ def test_record_action():
     })
 ```
 
-### Migration from DatabaseMiddleware
+### Adding Actions with the Service Layer
 
-If you have existing code using DatabaseMiddleware, you can migrate gradually:
+All new actions should use the Repository/Service pattern. Here's the complete flow:
 
+**1. Define Data Model** (`classes/models.py`):
 ```python
-# Old approach (still works)
-share_id = self.db_middleware.add_share(share_data)
+from sqlalchemy import Column, String, Text, Integer, ForeignKey
 
-# New approach (recommended)
-from YSimulator.YServer.services import PostService
-from YSimulator.YServer.repositories import SQLPostRepository
-
-post_repo = SQLPostRepository(engine, logger)
-post_service = PostService(post_repo)
-post_id = post_service.create_post(post_data)
+class Share(Base):
+    """Model for share actions."""
+    __tablename__ = "shares"
+    
+    id = Column(String(36), primary_key=True)  # UUID
+    user_id = Column(Integer, ForeignKey("user_mgmt.id"), nullable=False)
+    post_id = Column(String(36), ForeignKey("posts.id"), nullable=False)
+    share_comment = Column(Text, nullable=True)
+    day = Column(Integer, nullable=False)
+    slot = Column(Integer, nullable=False)
 ```
 
-Both approaches are fully supported for backward compatibility.
+**2. Add Repository Method** (`repositories/sql_repository.py`):
+```python
+def add_share(self, share_data: Dict[str, Any]) -> Optional[str]:
+    """Store share in database."""
+    session = Session(self.engine)
+    try:
+        share = Share(**share_data)
+        session.add(share)
+        session.commit()
+        return share_data["id"]
+    except Exception as e:
+        session.rollback()
+        self.logger.error(f"Failed to add share: {e}")
+        return None
+    finally:
+        session.close()
+```
+
+**3. Add Service Method** (`services/post_service.py`):
+```python
+def add_share(self, share_data: Dict[str, Any]) -> Optional[str]:
+    """Add a share action."""
+    share_id = str(uuid.uuid4())
+    share_data["id"] = share_id
+    return self.post_repo.add_share(share_data)
+```
+
+**4. Update Server** (`YServer/server.py`):
+```python
+@ray.method(num_returns=1)
+@log_server_request
+def submit_share(self, user_id: str, post_id: str, comment: str = None):
+    """Handle share action submission."""
+    share_data = {
+        "user_id": user_id,
+        "post_id": post_id,
+        "comment": comment,
+        "day": self.day,
+        "slot": self.slot,
+    }
+    share_id = self.db.add_share(share_data)  # Uses DatabaseServiceAdapter
+    return {"success": share_id is not None, "share_id": share_id}
+```
 
 ## Adding a New Action: Step by Step
 
@@ -354,156 +398,6 @@ class ShareModel(db.Model):
 - Add foreign keys to relate to other entities
 - Use appropriate data types (Text for long content, String for short)
 
-### Step 2: Update Database Middleware
-
-Add methods to `classes/db_middleware.py`:
-
-```python
-def add_share(self, share_data: dict) -> str:
-    """
-    Add a share action to the database.
-    
-    Args:
-        share_data: Dictionary with keys: user_id, post_id, share_comment, day, slot
-        
-    Returns:
-        share_id: UUID of the created share
-    """
-    import uuid
-    share_id = str(uuid.uuid4())
-    
-    if self.use_redis:
-        # Store in Redis
-        share_key = f"share:{share_id}"
-        self.redis_client.hset(share_key, mapping={
-            "id": share_id,
-            "user_id": share_data["user_id"],
-            "post_id": share_data["post_id"],
-            "share_comment": share_data.get("share_comment", ""),
-            "day": share_data["day"],
-            "slot": share_data["slot"],
-            "timestamp": int(time.time())
-        })
-        # Add to day index for consolidation
-        self.redis_client.sadd(f"shares:day:{share_data['day']}", share_id)
-    
-    # Always store in SQL for persistence
-    share = ShareModel(
-        id=share_id,
-        user_id=share_data["user_id"],
-        post_id=share_data["post_id"],
-        share_comment=share_data.get("share_comment", ""),
-        day=share_data["day"],
-        slot=share_data["slot"],
-        timestamp=int(time.time())
-    )
-    self.session.add(share)
-    self.session.commit()
-    
-    return share_id
-```
-
-**Key Points:**
-- Generate UUID for new records
-- Store in both Redis (if enabled) and SQL
-- Index by day in Redis for consolidation
-- Include comprehensive logging
-
-### Step 3: Add Consolidation Support
-
-Update `consolidate_day()` in `classes/db_middleware.py`:
-
-```python
-def consolidate_day(self, current_day: int):
-    """Consolidate data from Redis to SQL database."""
-    if not self.use_redis:
-        return
-    
-    # ... existing post/interaction consolidation ...
-    
-    # Consolidate shares
-    share_key = f"shares:day:{current_day}"
-    share_ids = self.redis_client.smembers(share_key)
-    
-    for share_id in share_ids:
-        share_data = self.redis_client.hgetall(f"share:{share_id}")
-        if share_data:
-            share = ShareModel(
-                id=share_data["id"],
-                user_id=int(share_data["user_id"]),
-                post_id=share_data["post_id"],
-                share_comment=share_data.get("share_comment", ""),
-                day=int(share_data["day"]),
-                slot=int(share_data["slot"]),
-                timestamp=int(share_data["timestamp"])
-            )
-            self.session.merge(share)  # Use merge to handle duplicates
-    
-    self.session.commit()
-```
-
-### Step 4: Add Server Handler
-
-Update `YServer/server.py` to handle the new action:
-
-```python
-def submit_share(self, client_id: str, share_data: dict) -> dict:
-    """
-    Process a share action from a client.
-    
-    Args:
-        client_id: ID of the submitting client
-        share_data: Share information (user_id, post_id, share_comment)
-        
-    Returns:
-        Response with share_id and status
-    """
-    start_time = time.time()
-    
-    try:
-        # Add temporal context
-        share_data["day"] = self.current_day
-        share_data["slot"] = self.current_slot
-        
-        # Store via middleware
-        share_id = self.db_middleware.add_share(share_data)
-        
-        execution_time = (time.time() - start_time) * 1000
-        self.logger.info(
-            "Share submitted",
-            extra={
-                "client_id": client_id,
-                "share_id": share_id,
-                "user_id": share_data["user_id"],
-                "post_id": share_data["post_id"],
-                "execution_time_ms": execution_time
-            }
-        )
-        
-        return {"success": True, "share_id": share_id}
-        
-    except Exception as e:
-        self.logger.error(f"Error submitting share: {e}", exc_info=True)
-        return {"success": False, "error": str(e)}
-```
-
-**Key Points:**
-- Add temporal context (day, slot) automatically
-- Use middleware for storage abstraction
-- Log with execution time metrics
-- Return structured response
-
-### Step 5: Implement Client-Side Logic (Modern Approach)
-
-With the modular action system, implement your action in the appropriate module:
-
-#### Option A: Add to ActionExecutorMixin (for complex actions)
-
-In `YClient/action_executor.py`, add a handler method:
-
-```python
-def _handle_share_action(self, agent, agent_type, day, slot, pending_llm_shares, actions):
-    """Handle share action for an agent."""
     if agent_type == "llm":
         # LLM: Fire off async call for intelligent share decision
         agent_attrs = self._extract_agent_attrs(agent)
@@ -782,7 +676,7 @@ class ShareModel(db.Model):
     timestamp = db.Column(db.Integer, nullable=False)
 ```
 
-### 2. Middleware (classes/db_middleware.py)
+### 2. Middleware (services and repositories)
 ```python
 def add_share(self, user_id: int, post_id: str, day: int) -> str:
     import uuid
@@ -802,7 +696,7 @@ def add_share(self, user_id: int, post_id: str, day: int) -> str:
 ### 3. Server (YServer/server.py)
 ```python
 def submit_share(self, client_id: str, user_id: int, post_id: str) -> dict:
-    share_id = self.db_middleware.add_share(user_id, post_id, self.current_day)
+    share_id = self.db.add_share(user_id, post_id, self.current_day)
     return {"success": True, "share_id": share_id}
 ```
 
@@ -1278,7 +1172,7 @@ The image action allows agents to:
 #### 1. Database Methods
 
 ```python
-# In db_middleware.py
+# In service layer
 
 def get_random_image(self) -> Optional[Dict[str, Any]]:
     """Get a random image from the images table."""
@@ -1447,7 +1341,7 @@ This action is particularly useful for Explorer archetype agents who actively se
 #### 1. Database Methods
 
 ```python
-# In db_middleware.py
+# In service layer
 
 def search_posts_by_topic(self, topic_id: str, agent_id: str, limit: int = 10) -> List[str]:
     """
@@ -1687,7 +1581,7 @@ self.logger.info(
 ```python
 # Test database query
 def test_search_posts_by_topic():
-    db = DatabaseMiddleware(...)
+    db = DatabaseServiceAdapter(...)
     
     # Create test posts with topics
     topic_id = db.add_or_get_interest("Technology")
@@ -1747,7 +1641,7 @@ YSimulator has evolved to support a modern, modular architecture for extending a
 ### Legacy Approach (Still Supported)
 
 1. **Database Model**: Define in `classes/models.py`
-2. **Middleware**: Add methods to `classes/db_middleware.py`
+2. **Middleware**: Add methods to `services and repositories`
 3. **Server**: Add handler to `YServer/server.py`
 4. **Client**: Implement action logic directly in `client.py`
 

@@ -213,7 +213,7 @@ This document contains visual representations of the YSimulator system architect
 │  │                                                  │        │
 │  │  submit_action(client_id, action_data)          │        │
 │  │  ├─→ Add temporal context (day, slot)           │        │
-│  │  ├─→ DatabaseMiddleware.add_post/interaction()  │        │
+│  │  ├─→ DatabaseServiceAdapter.add_post()          │        │
 │  │  └─→ Return {success, id}                       │        │
 │  │                                                  │        │
 │  │  submit_completion(client_id)                   │        │
@@ -452,17 +452,19 @@ Agent Decides to Post
         │
         ▼
 ┌─────────────────────────────────────┐
-│  DatabaseMiddleware.add_post()      │
+│  PostService.add_post()             │
+│  (via DatabaseServiceAdapter)       │
 │                                     │
-│  1. If Redis enabled:               │
-│     ├─→ Store in Redis              │
-│     │   redis.hset("post:{id}", ...)│
-│     └─→ Index by day                │
-│         redis.sadd("posts:day:{d}", id)│
+│  1. Generate UUID for post          │
+│  2. Add metadata (timestamp, etc)   │
+│  3. Call PostRepository             │
 │                                     │
-│  2. Always store in SQL:            │
-│     ├─→ Create PostModel            │
-│     ├─→ session.add(post)           │
+│  PostRepository.add_post()          │
+│  ├─→ If Redis: Store in Redis      │
+│  │   redis.lpush("posts:recent",...)│
+│  └─→ Store in SQL via SQLAlchemy   │
+│      ├─→ Create Post model          │
+│      ├─→ session.add(post)          │
 │     └─→ session.commit()            │
 └───────┬─────────────────────────────┘
         │
@@ -492,21 +494,16 @@ Server advances to new day
 │  Server.advance_time()              │
 │                                     │
 │  if Redis enabled:                  │
-│    consolidate_day(previous_day)    │
-└───────┬─────────────────────────────┘
+│    (Note: Redis consolidation handled at repository layer)    │
+└───────┬────────────────────────────────────────────────────┘
         │
         ▼
 ┌─────────────────────────────────────────────────────┐
-│  DatabaseMiddleware.consolidate_day(day)            │
+│  Repository Layer handles data persistence          │
 │                                                     │
-│  1. Get all post IDs for the day                   │
-│     post_ids = redis.smembers("posts:day:{day}")   │
-│                                                     │
-│  2. For each post:                                 │
-│     ├─→ Fetch data: redis.hgetall("post:{id}")     │
-│     ├─→ Create PostModel                           │
-│     ├─→ session.merge(post)  # Upsert              │
-│     └─→ Count++                                    │
+│  SQL repositories maintain data in database         │
+│  Redis repositories cache for performance           │
+│  Both accessed through service layer                │
 │                                                     │
 │  3. Get all interaction IDs for the day            │
 │     int_ids = redis.smembers("interactions:day:{day}")│
@@ -542,17 +539,17 @@ Server advances to new day
 ### Simulation Startup Sequence
 
 ```
-run_server          Ray         OrchestratorServer    DatabaseMiddleware    Storage
-     │               │                  │                      │               │
-     │ 1. Load config│                  │                      │               │
-     ├───────────────┤                  │                      │               │
-     │               │                  │                      │               │
-     │ 2. init(...)  │                  │                      │               │
-     ├──────────────>│                  │                      │               │
-     │               │                  │                      │               │
-     │               │ 3. Create Actor  │                      │               │
-     │               ├─────────────────>│                      │               │
-     │               │                  │                      │               │
+run_server          Ray         OrchestratorServer    Service Layer         Storage
+     │               │                  │                     │               │
+     │ 1. Load config│                  │                     │               │
+     ├───────────────┤                  │                     │               │
+     │               │                  │                     │               │
+     │ 2. init(...)  │                  │                     │               │
+     ├──────────────>│                  │                     │               │
+     │               │                  │                     │               │
+     │               │ 3. Create Actor  │                     │               │
+     │               ├─────────────────>│                     │               │
+     │               │                  │                     │               │
      │               │                  │ 4. __init__()        │               │
      │               │                  ├─────────────────────>│               │
      │               │                  │                      │               │
