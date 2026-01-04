@@ -41,22 +41,26 @@ except ImportError as e:
     import_error = e
 
 
-def create_database_engine(db_config: Dict[str, Any]):
+def create_database_engine(db_config: Dict[str, Any], logger: Optional[logging.Logger] = None):
     """
-    Create SQLAlchemy engine from database configuration.
+    Create SQLAlchemy engine from database configuration and initialize database tables.
     
     Args:
         db_config: Database configuration dict with:
             - type: "sqlite", "postgresql", or "mysql"
             - Additional connection parameters
+        logger: Optional logger instance
     
     Returns:
-        SQLAlchemy Engine instance
+        SQLAlchemy Engine instance with tables created
     """
     if not SQLALCHEMY_AVAILABLE:
         raise ImportError(
             "SQLAlchemy is not installed. Please install it with: pip install sqlalchemy>=2.0.0"
         )
+    
+    if logger is None:
+        logger = logging.getLogger(__name__)
     
     db_type = db_config.get("type", "sqlite")
     
@@ -87,6 +91,15 @@ def create_database_engine(db_config: Dict[str, Any]):
         pool_recycle=3600,  # Recycle connections after 1 hour
     )
     
+    # Create all tables if they don't exist
+    try:
+        from YSimulator.YServer.classes.models import Base
+        Base.metadata.create_all(engine)
+        logger.info(f"Database tables created/verified for {db_type}")
+    except Exception as e:
+        logger.error(f"Error creating database tables: {e}")
+        raise
+    
     return engine
 
 
@@ -113,8 +126,8 @@ def create_all_services(
     if logger is None:
         logger = logging.getLogger(__name__)
     
-    # Create database engine
-    engine = create_database_engine(db_config)
+    # Create database engine and initialize tables
+    engine = create_database_engine(db_config, logger)
     
     # Create all repositories
     user_repo = SQLUserRepository(engine, logger)
