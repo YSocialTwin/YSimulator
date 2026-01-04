@@ -602,6 +602,28 @@ class SQLPostRepository(PostRepository):
             )
             return None
     
+    def get_emotion_by_name_full(self, emotion_name: str) -> Optional[Dict[str, str]]:
+        """Get full emotion data by name (old middleware signature)."""
+        try:
+            session = Session(self.engine)
+            try:
+                emotion = session.query(Emotion).filter_by(emotion=emotion_name).first()
+                if not emotion:
+                    return None
+                
+                return {
+                    "id": emotion.id,
+                    "emotion": emotion.emotion,
+                    "icon": emotion.icon
+                }
+            finally:
+                session.close()
+        except Exception as e:
+            self.logger.error(
+                f"Error getting emotion by name (full): {e}", extra={"extra_data": {"error": str(e)}}
+            )
+            return None
+    
     def initialize_emotions_table(self):
         """Initialize emotions table with standard emotions."""
         try:
@@ -662,11 +684,40 @@ class SQLPostRepository(PostRepository):
                 session.add(post_sentiment)
                 session.commit()
                 return True
+            except Exception as e:
+                session.rollback()
+                raise
             finally:
                 session.close()
         except Exception as e:
             self.logger.error(
                 f"Error adding post sentiment: {e}", extra={"extra_data": {"error": str(e)}}
+            )
+            return False
+    
+    def add_post_sentiment_full(self, sentiment_data: Dict[str, Any]) -> bool:
+        """Add sentiment data using full dict (old middleware signature)."""
+        try:
+            session = Session(self.engine)
+            try:
+                import uuid
+                # Prepare sentiment data with id if not present
+                if "id" not in sentiment_data:
+                    sentiment_data = dict(sentiment_data)  # Make a copy
+                    sentiment_data["id"] = str(uuid.uuid4())
+                
+                post_sentiment = PostSentiment(**sentiment_data)
+                session.add(post_sentiment)
+                session.commit()
+                return True
+            except Exception as e:
+                session.rollback()
+                raise
+            finally:
+                session.close()
+        except Exception as e:
+            self.logger.error(
+                f"Error adding post sentiment (full): {e}", extra={"extra_data": {"error": str(e)}}
             )
             return False
     
@@ -685,6 +736,38 @@ class SQLPostRepository(PostRepository):
             )
             return None
     
+    def get_post_sentiment_full(self, post_id: str) -> Optional[Dict[str, Any]]:
+        """Get full sentiment data for a post (old middleware signature)."""
+        try:
+            session = Session(self.engine)
+            try:
+                sentiment = session.query(PostSentiment).filter_by(post_id=post_id).first()
+                if not sentiment:
+                    return None
+                
+                return {
+                    "id": sentiment.id,
+                    "post_id": sentiment.post_id,
+                    "user_id": sentiment.user_id,
+                    "topic_id": sentiment.topic_id,
+                    "round": sentiment.round,
+                    "neg": sentiment.neg,
+                    "pos": sentiment.pos,
+                    "neu": sentiment.neu,
+                    "compound": sentiment.compound,
+                    "sentiment_parent": sentiment.sentiment_parent,
+                    "is_post": sentiment.is_post,
+                    "is_comment": sentiment.is_comment,
+                    "is_reaction": sentiment.is_reaction,
+                }
+            finally:
+                session.close()
+        except Exception as e:
+            self.logger.error(
+                f"Error getting post sentiment (full): {e}", extra={"extra_data": {"error": str(e)}}
+            )
+            return None
+    
     def add_post_toxicity(self, post_id: str, toxicity_score: float) -> bool:
         """Add toxicity score to a post."""
         try:
@@ -699,11 +782,40 @@ class SQLPostRepository(PostRepository):
                 session.add(post_toxicity)
                 session.commit()
                 return True
+            except Exception as e:
+                session.rollback()
+                raise
             finally:
                 session.close()
         except Exception as e:
             self.logger.error(
                 f"Error adding post toxicity: {e}", extra={"extra_data": {"error": str(e)}}
+            )
+            return False
+    
+    def add_post_toxicity_full(self, toxicity_data: Dict[str, Any]) -> bool:
+        """Add toxicity data using full dict (old middleware signature)."""
+        try:
+            session = Session(self.engine)
+            try:
+                import uuid
+                # Prepare toxicity data with id if not present
+                if "id" not in toxicity_data:
+                    toxicity_data = dict(toxicity_data)  # Make a copy
+                    toxicity_data["id"] = str(uuid.uuid4())
+                
+                post_toxicity = PostToxicity(**toxicity_data)
+                session.add(post_toxicity)
+                session.commit()
+                return True
+            except Exception as e:
+                session.rollback()
+                raise
+            finally:
+                session.close()
+        except Exception as e:
+            self.logger.error(
+                f"Error adding post toxicity (full): {e}", extra={"extra_data": {"error": str(e)}}
             )
             return False
     
@@ -766,17 +878,47 @@ class SQLPostRepository(PostRepository):
                 mention = Mention(
                     id=str(uuid.uuid4()),
                     post_id=post_id,
-                    mentioned_user_id=mentioned_user_id,
-                    replied=False
+                    user_id=mentioned_user_id,  # Model uses user_id, not mentioned_user_id
+                    answered=0
                 )
                 session.add(mention)
                 session.commit()
                 return True
+            except Exception as e:
+                session.rollback()
+                raise
             finally:
                 session.close()
         except Exception as e:
             self.logger.error(
                 f"Error adding mention: {e}", extra={"extra_data": {"error": str(e)}}
+            )
+            return False
+    
+    def add_mention_full(self, mention_data: Dict[str, Any]) -> bool:
+        """Add a mention using full dict (old middleware signature)."""
+        try:
+            from YSimulator.YServer.classes.models import Mention
+            import uuid
+            session = Session(self.engine)
+            try:
+                # Prepare mention data with id if not present
+                if "id" not in mention_data:
+                    mention_data = dict(mention_data)  # Make a copy
+                    mention_data["id"] = str(uuid.uuid4())
+                
+                mention = Mention(**mention_data)
+                session.add(mention)
+                session.commit()
+                return True
+            except Exception as e:
+                session.rollback()
+                raise
+            finally:
+                session.close()
+        except Exception as e:
+            self.logger.error(
+                f"Error adding mention (full): {e}", extra={"extra_data": {"error": str(e)}}
             )
             return False
     
@@ -787,16 +929,17 @@ class SQLPostRepository(PostRepository):
             session = Session(self.engine)
             try:
                 mentions = session.query(Mention).filter(
-                    Mention.mentioned_user_id == user_id,
-                    Mention.replied == False
+                    Mention.user_id == user_id,  # Model uses user_id, not mentioned_user_id
+                    Mention.answered == 0  # Model uses answered (0=unreplied, 1=replied)
                 ).all()
                 
                 return [
                     {
                         "id": mention.id,
+                        "user_id": mention.user_id,
                         "post_id": mention.post_id,
-                        "mentioned_user_id": mention.mentioned_user_id,
-                        "replied": mention.replied
+                        "round": mention.round,
+                        "answered": mention.answered
                     }
                     for mention in mentions
                 ]
@@ -816,20 +959,51 @@ class SQLPostRepository(PostRepository):
             try:
                 mention = session.query(Mention).filter(
                     Mention.post_id == post_id,
-                    Mention.mentioned_user_id == mentioned_user_id
+                    Mention.user_id == mentioned_user_id  # Model uses user_id, not mentioned_user_id
                 ).first()
                 
                 if not mention:
                     return False
                 
-                mention.replied = True
+                mention.answered = 1  # Model uses answered (0=unreplied, 1=replied)
                 session.commit()
                 return True
+            except Exception as e:
+                session.rollback()
+                raise
             finally:
                 session.close()
         except Exception as e:
             self.logger.error(
                 f"Error marking mention replied: {e}", extra={"extra_data": {"error": str(e)}}
+            )
+            return False
+    
+    def mark_mention_replied_by_id(self, mention_id: str) -> bool:
+        """Mark a mention as replied by mention ID (old middleware signature)."""
+        try:
+            from YSimulator.YServer.classes.models import Mention
+            session = Session(self.engine)
+            try:
+                mention = session.query(Mention).filter(
+                    Mention.id == mention_id
+                ).first()
+                
+                if not mention:
+                    self.logger.warning(f"Mention {mention_id} not found")
+                    return False
+                
+                mention.answered = 1  # Model uses answered (0=unreplied, 1=replied)
+                session.commit()
+                return True
+            except Exception as e:
+                session.rollback()
+                raise
+            finally:
+                session.close()
+        except Exception as e:
+            self.logger.error(
+                f"Error marking mention replied by id: {e}", extra={"extra_data": {"error": str(e)}}
             )
             return False
 
@@ -876,6 +1050,9 @@ class SQLFollowRepository(FollowRepository):
                 session.add(follow)
                 session.commit()
                 return True
+            except Exception as e:
+                session.rollback()
+                raise
             finally:
                 session.close()
         except Exception as e:
@@ -883,6 +1060,10 @@ class SQLFollowRepository(FollowRepository):
                 f"Error adding follow: {e}", extra={"extra_data": {"error": str(e)}}
             )
             return False
+    
+    def add_follow_full(self, follow_data: Dict[str, Any]) -> bool:
+        """Add a follow relationship using full dict (alias for add_follow)."""
+        return self.add_follow(follow_data)
     
     def add_follows_batch(self, follows_data: List[Dict[str, Any]]) -> int:
         """Add multiple follow relationships in a batch."""

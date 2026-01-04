@@ -161,13 +161,35 @@ class DatabaseServiceAdapter:
         """Add post emotion."""
         return self.metadata_service.add_post_emotion(post_id, emotion_id)
     
-    def add_post_sentiment(self, post_id: str, sentiment_score: float) -> bool:
-        """Add post sentiment."""
-        return self.metadata_service.add_post_sentiment(post_id, sentiment_score)
+    def add_post_sentiment(self, sentiment_data: Dict[str, Any]) -> bool:
+        """
+        Add post sentiment - backwards compatible with old middleware signature.
+        
+        Args:
+            sentiment_data: Dict with keys: post_id, user_id, topic_id, round,
+                          neg, pos, neu, compound, sentiment_parent,
+                          is_post, is_comment, is_reaction
+                          
+        Returns:
+            bool: True if successful, False otherwise
+        """
+        # Repository method will handle the full dict
+        return self.metadata_service.post_repo.add_post_sentiment_full(sentiment_data)
     
-    def add_post_toxicity(self, post_id: str, toxicity_score: float) -> bool:
-        """Add post toxicity."""
-        return self.metadata_service.add_post_toxicity(post_id, toxicity_score)
+    def add_post_toxicity(self, toxicity_data: Dict[str, Any]) -> bool:
+        """
+        Add post toxicity - backwards compatible with old middleware signature.
+        
+        Args:
+            toxicity_data: Dict with keys: post_id, toxicity, severe_toxicity,
+                          identity_attack, insult, profanity, threat,
+                          sexually_explicit, flirtation
+                          
+        Returns:
+            bool: True if successful, False otherwise
+        """
+        # Repository method will handle the full dict
+        return self.metadata_service.post_repo.add_post_toxicity_full(toxicity_data)
     
     def add_post_hashtag(self, post_id: str, hashtag_id: str) -> bool:
         """Add post hashtag."""
@@ -177,13 +199,29 @@ class DatabaseServiceAdapter:
         """Add or get hashtag."""
         return self.metadata_service.add_or_get_hashtag(hashtag)
     
-    def get_post_sentiment(self, post_id: str) -> Optional[float]:
-        """Get post sentiment."""
-        return self.metadata_service.get_post_sentiment(post_id)
+    def get_post_sentiment(self, post_id: str) -> Optional[Dict[str, Any]]:
+        """
+        Get post sentiment - returns full dict like old middleware.
+        
+        Args:
+            post_id: Post ID
+            
+        Returns:
+            Dict with sentiment data or None if not found
+        """
+        return self.metadata_service.post_repo.get_post_sentiment_full(post_id)
     
-    def get_emotion_by_name(self, emotion_name: str) -> Optional[str]:
-        """Get emotion by name."""
-        return self.metadata_service.get_emotion_by_name(emotion_name)
+    def get_emotion_by_name(self, emotion_name: str) -> Optional[Dict[str, str]]:
+        """
+        Get emotion by name - returns dict like old middleware.
+        
+        Args:
+            emotion_name: Emotion name (e.g., "joy", "anger")
+            
+        Returns:
+            Dict with emotion data (id, emotion, icon) or None if not found
+        """
+        return self.metadata_service.post_repo.get_emotion_by_name_full(emotion_name)
     
     def initialize_emotions_table(self):
         """Initialize emotions table."""
@@ -193,13 +231,36 @@ class DatabaseServiceAdapter:
     # FOLLOW OPERATIONS - FollowService (COMPLETE)
     # ========================================================================
     
-    def add_follow(self, follower_id: str, followee_id: str, round_id: str) -> bool:
-        """Add follow relationship."""
-        return self.follow_service.add_follow(follower_id, followee_id, round_id)
+    def add_follow(self, follow_data: Dict[str, Any]) -> bool:
+        """
+        Add follow relationship - backwards compatible with old middleware signature.
+        
+        Args:
+            follow_data: Dict with keys: user_id (being followed), follower_id, action, round
+            
+        Returns:
+            bool: True if successful, False otherwise
+        """
+        # Extract parameters from dict - old middleware signature
+        user_id = follow_data.get("user_id")  # User being followed
+        follower_id = follow_data.get("follower_id")
+        action = follow_data.get("action", "follow")
+        round_id = follow_data.get("round")
+        
+        # Call repository directly with full data to maintain action field
+        return self.follow_service.follow_repo.add_follow_full(follow_data)
     
-    def add_follows_batch(self, follows_data: List[Tuple[str, str, str]]) -> int:
-        """Add multiple follows."""
-        return self.follow_service.add_follows_batch(follows_data)
+    def add_follows_batch(self, follows_data: List[Dict[str, Any]]) -> int:
+        """
+        Add multiple follows - backwards compatible with old middleware signature.
+        
+        Args:
+            follows_data: List of dicts with keys: user_id, follower_id, action, round
+            
+        Returns:
+            int: Number of follows added successfully
+        """
+        return self.follow_service.follow_repo.add_follows_batch(follows_data)
     
     # ========================================================================
     # INTEREST/TOPIC OPERATIONS - InterestService (COMPLETE)
@@ -237,17 +298,42 @@ class DatabaseServiceAdapter:
     # MENTION OPERATIONS - MentionService (COMPLETE)
     # ========================================================================
     
-    def add_mention(self, post_id: str, mentioned_user_id: str) -> bool:
-        """Add mention."""
-        return self.mention_service.add_mention(post_id, mentioned_user_id)
+    def add_mention(self, mention_data: Dict[str, Any]) -> bool:
+        """
+        Add mention - backwards compatible with old middleware signature.
+        
+        Args:
+            mention_data: Dict with keys: user_id, post_id, round, answered (optional)
+            
+        Returns:
+            bool: True if successful, False otherwise
+        """
+        # Extract parameters from dict for new service signature
+        user_id = mention_data.get("user_id")
+        post_id = mention_data.get("post_id")
+        round_id = mention_data.get("round")
+        
+        # Store the round_id and other fields for the actual repository to use
+        # The service expects simplified parameters but repository needs full data
+        return self.mention_service.post_repo.add_mention_full(mention_data)
     
     def get_unreplied_mentions(self, user_id: str) -> List[Dict[str, Any]]:
         """Get unreplied mentions."""
         return self.mention_service.get_unreplied_mentions(user_id)
     
-    def mark_mention_replied(self, post_id: str, mentioned_user_id: str) -> bool:
-        """Mark mention as replied."""
-        return self.mention_service.mark_mention_replied(post_id, mentioned_user_id)
+    def mark_mention_replied(self, mention_id: str) -> bool:
+        """
+        Mark mention as replied - backwards compatible with old middleware signature.
+        
+        Args:
+            mention_id: Mention ID (UUID string)
+            
+        Returns:
+            bool: True if successful, False otherwise
+        """
+        # Old middleware used mention_id, new service expects post_id and mentioned_user_id
+        # We'll add a new method in repository to handle this
+        return self.mention_service.post_repo.mark_mention_replied_by_id(mention_id)
     
     # ========================================================================
     # CONTENT OPERATIONS - ContentService (COMPLETE)
