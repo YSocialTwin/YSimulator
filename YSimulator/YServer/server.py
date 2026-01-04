@@ -231,18 +231,33 @@ class OrchestratorServer:
         # Set up logging first
         self._setup_logging()
 
-        # Initialize database middleware
-        self.db = DatabaseMiddleware(
+        # Initialize database middleware (legacy)
+        db_middleware = DatabaseMiddleware(
             db_config=db_config,
             config_path=str(self.config_path),
             redis_config=redis_config,
             logger=self.logger,
             simulation_config=simulation_config,
         )
+        
+        # Initialize new Repository/Service pattern components
+        from YSimulator.YServer.service_factory import create_services
+        from YSimulator.YServer.database_adapter import DatabaseServiceAdapter
+        
+        user_service, post_service = create_services(db_config, self.logger)
+        
+        # Create adapter that combines new services with legacy middleware
+        self.db = DatabaseServiceAdapter(
+            db_middleware=db_middleware,
+            user_service=user_service,
+            post_service=post_service,
+            logger=self.logger,
+        )
 
         # Initialize Interest Manager for topic/interest tracking
+        # Note: InterestManager still uses middleware internally for now
         self.interest_manager = InterestManager(
-            db_middleware=self.db, attention_window=self.attention_window
+            db_middleware=db_middleware, attention_window=self.attention_window
         )
 
         # Initialize the first round entry
@@ -253,7 +268,7 @@ class OrchestratorServer:
         self.db.initialize_emotions_table()
 
         self.logger.info(
-            "Orchestrator server initialized",
+            "Orchestrator server initialized with Repository/Service pattern",
             extra={
                 "extra_data": {
                     "db_type": db_config.get("type", "sqlite"),
@@ -261,6 +276,7 @@ class OrchestratorServer:
                     "redis_enabled": self.db.use_redis,
                     "timeout_seconds": timeout_seconds,
                     "archetypes_enabled": self.archetypes_enabled,
+                    "using_new_pattern": True,
                 }
             },
         )
