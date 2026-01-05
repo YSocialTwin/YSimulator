@@ -45,7 +45,7 @@ Add these flags to your `simulation_config.json` under the `"simulation"` sectio
 
 ### Server-Side (YServer)
 
-**Database Methods** (`YSimulator/YServer/classes/db_middleware.py`)
+**Database Methods** (`YSimulator/YServer/classes/service layer.py`)
 - `add_or_get_hashtag(hashtag_text)`: Gets or creates hashtag entries
 - `add_post_hashtag(post_id, hashtag_id)`: Links hashtags to posts
 - `get_user_by_username(username)`: Validates mentioned users
@@ -163,7 +163,7 @@ Both test files should pass with all checks marked as ✓.
 3. **YSimulator/YClient/classes/ray_models.py**
    - Added `annotations` field to `ActionDTO`
 
-4. **YSimulator/YServer/classes/db_middleware.py**
+4. **YSimulator/YServer/classes/service layer.py**
    - Added 6 new database methods for annotation storage
 
 5. **YSimulator/YServer/server.py**

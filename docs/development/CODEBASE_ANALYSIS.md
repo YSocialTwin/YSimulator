@@ -54,7 +54,7 @@ YSimulator/
 │   ├── server.py               # Main Ray actor server (3,002 lines)
 │   ├── classes/                # Database models and middleware
 │   │   ├── models.py           # SQLAlchemy data models
-│   │   └── db_middleware.py    # Legacy database middleware (3,814 lines)
+│   │   └── service and repository layers    # Legacy database middleware (3,814 lines)
 │   ├── repositories/           # NEW: Repository pattern implementation (2,800 lines)
 │   │   ├── base_repository.py  # Abstract interfaces
 │   │   ├── sql_repository.py   # SQLAlchemy implementations
@@ -317,7 +317,7 @@ rec_service.add_follow_relationship("user1", "user2")
 
 ### 4. Database Middleware (Legacy)
 
-**File**: `YServer/classes/db_middleware.py`  
+**File**: `YServer/services and repositories`  
 **Lines**: 3,814 lines  
 **Status**: Maintained for backward compatibility
 
@@ -504,7 +504,7 @@ rec_service.add_follow_relationship("user1", "user2")
 
 The implementation maintains **full backward compatibility**:
 
-- `db_middleware.py` remains unchanged and functional
+- `service and repository layers` remains unchanged and functional
 - Existing code continues to work without modifications
 - New code can use Repository/Service layers
 - Gradual migration path available
@@ -512,8 +512,8 @@ The implementation maintains **full backward compatibility**:
 **Migration Example**:
 ```python
 # Old approach (still works)
-from YSimulator.YServer.classes.db_middleware import DatabaseMiddleware
-middleware = DatabaseMiddleware(db_config)
+from YSimulator.YServer.database_adapter import DatabaseServiceAdapter
+middleware = DatabaseServiceAdapter(db_config)
 middleware.register_user(user_data)
 
 # New approach (recommended for new code)
@@ -559,7 +559,7 @@ user_service.register_user(user_data)
    - Consider further modularization
 
 2. **Legacy Code**
-   - `db_middleware.py` (3,814 lines) needs gradual migration
+   - `service and repository layers` (3,814 lines) needs gradual migration
    - Some redundancy between old and new patterns
    - Clear migration timeline needed
 
@@ -620,7 +620,7 @@ user_service.register_user(user_data)
 ### Long-Term Vision (3-6 Months)
 
 1. **Complete Migration**
-   - Deprecate db_middleware.py
+   - Deprecate service and repository layers
    - All code using Repository/Service layers
    - Remove redundant code
 
@@ -669,7 +669,6 @@ user_service.register_user(user_data)
 
 1. **Migration Tracking**
    - Maintain list of migrated vs. legacy code
-   - Monitor usage of db_middleware
    - Plan deprecation timeline
 
 2. **Code Quality**

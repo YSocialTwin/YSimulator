@@ -34,7 +34,7 @@ This document identifies the critical code paths in YSimulator that require high
 **Key Files**:
 - `YClient/client.py` - Agent initialization and execution loop
 - `YServer/server.py` - Agent registration and state management
-- `YServer/classes/db_middleware.py` - Database operations for user management
+- `YServer/services and repositories` - Database operations for user management
 
 **Critical Paths**:
 1. **Agent Creation** (`client.py:_create_agent_profiles`)
@@ -135,22 +135,22 @@ def test_parallel_llm_execution():
 **Target Coverage**: 95%
 
 **Key Files**:
-- `YServer/classes/db_middleware.py` - Core database abstraction
+- `YServer/services and repositories` - Core database abstraction
 - `YServer/classes/models.py` - SQLAlchemy models
 - `YServer/recsys/content_recsys_db.py` - Recommendation DB operations
 
 **Critical Paths**:
-1. **User Management** (`db_middleware.py:add_user`, `get_user`, `update_user`)
+1. **User Management** (`service layer.py:add_user`, `get_user`, `update_user`)
    - Creates and updates user records
    - Handles unique constraints (username, email)
    - **Risk**: Duplicate users, constraint violations, data loss
 
-2. **Post Operations** (`db_middleware.py:add_post`, `get_post_by_id`)
+2. **Post Operations** (`service layer.py:add_post`, `get_post_by_id`)
    - Stores posts with metadata
    - Links to authors, topics, parent posts
    - **Risk**: Orphaned posts, broken references
 
-3. **Follow Network** (`db_middleware.py:add_follow`, `get_followers`)
+3. **Follow Network** (`service layer.py:add_follow`, `get_followers`)
    - Manages social graph
    - Supports bi-directional lookups
    - **Risk**: Inconsistent network, missing edges
@@ -415,7 +415,7 @@ def test_unique_username_constraint():
 
 **Minimum Thresholds** (to be enforced in CI):
 - **Overall**: 60%
-- **Critical paths** (server.py, client.py, db_middleware.py): 85%
+- **Critical paths** (server.py, client.py, service layer.py): 85%
 - **High-impact paths** (recsys, interest_manager): 70%
 - **Supporting paths**: 50%
 

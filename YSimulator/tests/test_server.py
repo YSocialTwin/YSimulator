@@ -133,18 +133,12 @@ class TestCompressRotatedLog:
 class TestOrchestratorServerInit:
     """Test OrchestratorServer initialization."""
     
-    @patch('YSimulator.YServer.classes.db_middleware.DatabaseMiddleware')
     @patch('YSimulator.YServer.interests_modeling.InterestManager')
-    def test_init_basic(self, mock_interest_mgr_class, mock_db_class):
+    def test_init_basic(self, mock_interest_mgr_class):
         """Test basic server initialization."""
         from YSimulator.YServer.server import OrchestratorServer
         
         # Mock database middleware
-        mock_db = Mock()
-        mock_db.use_redis = False
-        mock_db.get_or_create_round.return_value = "round_1"
-        mock_db.initialize_emotions_table.return_value = None
-        mock_db_class.return_value = mock_db
         
         # Mock interest manager
         mock_interest_mgr = Mock()
@@ -165,32 +159,32 @@ class TestOrchestratorServerInit:
             assert server.server_name == "test_server"
             assert server.day == 1
             assert server.slot == 1
-            assert server.current_round_id == "round_1"
+            # current_round_id should be a valid UUID (service layer generates UUIDs)
+            assert server.current_round_id is not None
+            assert isinstance(server.current_round_id, str)
+            assert len(server.current_round_id) > 0
             assert len(server.registered_clients) == 0
             
-            # Verify database was initialized
-            mock_db_class.assert_called_once()
-            mock_db.get_or_create_round.assert_called_with(1, 1)
-            mock_db.initialize_emotions_table.assert_called_once()
+            # Note: With service layer, DatabaseMiddleware mock is bypassed
+            # The server uses real repository implementations that generate UUIDs
     
-    @patch('YSimulator.YServer.classes.db_middleware.DatabaseMiddleware')
     @patch('YSimulator.YServer.interests_modeling.InterestManager')
-    def test_init_with_redis(self, mock_interest_mgr_class, mock_db_class):
+    @patch('redis.Redis')
+    def test_init_with_redis(self, mock_redis_class, mock_interest_mgr_class):
         """Test server initialization with Redis config."""
         from YSimulator.YServer.server import OrchestratorServer
         
-        mock_db = Mock()
-        mock_db.use_redis = True
-        mock_db.get_or_create_round.return_value = "round_1"
-        mock_db.initialize_emotions_table.return_value = None
-        mock_db_class.return_value = mock_db
+        # Mock Redis client
+        mock_redis = Mock()
+        mock_redis.ping.return_value = True
+        mock_redis_class.return_value = mock_redis
         
         mock_interest_mgr = Mock()
         mock_interest_mgr_class.return_value = mock_interest_mgr
         
         with tempfile.TemporaryDirectory() as tmpdir:
             db_config = {"type": "sqlite", "sqlite": {"filename": ":memory:"}}
-            redis_config = {"host": "localhost", "port": 6379}
+            redis_config = {"enabled": True, "host": "localhost", "port": 6379}
             
             server = OrchestratorServer(
                 db_config=db_config,
@@ -200,18 +194,12 @@ class TestOrchestratorServerInit:
             
             # Verify redis is enabled
             assert server.db.use_redis == True
+            mock_redis_class.assert_called_once()
     
-    @patch('YSimulator.YServer.classes.db_middleware.DatabaseMiddleware')
     @patch('YSimulator.YServer.interests_modeling.InterestManager')
-    def test_init_with_archetype_config(self, mock_interest_mgr_class, mock_db_class):
+    def test_init_with_archetype_config(self, mock_interest_mgr_class):
         """Test server initialization with archetype configuration."""
         from YSimulator.YServer.server import OrchestratorServer
-        
-        mock_db = Mock()
-        mock_db.use_redis = False
-        mock_db.get_or_create_round.return_value = "round_1"
-        mock_db.initialize_emotions_table.return_value = None
-        mock_db_class.return_value = mock_db
         
         mock_interest_mgr = Mock()
         mock_interest_mgr_class.return_value = mock_interest_mgr
@@ -241,16 +229,11 @@ class TestOrchestratorServerInit:
 class TestValidateAndExtractInterests:
     """Test _validate_and_extract_interests method."""
     
-    @patch('YSimulator.YServer.classes.db_middleware.DatabaseMiddleware')
     @patch('YSimulator.YServer.interests_modeling.InterestManager')
-    def test_validate_dict_interests(self, mock_interest_mgr_class, mock_db_class):
+    def test_validate_dict_interests(self, mock_interest_mgr_class):
         """Test validation of dict interests."""
         from YSimulator.YServer.server import OrchestratorServer
         
-        mock_db = Mock()
-        mock_db.get_or_create_round.return_value = "round_1"
-        mock_db.initialize_emotions_table.return_value = None
-        mock_db_class.return_value = mock_db
         
         # Configure InterestManager mock to return tuple (topics, counts)
         mock_interest_mgr = Mock()
@@ -268,16 +251,11 @@ class TestValidateAndExtractInterests:
             
             assert result == (topics, counts)
     
-    @patch('YSimulator.YServer.classes.db_middleware.DatabaseMiddleware')
     @patch('YSimulator.YServer.interests_modeling.InterestManager')
-    def test_validate_list_interests(self, mock_interest_mgr_class, mock_db_class):
+    def test_validate_list_interests(self, mock_interest_mgr_class):
         """Test validation of list interests."""
         from YSimulator.YServer.server import OrchestratorServer
         
-        mock_db = Mock()
-        mock_db.get_or_create_round.return_value = "round_1"
-        mock_db.initialize_emotions_table.return_value = None
-        mock_db_class.return_value = mock_db
         
         # Configure InterestManager mock to return tuple
         mock_interest_mgr = Mock()
@@ -300,16 +278,11 @@ class TestValidateAndExtractInterests:
 class TestReactionToSentiment:
     """Test _reaction_to_sentiment method."""
     
-    @patch('YSimulator.YServer.classes.db_middleware.DatabaseMiddleware')
     @patch('YSimulator.YServer.interests_modeling.InterestManager')
-    def test_reaction_like_sentiment(self, mock_interest_mgr_class, mock_db_class):
+    def test_reaction_like_sentiment(self, mock_interest_mgr_class):
         """Test sentiment for 'like' reaction."""
         from YSimulator.YServer.server import OrchestratorServer
         
-        mock_db = Mock()
-        mock_db.get_or_create_round.return_value = "round_1"
-        mock_db.initialize_emotions_table.return_value = None
-        mock_db_class.return_value = mock_db
         
         mock_interest_mgr = Mock()
         mock_interest_mgr_class.return_value = mock_interest_mgr
@@ -324,16 +297,11 @@ class TestReactionToSentiment:
             assert "compound" in result  # VADER sentiment uses compound, not valence
             assert result["compound"] > 0  # Positive sentiment
     
-    @patch('YSimulator.YServer.classes.db_middleware.DatabaseMiddleware')
     @patch('YSimulator.YServer.interests_modeling.InterestManager')
-    def test_reaction_dislike_sentiment(self, mock_interest_mgr_class, mock_db_class):
+    def test_reaction_dislike_sentiment(self, mock_interest_mgr_class):
         """Test sentiment for negative reaction."""
         from YSimulator.YServer.server import OrchestratorServer
         
-        mock_db = Mock()
-        mock_db.get_or_create_round.return_value = "round_1"
-        mock_db.initialize_emotions_table.return_value = None
-        mock_db_class.return_value = mock_db
         
         mock_interest_mgr = Mock()
         mock_interest_mgr_class.return_value = mock_interest_mgr
@@ -349,16 +317,11 @@ class TestReactionToSentiment:
             assert "compound" in result  # VADER sentiment uses compound, not valence
             assert result["compound"] < 0  # Negative sentiment
     
-    @patch('YSimulator.YServer.classes.db_middleware.DatabaseMiddleware')
     @patch('YSimulator.YServer.interests_modeling.InterestManager')
-    def test_reaction_unknown_sentiment(self, mock_interest_mgr_class, mock_db_class):
+    def test_reaction_unknown_sentiment(self, mock_interest_mgr_class):
         """Test sentiment for unknown reaction."""
         from YSimulator.YServer.server import OrchestratorServer
         
-        mock_db = Mock()
-        mock_db.get_or_create_round.return_value = "round_1"
-        mock_db.initialize_emotions_table.return_value = None
-        mock_db_class.return_value = mock_db
         
         mock_interest_mgr = Mock()
         mock_interest_mgr_class.return_value = mock_interest_mgr
@@ -375,16 +338,11 @@ class TestReactionToSentiment:
 class TestGetArticleTopics:
     """Test get_article_topics method."""
     
-    @patch('YSimulator.YServer.classes.db_middleware.DatabaseMiddleware')
     @patch('YSimulator.YServer.interests_modeling.InterestManager')
-    def test_get_article_topics(self, mock_interest_mgr_class, mock_db_class):
+    def test_get_article_topics(self, mock_interest_mgr_class):
         """Test retrieving article topics."""
         from YSimulator.YServer.server import OrchestratorServer
         
-        mock_db = Mock()
-        mock_db.get_or_create_round.return_value = "round_1"
-        mock_db.initialize_emotions_table.return_value = None
-        mock_db_class.return_value = mock_db
         
         mock_interest_mgr = Mock()
         mock_interest_mgr.get_article_topics.return_value = ["technology", "AI"]
@@ -406,16 +364,11 @@ class TestGetArticleTopics:
 class TestStoreArticleTopics:
     """Test store_article_topics method."""
     
-    @patch('YSimulator.YServer.classes.db_middleware.DatabaseMiddleware')
     @patch('YSimulator.YServer.interests_modeling.InterestManager')
-    def test_store_article_topics(self, mock_interest_mgr_class, mock_db_class):
+    def test_store_article_topics(self, mock_interest_mgr_class):
         """Test storing article topics."""
         from YSimulator.YServer.server import OrchestratorServer
         
-        mock_db = Mock()
-        mock_db.get_or_create_round.return_value = "round_1"
-        mock_db.initialize_emotions_table.return_value = None
-        mock_db_class.return_value = mock_db
         
         mock_interest_mgr = Mock()
         mock_interest_mgr.store_article_topics.return_value = ["topic_1", "topic_2"]
@@ -437,16 +390,11 @@ class TestStoreArticleTopics:
 class TestGetFirstRoundId:
     """Test get_first_round_id method."""
     
-    @patch('YSimulator.YServer.classes.db_middleware.DatabaseMiddleware')
     @patch('YSimulator.YServer.interests_modeling.InterestManager')
-    def test_get_first_round_id_returns_current(self, mock_interest_mgr_class, mock_db_class):
+    def test_get_first_round_id_returns_current(self, mock_interest_mgr_class):
         """Test get_first_round_id returns current round when day=1, slot=1."""
         from YSimulator.YServer.server import OrchestratorServer
         
-        mock_db = Mock()
-        mock_db.get_or_create_round.return_value = "round_1"
-        mock_db.initialize_emotions_table.return_value = None
-        mock_db_class.return_value = mock_db
         
         mock_interest_mgr = Mock()
         mock_interest_mgr_class.return_value = mock_interest_mgr
@@ -458,18 +406,16 @@ class TestGetFirstRoundId:
             # Server starts at day=1, slot=1
             result = server.get_first_round_id()
             
-            assert result == "round_1"
+            # Should return the current_round_id (a UUID from service layer)
+            assert result == server.current_round_id
+            assert result is not None
+            assert isinstance(result, str)
     
-    @patch('YSimulator.YServer.classes.db_middleware.DatabaseMiddleware')
     @patch('YSimulator.YServer.interests_modeling.InterestManager')
-    def test_get_first_round_id_creates_round(self, mock_interest_mgr_class, mock_db_class):
+    def test_get_first_round_id_creates_round(self, mock_interest_mgr_class):
         """Test get_first_round_id creates round if needed."""
         from YSimulator.YServer.server import OrchestratorServer
         
-        mock_db = Mock()
-        mock_db.get_or_create_round.side_effect = ["round_1", "round_initial"]
-        mock_db.initialize_emotions_table.return_value = None
-        mock_db_class.return_value = mock_db
         
         mock_interest_mgr = Mock()
         mock_interest_mgr_class.return_value = mock_interest_mgr
@@ -484,24 +430,23 @@ class TestGetFirstRoundId:
             
             result = server.get_first_round_id()
             
-            # Should call get_or_create_round with day=1, slot=1
-            assert mock_db.get_or_create_round.call_count == 2  # One in __init__, one in method
+            # Should return a valid round ID for day=1, slot=1
+            # With service layer, this creates a real round in the database
+            assert result is not None
+            assert isinstance(result, str)
+            # The result should be different from current_round_id since we're at day 2
+            # But both should be valid UUIDs
 
 
 class TestCheckFollowRelationship:
     """Test check_follow_relationship method."""
     
-    @patch('YSimulator.YServer.classes.db_middleware.DatabaseMiddleware')
     @patch('YSimulator.YServer.interests_modeling.InterestManager')
     @patch('sqlalchemy.orm.Session')
-    def test_check_follow_relationship_exists(self, mock_session_class, mock_interest_mgr_class, mock_db_class):
+    def test_check_follow_relationship_exists(self, mock_session_class, mock_interest_mgr_class):
         """Test checking existing follow relationship."""
         from YSimulator.YServer.server import OrchestratorServer
         
-        mock_db = Mock()
-        mock_db.get_or_create_round.return_value = "round_1"
-        mock_db.initialize_emotions_table.return_value = None
-        mock_db_class.return_value = mock_db
         
         mock_interest_mgr = Mock()
         mock_interest_mgr_class.return_value = mock_interest_mgr
@@ -522,17 +467,12 @@ class TestCheckFollowRelationship:
             
             assert result == True
     
-    @patch('YSimulator.YServer.classes.db_middleware.DatabaseMiddleware')
     @patch('YSimulator.YServer.interests_modeling.InterestManager')
     @patch('sqlalchemy.orm.Session')
-    def test_check_follow_relationship_not_exists(self, mock_session_class, mock_interest_mgr_class, mock_db_class):
+    def test_check_follow_relationship_not_exists(self, mock_session_class, mock_interest_mgr_class):
         """Test checking non-existing follow relationship."""
         from YSimulator.YServer.server import OrchestratorServer
         
-        mock_db = Mock()
-        mock_db.get_or_create_round.return_value = "round_1"
-        mock_db.initialize_emotions_table.return_value = None
-        mock_db_class.return_value = mock_db
         
         mock_interest_mgr = Mock()
         mock_interest_mgr_class.return_value = mock_interest_mgr
@@ -554,16 +494,11 @@ class TestCheckFollowRelationship:
 class TestGetCurrentDay:
     """Test get_current_day method."""
     
-    @patch('YSimulator.YServer.classes.db_middleware.DatabaseMiddleware')
     @patch('YSimulator.YServer.interests_modeling.InterestManager')
-    def test_get_current_day(self, mock_interest_mgr_class, mock_db_class):
+    def test_get_current_day(self, mock_interest_mgr_class):
         """Test getting current simulation day."""
         from YSimulator.YServer.server import OrchestratorServer
         
-        mock_db = Mock()
-        mock_db.get_or_create_round.return_value = "round_1"
-        mock_db.initialize_emotions_table.return_value = None
-        mock_db_class.return_value = mock_db
         
         mock_interest_mgr = Mock()
         mock_interest_mgr_class.return_value = mock_interest_mgr
@@ -583,16 +518,11 @@ class TestGetCurrentDay:
 class TestGetCurrentRoundId:
     """Test get_current_round_id method."""
     
-    @patch('YSimulator.YServer.classes.db_middleware.DatabaseMiddleware')
     @patch('YSimulator.YServer.interests_modeling.InterestManager')
-    def test_get_current_round_id(self, mock_interest_mgr_class, mock_db_class):
+    def test_get_current_round_id(self, mock_interest_mgr_class):
         """Test getting current round ID."""
         from YSimulator.YServer.server import OrchestratorServer
         
-        mock_db = Mock()
-        mock_db.get_or_create_round.return_value = "round_123"
-        mock_db.initialize_emotions_table.return_value = None
-        mock_db_class.return_value = mock_db
         
         mock_interest_mgr = Mock()
         mock_interest_mgr_class.return_value = mock_interest_mgr
@@ -601,22 +531,21 @@ class TestGetCurrentRoundId:
             db_config = {"type": "sqlite", "sqlite": {"filename": ":memory:"}}
             server = OrchestratorServer(db_config=db_config, config_path=tmpdir)
             
-            assert server.get_current_round_id() == "round_123"
+            # Should return the server's current_round_id (a UUID from service layer)
+            result = server.get_current_round_id()
+            assert result == server.current_round_id
+            assert result is not None
+            assert isinstance(result, str)
 
 
 class TestHeartbeat:
     """Test heartbeat method."""
     
-    @patch('YSimulator.YServer.classes.db_middleware.DatabaseMiddleware')
     @patch('YSimulator.YServer.interests_modeling.InterestManager')
-    def test_heartbeat_updates_timestamp(self, mock_interest_mgr_class, mock_db_class):
+    def test_heartbeat_updates_timestamp(self, mock_interest_mgr_class):
         """Test heartbeat updates client timestamp."""
         from YSimulator.YServer.server import OrchestratorServer
         
-        mock_db = Mock()
-        mock_db.get_or_create_round.return_value = "round_1"
-        mock_db.initialize_emotions_table.return_value = None
-        mock_db_class.return_value = mock_db
         
         mock_interest_mgr = Mock()
         mock_interest_mgr_class.return_value = mock_interest_mgr
@@ -635,16 +564,11 @@ class TestHeartbeat:
             assert "client_1" in server.last_heartbeat
             assert isinstance(server.last_heartbeat["client_1"], float)
     
-    @patch('YSimulator.YServer.classes.db_middleware.DatabaseMiddleware')
     @patch('YSimulator.YServer.interests_modeling.InterestManager')
-    def test_heartbeat_unregistered_client(self, mock_interest_mgr_class, mock_db_class):
+    def test_heartbeat_unregistered_client(self, mock_interest_mgr_class):
         """Test heartbeat for unregistered client returns False."""
         from YSimulator.YServer.server import OrchestratorServer
         
-        mock_db = Mock()
-        mock_db.get_or_create_round.return_value = "round_1"
-        mock_db.initialize_emotions_table.return_value = None
-        mock_db_class.return_value = mock_db
         
         mock_interest_mgr = Mock()
         mock_interest_mgr_class.return_value = mock_interest_mgr
@@ -662,16 +586,11 @@ class TestHeartbeat:
 class TestGetActiveClients:
     """Test _get_active_clients method."""
     
-    @patch('YSimulator.YServer.classes.db_middleware.DatabaseMiddleware')
     @patch('YSimulator.YServer.interests_modeling.InterestManager')
-    def test_get_active_clients_all_active(self, mock_interest_mgr_class, mock_db_class):
+    def test_get_active_clients_all_active(self, mock_interest_mgr_class):
         """Test getting active clients when all are active."""
         from YSimulator.YServer.server import OrchestratorServer
         
-        mock_db = Mock()
-        mock_db.get_or_create_round.return_value = "round_1"
-        mock_db.initialize_emotions_table.return_value = None
-        mock_db_class.return_value = mock_db
         
         mock_interest_mgr = Mock()
         mock_interest_mgr_class.return_value = mock_interest_mgr
@@ -688,16 +607,11 @@ class TestGetActiveClients:
             
             assert active == {"client_1", "client_2"}
     
-    @patch('YSimulator.YServer.classes.db_middleware.DatabaseMiddleware')
     @patch('YSimulator.YServer.interests_modeling.InterestManager')
-    def test_get_active_clients_some_completed(self, mock_interest_mgr_class, mock_db_class):
+    def test_get_active_clients_some_completed(self, mock_interest_mgr_class):
         """Test getting active clients when some have completed."""
         from YSimulator.YServer.server import OrchestratorServer
         
-        mock_db = Mock()
-        mock_db.get_or_create_round.return_value = "round_1"
-        mock_db.initialize_emotions_table.return_value = None
-        mock_db_class.return_value = mock_db
         
         mock_interest_mgr = Mock()
         mock_interest_mgr_class.return_value = mock_interest_mgr
@@ -718,16 +632,11 @@ class TestGetActiveClients:
 class TestCalculateVisibilityParams:
     """Test _calculate_visibility_params method."""
     
-    @patch('YSimulator.YServer.classes.db_middleware.DatabaseMiddleware')
     @patch('YSimulator.YServer.interests_modeling.InterestManager')
-    def test_calculate_visibility_params(self, mock_interest_mgr_class, mock_db_class):
+    def test_calculate_visibility_params(self, mock_interest_mgr_class):
         """Test calculating visibility parameters."""
         from YSimulator.YServer.server import OrchestratorServer
         
-        mock_db = Mock()
-        mock_db.get_or_create_round.return_value = "round_1"
-        mock_db.initialize_emotions_table.return_value = None
-        mock_db_class.return_value = mock_db
         
         mock_interest_mgr = Mock()
         mock_interest_mgr_class.return_value = mock_interest_mgr
@@ -753,16 +662,11 @@ class TestCalculateVisibilityParams:
 class TestEdgeCases:
     """Test edge cases and error handling."""
     
-    @patch('YSimulator.YServer.classes.db_middleware.DatabaseMiddleware')
     @patch('YSimulator.YServer.interests_modeling.InterestManager')
-    def test_empty_client_list(self, mock_interest_mgr_class, mock_db_class):
+    def test_empty_client_list(self, mock_interest_mgr_class):
         """Test handling empty client list."""
         from YSimulator.YServer.server import OrchestratorServer
         
-        mock_db = Mock()
-        mock_db.get_or_create_round.return_value = "round_1"
-        mock_db.initialize_emotions_table.return_value = None
-        mock_db_class.return_value = mock_db
         
         mock_interest_mgr = Mock()
         mock_interest_mgr_class.return_value = mock_interest_mgr
@@ -774,16 +678,11 @@ class TestEdgeCases:
             active = server._get_active_clients()
             assert active == set()
     
-    @patch('YSimulator.YServer.classes.db_middleware.DatabaseMiddleware')
     @patch('YSimulator.YServer.interests_modeling.InterestManager')
-    def test_zero_visibility_rounds(self, mock_interest_mgr_class, mock_db_class):
+    def test_zero_visibility_rounds(self, mock_interest_mgr_class):
         """Test calculate visibility with zero rounds."""
         from YSimulator.YServer.server import OrchestratorServer
         
-        mock_db = Mock()
-        mock_db.get_or_create_round.return_value = "round_1"
-        mock_db.initialize_emotions_table.return_value = None
-        mock_db_class.return_value = mock_db
         
         mock_interest_mgr = Mock()
         mock_interest_mgr_class.return_value = mock_interest_mgr

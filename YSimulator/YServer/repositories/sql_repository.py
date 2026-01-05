@@ -398,7 +398,7 @@ class SQLPostRepository(PostRepository):
             session.close()
     
     def get_post(self, post_id: str) -> Optional[Dict[str, Any]]:
-        """Get post by ID - returns same fields as old middleware."""
+        """Get post by ID - returns API field names with proper mapping."""
         try:
             session = Session(self.engine)
             try:
@@ -406,16 +406,17 @@ class SQLPostRepository(PostRepository):
                 if not post:
                     return None
                 
-                # Return exact same fields as old middleware
+                # Map model field names to API field names
                 return {
                     "id": post.id,
-                    "thread_id": post.thread_id,
+                    "root_post": post.thread_id,  # API: root_post <-> Model: thread_id
                     "news_id": post.news_id,
-                    "comment_to": post.comment_to,
+                    "parent_post": post.comment_to,  # API: parent_post <-> Model: comment_to
                     "shared_from": post.shared_from,
-                    "user_id": post.user_id,
-                    "tweet": post.tweet,
+                    "author": post.user_id,  # API: author <-> Model: user_id
+                    "text": post.tweet,  # API: text <-> Model: tweet
                     "round": post.round,
+                    "num_reactions": post.reaction_count,  # API: num_reactions <-> Model: reaction_count
                 }
             finally:
                 session.close()

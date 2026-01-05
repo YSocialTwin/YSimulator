@@ -6,6 +6,7 @@ using Redis for high-performance caching operations.
 """
 
 import logging
+import uuid
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 try:
@@ -181,6 +182,96 @@ class RedisUserRepository(UserRepository):
                 extra={"extra_data": {"error": str(e)}},
             )
             return False
+    
+    def get_user_by_username(self, username: str) -> Optional[Dict[str, Any]]:
+        """Get user by username."""
+        try:
+            # Look up user ID from username index
+            username_key = self._redis_key("user_mgmt:by_username", username)
+            user_id = self.redis_client.get(username_key)
+            
+            if user_id:
+                # Decode if bytes
+                user_id_str = user_id.decode() if isinstance(user_id, bytes) else user_id
+                # Get user data by ID (reuse existing method)
+                return self.get_user(user_id_str)
+            return None
+        except Exception as e:
+            self.logger.error(
+                f"Error getting user by username from Redis: {e}",
+                extra={"extra_data": {"error": str(e), "username": username}},
+            )
+            return None
+    
+    def update_agent_last_active_day(self, agent_id: str, day: int) -> bool:
+        """Update agent's last active day."""
+        try:
+            key = self._redis_key("user_mgmt", agent_id)
+            self.redis_client.hset(key, "last_active_day", str(day))
+            return True
+        except Exception as e:
+            self.logger.error(
+                f"Error updating last_active_day in Redis: {e}",
+                extra={"extra_data": {"error": str(e), "agent_id": agent_id}},
+            )
+            return False
+    
+    def get_churned_agents(self, day: int = None, inactivity_threshold: int = None) -> List[str]:
+        """Get churned agents (agents with left_on set)."""
+        try:
+            churned_agents = []
+            # Get all user keys
+            pattern = self._redis_key("user_mgmt", "*")
+            for key in self.redis_client.scan_iter(match=pattern):
+                agent_data = self.redis_client.hgetall(key)
+                # Decode bytes to strings
+                decoded_data = {
+                    k.decode() if isinstance(k, bytes) else k: 
+                    v.decode() if isinstance(v, bytes) else v
+                    for k, v in agent_data.items()
+                }
+                # Agent is churned if left_on is set
+                if decoded_data.get("left_on"):
+                    churned_agents.append(decoded_data.get("id"))
+            return churned_agents
+        except Exception as e:
+            self.logger.error(
+                f"Error getting churned agents from Redis: {e}",
+                extra={"extra_data": {"error": str(e)}},
+            )
+            return []
+    
+    def set_agent_churned(self, agent_id: str, churned: bool) -> bool:
+        """Set agent churned status."""
+        try:
+            key = self._redis_key("user_mgmt", agent_id)
+            if churned:
+                # In db_middleware, this is set_agent_churned(agent_id, round_id)
+                # For Redis, we'll just set a marker. The round_id should be passed differently.
+                # Looking at the base_repository interface, it expects a bool.
+                # However, db_middleware uses round_id. Let's align with db_middleware behavior.
+                # Since the signature differs, we'll store "churned" as a marker
+                self.redis_client.hset(key, "left_on", "churned")
+            else:
+                self.redis_client.hdel(key, "left_on")
+            return True
+        except Exception as e:
+            self.logger.error(
+                f"Error setting agent churned status in Redis: {e}",
+                extra={"extra_data": {"error": str(e), "agent_id": agent_id}},
+            )
+            return False
+    
+    def get_inactive_agents(self, inactivity_threshold: int) -> List[str]:
+        """Get inactive agents - requires current_day context not available in this signature."""
+        # Note: db_middleware.get_inactive_agents requires current_day parameter
+        # but the base_repository interface only has inactivity_threshold.
+        # This is a signature mismatch. We'll log a warning and return empty list.
+        self.logger.warning(
+            "get_inactive_agents in RedisUserRepository requires current_day parameter "
+            "which is not available in the base interface. Returning empty list."
+        )
+        return []
 
 
 class RedisPostRepository(PostRepository):
@@ -221,8 +312,9 @@ class RedisPostRepository(PostRepository):
             
             # Store post data
             self.redis_client.hset(key, mapping=redis_data)
-            # Add to post IDs set
-            self.redis_client.sadd(self._redis_key("posts", "ids"), post_id)
+            # Add to posts list (no limit - will be cleaned by visibility_rounds at day end)
+            # Using lpush to maintain chronological order (most recent first)
+            self.redis_client.lpush(self._redis_key("posts", "recent"), post_id)
             
             return post_id
         except Exception as e:
@@ -255,14 +347,12 @@ class RedisPostRepository(PostRepository):
     def get_recent_posts(self, limit: int = 50) -> List[str]:
         """Get recent post IDs."""
         try:
-            # Redis stores posts in sets, so we need a different approach
-            # This is a simplified version - in production, use sorted sets with timestamps
-            post_ids = self.redis_client.smembers(self._redis_key("posts", "ids"))
-            post_ids = [
-                pid.decode() if isinstance(pid, bytes) else pid
-                for pid in post_ids
-            ]
-            return post_ids[:limit]
+            # Use lrange to get posts from the list (most recent first)
+            post_ids = self.redis_client.lrange(
+                self._redis_key("posts", "recent"), 0, limit - 1
+            )
+            # Properly decode bytes
+            return [pid.decode() if isinstance(pid, bytes) else str(pid) for pid in post_ids]
         except Exception as e:
             self.logger.error(
                 f"Error getting recent posts from Redis: {e}",
@@ -300,13 +390,13 @@ class RedisPostRepository(PostRepository):
     def add_interaction(self, interaction_data: Dict[str, Any]) -> bool:
         """Add a reaction/interaction to a post."""
         try:
-            reaction_id = interaction_data.get("id")
-            key = self._redis_key("reactions", reaction_id)
+            interaction_id = interaction_data.get("id")
+            key = self._redis_key("interactions", interaction_id)
             
             # Filter out None values
             redis_data = {k: str(v) if v is not None else "" for k, v in interaction_data.items()}
             
-            # Store reaction data
+            # Store interaction data
             self.redis_client.hset(key, mapping=redis_data)
             return True
         except Exception as e:
@@ -323,8 +413,11 @@ class RedisPostRepository(PostRepository):
             if not self.redis_client.exists(key):
                 return False
             
-            # Increment num_reactions field
-            self.redis_client.hincrby(key, "num_reactions", 1)
+            # Get current count, increment, and set
+            # This matches the db_middleware implementation
+            current_count = self.redis_client.hget(key, "reaction_count")
+            new_count = int(current_count or 0) + 1
+            self.redis_client.hset(key, "reaction_count", new_count)
             return True
         except Exception as e:
             self.logger.error(
@@ -366,9 +459,8 @@ class RedisPostRepository(PostRepository):
     def search_posts_by_topic(self, topic_id: str, agent_id: str, limit: int = 10) -> List[str]:
         """Search posts by topic."""
         try:
-            # This is a simplified implementation
-            # In production, use Redis search or maintain topic->posts index
-            all_post_ids = self.redis_client.smembers(self._redis_key("posts", "ids"))
+            # Get all recent post IDs from the list
+            all_post_ids = self.redis_client.lrange(self._redis_key("posts", "recent"), 0, -1)
             matching_posts = []
             
             for post_id in all_post_ids:
@@ -390,6 +482,336 @@ class RedisPostRepository(PostRepository):
                 extra={"extra_data": {"error": str(e)}},
             )
             return []
+    
+    # Metadata methods
+    def add_post_emotion(self, post_id: str, emotion_id: str) -> bool:
+        """Add emotion to a post."""
+        try:
+            post_emotion_id = str(uuid.uuid4())
+            post_emotion_data = {
+                "id": post_emotion_id,
+                "post_id": post_id,
+                "emotion_id": emotion_id,
+            }
+            
+            # Store post emotion in Redis
+            key = self._redis_key("post_emotions", post_emotion_id)
+            redis_data = {k: str(v) for k, v in post_emotion_data.items()}
+            self.redis_client.hset(key, mapping=redis_data)
+            
+            # Index by post_id for retrieval
+            post_emotions_key = self._redis_key("post_emotions", f"by_post:{post_id}")
+            self.redis_client.sadd(post_emotions_key, post_emotion_id)
+            
+            # Index by emotion_id + post_id for duplicate checking
+            emotion_post_key = self._redis_key("post_emotions", f"check:{post_id}:{emotion_id}")
+            if self.redis_client.exists(emotion_post_key):
+                return True  # Already exists
+            self.redis_client.set(emotion_post_key, "1")
+            
+            return True
+        except Exception as e:
+            self.logger.error(
+                f"Error adding post emotion to Redis: {e}",
+                extra={"extra_data": {"error": str(e), "post_id": post_id}},
+            )
+            return False
+    
+    def get_emotion_by_name(self, emotion_name: str) -> Optional[str]:
+        """Get emotion ID by name."""
+        try:
+            # Look up emotion ID from name index
+            emotion_name_key = self._redis_key("emotion:by_name", emotion_name)
+            emotion_id = self.redis_client.get(emotion_name_key)
+            
+            if emotion_id:
+                # Decode if bytes
+                return emotion_id.decode() if isinstance(emotion_id, bytes) else emotion_id
+            return None
+        except Exception as e:
+            self.logger.error(
+                f"Error getting emotion by name from Redis: {e}",
+                extra={"extra_data": {"error": str(e), "emotion_name": emotion_name}},
+            )
+            return None
+    
+    def initialize_emotions_table(self):
+        """Initialize emotions table with standard emotions."""
+        # Note: db_middleware uses SQL-only implementation for this
+        # Redis repositories typically don't initialize schemas
+        self.logger.warning(
+            "initialize_emotions_table is typically a SQL-only operation. "
+            "Redis implementation will not populate emotions."
+        )
+        pass
+    
+    def add_post_sentiment(self, post_id: str, sentiment_score: float) -> bool:
+        """Add sentiment score to a post."""
+        # Note: base repository signature is simplified compared to db_middleware
+        # db_middleware uses add_post_sentiment(sentiment_data: Dict)
+        # We'll create a minimal sentiment record with just the score
+        try:
+            sentiment_id = str(uuid.uuid4())
+            sentiment_data = {
+                "id": sentiment_id,
+                "post_id": post_id,
+                "compound": str(sentiment_score),
+            }
+            
+            # Store sentiment in Redis
+            key = self._redis_key("post_sentiment", sentiment_id)
+            self.redis_client.hset(key, mapping=sentiment_data)
+            
+            # Index by post_id for retrieval
+            post_sentiments_key = self._redis_key("post_sentiment", f"by_post:{post_id}")
+            self.redis_client.sadd(post_sentiments_key, sentiment_id)
+            
+            return True
+        except Exception as e:
+            self.logger.error(
+                f"Error adding post sentiment to Redis: {e}",
+                extra={"extra_data": {"error": str(e), "post_id": post_id}},
+            )
+            return False
+    
+    def get_post_sentiment(self, post_id: str) -> Optional[float]:
+        """Get sentiment score for a post."""
+        try:
+            # Get sentiment IDs for this post
+            post_sentiments_key = self._redis_key("post_sentiment", f"by_post:{post_id}")
+            sentiment_ids = self.redis_client.smembers(post_sentiments_key)
+            
+            if not sentiment_ids:
+                return None
+            
+            # Get the first sentiment
+            sentiment_id = list(sentiment_ids)[0]
+            sentiment_id_str = (
+                sentiment_id.decode() if isinstance(sentiment_id, bytes) else sentiment_id
+            )
+            key = self._redis_key("post_sentiment", sentiment_id_str)
+            sentiment_data = self.redis_client.hgetall(key)
+            
+            if sentiment_data:
+                # Decode and get compound score
+                compound = sentiment_data.get(b"compound") or sentiment_data.get("compound")
+                if compound:
+                    compound_str = compound.decode() if isinstance(compound, bytes) else compound
+                    return float(compound_str) if compound_str else None
+            
+            return None
+        except Exception as e:
+            self.logger.error(
+                f"Error getting post sentiment from Redis: {e}",
+                extra={"extra_data": {"error": str(e), "post_id": post_id}},
+            )
+            return None
+    
+    def add_post_toxicity(self, post_id: str, toxicity_score: float) -> bool:
+        """Add toxicity score to a post."""
+        # Note: base repository signature is simplified compared to db_middleware
+        # db_middleware uses add_post_toxicity(toxicity_data: Dict)
+        # We'll create a minimal toxicity record with just the main score
+        try:
+            toxicity_id = str(uuid.uuid4())
+            toxicity_data = {
+                "id": toxicity_id,
+                "post_id": post_id,
+                "toxicity": str(toxicity_score),
+            }
+            
+            # Store toxicity in Redis
+            key = self._redis_key("post_toxicity", toxicity_id)
+            self.redis_client.hset(key, mapping=toxicity_data)
+            
+            # Index by post_id for retrieval
+            post_toxicity_key = self._redis_key("post_toxicity", f"by_post:{post_id}")
+            self.redis_client.set(post_toxicity_key, toxicity_id)
+            
+            return True
+        except Exception as e:
+            self.logger.error(
+                f"Error adding post toxicity to Redis: {e}",
+                extra={"extra_data": {"error": str(e), "post_id": post_id}},
+            )
+            return False
+    
+    def add_or_get_hashtag(self, hashtag: str) -> Optional[str]:
+        """Add or get hashtag ID."""
+        try:
+            # Check if hashtag exists in Redis
+            hashtag_lookup_key = self._redis_key("hashtags", f"lookup:{hashtag}")
+            existing_id = self.redis_client.get(hashtag_lookup_key)
+            
+            if existing_id:
+                return existing_id.decode() if isinstance(existing_id, bytes) else existing_id
+            
+            # Create new hashtag
+            hashtag_id = str(uuid.uuid4())
+            hashtag_data = {"id": hashtag_id, "hashtag": hashtag}
+            
+            # Store hashtag
+            key = self._redis_key("hashtags", hashtag_id)
+            self.redis_client.hset(key, mapping=hashtag_data)
+            
+            # Store lookup index
+            self.redis_client.set(hashtag_lookup_key, hashtag_id)
+            
+            return hashtag_id
+        except Exception as e:
+            self.logger.error(
+                f"Error adding or getting hashtag from Redis: {e}",
+                extra={"extra_data": {"error": str(e), "hashtag": hashtag}},
+            )
+            return None
+    
+    def add_post_hashtag(self, post_id: str, hashtag_id: str) -> bool:
+        """Add hashtag to a post."""
+        try:
+            post_hashtag_id = str(uuid.uuid4())
+            post_hashtag_data = {
+                "id": post_hashtag_id,
+                "post_id": post_id,
+                "hashtag_id": hashtag_id,
+            }
+            
+            # Store post hashtag in Redis
+            key = self._redis_key("post_hashtags", post_hashtag_id)
+            redis_data = {k: str(v) for k, v in post_hashtag_data.items()}
+            self.redis_client.hset(key, mapping=redis_data)
+            
+            # Index by post_id for retrieval
+            post_hashtags_key = self._redis_key("post_hashtags", f"by_post:{post_id}")
+            self.redis_client.sadd(post_hashtags_key, post_hashtag_id)
+            
+            # Check for duplicates
+            hashtag_post_key = self._redis_key("post_hashtags", f"check:{post_id}:{hashtag_id}")
+            if self.redis_client.exists(hashtag_post_key):
+                return True  # Already exists
+            self.redis_client.set(hashtag_post_key, "1")
+            
+            return True
+        except Exception as e:
+            self.logger.error(
+                f"Error adding post hashtag to Redis: {e}",
+                extra={"extra_data": {"error": str(e), "post_id": post_id}},
+            )
+            return False
+    
+    # Mention methods
+    def add_mention(self, post_id: str, mentioned_user_id: str) -> bool:
+        """Add a mention to a post."""
+        try:
+            mention_id = str(uuid.uuid4())
+            # Note: base repository signature differs from db_middleware
+            # db_middleware uses add_mention(mention_data: Dict) with round and answered fields
+            # base repository uses add_mention(post_id, mentioned_user_id)
+            # We'll store with minimal data and set answered=0 by default
+            mention_data = {
+                "id": mention_id,
+                "user_id": mentioned_user_id,
+                "post_id": post_id,
+                "answered": "0",
+                # Note: round field is missing in this signature
+            }
+            
+            # Store mention in Redis
+            key = self._redis_key("mentions", mention_id)
+            self.redis_client.hset(key, mapping=mention_data)
+            
+            # Index by user_id for retrieval
+            user_mentions_key = self._redis_key("mentions", f"by_user:{mentioned_user_id}")
+            self.redis_client.sadd(user_mentions_key, mention_id)
+            
+            # Index by post_id for retrieval
+            post_mentions_key = self._redis_key("mentions", f"by_post:{post_id}")
+            self.redis_client.sadd(post_mentions_key, mention_id)
+            
+            return True
+        except Exception as e:
+            self.logger.error(
+                f"Error adding mention to Redis: {e}",
+                extra={"extra_data": {"error": str(e), "post_id": post_id}},
+            )
+            return False
+    
+    def get_unreplied_mentions(self, user_id: str) -> List[Dict[str, Any]]:
+        """Get unreplied mentions for a user."""
+        try:
+            # Get mention IDs for this user
+            user_mentions_key = self._redis_key("mentions", f"by_user:{user_id}")
+            mention_ids = self.redis_client.smembers(user_mentions_key)
+            
+            if not mention_ids:
+                return []
+            
+            # Filter to only unreplied mentions
+            unreplied_mentions = []
+            for mention_id in mention_ids:
+                # Decode mention_id if it's bytes
+                mention_id_str = (
+                    mention_id.decode() if isinstance(mention_id, bytes) else mention_id
+                )
+                mention_key = self._redis_key("mentions", mention_id_str)
+                mention_data = self.redis_client.hgetall(mention_key)
+                
+                if mention_data:
+                    # Convert bytes to strings
+                    mention_dict = {
+                        k.decode() if isinstance(k, bytes) else k: (
+                            v.decode() if isinstance(v, bytes) else v
+                        )
+                        for k, v in mention_data.items()
+                    }
+                    # Check if unreplied (answered is "0")
+                    if mention_dict.get("answered", "0") == "0":
+                        unreplied_mentions.append(mention_dict)
+            
+            return unreplied_mentions
+        except Exception as e:
+            self.logger.error(
+                f"Error getting unreplied mentions from Redis: {e}",
+                extra={"extra_data": {"error": str(e), "user_id": user_id}},
+            )
+            return []
+    
+    def mark_mention_replied(self, post_id: str, mentioned_user_id: str) -> bool:
+        """Mark a mention as replied."""
+        try:
+            # Note: base repository signature differs from db_middleware
+            # db_middleware uses mark_mention_replied(mention_id)
+            # base repository uses mark_mention_replied(post_id, mentioned_user_id)
+            # We need to find the mention by post_id and user_id
+            
+            # Get mentions for this post
+            post_mentions_key = self._redis_key("mentions", f"by_post:{post_id}")
+            mention_ids = self.redis_client.smembers(post_mentions_key)
+            
+            marked = False
+            for mention_id in mention_ids:
+                mention_id_str = (
+                    mention_id.decode() if isinstance(mention_id, bytes) else mention_id
+                )
+                mention_key = self._redis_key("mentions", mention_id_str)
+                mention_data = self.redis_client.hgetall(mention_key)
+                
+                if mention_data:
+                    # Decode and check if this mention is for the specified user
+                    user_id = mention_data.get(b"user_id") or mention_data.get("user_id")
+                    if user_id:
+                        user_id_str = user_id.decode() if isinstance(user_id, bytes) else user_id
+                        if user_id_str == mentioned_user_id:
+                            # Mark as replied
+                            self.redis_client.hset(mention_key, "answered", "1")
+                            marked = True
+            
+            return marked
+        except Exception as e:
+            self.logger.error(
+                f"Error marking mention as replied in Redis: {e}",
+                extra={"extra_data": {"error": str(e), "post_id": post_id}},
+            )
+            return False
 
 
 class RedisFollowRepository(FollowRepository):
@@ -422,20 +844,15 @@ class RedisFollowRepository(FollowRepository):
     def add_follow(self, follow_data: Dict[str, Any]) -> bool:
         """Add a follow relationship."""
         try:
-            follower_id = follow_data["follower_id"]
-            followee_id = follow_data["followee_id"]
+            # Generate UUID for follow record
+            follow_id = str(uuid.uuid4())
+            follow_data["id"] = follow_id
             
-            # Store follower -> followees
-            self.redis_client.sadd(
-                self._redis_key("follows:following", follower_id),
-                followee_id
-            )
-            
-            # Store followee -> followers
-            self.redis_client.sadd(
-                self._redis_key("follows:followers", followee_id),
-                follower_id
-            )
+            # Store follow relationship in Redis as a hash
+            key = self._redis_key("follow", follow_id)
+            # Filter out None values for Redis
+            redis_data = {k: str(v) if v is not None else "" for k, v in follow_data.items()}
+            self.redis_client.hset(key, mapping=redis_data)
             
             return True
         except Exception as e:
@@ -450,10 +867,19 @@ class RedisFollowRepository(FollowRepository):
             return 0
         
         try:
+            # Generate UUIDs for all follow records
+            for follow_data in follows_data:
+                follow_data["id"] = str(uuid.uuid4())
+            
+            # Store follow relationships in Redis
             count = 0
             for follow_data in follows_data:
-                if self.add_follow(follow_data):
-                    count += 1
+                key = self._redis_key("follow", follow_data["id"])
+                # Filter out None values for Redis
+                redis_data = {k: str(v) if v is not None else "" for k, v in follow_data.items()}
+                self.redis_client.hset(key, mapping=redis_data)
+                count += 1
+            
             return count
         except Exception as e:
             self.logger.error(
@@ -522,7 +948,6 @@ class RedisInterestRepository(InterestRepository):
                 return existing_id.decode() if isinstance(existing_id, bytes) else existing_id
             
             # Create new interest
-            import uuid
             interest_id = str(uuid.uuid4())
             key = self._redis_key("interests", interest_id)
             
@@ -706,7 +1131,6 @@ class RedisRecommendationRepository(RecommendationRepository):
                 return round_id.decode() if isinstance(round_id, bytes) else round_id
             
             # Create new round
-            import uuid
             round_id = str(uuid.uuid4())
             self.redis_client.set(key, round_id)
             

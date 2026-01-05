@@ -867,7 +867,7 @@ def get_topic_name_from_id(self, topic_id) -> Optional[str]:
 
 ### Database Layer
 
-**Location:** `YSimulator/YServer/classes/db_middleware.py`
+**Location:** `YSimulator/YServer/classes/service layer.py`
 
 **Key Methods:**
 

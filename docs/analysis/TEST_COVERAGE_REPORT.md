@@ -71,7 +71,7 @@ This report provides a comprehensive overview of test coverage across the YSimul
 |--------|-------|-----------------|----------|------------------|
 | `YServer/server.py` | 934 | ~12% | Critical | 3-4 weeks |
 | `YClient/client.py` | 1,402 | ~5% | Critical | 4-5 weeks |
-| `utils/db_middleware.py` | 1,480 | ~18% | High | 2-3 weeks |
+| `services and repositories` | 1,480 | ~18% | High | 2-3 weeks |
 
 **Phase 2 Estimated**: 100+ tests, 3-4 months effort
 
@@ -550,7 +550,7 @@ Shared utilities for recommendation systems.
 - **Estimated Effort**: 4-5 weeks, 60-70 tests
 - **Target Coverage**: 50%+
 
-**utils/db_middleware.py** (1,480 lines, ~18% coverage)
+**Service and Repository Layers** (1,480 lines, ~18% coverage)
 - Database middleware layer
 - Connection pooling
 - Query optimization
@@ -629,12 +629,12 @@ Shared utilities for recommendation systems.
 **Modules**:
 1. YServer/server.py (3-4 weeks, 40-50 tests)
 2. YClient/client.py (4-5 weeks, 60-70 tests)
-3. utils/db_middleware.py (2-3 weeks, 30-40 tests)
+3. services and repositories (2-3 weeks, 30-40 tests)
 
 **Goals**:
 - 60%+ coverage for server.py
 - 50%+ coverage for client.py
-- 60%+ coverage for db_middleware.py
+- 60%+ coverage for service and repository layers
 - Integration test framework setup
 
 ---
@@ -929,7 +929,7 @@ Phase 1 has successfully established a strong testing foundation for YSimulator 
 
 ### Next Steps
 
-1. **Phase 2**: Test core infrastructure (server, client, db_middleware)
+1. **Phase 2**: Test core infrastructure (server, client, service layer)
 2. **Phase 3**: Test additional features (LLM, opinion dynamics, client recsys)
 3. **Integration Tests**: Add end-to-end workflow tests
 4. **Coverage Target**: Achieve 60%+ overall codebase coverage
