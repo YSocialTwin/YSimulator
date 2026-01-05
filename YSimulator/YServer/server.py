@@ -308,6 +308,17 @@ class OrchestratorServer:
         self.follow_recommender = FollowRecommender(self.db, self.logger)
         self.logger.info("Recommendation engines initialized (ContentRecommender, FollowRecommender)")
 
+        # Initialize opinion dynamics handler
+        from YSimulator.YServer.opinion_dynamics import OpinionHandler
+        self.opinion_handler = OpinionHandler(
+            db_adapter=self.db,
+            simulation_config=self.simulation_config,
+            agent_profiles_cache=self.agent_profiles_cache,
+            current_round_id_getter=lambda: self.current_round_id,
+            logger=self.logger
+        )
+        self.logger.info("Opinion dynamics handler initialized")
+
         self.logger.info(
             "Orchestrator server fully initialized - 100% modern architecture!",
             extra={
@@ -522,80 +533,17 @@ class OrchestratorServer:
     ):
         """
         Ensure an agent has an opinion recorded for a topic.
-
-        This is a safety fallback that creates opinions if they don't exist.
-        For page agents, the client should have already inferred opinions via LLM
-        before submitting the POST action. This method just provides defaults.
-
-        For regular agents: Use cached profile opinion or neutral (0.5) as fallback.
-        For page agents: Use neutral (0.5) as placeholder (client should set opinion first).
-
-        Only executes when opinion dynamics is enabled in simulation config.
-
-        NOTE: Server does NOT call LLM service. All LLM interactions happen on client side.
-
+        
+        Delegates to OpinionHandler for opinion management logic.
+        
         Args:
             agent_id: Agent UUID
             topic_id: Topic UUID (from interests table)
             topic_name: Topic name for looking up in cached profile
             article_content: Unused (kept for backwards compatibility)
         """
-        # Only enforce this constraint when opinion dynamics is enabled
-        opinion_config = self.simulation_config.get("opinion_dynamics", {})
-        if not opinion_config.get("enabled", False):
-            return  # Opinion dynamics disabled, no need to ensure opinions exist
-
-        # Check if agent already has an opinion on this topic
-        existing_opinion = self.db.get_latest_agent_opinion(agent_id, topic_id)
-        if existing_opinion is not None:
-            return  # Opinion already exists
-
-        # Agent doesn't have opinion - need to create one as fallback
-        cached_profile = self.agent_profiles_cache.get(agent_id)
-        is_page_agent = cached_profile and cached_profile.is_page == 1
-
-        opinion_value = None
-
-        if is_page_agent:
-            # Page agent: Client should have already set opinion via LLM/random
-            # This is just a fallback - use neutral placeholder
-            opinion_value = 0.5
-            self.logger.warning(
-                f"Page agent {agent_id}: no opinion found for topic '{topic_name}'. "
-                f"Using neutral fallback (0.5). Client should have set opinion first."
-            )
-        else:
-            # Regular agent: try to get from cached profile
-            if cached_profile and cached_profile.opinions:
-                # Try exact match first
-                opinion_value = cached_profile.opinions.get(topic_name)
-                # If not found, try case-insensitive match
-                if opinion_value is None:
-                    for key, value in cached_profile.opinions.items():
-                        if key.lower() == topic_name.lower():
-                            opinion_value = value
-                            break
-
-                if opinion_value is not None:
-                    self.logger.info(
-                        f"Regular agent {agent_id}: using initial opinion {opinion_value} from profile for topic '{topic_name}'"
-                    )
-
-            # Default to neutral opinion if not found in profile
-            if opinion_value is None:
-                opinion_value = 0.5
-                self.logger.info(
-                    f"Regular agent {agent_id}: creating default neutral opinion {opinion_value} for topic '{topic_name}'"
-                )
-
-        # Store the opinion
-        self.db.add_agent_opinion(
-            agent_id=agent_id,
-            round_id=self.current_round_id,
-            topic_id=topic_id,
-            opinion=opinion_value,
-            id_interacted_with=None,
-            id_post=None,
+        self.opinion_handler.ensure_agent_opinion_exists(
+            agent_id, topic_id, topic_name, article_content
         )
 
     def _reaction_to_sentiment(self, reaction_type: str) -> Optional[Dict[str, float]]:
@@ -2165,6 +2113,8 @@ class OrchestratorServer:
     ) -> Optional[float]:
         """
         Get the latest opinion value for an agent on a topic.
+        
+        Delegates to OpinionHandler for opinion retrieval.
 
         Args:
             agent_id: Agent UUID
@@ -2174,7 +2124,7 @@ class OrchestratorServer:
         Returns:
             Latest opinion value or None if not found
         """
-        return self.db.get_latest_agent_opinion(agent_id, topic_id)
+        return self.opinion_handler.get_latest_opinion(agent_id, topic_id)
 
     @log_server_request
     def add_agent_opinion(
@@ -2188,6 +2138,8 @@ class OrchestratorServer:
     ) -> bool:
         """
         Add an agent opinion record to the database.
+        
+        Delegates to OpinionHandler for opinion storage.
 
         Args:
             agent_id: Agent UUID
@@ -2200,8 +2152,8 @@ class OrchestratorServer:
         Returns:
             True if successful, False otherwise
         """
-        return self.db.add_agent_opinion(
-            agent_id, self.current_round_id, topic_id, opinion, id_interacted_with, id_post
+        return self.opinion_handler.add_opinion(
+            agent_id, topic_id, opinion, id_interacted_with, id_post
         )
 
     @log_server_request
@@ -2210,6 +2162,8 @@ class OrchestratorServer:
     ) -> List[float]:
         """
         Get the opinions of an agent's neighbors (followees) on a specific topic.
+        
+        Delegates to OpinionHandler for neighbor opinion retrieval.
 
         This method retrieves the latest opinions of all users that the agent follows
         on the specified topic. Used for LLM-based opinion dynamics with evaluation_scope="neighbors".
@@ -2222,76 +2176,7 @@ class OrchestratorServer:
         Returns:
             List of opinion values (floats in [0, 1]) from the agent's neighbors
         """
-        try:
-            # Query the Follow table to get users that agent_id follows
-            # In the Follow table: follower_id is the agent, user_id is who they follow
-            if self.db.use_redis:
-                # Redis implementation: hybrid approach
-                # Step 1: Get followees from Redis follow keys
-                follow_pattern = self.db.get_redis_key_pattern("follow", "*")
-                # Note: Using KEYS here for consistency with follow_recsys_redis.py
-                # For large-scale production deployments, consider using SCAN instead
-                follow_keys = self.db.redis_client.keys(follow_pattern)
-
-                # Encode agent_id once for efficiency
-                agent_id_bytes = agent_id.encode()
-
-                followee_ids = set()
-                for key in follow_keys:
-                    follow_data = self.db.redis_client.hgetall(key)
-                    # Check if this is a follow relationship for the agent
-                    if (
-                        follow_data.get(b"follower_id") == agent_id_bytes
-                        and follow_data.get(b"action") == b"follow"
-                    ):
-                        user_id = follow_data.get(b"user_id")
-                        if user_id:
-                            followee_ids.add(user_id.decode())
-
-                if not followee_ids:
-                    return []
-
-                # Step 2: Get opinions from Redis for each followee
-                opinions = []
-                for followee_id in followee_ids:
-                    opinion = self.db.get_latest_agent_opinion(followee_id, topic_id)
-                    if opinion is not None:
-                        opinions.append(opinion)
-
-                return opinions
-            else:
-                # SQL implementation
-                from sqlalchemy.orm import Session
-
-                from YSimulator.YServer.classes.models import Follow
-
-                with Session(self.db.engine) as session:
-                    # Get list of user_ids that agent follows (where agent is the follower and action='follow')
-                    followees_query = (
-                        session.query(Follow.user_id)
-                        .filter(Follow.follower_id == agent_id, Follow.action == "follow")
-                        .all()
-                    )
-
-                    followee_ids = [row[0] for row in followees_query]
-
-                    if not followee_ids:
-                        return []
-
-                    # Get opinions of each followee on this topic
-                    opinions = []
-                    for followee_id in followee_ids:
-                        opinion = self.db.get_latest_agent_opinion(followee_id, topic_id)
-                        if opinion is not None:
-                            opinions.append(opinion)
-
-                    return opinions
-        except Exception as e:
-            self.logger.error(
-                f"Error getting neighbors opinions: {e}",
-                extra={"extra_data": {"error": str(e), "agent_id": agent_id, "topic_id": topic_id}},
-            )
-            return []
+        return self.opinion_handler.get_neighbors_opinions(agent_id, topic_id)
 
     @log_server_request
     def get_follow_suggestions(
