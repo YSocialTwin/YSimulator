@@ -30,6 +30,7 @@ def mock_services():
     services.post_service.get_post_sentiment = Mock(return_value={"compound": 0.5})
     services.post_service.add_post_sentiment = Mock(return_value=True)
     services.post_service.increment_post_reaction_count = Mock(return_value=True)
+    services.post_service.add_interaction = Mock(return_value=True)
     
     services.article_service = Mock()
     services.article_service.get_article = Mock(return_value={"title": "Test", "content": "Content"})
@@ -47,11 +48,9 @@ def mock_services():
     services.follow_service.add_follow = Mock(return_value=True)
     
     services.metadata_service = Mock()
-    services.metadata_service.add_interaction = Mock(return_value=True)
+    services.metadata_service.get_post_sentiment = Mock(return_value={"compound": 0.5})
+    services.metadata_service.add_post_sentiment = Mock(return_value=True)
     services.metadata_service._is_empty_or_default = Mock(return_value=False)
-    services.metadata_service._reaction_to_sentiment = Mock(return_value={
-        "neg": 0.0, "pos": 1.0, "neu": 0.0, "compound": 1.0
-    })
     
     # Server-level helper methods (on services object itself)
     services._ensure_agent_opinion_exists = Mock()
@@ -256,7 +255,7 @@ class TestReactionProcessor:
         result = processor.process(mock_action, action_context)
         
         assert result.success is True
-        mock_services.post_service.add_post_sentiment.assert_called()
+        mock_services.metadata_service.add_post_sentiment.assert_called()
 
 
 class TestActionRouter:
