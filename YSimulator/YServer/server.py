@@ -302,8 +302,9 @@ class OrchestratorServer:
         self.metadata_service.initialize_emotions_table()
 
         # Initialize action router for modular action processing
+        # Pass self (the server) so processors can access server methods like _process_annotations
         from YSimulator.YServer.action_processors.action_router import ActionRouter
-        self.action_router = ActionRouter(self.db, self.logger)
+        self.action_router = ActionRouter(self, self.logger)
         self.logger.info("Action router initialized with processors for POST, COMMENT, SHARE, FOLLOW, UNFOLLOW, and reactions")
 
         # Initialize recommendation engines
