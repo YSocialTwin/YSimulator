@@ -11,6 +11,8 @@ from unittest.mock import Mock, MagicMock
 from YSimulator.YServer.services.user_service import UserService
 from YSimulator.YServer.services.post_service import PostService
 from YSimulator.YServer.services.recommendation_service import RecommendationService
+from YSimulator.YServer.services.article_service import ArticleService
+from YSimulator.YServer.services.image_service import ImageService
 
 
 # ============================================================================
@@ -481,3 +483,404 @@ class TestRecommendationService:
         assert result["recommendation"] is True
         assert result["follow"] is False
         assert result["interest"] is True
+
+
+# ============================================================================
+# ArticleService Tests
+# ============================================================================
+
+
+class TestArticleService:
+    """Test suite for ArticleService."""
+    
+    @pytest.fixture
+    def mock_article_repo(self):
+        """Create a mock ArticleRepository."""
+        return Mock()
+    
+    @pytest.fixture
+    def mock_interest_repo(self):
+        """Create a mock InterestRepository."""
+        return Mock()
+    
+    @pytest.fixture
+    def service(self, mock_article_repo, mock_interest_repo):
+        """Create an ArticleService instance."""
+        return ArticleService(mock_article_repo, mock_interest_repo)
+    
+    @pytest.fixture
+    def service_no_interest_repo(self, mock_article_repo):
+        """Create an ArticleService instance without interest repository."""
+        return ArticleService(mock_article_repo, interest_repository=None)
+    
+    def test_add_website_success(self, service, mock_article_repo):
+        """Test successful website addition."""
+        website_data = {
+            "id": "website1",
+            "name": "Example Website",
+            "rss": "https://example.com/rss"
+        }
+        expected_id = "website1"
+        mock_article_repo.add_website.return_value = expected_id
+        
+        result = service.add_website(website_data)
+        
+        assert result == expected_id
+        mock_article_repo.add_website.assert_called_once_with(website_data)
+    
+    def test_add_website_failure(self, service, mock_article_repo):
+        """Test website addition failure."""
+        website_data = {"name": "Example Website"}
+        mock_article_repo.add_website.return_value = None
+        
+        result = service.add_website(website_data)
+        
+        assert result is None
+        mock_article_repo.add_website.assert_called_once_with(website_data)
+    
+    def test_add_website_exception(self, service, mock_article_repo):
+        """Test website addition with exception."""
+        website_data = {"name": "Example Website"}
+        mock_article_repo.add_website.side_effect = Exception("Database error")
+        
+        result = service.add_website(website_data)
+        
+        assert result is None
+    
+    def test_add_websites_batch_success(self, service, mock_article_repo):
+        """Test successful batch website addition."""
+        websites_data = [
+            {"id": "website1", "name": "Website 1", "rss": "https://example1.com/rss"},
+            {"id": "website2", "name": "Website 2", "rss": "https://example2.com/rss"},
+        ]
+        mock_article_repo.add_websites_batch.return_value = 2
+        
+        result = service.add_websites_batch(websites_data)
+        
+        assert result == 2
+        mock_article_repo.add_websites_batch.assert_called_once_with(websites_data)
+    
+    def test_add_websites_batch_exception(self, service, mock_article_repo):
+        """Test batch website addition with exception."""
+        websites_data = [{"name": "Website 1"}]
+        mock_article_repo.add_websites_batch.side_effect = Exception("Database error")
+        
+        result = service.add_websites_batch(websites_data)
+        
+        assert result == 0
+    
+    def test_add_article_success(self, service, mock_article_repo):
+        """Test successful article addition."""
+        article_data = {
+            "id": "article1",
+            "title": "Test Article",
+            "content": "Article content",
+            "website_id": "website1"
+        }
+        expected_id = "article1"
+        mock_article_repo.add_article.return_value = expected_id
+        
+        result = service.add_article(article_data)
+        
+        assert result == expected_id
+        mock_article_repo.add_article.assert_called_once_with(article_data)
+    
+    def test_add_article_failure(self, service, mock_article_repo):
+        """Test article addition failure."""
+        article_data = {"title": "Test Article"}
+        mock_article_repo.add_article.return_value = None
+        
+        result = service.add_article(article_data)
+        
+        assert result is None
+    
+    def test_add_article_exception(self, service, mock_article_repo):
+        """Test article addition with exception."""
+        article_data = {"title": "Test Article"}
+        mock_article_repo.add_article.side_effect = Exception("Database error")
+        
+        result = service.add_article(article_data)
+        
+        assert result is None
+    
+    def test_get_article_success(self, service, mock_article_repo):
+        """Test getting an article."""
+        article_id = "article1"
+        expected_article = {
+            "id": article_id,
+            "title": "Test Article",
+            "content": "Article content"
+        }
+        mock_article_repo.get_article.return_value = expected_article
+        
+        result = service.get_article(article_id)
+        
+        assert result == expected_article
+        mock_article_repo.get_article.assert_called_once_with(article_id)
+    
+    def test_get_article_not_found(self, service, mock_article_repo):
+        """Test getting a non-existent article."""
+        mock_article_repo.get_article.return_value = None
+        
+        result = service.get_article("nonexistent")
+        
+        assert result is None
+    
+    def test_get_article_exception(self, service, mock_article_repo):
+        """Test get article with exception."""
+        mock_article_repo.get_article.side_effect = Exception("Database error")
+        
+        result = service.get_article("article1")
+        
+        assert result is None
+    
+    def test_get_website_by_rss_success(self, service, mock_article_repo):
+        """Test getting a website by RSS URL."""
+        rss_url = "https://example.com/rss"
+        expected_website = {
+            "id": "website1",
+            "name": "Example Website",
+            "rss": rss_url
+        }
+        mock_article_repo.get_website_by_rss.return_value = expected_website
+        
+        result = service.get_website_by_rss(rss_url)
+        
+        assert result == expected_website
+        mock_article_repo.get_website_by_rss.assert_called_once_with(rss_url)
+    
+    def test_get_website_by_rss_not_found(self, service, mock_article_repo):
+        """Test getting a non-existent website by RSS."""
+        mock_article_repo.get_website_by_rss.return_value = None
+        
+        result = service.get_website_by_rss("https://nonexistent.com/rss")
+        
+        assert result is None
+    
+    def test_get_website_by_rss_exception(self, service, mock_article_repo):
+        """Test get website by RSS with exception."""
+        mock_article_repo.get_website_by_rss.side_effect = Exception("Database error")
+        
+        result = service.get_website_by_rss("https://example.com/rss")
+        
+        assert result is None
+    
+    def test_get_article_topics_success(self, service, mock_article_repo):
+        """Test getting article topics."""
+        article_id = "article1"
+        expected_topics = ["topic1", "topic2", "topic3"]
+        mock_article_repo.get_article_topics.return_value = expected_topics
+        
+        result = service.get_article_topics(article_id)
+        
+        assert result == expected_topics
+        mock_article_repo.get_article_topics.assert_called_once_with(article_id)
+    
+    def test_get_article_topics_empty(self, service, mock_article_repo):
+        """Test getting article topics with no topics."""
+        mock_article_repo.get_article_topics.return_value = []
+        
+        result = service.get_article_topics("article1")
+        
+        assert result == []
+    
+    def test_get_article_topics_exception(self, service, mock_article_repo):
+        """Test get article topics with exception."""
+        mock_article_repo.get_article_topics.side_effect = Exception("Database error")
+        
+        result = service.get_article_topics("article1")
+        
+        assert result == []
+    
+    def test_get_article_with_topics_success(self, service, mock_article_repo, mock_interest_repo):
+        """Test getting an article with topic names."""
+        article_id = "article1"
+        article_data = {
+            "id": article_id,
+            "title": "Test Article",
+            "content": "Article content"
+        }
+        topic_ids = ["topic1", "topic2"]
+        
+        mock_article_repo.get_article.return_value = article_data
+        mock_article_repo.get_article_topics.return_value = topic_ids
+        mock_interest_repo.get_topic_name_from_id.side_effect = ["Technology", "Science"]
+        
+        result = service.get_article_with_topics(article_id)
+        
+        assert result is not None
+        assert result["id"] == article_id
+        assert "topics" in result
+        assert result["topics"] == ["Technology", "Science"]
+        mock_article_repo.get_article.assert_called_once_with(article_id)
+        mock_article_repo.get_article_topics.assert_called_once_with(article_id)
+    
+    def test_get_article_with_topics_not_found(self, service, mock_article_repo):
+        """Test getting a non-existent article with topics."""
+        mock_article_repo.get_article.return_value = None
+        
+        result = service.get_article_with_topics("nonexistent")
+        
+        assert result is None
+        mock_article_repo.get_article.assert_called_once_with("nonexistent")
+        mock_article_repo.get_article_topics.assert_not_called()
+    
+    def test_get_article_with_topics_no_interest_repo(
+        self, service_no_interest_repo, mock_article_repo
+    ):
+        """Test getting article with topics when no interest repo available."""
+        article_id = "article1"
+        article_data = {
+            "id": article_id,
+            "title": "Test Article",
+            "content": "Article content"
+        }
+        mock_article_repo.get_article.return_value = article_data
+        
+        result = service_no_interest_repo.get_article_with_topics(article_id)
+        
+        assert result is not None
+        assert result["id"] == article_id
+        assert "topics" not in result
+        mock_article_repo.get_article.assert_called_once_with(article_id)
+    
+    def test_get_article_with_topics_exception(self, service, mock_article_repo):
+        """Test get article with topics with exception."""
+        mock_article_repo.get_article.side_effect = Exception("Database error")
+        
+        result = service.get_article_with_topics("article1")
+        
+        assert result is None
+    
+    def test_health_check_success(self, service, mock_article_repo):
+        """Test health check success."""
+        mock_article_repo.health_check.return_value = True
+        
+        result = service.health_check()
+        
+        assert result is True
+        mock_article_repo.health_check.assert_called_once()
+    
+    def test_health_check_failure(self, service, mock_article_repo):
+        """Test health check failure."""
+        mock_article_repo.health_check.return_value = False
+        
+        result = service.health_check()
+        
+        assert result is False
+    
+    def test_health_check_exception(self, service, mock_article_repo):
+        """Test health check with exception."""
+        mock_article_repo.health_check.side_effect = Exception("Connection error")
+        
+        result = service.health_check()
+        
+        assert result is False
+
+
+# ============================================================================
+# ImageService Tests
+# ============================================================================
+
+
+class TestImageService:
+    """Test suite for ImageService."""
+    
+    @pytest.fixture
+    def mock_image_repo(self):
+        """Create a mock ImageRepository."""
+        return Mock()
+    
+    @pytest.fixture
+    def service(self, mock_image_repo):
+        """Create an ImageService instance."""
+        return ImageService(mock_image_repo)
+    
+    def test_add_image_success(self, service, mock_image_repo):
+        """Test successful image addition."""
+        image_data = {
+            "id": "image1",
+            "url": "https://example.com/image.jpg",
+            "description": "Test image"
+        }
+        expected_id = "image1"
+        mock_image_repo.add_image.return_value = expected_id
+        
+        result = service.add_image(image_data)
+        
+        assert result == expected_id
+        mock_image_repo.add_image.assert_called_once_with(image_data)
+    
+    def test_add_image_failure(self, service, mock_image_repo):
+        """Test image addition failure."""
+        image_data = {"url": "https://example.com/image.jpg"}
+        mock_image_repo.add_image.return_value = None
+        
+        result = service.add_image(image_data)
+        
+        assert result is None
+        mock_image_repo.add_image.assert_called_once_with(image_data)
+    
+    def test_add_image_exception(self, service, mock_image_repo):
+        """Test image addition with exception."""
+        image_data = {"url": "https://example.com/image.jpg"}
+        mock_image_repo.add_image.side_effect = Exception("Database error")
+        
+        result = service.add_image(image_data)
+        
+        assert result is None
+    
+    def test_get_random_image_success(self, service, mock_image_repo):
+        """Test getting a random image."""
+        expected_image = {
+            "id": "image1",
+            "url": "https://example.com/image.jpg",
+            "description": "Random image"
+        }
+        mock_image_repo.get_random_image.return_value = expected_image
+        
+        result = service.get_random_image()
+        
+        assert result == expected_image
+        mock_image_repo.get_random_image.assert_called_once()
+    
+    def test_get_random_image_not_found(self, service, mock_image_repo):
+        """Test getting a random image when none available."""
+        mock_image_repo.get_random_image.return_value = None
+        
+        result = service.get_random_image()
+        
+        assert result is None
+    
+    def test_get_random_image_exception(self, service, mock_image_repo):
+        """Test get random image with exception."""
+        mock_image_repo.get_random_image.side_effect = Exception("Database error")
+        
+        result = service.get_random_image()
+        
+        assert result is None
+    
+    def test_health_check_success(self, service, mock_image_repo):
+        """Test health check success."""
+        mock_image_repo.health_check.return_value = True
+        
+        result = service.health_check()
+        
+        assert result is True
+        mock_image_repo.health_check.assert_called_once()
+    
+    def test_health_check_failure(self, service, mock_image_repo):
+        """Test health check failure."""
+        mock_image_repo.health_check.return_value = False
+        
+        result = service.health_check()
+        
+        assert result is False
+    
+    def test_health_check_exception(self, service, mock_image_repo):
+        """Test health check with exception."""
+        mock_image_repo.health_check.side_effect = Exception("Connection error")
+        
+        result = service.health_check()
+        
+        assert result is False
