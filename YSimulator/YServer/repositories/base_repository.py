@@ -173,6 +173,11 @@ class PostRepository(BaseRepository):
         pass
     
     @abstractmethod
+    def get_mention_by_id(self, mention_id: str) -> Optional[Dict[str, Any]]:
+        """Get mention by ID."""
+        pass
+    
+    @abstractmethod
     def mark_mention_replied(self, post_id: str, mentioned_user_id: str) -> bool:
         """Mark a mention as replied."""
         pass

@@ -985,6 +985,33 @@ class SQLPostRepository(PostRepository):
             )
             return []
     
+    def get_mention_by_id(self, mention_id: str) -> Optional[Dict[str, Any]]:
+        """Get mention by ID."""
+        try:
+            from YSimulator.YServer.classes.models import Mention
+            session = Session(self.engine)
+            try:
+                mention = session.query(Mention).filter(Mention.id == mention_id).first()
+                
+                if not mention:
+                    return None
+                
+                return {
+                    "id": mention.id,
+                    "user_id": mention.user_id,
+                    "mentioned_user_id": mention.user_id,  # Alias for compatibility
+                    "post_id": mention.post_id,
+                    "round": mention.round,
+                    "answered": mention.answered
+                }
+            finally:
+                session.close()
+        except Exception as e:
+            self.logger.error(
+                f"Error getting mention by ID: {e}", extra={"extra_data": {"error": str(e)}}
+            )
+            return None
+    
     def mark_mention_replied(self, post_id: str, mentioned_user_id: str) -> bool:
         """Mark a mention as replied."""
         try:

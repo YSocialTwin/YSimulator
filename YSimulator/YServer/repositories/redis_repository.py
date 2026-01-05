@@ -775,6 +775,26 @@ class RedisPostRepository(PostRepository):
             )
             return []
     
+    def get_mention_by_id(self, mention_id: str) -> Optional[Dict[str, Any]]:
+        """Get mention by ID."""
+        try:
+            mention_key = self._redis_key("mention", mention_id)
+            mention_data = self.redis.hgetall(mention_key)
+            
+            if not mention_data:
+                return None
+            
+            # Convert bytes to strings
+            mention_dict = {k.decode(): v.decode() for k, v in mention_data.items()}
+            
+            # Add alias for compatibility
+            mention_dict["mentioned_user_id"] = mention_dict.get("user_id", "")
+            
+            return mention_dict
+        except Exception as e:
+            self.logger.error(f"Error getting mention by ID from Redis: {e}")
+            return None
+    
     def mark_mention_replied(self, post_id: str, mentioned_user_id: str) -> bool:
         """Mark a mention as replied."""
         try:

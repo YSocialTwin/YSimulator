@@ -747,9 +747,7 @@ class SimulationClient(ActionExecutorMixin):
                         )
                         # Get current round_id from server
                         current_round_id = ray.get(self.server.get_current_round_id.remote())
-                        # TODO: Implement _evaluate_new_agents method
-                        # new_agents_count = self._evaluate_new_agents(current_round_id)
-                        new_agents_count = 0  # Temporarily disabled until method is implemented
+                        new_agents_count = self._evaluate_new_agents(current_round_id)
                         self.logger.info(
                             f"New agents evaluation complete: {new_agents_count} agents added"
                         )
@@ -2923,6 +2921,118 @@ class SimulationClient(ActionExecutorMixin):
             self.client_id,
             self.logger,
         )
+
+    def _evaluate_new_agents(self, current_round_id: str) -> int:
+        """
+        Evaluate and create new agents at end of day.
+        
+        Creates new agents by:
+        1. Calculating available slots based on non-churned population
+        2. For each slot, rolling probability to create agent
+        3. Selecting random template from existing agents
+        4. Generating realistic name with Faker
+        5. Batch registering with server
+        6. Updating agent_population.json
+        
+        Args:
+            current_round_id: Current round UUID
+            
+        Returns:
+            int: Number of new agents created
+        """
+        if not self.new_agents_enabled:
+            return 0
+            
+        try:
+            from faker import Faker
+            import uuid
+            
+            # Count non-churned agents
+            non_churned_agents = [a for a in self.agent_profiles if a.left_on is None]
+            num_non_churned = len(non_churned_agents)
+            
+            # Calculate available slots
+            num_slots = int(num_non_churned * self.percentage_new_agents)
+            
+            if num_slots == 0:
+                self.logger.info("No new agent slots available")
+                return 0
+            
+            # Roll probability for each slot
+            new_agents = []
+            fake = Faker()
+            existing_usernames = {a.username for a in self.agent_profiles}
+            
+            for _ in range(num_slots):
+                if random.random() < self.probability_new_agents:
+                    # Select random template
+                    template = random.choice(non_churned_agents)
+                    
+                    # Generate name based on template gender
+                    gender = getattr(template, "gender", "male")
+                    max_attempts = 10
+                    for attempt in range(max_attempts):
+                        if gender == "female":
+                            name = fake.name_female()
+                        else:
+                            name = fake.name_male()
+                        
+                        # Convert to username format
+                        username = name.replace(" ", "_").replace(".", "_")
+                        
+                        if username not in existing_usernames:
+                            break
+                    else:
+                        # Fallback with UUID if can't find unique name
+                        username = f"{name.replace(' ', '_')}_{str(uuid.uuid4())[:8]}"
+                    
+                    # Create new agent from template
+                    new_agent = AgentProfile(
+                        id=str(uuid.uuid4()),
+                        username=username,
+                        joined_on=current_round_id,
+                        left_on=None,
+                        # Copy attributes from template
+                        gender=getattr(template, "gender", "male"),
+                        archetype=template.archetype,
+                        llm=template.llm,
+                        round_actions=template.round_actions,
+                        daily_activity_level=getattr(template, "daily_activity_level", 1),
+                        activity_profile=getattr(template, "activity_profile", "Always On"),
+                        recsys_type=getattr(template, "recsys_type", "random"),
+                        frecsys_type=getattr(template, "frecsys_type", "random"),
+                        # Additional attributes
+                        leaning=getattr(template, "leaning", 0),
+                        leaning_bias=getattr(template, "leaning_bias", 1),
+                        profile=getattr(template, "profile", ""),
+                        action_likelihoods=getattr(template, "action_likelihoods", {}),
+                    )
+                    
+                    new_agents.append(new_agent)
+                    existing_usernames.add(username)
+                    self.logger.info(f"Created new agent: {username} (template: {template.username})")
+            
+            if not new_agents:
+                self.logger.info("No new agents created this evaluation")
+                return 0
+            
+            # Batch register with server
+            self.logger.info(f"Batch registering {len(new_agents)} new agents")
+            ray.get(self.server.register_agents.remote(new_agents))
+            
+            # Add to local agent_profiles
+            self.agent_profiles.extend(new_agents)
+            
+            # Update agent_population.json for persistence
+            for agent in new_agents:
+                self._add_agent_to_population_file(agent)
+            
+            self.logger.info(f"Successfully created and registered {len(new_agents)} new agents")
+            return len(new_agents)
+            
+        except Exception as e:
+            self.logger.error(f"Error evaluating new agents: {e}", exc_info=True)
+            return 0
 
     def shutdown(self) -> None:
         ray.get(self.server.deregister_client.remote(self.client_id))
