@@ -93,6 +93,19 @@ class ShareProcessor(BaseActionProcessor):
                     error="Failed to create share post"
                 )
             
+            # Link original post topics to share (shares inherit topics from original)
+            original_topic_ids = self.services.post_service.get_post_topics(action.target_post_id)
+            if original_topic_ids:
+                for topic_id in original_topic_ids:
+                    self.services.post_service.add_post_topic(post_id, topic_id)
+                self.logger.info(
+                    f"Linked {len(original_topic_ids)} topics from original post {action.target_post_id} to share {post_id}"
+                )
+            else:
+                self.logger.warning(
+                    f"No topics found on original post {action.target_post_id} for share {post_id}"
+                )
+            
             # Store opinion updates if calculated by client
             if hasattr(action, "updated_opinions") and action.updated_opinions:
                 parent_author_id = original_post.get("user_id")

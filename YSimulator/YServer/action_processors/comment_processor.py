@@ -112,6 +112,19 @@ class CommentProcessor(BaseActionProcessor):
                     f"Failed to increment reaction count for post {action.target_post_id}"
                 )
             
+            # Link parent post topics to comment (comments inherit topics from parent)
+            parent_topic_ids = self.services.post_service.get_post_topics(action.target_post_id)
+            if parent_topic_ids:
+                for topic_id in parent_topic_ids:
+                    self.services.post_service.add_post_topic(post_id, topic_id)
+                self.logger.info(
+                    f"Linked {len(parent_topic_ids)} topics from parent post {action.target_post_id} to comment {post_id}"
+                )
+            else:
+                self.logger.warning(
+                    f"No topics found on parent post {action.target_post_id} for comment {post_id}"
+                )
+            
             # Process annotations with parent sentiment
             if hasattr(action, "annotations") and action.annotations:
                 parent_sentiment = self._get_parent_sentiment(action.target_post_id)
