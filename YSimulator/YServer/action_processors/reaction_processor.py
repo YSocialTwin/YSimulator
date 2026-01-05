@@ -53,7 +53,7 @@ class ReactionProcessor(BaseActionProcessor):
             }
             
             # Create the reaction/interaction
-            success = self.services.content_service.add_interaction(interaction_data)
+            success = self.services.post_service.add_interaction(interaction_data)
             
             # Increment reaction count for the post
             if success:
@@ -163,7 +163,7 @@ class ReactionProcessor(BaseActionProcessor):
         Returns:
             Sentiment classification: "pos", "neg", "neu", or empty string
         """
-        parent_sentiment_data = self.services.post_service.get_post_sentiment(post_id)
+        parent_sentiment_data = self.services.metadata_service.get_post_sentiment(post_id)
         if parent_sentiment_data is not None:
             sentiment_parent_compound = parent_sentiment_data.get("compound")
             if sentiment_parent_compound is not None:

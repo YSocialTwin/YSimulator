@@ -688,13 +688,7 @@ class OrchestratorServer:
             mentioned_user = self.user_service.get_user_by_username(username)
             if mentioned_user:
                 # Add mention entry
-                mention_data = {
-                    "user_id": mentioned_user["id"],
-                    "post_id": post_id,
-                    "round": self.current_round_id,
-                    "answered": 0,
-                }
-                self.mention_service.add_mention(mention_data)
+                self.mention_service.add_mention(post_id, mentioned_user["id"])
                 self.logger.info(f"Added mention of @{username} in post {post_id}")
             else:
                 self.logger.warning(f"Mentioned user @{username} not found in database")

@@ -171,7 +171,7 @@ class CommentProcessor(BaseActionProcessor):
         Returns:
             Sentiment classification: "pos", "neg", "neu", or empty string
         """
-        parent_sentiment_data = self.services.post_service.get_post_sentiment(parent_post_id)
+        parent_sentiment_data = self.services.metadata_service.get_post_sentiment(parent_post_id)
         if parent_sentiment_data is not None:
             sentiment_parent_compound = parent_sentiment_data.get("compound")
             if sentiment_parent_compound is not None:
