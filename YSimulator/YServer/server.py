@@ -244,7 +244,21 @@ class OrchestratorServer:
                 self.logger
             )
             
-            # Create complete database adapter with ALL services
+            # Phase 5: Expose services directly for explicit usage
+            self.user_service = user_service
+            self.post_service = post_service
+            self.follow_service = follow_service
+            self.interest_service = interest_service
+            self.article_service = article_service
+            self.image_service = image_service
+            self.content_service = content_service
+            self.simulation_service = simulation_service
+            self.metadata_service = metadata_service
+            self.mention_service = mention_service
+            self.redis_client = redis_client
+            self.use_redis = redis_client is not None
+            
+            # Create database adapter for backwards compatibility (will be phased out)
             self.db = DatabaseServiceAdapter(
                 user_service=user_service,
                 post_service=post_service,
@@ -261,10 +275,11 @@ class OrchestratorServer:
             )
             use_new_pattern = True
             self.logger.info(
-                "Orchestrator server initialized - Repository/Service pattern 100% MIGRATED!",
+                "Orchestrator server initialized - Repository/Service pattern 100% with direct service access!",
                 extra={
-                    "migration_status": "100_PERCENT_COMPLETE",
+                    "migration_status": "PHASE_5_COMPLETE",
                     "services": "User, Post, Follow, Interest, Article, Image, Content, Simulation, Metadata, Mention",
+                    "service_access": "Direct - no adapter facade",
                     "legacy_middleware": "None - fully eliminated"
                 }
             )
@@ -284,7 +299,7 @@ class OrchestratorServer:
         )
 
         # Initialize emotions table
-        self.db.initialize_emotions_table()
+        self.metadata_service.initialize_emotions_table()
 
         # Initialize action router for modular action processing
         from YSimulator.YServer.action_processors.action_router import ActionRouter
@@ -658,17 +673,17 @@ class OrchestratorServer:
         hashtags = annotations.get("hashtags", [])
         for hashtag_text in hashtags:
             # Get or create hashtag
-            hashtag_id = self.db.add_or_get_hashtag(hashtag_text)
+            hashtag_id = self.metadata_service.add_or_get_hashtag(hashtag_text)
             if hashtag_id:
                 # Link hashtag to post
-                self.db.add_post_hashtag(post_id, hashtag_id)
+                self.metadata_service.add_post_hashtag(post_id, hashtag_id)
                 self.logger.info(f"Linked hashtag '{hashtag_text}' to post {post_id}")
 
         # Process mentions
         mentions = annotations.get("mentions", [])
         for username in mentions:
             # Check if user exists
-            mentioned_user = self.db.get_user_by_username(username)
+            mentioned_user = self.user_service.get_user_by_username(username)
             if mentioned_user:
                 # Add mention entry
                 mention_data = {
@@ -677,7 +692,7 @@ class OrchestratorServer:
                     "round": self.current_round_id,
                     "answered": 0,
                 }
-                self.db.add_mention(mention_data)
+                self.mention_service.add_mention(mention_data)
                 self.logger.info(f"Added mention of @{username} in post {post_id}")
             else:
                 self.logger.warning(f"Mentioned user @{username} not found in database")
@@ -689,11 +704,11 @@ class OrchestratorServer:
                 f"Processing sentiment for post {post_id}: compound={sentiment_scores.get('compound', 0):.3f}"
             )
             # Get topics associated with this post/comment
-            topic_ids = self.db.get_post_topics(post_id)
+            topic_ids = self.post_service.get_post_topics(post_id)
 
             # If comment without topics yet, get parent's topics
             if not topic_ids and parent_post_id:
-                topic_ids = self.db.get_post_topics(parent_post_id)
+                topic_ids = self.post_service.get_post_topics(parent_post_id)
                 if topic_ids:
                     self.logger.info(
                         f"Using {len(topic_ids)} topics from parent post {parent_post_id} for comment {post_id}"
@@ -720,7 +735,7 @@ class OrchestratorServer:
                     "is_comment": 1 if is_comment else 0,
                     "is_reaction": 0,
                 }
-                success = self.db.add_post_sentiment(sentiment_data)
+                success = self.metadata_service.add_post_sentiment(sentiment_data)
                 if success:
                     self.logger.info(f"Added sentiment entry for post {post_id}, topic {topic_id}")
                 else:
@@ -752,7 +767,7 @@ class OrchestratorServer:
                 "sexually_explicit": toxicity_scores.get("SEXUALLY_EXPLICIT", 0.0),
                 "flirtation": toxicity_scores.get("FLIRTATION", 0.0),
             }
-            success = self.db.add_post_toxicity(toxicity_data)
+            success = self.metadata_service.add_post_toxicity(toxicity_data)
             if success:
                 self.logger.info(f"Successfully added toxicity data for post {post_id}")
             else:
@@ -766,10 +781,10 @@ class OrchestratorServer:
             self.logger.info(f"Processing emotions for post {post_id}: {emotions}")
             for emotion_name in emotions:
                 # Get emotion from database
-                emotion = self.db.get_emotion_by_name(emotion_name)
+                emotion = self.metadata_service.get_emotion_by_name(emotion_name)
                 if emotion:
                     # Add post emotion association
-                    success = self.db.add_post_emotion(post_id, emotion["id"])
+                    success = self.metadata_service.add_post_emotion(post_id, emotion["id"])
                     if success:
                         self.logger.info(f"Added emotion '{emotion_name}' to post {post_id}")
                     else:
@@ -824,7 +839,7 @@ class OrchestratorServer:
         Returns:
             str: Topic UUID or None if not found
         """
-        return self.db.get_topic_id_by_name(topic_name)
+        return self.interest_service.get_topic_id_by_name(topic_name)
 
     def store_article_topics(self, article_id: str, topic_names: List[str]) -> List[str]:
         """
@@ -917,7 +932,7 @@ class OrchestratorServer:
 
         try:
             # Batch register users - returns (count, set of newly registered IDs)
-            registered_count, newly_registered_ids = self.db.register_users_batch(users_data)
+            registered_count, newly_registered_ids = self.user_service.register_users_batch(users_data)
 
             # All agents (new and existing) should be in registered_agents dict
             # Also cache agent profiles for opinion lookups (when opinion dynamics enabled)
@@ -949,10 +964,10 @@ class OrchestratorServer:
                     # Get interest IDs for the agent's topics
                     for topic_name, opinion_value in agent_profile.opinions.items():
                         # Get or create the interest/topic in the database
-                        topic_id = self.db.add_or_get_interest(topic_name)
+                        topic_id = self.interest_service.add_or_get_interest(topic_name)
                         if topic_id:
                             # Store initial opinion with no interaction references
-                            self.db.add_agent_opinion(
+                            self.interest_service.add_agent_opinion(
                                 agent_id=agent_id,
                                 round_id=self.current_round_id,
                                 topic_id=topic_id,
@@ -964,7 +979,7 @@ class OrchestratorServer:
             # Batch register websites for page agents
             pages_registered = 0
             if websites_data:
-                pages_registered = self.db.add_websites_batch(websites_data)
+                pages_registered = self.content_service.add_websites_batch(websites_data)
 
             execution_time = (time.time() - start_time) * 1000
 
@@ -1019,7 +1034,7 @@ class OrchestratorServer:
             bool: True if successful, False otherwise
         """
         try:
-            success = self.db.add_follow(follow_data)
+            success = self.follow_service.add_follow(follow_data)
             return success
         except Exception as e:
             self.logger.error(
@@ -1098,7 +1113,7 @@ class OrchestratorServer:
             int: Number of follow relationships successfully added
         """
         try:
-            count = self.db.add_follows_batch(follows_data)
+            count = self.follow_service.add_follows_batch(follows_data)
             self.logger.info(
                 f"Batch added {count} follow relationships",
                 extra={"extra_data": {"count": count, "batch_size": len(follows_data)}},
@@ -1124,7 +1139,7 @@ class OrchestratorServer:
         """
         try:
             # Get or create the first round (day 1, slot 1)
-            first_round_id = self.db.get_or_create_round(1, 1)
+            first_round_id = self.simulation_service.get_or_create_round(1, 1)
             self.logger.info(f"Retrieved first round ID: {first_round_id}")
             return first_round_id
         except Exception as e:
@@ -1184,7 +1199,7 @@ class OrchestratorServer:
         Returns:
             List[Dict]: List of mention records with keys: id, user_id, post_id, round, answered
         """
-        result = self.db.get_unreplied_mentions(user_id)
+        result = self.mention_service.get_unreplied_mentions(user_id)
         self.logger.debug(
             f"[REPLY_SERVER] get_unreplied_mentions for user {user_id}: found {len(result)} unreplied mentions"
         )
@@ -1200,7 +1215,7 @@ class OrchestratorServer:
         Returns:
             bool: True if successful, False otherwise
         """
-        result = self.db.mark_mention_replied(mention_id)
+        result = self.mention_service.mark_mention_replied(mention_id)
         self.logger.debug(
             f"[REPLY_SERVER] mark_mention_replied for mention {mention_id}: success={result}"
         )
@@ -1381,7 +1396,7 @@ class OrchestratorServer:
             if actions:
                 active_agent_ids = set(act.agent_id for act in actions)
                 for agent_id in active_agent_ids:
-                    self.db.update_agent_last_active_day(agent_id, self.day)
+                    self.user_service.update_agent_last_active_day(agent_id, self.day)
 
             execution_time = (time.time() - start_time) * 1000
 
@@ -1442,7 +1457,7 @@ class OrchestratorServer:
         Returns:
             List of agent IDs (strings) that are inactive
         """
-        return self.db.get_inactive_agents(current_day, inactivity_threshold)
+        return self.user_service.get_inactive_agents(current_day, inactivity_threshold)
 
     def set_agent_churned(self, agent_id: str, round_id: str) -> bool:
         """
@@ -1455,7 +1470,7 @@ class OrchestratorServer:
         Returns:
             bool: True if successful
         """
-        return self.db.set_agent_churned(agent_id, round_id)
+        return self.user_service.set_agent_churned(agent_id, round_id)
 
     def set_agents_churned_batch(self, agent_ids: List[str], round_id: str) -> int:
         """
@@ -1470,7 +1485,7 @@ class OrchestratorServer:
         """
         churned_count = 0
         for agent_id in agent_ids:
-            if self.db.set_agent_churned(agent_id, round_id):
+            if self.user_service.set_agent_churned(agent_id, round_id):
                 churned_count += 1
         return churned_count
 
@@ -1481,7 +1496,7 @@ class OrchestratorServer:
         Returns:
             List of agent IDs (UUID strings) that are churned
         """
-        return self.db.get_churned_agents()
+        return self.user_service.get_churned_agents()
 
     def add_website(self, website_data: dict) -> Optional[str]:
         """
@@ -1495,7 +1510,7 @@ class OrchestratorServer:
         Returns:
             str: Website ID if successful, None otherwise
         """
-        return self.db.add_website(website_data)
+        return self.content_service.add_website(website_data)
 
     def get_website_by_rss(self, rss_url: str) -> Optional[dict]:
         """
@@ -1509,7 +1524,7 @@ class OrchestratorServer:
         Returns:
             dict: Website information if found, None otherwise
         """
-        return self.db.get_website_by_rss(rss_url)
+        return self.content_service.get_website_by_rss(rss_url)
 
     def add_article(self, article_data: dict) -> Optional[str]:
         """
@@ -1523,7 +1538,7 @@ class OrchestratorServer:
         Returns:
             str: Article ID if successful, None otherwise
         """
-        return self.db.add_article(article_data)
+        return self.article_service.add_article(article_data)
 
     def add_image(self, image_data: dict) -> Optional[str]:
         """
@@ -1537,7 +1552,7 @@ class OrchestratorServer:
         Returns:
             str: Image ID if successful, None otherwise
         """
-        return self.db.add_image(image_data)
+        return self.image_service.add_image(image_data)
 
     def get_random_image(self) -> Optional[dict]:
         """
@@ -1548,7 +1563,7 @@ class OrchestratorServer:
         Returns:
             dict: Image data or None if no images available
         """
-        return self.db.get_random_image()
+        return self.image_service.get_random_image()
 
     def get_interest_by_id(self, interest_id: str) -> Optional[dict]:
         """
@@ -1562,7 +1577,7 @@ class OrchestratorServer:
         Returns:
             dict: Interest data or None if not found
         """
-        return self.db.get_interest_by_id(interest_id)
+        return self.interest_service.get_interest_by_id(interest_id)
 
     def _check_barrier_and_advance(self) -> None:
         """
@@ -1656,14 +1671,12 @@ class OrchestratorServer:
                 session.close()
 
             # Also save to Redis if enabled
-            if self.db.use_redis:
+            if self.use_redis:
                 # Store recommendation in Redis with key format: ysim:recommendations:{user_id}:{round_id}
-                rec_key = self.db._redis_key(
-                    "recommendations", f"{agent_id}:{self.current_round_id}"
-                )
-                self.db.redis_client.set(rec_key, post_ids_str)
+                rec_key = f"ysim:recommendations:{agent_id}:{self.current_round_id}"
+                self.redis_client.set(rec_key, post_ids_str)
                 # Set TTL to prevent unbounded growth
-                self.db.redis_client.expire(rec_key, RECOMMENDATION_TTL_SECONDS)
+                self.redis_client.expire(rec_key, RECOMMENDATION_TTL_SECONDS)
 
             self.logger.debug(
                 f"Saved recommendation for agent {agent_id}: {len(post_ids)} posts",
@@ -1734,7 +1747,7 @@ class OrchestratorServer:
         Returns:
             Dictionary with post data or None if not found
         """
-        return self.db.get_post(post_id)
+        return self.post_service.get_post(post_id)
 
     @log_server_request
     def get_thread_context(
@@ -1756,7 +1769,7 @@ class OrchestratorServer:
             List of dicts with keys: id, user_id, username, tweet, round
             in chronological order (oldest first)
         """
-        return self.db.get_thread_context(post_id, max_length)
+        return self.post_service.get_thread_context(post_id, max_length)
 
     @log_server_request
     def get_user(self, user_id: str, client_id: str = None) -> Optional[Dict[str, Any]]:
@@ -1770,7 +1783,7 @@ class OrchestratorServer:
         Returns:
             Dictionary with user data or None if not found
         """
-        return self.db.get_user(user_id)
+        return self.user_service.get_user(user_id)
 
     @log_server_request
     def search_posts_by_topic(
@@ -1787,7 +1800,7 @@ class OrchestratorServer:
         Returns:
             List[str]: List of post UUIDs from other users on this topic
         """
-        return self.db.search_posts_by_topic(topic_id, agent_id, limit)
+        return self.post_service.search_posts_by_topic(topic_id, agent_id, limit)
 
     @log_server_request
     def get_post_topics(self, post_id: str, client_id: str = None) -> List[str]:
@@ -1801,7 +1814,7 @@ class OrchestratorServer:
         Returns:
             List of topic UUIDs
         """
-        return self.db.get_post_topics(post_id)
+        return self.post_service.get_post_topics(post_id)
 
     @log_server_request
     def get_topic_name_from_id(self, topic_id: str, client_id: str = None) -> Optional[str]:
