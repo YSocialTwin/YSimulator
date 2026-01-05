@@ -59,16 +59,13 @@ class FollowProcessor(BaseActionProcessor):
                     error="Missing required field: target_user_id"
                 )
             
-            # Build follow relationship data
-            follow_data = {
-                "follower_id": str(action.agent_id),  # Agent who is following
-                "user_id": str(action.target_user_id),  # User being followed (ensure string)
-                "action": "follow",
-                "round": context.current_round_id,
-            }
-            
             # Create the follow relationship
-            success = self.services.follow_service.add_follow(follow_data)
+            # FollowService.add_follow expects: follower_id, followee_id, round_id
+            success = self.services.follow_service.add_follow(
+                follower_id=str(action.agent_id),
+                followee_id=str(action.target_user_id),
+                round_id=context.current_round_id
+            )
             
             if not success:
                 self.logger.warning(

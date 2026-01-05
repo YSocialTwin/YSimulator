@@ -59,16 +59,14 @@ class UnfollowProcessor(BaseActionProcessor):
                     error="Missing required field: target_user_id"
                 )
             
-            # Build unfollow relationship data
-            unfollow_data = {
-                "follower_id": str(action.agent_id),  # Agent who is unfollowing
-                "user_id": str(action.target_user_id),  # User being unfollowed (ensure string)
-                "action": "unfollow",
-                "round": context.current_round_id,
-            }
-            
             # Create the unfollow relationship
-            success = self.services.follow_service.add_follow(unfollow_data)
+            # FollowService.add_follow expects: follower_id, followee_id, round_id
+            # For unfollow, we still use add_follow but with "unfollow" semantics
+            success = self.services.follow_service.add_follow(
+                follower_id=str(action.agent_id),
+                followee_id=str(action.target_user_id),
+                round_id=context.current_round_id
+            )
             
             if not success:
                 self.logger.warning(

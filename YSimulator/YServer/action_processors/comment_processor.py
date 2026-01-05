@@ -87,7 +87,7 @@ class CommentProcessor(BaseActionProcessor):
             }
             
             # Create the comment as a post
-            post_id = self.services.post_service.add_post(post_data)
+            post_id = self.services.post_service.create_post(post_data)
             
             if not post_id:
                 self.logger.warning(
