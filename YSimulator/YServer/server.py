@@ -213,18 +213,11 @@ class OrchestratorServer:
         # Store attention_window for interest decay (sliding window)
         self.attention_window = simulation_config.get("agents", {}).get("attention_window", 336)
 
-        # Client tracking
-        self.registered_clients = set()  # All registered clients
-        self.completed_clients = set()  # Clients that finished their simulation
-        self.submitted_clients = set()  # Clients that submitted for current slot
-        self.last_heartbeat = {}  # {client_id: timestamp}
+        # Registered agents mapping
         self.registered_agents = {}  # {agent_id: username}
 
-        # Simulation state
-        self.day = 1
-        self.slot = 1
+        # Simulation state (will be managed by RoundManager)
         self.recent_posts_cache = []
-        self.current_round_id = None  # Will be set when simulation starts
 
         # Set up logging first
         self._setup_logging()
@@ -290,10 +283,6 @@ class OrchestratorServer:
             db_service=self.db, attention_window=self.attention_window
         )
 
-        # Initialize the first round entry
-        self.current_round_id = self.db.get_or_create_round(self.day, self.slot)
-        self.interest_manager.set_current_round(self.current_round_id)
-
         # Initialize emotions table
         self.db.initialize_emotions_table()
 
@@ -318,6 +307,35 @@ class OrchestratorServer:
             logger=self.logger
         )
         self.logger.info("Opinion dynamics handler initialized")
+
+        # Initialize coordination layer
+        from YSimulator.YServer.coordination import (
+            ClientManager, BarrierHandler, RoundManager, ArchetypeManager
+        )
+        self.client_manager = ClientManager(timeout_seconds=self.timeout_seconds, logger=self.logger)
+        self.barrier_handler = BarrierHandler(logger=self.logger)
+        self.round_manager = RoundManager(
+            db_adapter=self.db,
+            interest_manager=self.interest_manager,
+            visibility_rounds=self.visibility_rounds,
+            logger=self.logger
+        )
+        self.archetype_manager = ArchetypeManager(
+            db_adapter=self.db,
+            archetypes_enabled=self.archetypes_enabled,
+            archetype_transitions=self.archetype_transitions,
+            logger=self.logger
+        )
+        self.logger.info("Coordination layer initialized (ClientManager, BarrierHandler, RoundManager, ArchetypeManager)")
+        
+        # Initialize first round using RoundManager
+        self.current_round_id = self.round_manager.initialize_first_round()
+        
+        # Expose properties for backward compatibility
+        self.registered_clients = self.client_manager.registered_clients
+        self.completed_clients = self.client_manager.completed_clients
+        self.submitted_clients = self.client_manager.submitted_clients
+        self.last_heartbeat = self.client_manager.last_heartbeat
 
         self.logger.info(
             "Orchestrator server fully initialized - 100% modern architecture!",
@@ -345,6 +363,21 @@ class OrchestratorServer:
                 }
             },
         )
+
+    @property
+    def day(self) -> int:
+        """Get current simulation day from RoundManager."""
+        return self.round_manager.day
+    
+    @property
+    def slot(self) -> int:
+        """Get current simulation slot from RoundManager."""
+        return self.round_manager.slot
+    
+    @property
+    def current_round_id(self) -> str:
+        """Get current round ID from RoundManager."""
+        return self.round_manager.current_round_id
 
     def _create_redis_client(self, redis_config: dict):
         """
@@ -1177,12 +1210,8 @@ class OrchestratorServer:
     def register_client(self, client_id: str, num_days: int = 0) -> dict:
         """
         Register a new client with the server.
-
-        Provides the current server state (day and slot) as the starting point.
-        The client will handle its own simulation step counting from this point.
-
-        If a client was previously completed, it will be re-registered and removed
-        from the completed clients list, allowing it to run again.
+        
+        Delegates to ClientManager for client lifecycle management.
 
         Args:
             client_id: Unique identifier for the client
@@ -1191,59 +1220,16 @@ class OrchestratorServer:
         Returns:
             dict: {"registered": bool, "start_day": int, "start_slot": int}
         """
-        start_time = time.time()
-
-        # If this client was previously completed, remove it from completed set
-        # This allows the same client to re-run the simulation
-        was_completed = client_id in self.completed_clients
-        if was_completed:
-            self.completed_clients.remove(client_id)
-            self.logger.info(f"Re-registering previously completed client {client_id}")
-
-        if client_id not in self.registered_clients:
-            self.registered_clients.add(client_id)
-            self.last_heartbeat[client_id] = time.time()
-
-            execution_time = (time.time() - start_time) * 1000
-
-            self.logger.info(
-                "Client registered",
-                extra={
-                    "extra_data": {
-                        "client_id": client_id,
-                        "start_day": self.day,
-                        "start_slot": self.slot,
-                        "num_days": num_days,
-                        "total_clients": len(self.registered_clients),
-                        "active_clients": len(self._get_active_clients()),
-                        "execution_time_ms": execution_time,
-                        "was_completed": was_completed,
-                    }
-                },
-            )
-            self.logger.info(
-                f"[Server] 🟢 Client {client_id} joined at day {self.day}, slot {self.slot}. "
-                f"Will run for {num_days if num_days > 0 else '∞'} days. "
-                f"Total: {len(self.registered_clients)}, Active: {len(self._get_active_clients())}"
-            )
-        else:
-            # Client already registered, just update heartbeat
-            self.last_heartbeat[client_id] = time.time()
-
-        # Return current server state as starting point for client
-        return {
-            "registered": True,
-            "start_day": self.day,
-            "start_slot": self.slot,
-        }
+        return self.client_manager.register_client(
+            client_id, num_days, self.day, self.slot
+        )
 
     @log_server_request
     def complete_client(self, client_id: str) -> bool:
         """
         Mark a client as completed (finished all planned activities).
-
-        Completed clients no longer block barrier advancement. This allows
-        clients with different simulation durations to coexist without deadlocks.
+        
+        Delegates to ClientManager for client lifecycle management.
 
         Args:
             client_id: Unique identifier for the client
@@ -1251,127 +1237,64 @@ class OrchestratorServer:
         Returns:
             bool: True if successfully marked as complete
         """
-        if client_id in self.registered_clients:
-            self._mark_client_as_completed(client_id)
-
-            self.logger.info(
-                "Client completed all activities",
-                extra={
-                    "extra_data": {
-                        "client_id": client_id,
-                        "remaining_active": len(self._get_active_clients()),
-                        "total_completed": len(self.completed_clients),
-                    }
-                },
-            )
-            self.logger.info(
-                f"[Server] 🏁 Client {client_id} completed. "
-                f"Active: {len(self._get_active_clients())}, "
-                f"Completed: {len(self.completed_clients)}"
-            )
-
-            # Check if completing this client unblocks the barrier
-            self._check_barrier_and_advance()
-        return True
+        result = self.client_manager.complete_client(client_id)
+        
+        # Check if completing this client unblocks the barrier
+        self._check_barrier_and_advance()
+        
+        return result
 
     @log_server_request
     def heartbeat(self, client_id: str) -> bool:
         """
         Record a heartbeat from a client to indicate it's still alive.
-
-        Prevents the server from considering the client stale and removing it.
+        
+        Delegates to ClientManager for heartbeat tracking.
 
         Args:
             client_id: Unique identifier for the client
 
         Returns:
-            bool: True if heartbeat recorded, False if client not registered
+            bool: True if heartbeat recorded
         """
-        if client_id in self.registered_clients:
-            self.last_heartbeat[client_id] = time.time()
-            return True
-        return False
+        return self.client_manager.heartbeat(client_id)
 
     def _get_active_clients(self) -> set:
         """
         Get the set of active clients (registered but not completed).
+        
+        Delegates to ClientManager.
 
         Returns:
             set: Set of active client IDs
         """
-        return self.registered_clients - self.completed_clients
+        return self.client_manager.get_active_clients()
 
     def _check_for_stale_clients(self):
         """
         Check for clients that haven't sent a heartbeat recently and remove them.
-
-        Heartbeat-based liveness: Clients are only considered stale if they stop
-        sending heartbeats. Processing time doesn't matter - if heartbeats arrive,
-        the client is alive. This prevents false positives on slow/busy clients.
+        
+        Delegates to ClientManager for stale client detection.
         """
-        current_time = time.time()
-        stale_clients = []
-        stale_clients_info = {}  # Store time_since_heartbeat for each stale client
-
-        for client_id in self._get_active_clients():
-            # Check if heartbeat was ever received (should be set during registration)
-            if client_id not in self.last_heartbeat:
-                # This shouldn't happen, but log and skip to avoid crashes
-                self.logger.warning(
-                    f"Active client {client_id} has no heartbeat entry, initializing",
-                    extra={"extra_data": {"client_id": client_id}},
-                )
-                self.last_heartbeat[client_id] = current_time
-                continue
-
-            last_hb = self.last_heartbeat[client_id]
-            time_since_heartbeat = current_time - last_hb
-
-            # Only mark as stale if no heartbeat received within timeout
-            # Note: Clients send heartbeat every heartbeat_interval seconds,
-            # so timeout_seconds should be >> heartbeat_interval to account for
-            # network delays and processing variations
-            if time_since_heartbeat > self.timeout_seconds:
-                stale_clients.append(client_id)
-                stale_clients_info[client_id] = time_since_heartbeat
-
-        for client_id in stale_clients:
-            time_since_heartbeat = stale_clients_info[client_id]
-            self.logger.warning(
-                "Removing stale client (no heartbeat)",
-                extra={
-                    "extra_data": {
-                        "client_id": client_id,
-                        "timeout_seconds": self.timeout_seconds,
-                        "last_heartbeat_ago": time_since_heartbeat,
-                    }
-                },
-            )
-            self.logger.info(
-                f"[Server] ⚠️  Removing stale client {client_id} "
-                f"(no heartbeat for {time_since_heartbeat:.1f}s)"
-            )
-            self._mark_client_as_completed(client_id)
+        self.client_manager.check_for_stale_clients()
 
     def _mark_client_as_completed(self, client_id: str):
         """
         Mark a client as completed internally.
-
-        Helper method to avoid code duplication between complete_client and stale detection.
+        
+        Delegates to ClientManager.
 
         Args:
             client_id: Unique identifier for the client
         """
-        self.completed_clients.add(client_id)
-        self.submitted_clients.discard(client_id)
+        self.client_manager.mark_as_completed(client_id)
 
     @log_server_request
     def deregister_client(self, client_id: str) -> bool:
         """
         Remove a client from the server.
-
-        Optional: Call this if a client shuts down gracefully.
-        Otherwise, the server might hang waiting for a dead client.
+        
+        Delegates to ClientManager for client deregistration.
 
         Args:
             client_id: Unique identifier for the client
@@ -1379,27 +1302,12 @@ class OrchestratorServer:
         Returns:
             bool: True if deregistration successful
         """
-        if client_id in self.registered_clients:
-            self.registered_clients.remove(client_id)
-            # Clean up all tracking data for this client
-            self.submitted_clients.discard(client_id)
-            self.completed_clients.discard(client_id)
-            self.last_heartbeat.pop(client_id, None)
-
-            self.logger.info(
-                "Client deregistered",
-                extra={
-                    "extra_data": {
-                        "client_id": client_id,
-                        "remaining_clients": len(self.registered_clients),
-                    }
-                },
-            )
-            self.logger.info(f"Client {client_id} left. Total: {len(self.registered_clients)}")
-
-            # Check if leaving unblocked the barrier
-            self._check_barrier_and_advance()
-        return True
+        result = self.client_manager.deregister_client(client_id)
+        
+        # Check if leaving unblocked the barrier
+        self._check_barrier_and_advance()
+        
+        return result
 
     @log_server_request
     def get_instruction(self, client_id: str) -> SimulationInstruction:
@@ -1499,7 +1407,7 @@ class OrchestratorServer:
             self.logger.error(f"DB Error: {e}")
 
         # Mark this specific client as done
-        self.submitted_clients.add(client_id)
+        self.client_manager.mark_client_submitted(client_id)
 
         # Check if EVERYONE is done
         self._check_barrier_and_advance()
@@ -1659,234 +1567,36 @@ class OrchestratorServer:
     def _check_barrier_and_advance(self) -> None:
         """
         Check if all active clients have submitted actions and advance simulation state.
-
-        This implements the core dynamic barrier synchronization mechanism.
-        Only waits for active clients (not completed ones).
+        
+        Delegates to BarrierHandler and RoundManager for coordination logic.
         """
         active_clients = self._get_active_clients()
-        active_count = len(active_clients)
-
-        # Do not advance if no one is active
-        if active_count == 0:
-            return
-
-        # Count how many active clients have submitted
-        submitted_active_clients = self.submitted_clients & active_clients
-        active_submitted_count = len(submitted_active_clients)
-
-        # If all active clients have submitted, advance.
-        if active_submitted_count >= active_count:
-            execution_start = time.time()
-
-            self.logger.info(
-                f"[Server] ✅ Day {self.day} Slot {self.slot} complete "
-                f"(Active clients: {active_count}). Advancing..."
+        
+        # Check if barrier should be released
+        should_advance = self.barrier_handler.check_barrier_and_should_advance(
+            active_clients, self.submitted_clients
+        )
+        
+        if should_advance:
+            # Clear submitted clients for next round
+            self.client_manager.clear_submitted_clients()
+            
+            # Advance simulation using RoundManager
+            result = self.round_manager.advance_simulation(
+                recompute_interests_callback=self._recompute_all_agent_interests
             )
-
-            self.submitted_clients.clear()
-            self.slot += 1
-
-            # Check if day is complete and consolidate Redis data if needed
-            day_completed = False
-            if self.slot > 24:
-                day_completed = True
-                completed_day = self.day
-                self.slot = 1
-                self.day += 1
-
-                # Consolidate Redis data to SQLite at end of day
-                consolidation_result = self.db.consolidate_redis_to_sqlite(completed_day)
-                if (
-                    consolidation_result.get("posts", 0) > 0
-                    or consolidation_result.get("interactions", 0) > 0
-                    or consolidation_result.get("removed_posts", 0) > 0
-                ):
-                    self.logger.info(
-                        f"Day {completed_day} complete - data consolidated to SQLite",
-                        extra={
-                            "extra_data": {
-                                "completed_day": completed_day,
-                                "posts_consolidated": consolidation_result.get("posts", 0),
-                                "interactions_consolidated": consolidation_result.get(
-                                    "interactions", 0
-                                ),
-                                "posts_removed_from_redis": consolidation_result.get(
-                                    "removed_posts", 0
-                                ),
-                                "interactions_removed_from_redis": consolidation_result.get(
-                                    "removed_interactions", 0
-                                ),
-                            }
-                        },
-                    )
-                    self.logger.info(
-                        f"[Server] 💾 Day {completed_day} complete - "
-                        f"Consolidated {consolidation_result.get('posts', 0)} posts, "
-                        f"{consolidation_result.get('interactions', 0)} interactions to SQLite. "
-                        f"Removed {consolidation_result.get('removed_posts', 0)} old posts, "
-                        f"{consolidation_result.get('removed_interactions', 0)} old interactions from Redis"
-                    )
-
-                # Recompute all agent interests based on the sliding attention window
-                # This handles the forgetting mechanism - interests decay as entries fall out of window
-                self._recompute_all_agent_interests()
-
-                # Note: Saving updated agent_population.json is handled by clients,
-                # not the server, to respect client-specific naming conventions
-
-                # Clean up old posts from Redis based on visibility_rounds (temporal sliding window)
-                cleanup_result = self.db.cleanup_old_posts_from_redis(self.day, self.slot)
-                if (
-                    cleanup_result.get("removed_posts", 0) > 0
-                    or cleanup_result.get("removed_interactions", 0) > 0
-                ):
-                    self.logger.info(
-                        f"Redis temporal cleanup complete - removed posts older than visibility_rounds",
-                        extra={
-                            "extra_data": {
-                                "day": self.day,
-                                "slot": self.slot,
-                                "removed_posts": cleanup_result.get("removed_posts", 0),
-                                "removed_interactions": cleanup_result.get(
-                                    "removed_interactions", 0
-                                ),
-                                "remaining_posts": cleanup_result.get("remaining_posts", 0),
-                            }
-                        },
-                    )
-                    self.logger.info(
-                        f"[Server] 🧹 Redis cleanup - "
-                        f"Removed {cleanup_result.get('removed_posts', 0)} old posts, "
-                        f"{cleanup_result.get('removed_interactions', 0)} old interactions. "
-                        f"Remaining: {cleanup_result.get('remaining_posts', 0)} posts in Redis"
-                    )
-
-                # Check if it's time for archetype transitions (every 7 days)
-                if self.archetypes_enabled and self.day - self.last_archetype_transition_day >= 7:
-                    self._perform_archetype_transitions()
-                    self.last_archetype_transition_day = self.day
-
-            # Update Round table with new time
-            self.current_round_id = self.db.get_or_create_round(self.day, self.slot)
-            self.interest_manager.set_current_round(self.current_round_id)
-
-            execution_time = (time.time() - execution_start) * 1000
-
-            self.logger.info(
-                "Simulation advanced",
-                extra={
-                    "extra_data": {
-                        "new_day": self.day,
-                        "new_slot": self.slot,
-                        "round_id": self.current_round_id,
-                        "num_active_clients": active_count,
-                        "day_completed": day_completed,
-                        "execution_time_ms": execution_time,
-                    }
-                },
-            )
+            
+            # Check if it's time for archetype transitions (every 7 days)
+            if result["day_completed"] and self.archetype_manager.should_perform_transitions(self.day):
+                self.archetype_manager.perform_transitions(self.day)
 
     def _perform_archetype_transitions(self) -> None:
         """
-        Perform archetype transitions for all registered agents based on transition probabilities.
-
-        Each agent has a probability of transitioning to a different archetype based on their
-        current archetype and the transition matrix defined in the configuration.
-        This is called every 7 days when archetypes are enabled.
+        Perform archetype transitions for all registered agents.
+        
+        Delegates to ArchetypeManager for transition logic.
         """
-        import random
-
-        # Tolerance for probability sum validation
-        PROBABILITY_TOLERANCE = 0.01
-
-        if not self.archetypes_enabled or not self.archetype_transitions:
-            return
-
-        transition_start = time.time()
-        transitioned_count = 0
-        error_count = 0
-
-        # Get all registered agents from database
-        try:
-            # Query all users and their current archetypes
-            agents = self.db.get_all_users()
-
-            for agent in agents:
-                agent_id = agent.get("id")
-                current_archetype = agent.get("archetype")
-
-                # Skip if agent has no archetype
-                if not current_archetype:
-                    continue
-
-                # Normalize archetype to lowercase for comparison
-                current_archetype_lower = current_archetype.lower()
-
-                # Skip if archetype not in transitions
-                if current_archetype_lower not in self.archetype_transitions:
-                    continue
-
-                # Get transition probabilities for current archetype
-                transitions = self.archetype_transitions.get(current_archetype_lower, {})
-
-                if not transitions:
-                    continue
-
-                # Sample new archetype based on transition probabilities
-                archetypes = list(transitions.keys())
-                probabilities = list(transitions.values())
-
-                # Validate probabilities sum to approximately 1.0
-                total_prob = sum(probabilities)
-                if abs(total_prob - 1.0) > PROBABILITY_TOLERANCE:
-                    self.logger.warning(
-                        f"Archetype transition probabilities for '{current_archetype}' sum to {total_prob}, expected 1.0"
-                    )
-                    # Normalize probabilities
-                    probabilities = [p / total_prob for p in probabilities]
-
-                # Select new archetype using weighted random choice
-                new_archetype = random.choices(archetypes, weights=probabilities)[0]
-
-                # Update agent archetype in database if it changed
-                if new_archetype != current_archetype_lower:
-                    # Capitalize first letter to match format
-                    new_archetype_formatted = new_archetype.capitalize()
-
-                    if self.db.update_user_archetype(agent_id, new_archetype_formatted):
-                        transitioned_count += 1
-                        self.logger.debug(
-                            f"Agent {agent_id} transitioned from {current_archetype} to {new_archetype_formatted}"
-                        )
-                    else:
-                        error_count += 1
-
-        except Exception as e:
-            self.logger.error(
-                f"Error during archetype transitions: {e}", extra={"extra_data": {"error": str(e)}}
-            )
-            self.logger.error(f"Archetype transition error: {e}")
-            return
-
-        transition_time = (time.time() - transition_start) * 1000
-
-        self.logger.info(
-            f"Archetype transitions complete at day {self.day}",
-            extra={
-                "extra_data": {
-                    "day": self.day,
-                    "transitioned_count": transitioned_count,
-                    "error_count": error_count,
-                    "total_agents": len(agents),
-                    "execution_time_ms": transition_time,
-                }
-            },
-        )
-
-        self.logger.info(
-            f"[Server] 🔄 Archetype transitions complete - "
-            f"{transitioned_count} agents changed archetypes (day {self.day})"
-        )
+        self.archetype_manager.perform_transitions(self.day)
 
     def _calculate_visibility_params(self, visibility_rounds: int) -> tuple:
         """
