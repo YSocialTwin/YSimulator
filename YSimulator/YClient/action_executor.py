@@ -63,6 +63,7 @@ RECSYS_CLASS_MAP = {
     "common_user_interests": CommonUserInterests,
     "similar_users_react": SimilarUsersReact,
     "similar_users_posts": SimilarUsersPosts,
+    "default": ReverseChrono,  # Default to reverse chronological
 }
 
 # Follow recommendation system class mapping
@@ -72,6 +73,7 @@ FOLLOW_RECSYS_CLASS_MAP = {
     "jaccard": JaccardFollowRecSys,
     "adamic_adar": AdamicAdarFollowRecSys,
     "preferential_attachment": PreferentialAttachmentFollowRecSys,
+    "default": CommonNeighborsFollowRecSys,  # Default to common neighbors algorithm
 }
 
 
