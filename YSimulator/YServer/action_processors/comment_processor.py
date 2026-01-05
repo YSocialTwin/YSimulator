@@ -220,11 +220,13 @@ class CommentProcessor(BaseActionProcessor):
     
     def _get_topic_name_from_id(self, topic_id: str) -> Optional[str]:
         """Get topic name from ID (delegates to services)."""
+        # Try public method first, then private method
         if hasattr(self.services, 'get_topic_name_from_id'):
             return self.services.get_topic_name_from_id(topic_id)
-        # Fallback for direct method call
-        if hasattr(self.services, '_get_topic_name_from_id'):
+        elif hasattr(self.services, '_get_topic_name_from_id'):
             return self.services._get_topic_name_from_id(topic_id)
+        
+        self.logger.warning(f"get_topic_name_from_id not available in services")
         return None
     
     def _update_agent_interest_counter(

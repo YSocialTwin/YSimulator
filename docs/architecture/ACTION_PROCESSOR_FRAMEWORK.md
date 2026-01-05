@@ -282,7 +282,7 @@ pytest YSimulator/tests/test_action_processors.py -v
 
 ## Related Documentation
 
-- [Server Refactoring Report](../refactoring/SERVER_REFACTORING_REPORT.md) - Full refactoring analysis
+- [Server Refactoring Report](../../docs/refactoring/SERVER_REFACTORING_REPORT.md) - Full refactoring analysis
 - [Repository Pattern](./REPOSITORY_PATTERN.md) - Data access layer
 - [Architecture Overview](./ARCHITECTURE.md) - Overall system architecture
 

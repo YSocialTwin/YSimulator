@@ -89,8 +89,8 @@ class TestPostProcessor:
         result = processor.process(mock_action, action_context)
         
         assert result.success is True
-        assert mock_services.get_article.called_with("article_1")
-        assert mock_services.add_post_topic.called
+        mock_services.get_article.assert_called()
+        mock_services.add_post_topic.assert_called()
     
     def test_process_post_with_topic(self, mock_services, action_context, mock_action):
         """Test processing a post with topic."""
@@ -100,7 +100,7 @@ class TestPostProcessor:
         result = processor.process(mock_action, action_context)
         
         assert result.success is True
-        assert mock_services.add_or_get_interest.called_with("Technology")
+        mock_services.add_or_get_interest.assert_called()
 
 
 class TestCommentProcessor:
@@ -116,9 +116,9 @@ class TestCommentProcessor:
         
         assert result.success is True
         assert result.action_type == "COMMENT"
-        assert mock_services.get_post.called_with("post_1")
-        assert mock_services.add_post.called
-        assert mock_services.increment_post_reaction_count.called
+        mock_services.get_post.assert_called()
+        mock_services.add_post.assert_called()
+        mock_services.increment_post_reaction_count.assert_called()
     
     def test_comment_parent_not_found(self, mock_services, action_context, mock_action):
         """Test comment when parent post not found."""
@@ -146,8 +146,8 @@ class TestShareProcessor:
         
         assert result.success is True
         assert result.action_type == "SHARE"
-        assert mock_services.get_post.called_with("post_1")
-        assert mock_services.add_post.called
+        mock_services.get_post.assert_called()
+        mock_services.add_post.assert_called()
     
     def test_share_original_not_found(self, mock_services, action_context, mock_action):
         """Test share when original post not found."""
@@ -175,7 +175,7 @@ class TestFollowProcessor:
         
         assert result.success is True
         assert result.action_type == "FOLLOW"
-        assert mock_services.add_follow.called
+        mock_services.add_follow.assert_called()
     
     def test_follow_failure(self, mock_services, action_context, mock_action):
         """Test follow when database operation fails."""
@@ -202,7 +202,7 @@ class TestUnfollowProcessor:
         
         assert result.success is True
         assert result.action_type == "UNFOLLOW"
-        assert mock_services.add_follow.called
+        mock_services.add_follow.assert_called()
 
 
 class TestReactionProcessor:
@@ -218,8 +218,8 @@ class TestReactionProcessor:
         
         assert result.success is True
         assert result.action_type == "LIKE"
-        assert mock_services.add_interaction.called
-        assert mock_services.increment_post_reaction_count.called
+        mock_services.add_interaction.assert_called()
+        mock_services.increment_post_reaction_count.assert_called()
     
     def test_process_reaction_with_sentiment(self, mock_services, action_context, mock_action):
         """Test reaction processing includes sentiment."""
@@ -230,7 +230,7 @@ class TestReactionProcessor:
         result = processor.process(mock_action, action_context)
         
         assert result.success is True
-        assert mock_services.add_post_sentiment.called
+        mock_services.add_post_sentiment.assert_called()
 
 
 class TestActionRouter:
@@ -287,4 +287,4 @@ class TestActionRouter:
         
         assert result.success is True
         assert result.action_type == "CUSTOM"
-        assert custom_processor.process.called
+        custom_processor.process.assert_called()

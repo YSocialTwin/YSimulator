@@ -195,4 +195,9 @@ class ReactionProcessor(BaseActionProcessor):
         """
         if hasattr(self.services, '_reaction_to_sentiment'):
             return self.services._reaction_to_sentiment(reaction_type)
+        
+        # Log warning if method not available
+        self.logger.warning(
+            f"_reaction_to_sentiment not available in services, cannot map reaction {reaction_type}"
+        )
         return None
