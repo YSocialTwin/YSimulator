@@ -67,7 +67,7 @@ class PostProcessor(BaseActionProcessor):
                 )
             
             # Create the post
-            post_id = self.services.add_post(post_data)
+            post_id = self.services.post_service.add_post(post_data)
             
             if not post_id:
                 self.logger.warning(
@@ -127,9 +127,9 @@ class PostProcessor(BaseActionProcessor):
         """
         # If this is an article post, extract and store topics
         if article_id:
-            article_data = self.services.get_article(article_id)
+            article_data = self.services.article_service.get_article(article_id)
             if article_data:
-                existing_topic_ids = self.services.get_article_topics(article_id)
+                existing_topic_ids = self.services.article_service.get_article_topics(article_id)
                 
                 # Get article content for opinion inference
                 article_content = (
@@ -141,9 +141,9 @@ class PostProcessor(BaseActionProcessor):
                 if existing_topic_ids:
                     # Article already has topics, link them to the post
                     for topic_id in existing_topic_ids:
-                        self.services.add_post_topic(post_id, topic_id)
+                        self.services.post_service.add_post_topic(post_id, topic_id)
                         # Ensure author has opinion on each topic
-                        topic_name = self.services.get_topic_name_from_id(topic_id)
+                        topic_name = self.services.interest_service.get_topic_name_from_id(topic_id)
                         if topic_name:
                             self._ensure_agent_opinion_exists(
                                 action.agent_id,
@@ -159,9 +159,9 @@ class PostProcessor(BaseActionProcessor):
         elif hasattr(action, "topic_ids") and action.topic_ids:
             # Image posts have pre-fetched topic IDs from article
             for topic_id in action.topic_ids:
-                self.services.add_post_topic(post_id, topic_id)
+                self.services.post_service.add_post_topic(post_id, topic_id)
                 # Ensure author has opinion on each topic
-                topic_name = self.services.get_topic_name_from_id(topic_id)
+                topic_name = self.services.interest_service.get_topic_name_from_id(topic_id)
                 if topic_name:
                     self._ensure_agent_opinion_exists(
                         action.agent_id, topic_id, topic_name
@@ -173,10 +173,10 @@ class PostProcessor(BaseActionProcessor):
         # Save post topic if provided (for non-article posts)
         elif hasattr(action, "topic") and action.topic:
             # Get or create the topic in interests table
-            topic_id = self.services.add_or_get_interest(action.topic)
+            topic_id = self.services.interest_service.add_or_get_interest(action.topic)
             if topic_id:
                 # Save post-topic association
-                self.services.add_post_topic(post_id, topic_id)
+                self.services.post_service.add_post_topic(post_id, topic_id)
                 
                 # Increment the agent's interest counter for this topic
                 self._update_agent_interest_counter(

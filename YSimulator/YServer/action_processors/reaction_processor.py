@@ -53,11 +53,11 @@ class ReactionProcessor(BaseActionProcessor):
             }
             
             # Create the reaction/interaction
-            success = self.services.add_interaction(interaction_data)
+            success = self.services.content_service.add_interaction(interaction_data)
             
             # Increment reaction count for the post
             if success:
-                count_updated = self.services.increment_post_reaction_count(action.target_post_id)
+                count_updated = self.services.post_service.increment_post_reaction_count(action.target_post_id)
                 if count_updated:
                     self.logger.info(
                         f"Incremented reaction count for post {action.target_post_id} after {action.action_type} by agent {action.agent_id}"
@@ -103,14 +103,14 @@ class ReactionProcessor(BaseActionProcessor):
             context: ActionContext with current round info
         """
         # Get the post being reacted to
-        reacted_post = self.services.get_post(action.target_post_id)
+        reacted_post = self.services.post_service.get_post(action.target_post_id)
         
         if not reacted_post:
             self.logger.warning(f"Reacted post {action.target_post_id} not found")
             return
         
         # Get topics from the reacted post
-        topic_ids = self.services.get_post_topics(action.target_post_id)
+        topic_ids = self.services.post_service.get_post_topics(action.target_post_id)
         
         if not topic_ids:
             self.logger.debug(
@@ -143,7 +143,7 @@ class ReactionProcessor(BaseActionProcessor):
                 "is_comment": 0,
                 "is_reaction": 1,
             }
-            success = self.services.add_post_sentiment(sentiment_data)
+            success = self.services.metadata_service.add_post_sentiment(sentiment_data)
             if success:
                 self.logger.info(
                     f"Added reaction sentiment for {action.action_type} on post {action.target_post_id}, topic {topic_id}"
@@ -163,7 +163,7 @@ class ReactionProcessor(BaseActionProcessor):
         Returns:
             Sentiment classification: "pos", "neg", "neu", or empty string
         """
-        parent_sentiment_data = self.services.get_post_sentiment(post_id)
+        parent_sentiment_data = self.services.post_service.get_post_sentiment(post_id)
         if parent_sentiment_data is not None:
             sentiment_parent_compound = parent_sentiment_data.get("compound")
             if sentiment_parent_compound is not None:

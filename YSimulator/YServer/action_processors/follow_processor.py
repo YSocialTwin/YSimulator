@@ -68,7 +68,7 @@ class FollowProcessor(BaseActionProcessor):
             }
             
             # Create the follow relationship
-            success = self.services.add_follow(follow_data)
+            success = self.services.follow_service.add_follow(follow_data)
             
             if not success:
                 self.logger.warning(

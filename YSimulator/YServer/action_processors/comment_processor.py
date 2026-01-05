@@ -48,7 +48,7 @@ class CommentProcessor(BaseActionProcessor):
         """
         try:
             # Get the parent post to inherit thread_id
-            parent_post = self.services.get_post(action.target_post_id)
+            parent_post = self.services.post_service.get_post(action.target_post_id)
             
             if not parent_post:
                 self.logger.warning(
@@ -87,7 +87,7 @@ class CommentProcessor(BaseActionProcessor):
             }
             
             # Create the comment as a post
-            post_id = self.services.add_post(post_data)
+            post_id = self.services.post_service.add_post(post_data)
             
             if not post_id:
                 self.logger.warning(
@@ -102,7 +102,7 @@ class CommentProcessor(BaseActionProcessor):
                 )
             
             # Increment reaction count for the parent post
-            count_updated = self.services.increment_post_reaction_count(action.target_post_id)
+            count_updated = self.services.post_service.increment_post_reaction_count(action.target_post_id)
             if count_updated:
                 self.logger.info(
                     f"Incremented reaction count for post {action.target_post_id} after COMMENT by agent {action.agent_id}"
@@ -171,7 +171,7 @@ class CommentProcessor(BaseActionProcessor):
         Returns:
             Sentiment classification: "pos", "neg", "neu", or empty string
         """
-        parent_sentiment_data = self.services.get_post_sentiment(parent_post_id)
+        parent_sentiment_data = self.services.post_service.get_post_sentiment(parent_post_id)
         if parent_sentiment_data is not None:
             sentiment_parent_compound = parent_sentiment_data.get("compound")
             if sentiment_parent_compound is not None:
@@ -202,10 +202,10 @@ class CommentProcessor(BaseActionProcessor):
             current_round_id: Current round identifier
         """
         parent_post_id = action.target_post_id
-        topic_ids = self.services.get_post_topics(parent_post_id)
+        topic_ids = self.services.post_service.get_post_topics(parent_post_id)
         
         for topic_id in topic_ids:
-            self.services.add_user_interest(
+            self.services.metadata_service.add_user_interest(
                 user_id=str(action.agent_id),
                 interest_id=topic_id,
                 round_id=current_round_id,

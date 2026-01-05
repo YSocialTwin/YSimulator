@@ -68,7 +68,7 @@ class UnfollowProcessor(BaseActionProcessor):
             }
             
             # Create the unfollow relationship
-            success = self.services.add_follow(unfollow_data)
+            success = self.services.follow_service.add_follow(unfollow_data)
             
             if not success:
                 self.logger.warning(

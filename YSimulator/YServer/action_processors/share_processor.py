@@ -46,7 +46,7 @@ class ShareProcessor(BaseActionProcessor):
         """
         try:
             # Get the original post to copy metadata
-            original_post = self.services.get_post(action.target_post_id)
+            original_post = self.services.post_service.get_post(action.target_post_id)
             
             if not original_post:
                 self.logger.warning(
@@ -79,7 +79,7 @@ class ShareProcessor(BaseActionProcessor):
                 post_data["news_id"] = news_id
             
             # Create the share post
-            post_id = self.services.add_post(post_data)
+            post_id = self.services.post_service.add_post(post_data)
             
             if not post_id:
                 self.logger.warning(
