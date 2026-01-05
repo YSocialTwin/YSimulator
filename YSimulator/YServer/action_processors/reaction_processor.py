@@ -105,8 +105,8 @@ class ReactionProcessor(BaseActionProcessor):
         # Get the post being reacted to
         reacted_post = self.services.post_service.get_post(action.target_post_id)
         
-        if not reacted_post:
-            self.logger.warning(f"Reacted post {action.target_post_id} not found")
+        if not reacted_post or not isinstance(reacted_post, dict):
+            self.logger.warning(f"Reacted post {action.target_post_id} not found or invalid")
             return
         
         # Get topics from the reacted post

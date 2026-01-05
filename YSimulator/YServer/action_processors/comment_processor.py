@@ -50,9 +50,9 @@ class CommentProcessor(BaseActionProcessor):
             # Get the parent post to inherit thread_id
             parent_post = self.services.post_service.get_post(action.target_post_id)
             
-            if not parent_post:
+            if not parent_post or not isinstance(parent_post, dict):
                 self.logger.warning(
-                    f"Parent post not found for comment: {action.target_post_id}",
+                    f"Parent post not found or invalid for comment: {action.target_post_id}",
                     extra={
                         "extra_data": {
                             "agent_id": action.agent_id,
@@ -64,7 +64,7 @@ class CommentProcessor(BaseActionProcessor):
                     success=False,
                     action_type="COMMENT",
                     agent_id=action.agent_id,
-                    error="Parent post not found"
+                    error="Parent post not found or invalid"
                 )
             
             # Get thread_id from parent - points to root post
@@ -134,7 +134,6 @@ class CommentProcessor(BaseActionProcessor):
                 for topic_id, new_opinion in action.updated_opinions.items():
                     self.services.add_agent_opinion(
                         agent_id=str(action.agent_id),
-                        round_id=context.current_round_id,
                         topic_id=topic_id,
                         opinion=new_opinion,
                         id_interacted_with=parent_author_id,
