@@ -297,6 +297,11 @@ class OrchestratorServer:
         # Initialize emotions table
         self.db.initialize_emotions_table()
 
+        # Initialize action router for modular action processing
+        from YSimulator.YServer.action_processors.action_router import ActionRouter
+        self.action_router = ActionRouter(self.db, self.logger)
+        self.logger.info("Action router initialized with processors for POST, COMMENT, SHARE, FOLLOW, UNFOLLOW, and reactions")
+
         self.logger.info(
             "Orchestrator server fully initialized - 100% modern architecture!",
             extra={
@@ -1479,6 +1484,8 @@ class OrchestratorServer:
         """
         Submit actions from a client for the current simulation slot.
 
+        Uses ActionRouter to dispatch actions to dedicated processors.
+
         Args:
             client_id: Unique identifier for the client
             actions: List of ActionDTO objects representing agent actions
@@ -1487,432 +1494,23 @@ class OrchestratorServer:
         new_ids = []
 
         try:
+            # Create action context with current simulation state
+            from YSimulator.YServer.action_processors.base_processor import ActionContext
+            context = ActionContext(
+                current_round_id=self.current_round_id,
+                day=self.day,
+                slot=self.slot
+            )
+
+            # Process each action through the router
             for act in actions:
-                if act.action_type == "POST":
-                    post_data = {
-                        "user_id": str(act.agent_id),  # FK to user_mgmt.id (UUID string)
-                        "tweet": act.content,  # Post content field
-                        "round": self.current_round_id,  # FK to rounds.id
-                    }
-                    # Add article_id (news_id) if this is a news post
-                    article_id = None
-                    if hasattr(act, "article_id") and act.article_id:
-                        post_data["news_id"] = act.article_id
-                        article_id = act.article_id
+                result = self.action_router.route(act, context)
+                
+                # Collect new post IDs from successful results
+                if result.success and result.new_ids:
+                    new_ids.extend(result.new_ids)
 
-                    # Add image_id if this is an image post
-                    if hasattr(act, "image_id") and act.image_id:
-                        post_data["image_id"] = act.image_id
-                        self.logger.info(
-                            f"Adding image post: agent={act.agent_id}, image_id={act.image_id}"
-                        )
-
-                    post_id = self.db.add_post(post_data)
-                    if post_id:
-                        new_ids.append(post_id)
-
-                        # If this is an article post, extract and store topics
-                        if article_id:
-                            # Get article details from database
-                            article_data = self.db.get_article(article_id)
-                            if article_data:
-                                # Extract topics using LLM (checks if already extracted)
-                                # Note: We need the LLM service handle - we'll get it from the client context
-                                # For now, check if article already has topics
-                                existing_topic_ids = self.db.get_article_topics(article_id)
-
-                                # Get article content for opinion inference
-                                article_content = (
-                                    article_data.get("content")
-                                    or article_data.get("summary")
-                                    or article_data.get("title", "")
-                                )
-
-                                if existing_topic_ids:
-                                    # Article already has topics, link them to the post
-                                    for topic_id in existing_topic_ids:
-                                        self.db.add_post_topic(post_id, topic_id)
-                                        # Ensure author has opinion on each topic
-                                        topic_name = self.db.get_topic_name_from_id(topic_id)
-                                        if topic_name:
-                                            self._ensure_agent_opinion_exists(
-                                                act.agent_id,
-                                                topic_id,
-                                                topic_name,
-                                                article_content=article_content,
-                                            )
-                                    self.logger.info(
-                                        f"Linked {len(existing_topic_ids)} existing article topics to post {post_id}"
-                                    )
-                                # If no existing topics, they will need to be extracted by client before posting
-
-                        # Handle topic_ids for image posts
-                        elif hasattr(act, "topic_ids") and act.topic_ids:
-                            # Image posts have pre-fetched topic IDs from article
-                            for topic_id in act.topic_ids:
-                                self.db.add_post_topic(post_id, topic_id)
-                                # Ensure author has opinion on each topic
-                                topic_name = self.db.get_topic_name_from_id(topic_id)
-                                if topic_name:
-                                    self._ensure_agent_opinion_exists(
-                                        act.agent_id, topic_id, topic_name
-                                    )
-                            self.logger.info(
-                                f"Linked {len(act.topic_ids)} article topics to image post {post_id}"
-                            )
-
-                        # Save post topic if provided (for non-article posts)
-                        elif hasattr(act, "topic") and act.topic:
-                            # Get or create the topic in interests table
-                            topic_id = self.db.add_or_get_interest(act.topic)
-                            if topic_id:
-                                # Save post-topic association
-                                self.db.add_post_topic(post_id, topic_id)
-
-                                # Increment the agent's interest counter for this topic
-                                self._update_agent_interest_counter(
-                                    act.agent_id, act.topic, increment=1
-                                )
-
-                                # Ensure author has an opinion on the topic they're posting about
-                                self._ensure_agent_opinion_exists(act.agent_id, topic_id, act.topic)
-
-                        # Process annotations AFTER topics are assigned
-                        if hasattr(act, "annotations") and act.annotations:
-                            self._process_annotations(
-                                post_id,
-                                act.agent_id,
-                                act.annotations,
-                                is_post=True,
-                                is_comment=False,
-                            )
-                    else:
-                        self.logger.warning(
-                            f"Failed to add post for agent {act.agent_id}",
-                            extra={"extra_data": {"agent_id": act.agent_id}},
-                        )
-
-                elif act.action_type == "COMMENT":
-                    # Comments are stored as posts with comment_to set
-                    # Get the parent post to inherit thread_id (which points to the root of the thread)
-                    parent_post = self.db.get_post(act.target_post_id)
-                    if parent_post:
-                        # Get thread_id from parent - this will point to the root post
-                        # because:
-                        # 1. If parent is a root post, thread_id equals parent's ID
-                        # 2. If parent is a comment, it already inherited root's thread_id
-                        # So we recursively inherit the correct root thread_id
-                        thread_id = parent_post.get("thread_id")
-
-                        # Fallback: If parent doesn't have thread_id (legacy data),
-                        # assume parent IS the root post
-                        if not thread_id:
-                            thread_id = act.target_post_id
-
-                        post_data = {
-                            "user_id": str(act.agent_id),
-                            "tweet": act.content,
-                            "round": self.current_round_id,
-                            "comment_to": act.target_post_id,  # Points to immediate parent
-                            "thread_id": thread_id,  # Points to root post of thread
-                        }
-                        post_id = self.db.add_post(post_data)
-                        if post_id:
-                            new_ids.append(post_id)
-
-                            # Increment reaction count for the parent post
-                            count_updated = self.db.increment_post_reaction_count(
-                                act.target_post_id
-                            )
-                            if count_updated:
-                                self.logger.info(
-                                    f"Incremented reaction count for post {act.target_post_id} after COMMENT by agent {act.agent_id}"
-                                )
-                            else:
-                                self.logger.warning(
-                                    f"Failed to increment reaction count for post {act.target_post_id}"
-                                )
-
-                            # Process annotations if provided
-                            if hasattr(act, "annotations") and act.annotations:
-                                # Get parent post sentiment for sentiment_parent field
-                                parent_sentiment = None
-                                if parent_post:
-                                    # Query database to get sentiment of parent post
-                                    parent_sentiment_data = self.db.get_post_sentiment(
-                                        act.target_post_id
-                                    )
-                                    if parent_sentiment_data is not None:
-                                        sentiment_parent_compound = parent_sentiment_data.get(
-                                            "compound"
-                                        )
-                                        if sentiment_parent_compound is not None:
-                                            # Apply thresholding
-                                            if sentiment_parent_compound > 0.05:
-                                                parent_sentiment = "pos"
-                                            elif sentiment_parent_compound < -0.05:
-                                                parent_sentiment = "neg"
-                                            else:
-                                                parent_sentiment = "neu"
-                                            self.logger.info(
-                                                f"Parent sentiment for comment {post_id}: compound={sentiment_parent_compound:.3f} -> {parent_sentiment}"
-                                            )
-                                        else:
-                                            parent_sentiment = ""
-                                            self.logger.debug(
-                                                f"Parent sentiment compound is None for post {act.target_post_id}"
-                                            )
-                                    else:
-                                        parent_sentiment = ""
-                                        self.logger.debug(
-                                            f"No sentiment data found for parent post {act.target_post_id}"
-                                        )
-
-                                self._process_annotations(
-                                    post_id,
-                                    act.agent_id,
-                                    act.annotations,
-                                    is_post=False,
-                                    is_comment=True,
-                                    parent_post_id=act.target_post_id,
-                                    parent_sentiment=parent_sentiment,
-                                )
-
-                            # When commenting on a post, save the post's topics as user interests
-                            parent_post_id = act.target_post_id
-                            topic_ids = self.db.get_post_topics(parent_post_id)
-                            for topic_id in topic_ids:
-                                self.db.add_user_interest(
-                                    user_id=str(act.agent_id),
-                                    interest_id=topic_id,
-                                    round_id=self.current_round_id,
-                                )
-
-                                # Increment the agent's interest counter for this topic
-                                topic_name = self._get_topic_name_from_id(topic_id)
-                                if topic_name:
-                                    self._update_agent_interest_counter(
-                                        act.agent_id, topic_name, increment=1
-                                    )
-
-                            # Store opinion updates if calculated by client
-                            if hasattr(act, "updated_opinions") and act.updated_opinions:
-                                parent_author_id = parent_post.get("user_id")
-                                for topic_id, new_opinion in act.updated_opinions.items():
-                                    self.db.add_agent_opinion(
-                                        agent_id=str(act.agent_id),
-                                        round_id=self.current_round_id,
-                                        topic_id=topic_id,
-                                        opinion=new_opinion,
-                                        id_interacted_with=parent_author_id,
-                                        id_post=parent_post_id,
-                                    )
-                                self.logger.info(
-                                    f"Stored {len(act.updated_opinions)} opinion updates for agent {act.agent_id}"
-                                )
-                        else:
-                            self.logger.warning(
-                                f"Failed to add comment for agent {act.agent_id}",
-                                extra={"extra_data": {"agent_id": act.agent_id}},
-                            )
-                    else:
-                        self.logger.warning(
-                            f"Parent post not found for comment: {act.target_post_id}",
-                            extra={
-                                "extra_data": {
-                                    "agent_id": act.agent_id,
-                                    "target_post_id": act.target_post_id,
-                                }
-                            },
-                        )
-
-                elif act.action_type == "SHARE":
-                    # Share action: create a new post referencing the original
-                    # Get the original post to copy news_id if present
-                    original_post = self.db.get_post(act.target_post_id)
-                    if original_post:
-                        post_data = {
-                            "user_id": str(act.agent_id),
-                            "tweet": act.content if act.content else "",  # Optional commentary
-                            "round": self.current_round_id,
-                            "shared_from": act.target_post_id,
-                        }
-                        # If the original post references an article, copy the reference
-                        # Use helper method for consistent empty/default value checking
-                        news_id = original_post.get("news_id")
-                        if not self.db._is_empty_or_default(news_id):
-                            post_data["news_id"] = news_id
-
-                        post_id = self.db.add_post(post_data)
-                        if post_id:
-                            new_ids.append(post_id)
-
-                            # Store opinion updates if calculated by client
-                            if hasattr(act, "updated_opinions") and act.updated_opinions:
-                                parent_author_id = original_post.get("user_id")
-                                for topic_id, new_opinion in act.updated_opinions.items():
-                                    self.db.add_agent_opinion(
-                                        agent_id=str(act.agent_id),
-                                        round_id=self.current_round_id,
-                                        topic_id=topic_id,
-                                        opinion=new_opinion,
-                                        id_interacted_with=parent_author_id,
-                                        id_post=act.target_post_id,
-                                    )
-                                self.logger.info(
-                                    f"Stored {len(act.updated_opinions)} opinion updates for share by agent {act.agent_id}"
-                                )
-                        else:
-                            self.logger.warning(
-                                f"Failed to add share for agent {act.agent_id}",
-                                extra={"extra_data": {"agent_id": act.agent_id}},
-                            )
-                    else:
-                        self.logger.warning(
-                            f"Original post not found for share: {act.target_post_id}",
-                            extra={
-                                "extra_data": {
-                                    "agent_id": act.agent_id,
-                                    "target_post_id": act.target_post_id,
-                                }
-                            },
-                        )
-
-                elif act.action_type == "FOLLOW":
-                    # Follow action: create follow relationship
-                    follow_data = {
-                        "follower_id": str(
-                            act.agent_id
-                        ),  # FK to user_mgmt.id (UUID string) - agent who is following
-                        "user_id": act.target_user_id,  # FK to user_mgmt.id (UUID string) - user being followed
-                        "action": "follow",
-                        "round": self.current_round_id,  # FK to rounds.id
-                    }
-                    success = self.db.add_follow(follow_data)
-                    if not success:
-                        self.logger.warning(
-                            f"Failed to add follow for agent {act.agent_id}",
-                            extra={
-                                "extra_data": {
-                                    "agent_id": act.agent_id,
-                                    "target_user_id": act.target_user_id,
-                                }
-                            },
-                        )
-
-                elif act.action_type == "UNFOLLOW":
-                    # Unfollow action: create unfollow relationship record
-                    unfollow_data = {
-                        "follower_id": str(
-                            act.agent_id
-                        ),  # FK to user_mgmt.id (UUID string) - agent who is unfollowing
-                        "user_id": act.target_user_id,  # FK to user_mgmt.id (UUID string) - user being unfollowed
-                        "action": "unfollow",
-                        "round": self.current_round_id,  # FK to rounds.id
-                    }
-                    success = self.db.add_follow(unfollow_data)
-                    if not success:
-                        self.logger.warning(
-                            f"Failed to add unfollow for agent {act.agent_id}",
-                            extra={
-                                "extra_data": {
-                                    "agent_id": act.agent_id,
-                                    "target_user_id": act.target_user_id,
-                                }
-                            },
-                        )
-
-                else:
-                    # Other interactions (LIKE, LOVE, ANGRY, SAD, LAUGH, etc.)
-                    interaction_data = {
-                        "user_id": str(act.agent_id),  # FK to user_mgmt.id (UUID string)
-                        "post_id": act.target_post_id,  # FK to post.id (UUID string)
-                        "type": act.action_type,  # Field name is 'type' not 'reaction_type'
-                        "round": self.current_round_id,  # FK to rounds.id
-                    }
-                    success = self.db.add_interaction(interaction_data)
-
-                    # Increment reaction count for the post
-                    if success:
-                        count_updated = self.db.increment_post_reaction_count(act.target_post_id)
-                        if count_updated:
-                            self.logger.info(
-                                f"Incremented reaction count for post {act.target_post_id} after {act.action_type} by agent {act.agent_id}"
-                            )
-                        else:
-                            self.logger.warning(
-                                f"Failed to increment reaction count for post {act.target_post_id}"
-                            )
-
-                    # Save sentiment for reactions
-                    # Get the post being reacted to
-                    reacted_post = self.db.get_post(act.target_post_id)
-                    if reacted_post:
-                        # Get topics from the reacted post
-                        topic_ids = self.db.get_post_topics(act.target_post_id)
-
-                        if topic_ids:
-                            # Map reaction type to sentiment values
-                            sentiment_values = self._reaction_to_sentiment(act.action_type)
-
-                            if sentiment_values:
-                                # Get parent post sentiment for sentiment_parent field
-                                parent_sentiment = None
-                                parent_sentiment_data = self.db.get_post_sentiment(
-                                    act.target_post_id
-                                )
-                                if parent_sentiment_data is not None:
-                                    sentiment_parent_compound = parent_sentiment_data.get(
-                                        "compound"
-                                    )
-                                    if sentiment_parent_compound is not None:
-                                        # Apply thresholding
-                                        if sentiment_parent_compound > 0.05:
-                                            parent_sentiment = "pos"
-                                        elif sentiment_parent_compound < -0.05:
-                                            parent_sentiment = "neg"
-                                        else:
-                                            parent_sentiment = "neu"
-                                        self.logger.info(
-                                            f"Parent sentiment for reaction on post {act.target_post_id}: compound={sentiment_parent_compound:.3f} -> {parent_sentiment}"
-                                        )
-                                    else:
-                                        parent_sentiment = ""
-                                else:
-                                    parent_sentiment = ""
-
-                                # Create sentiment entries for each topic
-                                for topic_id in topic_ids:
-                                    sentiment_data = {
-                                        "post_id": act.target_post_id,
-                                        "user_id": str(act.agent_id),
-                                        "topic_id": topic_id,
-                                        "round": self.current_round_id,
-                                        "neg": sentiment_values["neg"],
-                                        "pos": sentiment_values["pos"],
-                                        "neu": sentiment_values["neu"],
-                                        "compound": sentiment_values["compound"],
-                                        "sentiment_parent": parent_sentiment,
-                                        "is_post": 0,
-                                        "is_comment": 0,
-                                        "is_reaction": 1,
-                                    }
-                                    success = self.db.add_post_sentiment(sentiment_data)
-                                    if success:
-                                        self.logger.info(
-                                            f"Added reaction sentiment for {act.action_type} on post {act.target_post_id}, topic {topic_id}"
-                                        )
-                                    else:
-                                        self.logger.error(
-                                            f"Failed to add reaction sentiment for {act.action_type} on post {act.target_post_id}, topic {topic_id}"
-                                        )
-                        else:
-                            self.logger.debug(
-                                f"No topics found for reacted post {act.target_post_id}, skipping reaction sentiment"
-                            )
-                    else:
-                        self.logger.warning(f"Reacted post {act.target_post_id} not found")
-
+            # Update recent posts cache
             if new_ids:
                 self.recent_posts_cache.extend(new_ids)
                 self.recent_posts_cache = self.recent_posts_cache[-50:]  # Keep last 50
@@ -1951,6 +1549,7 @@ class OrchestratorServer:
 
         # Check if EVERYONE is done
         self._check_barrier_and_advance()
+
 
     def get_current_day(self) -> int:
         """
