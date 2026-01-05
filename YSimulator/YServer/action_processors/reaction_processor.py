@@ -169,7 +169,11 @@ class ReactionProcessor(BaseActionProcessor):
         """
         parent_sentiment_data = self.services.metadata_service.get_post_sentiment(post_id)
         if parent_sentiment_data is not None:
-            sentiment_parent_compound = parent_sentiment_data.get("compound")
+            # Handle both dict and float return types
+            if isinstance(parent_sentiment_data, (int, float)):
+                sentiment_parent_compound = parent_sentiment_data
+            else:
+                sentiment_parent_compound = parent_sentiment_data.get("compound")
             if sentiment_parent_compound is not None:
                 # Apply thresholding
                 if sentiment_parent_compound > 0.05:

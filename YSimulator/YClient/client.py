@@ -747,7 +747,9 @@ class SimulationClient(ActionExecutorMixin):
                         )
                         # Get current round_id from server
                         current_round_id = ray.get(self.server.get_current_round_id.remote())
-                        new_agents_count = self._evaluate_new_agents(current_round_id)
+                        # TODO: Implement _evaluate_new_agents method
+                        # new_agents_count = self._evaluate_new_agents(current_round_id)
+                        new_agents_count = 0  # Temporarily disabled until method is implemented
                         self.logger.info(
                             f"New agents evaluation complete: {new_agents_count} agents added"
                         )

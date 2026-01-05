@@ -1211,7 +1211,8 @@ class OrchestratorServer:
         Returns:
             bool: True if successful, False otherwise
         """
-        result = self.mention_service.mark_mention_replied(mention_id)
+        # Use database adapter which has the correct signature for mention_id
+        result = self.db.mark_mention_replied(mention_id)
         self.logger.debug(
             f"[REPLY_SERVER] mark_mention_replied for mention {mention_id}: success={result}"
         )
