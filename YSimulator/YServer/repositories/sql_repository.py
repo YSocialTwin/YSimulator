@@ -322,15 +322,11 @@ class SQLUserRepository(UserRepository):
             )
             return False
     
-    def get_inactive_agents(self, inactivity_threshold: int) -> List[str]:
+    def get_inactive_agents(self, current_day: int, inactivity_threshold: int) -> List[str]:
         """Get inactive agents."""
         try:
             session = Session(self.engine)
             try:
-                from datetime import datetime, timedelta
-                
-                # Get current day (you may need to adjust this based on your simulation logic)
-                current_day = 1  # This should be passed from somewhere
                 cutoff_day = current_day - inactivity_threshold
                 
                 users = session.query(User_mgmt).filter(

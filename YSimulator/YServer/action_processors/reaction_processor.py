@@ -185,7 +185,9 @@ class ReactionProcessor(BaseActionProcessor):
     
     def _reaction_to_sentiment(self, reaction_type: str) -> Optional[dict]:
         """
-        Map reaction type to sentiment values (delegates to services).
+        Map reaction type to sentiment values.
+        
+        Converts reaction types (LIKE, LOVE, ANGRY, SAD, LAUGH) to sentiment scores.
         
         Args:
             reaction_type: Reaction type (LIKE, LOVE, ANGRY, etc.)
@@ -193,11 +195,15 @@ class ReactionProcessor(BaseActionProcessor):
         Returns:
             Dict with neg, pos, neu, compound values or None
         """
-        if hasattr(self.services, '_reaction_to_sentiment'):
-            return self.services._reaction_to_sentiment(reaction_type)
+        # Map reaction types to sentiment
+        # pos=1 for positive reactions, neg=1 for negative, neu=1 for neutral
+        # compound: 1 if pos=1, -1 if neg=1, 0 otherwise
+        reaction_map = {
+            "LIKE": {"pos": 1.0, "neg": 0.0, "neu": 0.0, "compound": 1.0},
+            "LOVE": {"pos": 1.0, "neg": 0.0, "neu": 0.0, "compound": 1.0},
+            "LAUGH": {"pos": 1.0, "neg": 0.0, "neu": 0.0, "compound": 1.0},
+            "ANGRY": {"pos": 0.0, "neg": 1.0, "neu": 0.0, "compound": -1.0},
+            "SAD": {"pos": 0.0, "neg": 1.0, "neu": 0.0, "compound": -1.0},
+        }
         
-        # Log warning if method not available
-        self.logger.warning(
-            f"_reaction_to_sentiment not available in services, cannot map reaction {reaction_type}"
-        )
-        return None
+        return reaction_map.get(reaction_type, None)

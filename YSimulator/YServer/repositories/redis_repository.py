@@ -262,16 +262,10 @@ class RedisUserRepository(UserRepository):
             )
             return False
     
-    def get_inactive_agents(self, inactivity_threshold: int) -> List[str]:
-        """Get inactive agents - requires current_day context not available in this signature."""
-        # Note: db_middleware.get_inactive_agents requires current_day parameter
-        # but the base_repository interface only has inactivity_threshold.
-        # This is a signature mismatch. We'll log a warning and return empty list.
-        self.logger.warning(
-            "get_inactive_agents in RedisUserRepository requires current_day parameter "
-            "which is not available in the base interface. Returning empty list."
-        )
-        return []
+    def get_inactive_agents(self, current_day: int, inactivity_threshold: int) -> List[str]:
+        """Get inactive agents."""
+        # Note: db_middleware.get_inactive_agents requires both current_day and inactivity_threshold parameters
+        return self.db_middleware.get_inactive_agents(current_day, inactivity_threshold)
 
 
 class RedisPostRepository(PostRepository):

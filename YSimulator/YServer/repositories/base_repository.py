@@ -67,7 +67,7 @@ class UserRepository(BaseRepository):
         pass
     
     @abstractmethod
-    def get_inactive_agents(self, inactivity_threshold: int) -> List[str]:
+    def get_inactive_agents(self, current_day: int, inactivity_threshold: int) -> List[str]:
         """Get inactive agents."""
         pass
 
