@@ -213,18 +213,11 @@ class OrchestratorServer:
         # Store attention_window for interest decay (sliding window)
         self.attention_window = simulation_config.get("agents", {}).get("attention_window", 336)
 
-        # Client tracking
-        self.registered_clients = set()  # All registered clients
-        self.completed_clients = set()  # Clients that finished their simulation
-        self.submitted_clients = set()  # Clients that submitted for current slot
-        self.last_heartbeat = {}  # {client_id: timestamp}
+        # Registered agents mapping
         self.registered_agents = {}  # {agent_id: username}
 
-        # Simulation state
-        self.day = 1
-        self.slot = 1
+        # Simulation state (will be managed by RoundManager)
         self.recent_posts_cache = []
-        self.current_round_id = None  # Will be set when simulation starts
 
         # Set up logging first
         self._setup_logging()
@@ -251,7 +244,21 @@ class OrchestratorServer:
                 self.logger
             )
             
-            # Create complete database adapter with ALL services
+            # Phase 5: Expose services directly for explicit usage
+            self.user_service = user_service
+            self.post_service = post_service
+            self.follow_service = follow_service
+            self.interest_service = interest_service
+            self.article_service = article_service
+            self.image_service = image_service
+            self.content_service = content_service
+            self.simulation_service = simulation_service
+            self.metadata_service = metadata_service
+            self.mention_service = mention_service
+            self.redis_client = redis_client
+            self.use_redis = redis_client is not None
+            
+            # Create database adapter for backwards compatibility (will be phased out)
             self.db = DatabaseServiceAdapter(
                 user_service=user_service,
                 post_service=post_service,
@@ -268,10 +275,11 @@ class OrchestratorServer:
             )
             use_new_pattern = True
             self.logger.info(
-                "Orchestrator server initialized - Repository/Service pattern 100% MIGRATED!",
+                "Orchestrator server initialized - Repository/Service pattern 100% with direct service access!",
                 extra={
-                    "migration_status": "100_PERCENT_COMPLETE",
+                    "migration_status": "PHASE_5_COMPLETE",
                     "services": "User, Post, Follow, Interest, Article, Image, Content, Simulation, Metadata, Mention",
+                    "service_access": "Direct - no adapter facade",
                     "legacy_middleware": "None - fully eliminated"
                 }
             )
@@ -290,12 +298,61 @@ class OrchestratorServer:
             db_service=self.db, attention_window=self.attention_window
         )
 
-        # Initialize the first round entry
-        self.current_round_id = self.db.get_or_create_round(self.day, self.slot)
-        self.interest_manager.set_current_round(self.current_round_id)
-
         # Initialize emotions table
-        self.db.initialize_emotions_table()
+        self.metadata_service.initialize_emotions_table()
+
+        # Initialize action router for modular action processing
+        # Pass self (the server) so processors can access server methods like _process_annotations
+        from YSimulator.YServer.action_processors.action_router import ActionRouter
+        self.action_router = ActionRouter(self, self.logger)
+        self.logger.info("Action router initialized with processors for POST, COMMENT, SHARE, FOLLOW, UNFOLLOW, and reactions")
+
+        # Initialize recommendation engines
+        from YSimulator.YServer.recommendation import ContentRecommender, FollowRecommender
+        self.content_recommender = ContentRecommender(self.db, self.visibility_rounds, self.logger)
+        self.follow_recommender = FollowRecommender(self.db, self.logger)
+        self.logger.info("Recommendation engines initialized (ContentRecommender, FollowRecommender)")
+
+        # Initialize opinion dynamics handler
+        from YSimulator.YServer.opinion_dynamics import OpinionHandler
+        self.opinion_handler = OpinionHandler(
+            db_adapter=self.db,
+            simulation_config=self.simulation_config,
+            agent_profiles_cache=self.agent_profiles_cache,
+            current_round_id_getter=lambda: self.current_round_id,
+            logger=self.logger
+        )
+        self.logger.info("Opinion dynamics handler initialized")
+
+        # Initialize coordination layer
+        from YSimulator.YServer.coordination import (
+            ClientManager, BarrierHandler, RoundManager, ArchetypeManager
+        )
+        self.client_manager = ClientManager(timeout_seconds=self.timeout_seconds, logger=self.logger)
+        self.barrier_handler = BarrierHandler(logger=self.logger)
+        self.round_manager = RoundManager(
+            db_adapter=self.db,
+            interest_manager=self.interest_manager,
+            visibility_rounds=self.visibility_rounds,
+            num_slots_per_day=self.num_slots_per_day,
+            logger=self.logger
+        )
+        self.archetype_manager = ArchetypeManager(
+            db_adapter=self.db,
+            archetypes_enabled=self.archetypes_enabled,
+            archetype_transitions=self.archetype_transitions,
+            logger=self.logger
+        )
+        self.logger.info("Coordination layer initialized (ClientManager, BarrierHandler, RoundManager, ArchetypeManager)")
+        
+        # Initialize first round using RoundManager (no need to store, accessed via property)
+        self.round_manager.initialize_first_round()
+        
+        # Expose properties for backward compatibility
+        self.registered_clients = self.client_manager.registered_clients
+        self.completed_clients = self.client_manager.completed_clients
+        self.submitted_clients = self.client_manager.submitted_clients
+        self.last_heartbeat = self.client_manager.last_heartbeat
 
         self.logger.info(
             "Orchestrator server fully initialized - 100% modern architecture!",
@@ -323,6 +380,21 @@ class OrchestratorServer:
                 }
             },
         )
+
+    @property
+    def day(self) -> int:
+        """Get current simulation day from RoundManager."""
+        return self.round_manager.day
+    
+    @property
+    def slot(self) -> int:
+        """Get current simulation slot from RoundManager."""
+        return self.round_manager.slot
+    
+    @property
+    def current_round_id(self) -> str:
+        """Get current round ID from RoundManager."""
+        return self.round_manager.current_round_id
 
     def _create_redis_client(self, redis_config: dict):
         """
@@ -511,80 +583,17 @@ class OrchestratorServer:
     ):
         """
         Ensure an agent has an opinion recorded for a topic.
-
-        This is a safety fallback that creates opinions if they don't exist.
-        For page agents, the client should have already inferred opinions via LLM
-        before submitting the POST action. This method just provides defaults.
-
-        For regular agents: Use cached profile opinion or neutral (0.5) as fallback.
-        For page agents: Use neutral (0.5) as placeholder (client should set opinion first).
-
-        Only executes when opinion dynamics is enabled in simulation config.
-
-        NOTE: Server does NOT call LLM service. All LLM interactions happen on client side.
-
+        
+        Delegates to OpinionHandler for opinion management logic.
+        
         Args:
             agent_id: Agent UUID
             topic_id: Topic UUID (from interests table)
             topic_name: Topic name for looking up in cached profile
             article_content: Unused (kept for backwards compatibility)
         """
-        # Only enforce this constraint when opinion dynamics is enabled
-        opinion_config = self.simulation_config.get("opinion_dynamics", {})
-        if not opinion_config.get("enabled", False):
-            return  # Opinion dynamics disabled, no need to ensure opinions exist
-
-        # Check if agent already has an opinion on this topic
-        existing_opinion = self.db.get_latest_agent_opinion(agent_id, topic_id)
-        if existing_opinion is not None:
-            return  # Opinion already exists
-
-        # Agent doesn't have opinion - need to create one as fallback
-        cached_profile = self.agent_profiles_cache.get(agent_id)
-        is_page_agent = cached_profile and cached_profile.is_page == 1
-
-        opinion_value = None
-
-        if is_page_agent:
-            # Page agent: Client should have already set opinion via LLM/random
-            # This is just a fallback - use neutral placeholder
-            opinion_value = 0.5
-            self.logger.warning(
-                f"Page agent {agent_id}: no opinion found for topic '{topic_name}'. "
-                f"Using neutral fallback (0.5). Client should have set opinion first."
-            )
-        else:
-            # Regular agent: try to get from cached profile
-            if cached_profile and cached_profile.opinions:
-                # Try exact match first
-                opinion_value = cached_profile.opinions.get(topic_name)
-                # If not found, try case-insensitive match
-                if opinion_value is None:
-                    for key, value in cached_profile.opinions.items():
-                        if key.lower() == topic_name.lower():
-                            opinion_value = value
-                            break
-
-                if opinion_value is not None:
-                    self.logger.info(
-                        f"Regular agent {agent_id}: using initial opinion {opinion_value} from profile for topic '{topic_name}'"
-                    )
-
-            # Default to neutral opinion if not found in profile
-            if opinion_value is None:
-                opinion_value = 0.5
-                self.logger.info(
-                    f"Regular agent {agent_id}: creating default neutral opinion {opinion_value} for topic '{topic_name}'"
-                )
-
-        # Store the opinion
-        self.db.add_agent_opinion(
-            agent_id=agent_id,
-            round_id=self.current_round_id,
-            topic_id=topic_id,
-            opinion=opinion_value,
-            id_interacted_with=None,
-            id_post=None,
+        self.opinion_handler.ensure_agent_opinion_exists(
+            agent_id, topic_id, topic_name, article_content
         )
 
     def _reaction_to_sentiment(self, reaction_type: str) -> Optional[Dict[str, float]]:
@@ -666,26 +675,20 @@ class OrchestratorServer:
         hashtags = annotations.get("hashtags", [])
         for hashtag_text in hashtags:
             # Get or create hashtag
-            hashtag_id = self.db.add_or_get_hashtag(hashtag_text)
+            hashtag_id = self.metadata_service.add_or_get_hashtag(hashtag_text)
             if hashtag_id:
                 # Link hashtag to post
-                self.db.add_post_hashtag(post_id, hashtag_id)
+                self.metadata_service.add_post_hashtag(post_id, hashtag_id)
                 self.logger.info(f"Linked hashtag '{hashtag_text}' to post {post_id}")
 
         # Process mentions
         mentions = annotations.get("mentions", [])
         for username in mentions:
             # Check if user exists
-            mentioned_user = self.db.get_user_by_username(username)
+            mentioned_user = self.user_service.get_user_by_username(username)
             if mentioned_user:
                 # Add mention entry
-                mention_data = {
-                    "user_id": mentioned_user["id"],
-                    "post_id": post_id,
-                    "round": self.current_round_id,
-                    "answered": 0,
-                }
-                self.db.add_mention(mention_data)
+                self.mention_service.add_mention(post_id, mentioned_user["id"])
                 self.logger.info(f"Added mention of @{username} in post {post_id}")
             else:
                 self.logger.warning(f"Mentioned user @{username} not found in database")
@@ -697,11 +700,11 @@ class OrchestratorServer:
                 f"Processing sentiment for post {post_id}: compound={sentiment_scores.get('compound', 0):.3f}"
             )
             # Get topics associated with this post/comment
-            topic_ids = self.db.get_post_topics(post_id)
+            topic_ids = self.post_service.get_post_topics(post_id)
 
             # If comment without topics yet, get parent's topics
             if not topic_ids and parent_post_id:
-                topic_ids = self.db.get_post_topics(parent_post_id)
+                topic_ids = self.post_service.get_post_topics(parent_post_id)
                 if topic_ids:
                     self.logger.info(
                         f"Using {len(topic_ids)} topics from parent post {parent_post_id} for comment {post_id}"
@@ -728,7 +731,7 @@ class OrchestratorServer:
                     "is_comment": 1 if is_comment else 0,
                     "is_reaction": 0,
                 }
-                success = self.db.add_post_sentiment(sentiment_data)
+                success = self.metadata_service.add_post_sentiment(sentiment_data)
                 if success:
                     self.logger.info(f"Added sentiment entry for post {post_id}, topic {topic_id}")
                 else:
@@ -760,7 +763,7 @@ class OrchestratorServer:
                 "sexually_explicit": toxicity_scores.get("SEXUALLY_EXPLICIT", 0.0),
                 "flirtation": toxicity_scores.get("FLIRTATION", 0.0),
             }
-            success = self.db.add_post_toxicity(toxicity_data)
+            success = self.metadata_service.add_post_toxicity(toxicity_data)
             if success:
                 self.logger.info(f"Successfully added toxicity data for post {post_id}")
             else:
@@ -774,10 +777,10 @@ class OrchestratorServer:
             self.logger.info(f"Processing emotions for post {post_id}: {emotions}")
             for emotion_name in emotions:
                 # Get emotion from database
-                emotion = self.db.get_emotion_by_name(emotion_name)
+                emotion = self.metadata_service.get_emotion_by_name(emotion_name)
                 if emotion:
                     # Add post emotion association
-                    success = self.db.add_post_emotion(post_id, emotion["id"])
+                    success = self.metadata_service.add_post_emotion(post_id, emotion["id"])
                     if success:
                         self.logger.info(f"Added emotion '{emotion_name}' to post {post_id}")
                     else:
@@ -832,7 +835,7 @@ class OrchestratorServer:
         Returns:
             str: Topic UUID or None if not found
         """
-        return self.db.get_topic_id_by_name(topic_name)
+        return self.interest_service.get_topic_id_by_name(topic_name)
 
     def store_article_topics(self, article_id: str, topic_names: List[str]) -> List[str]:
         """
@@ -925,7 +928,7 @@ class OrchestratorServer:
 
         try:
             # Batch register users - returns (count, set of newly registered IDs)
-            registered_count, newly_registered_ids = self.db.register_users_batch(users_data)
+            registered_count, newly_registered_ids = self.user_service.register_users_batch(users_data)
 
             # All agents (new and existing) should be in registered_agents dict
             # Also cache agent profiles for opinion lookups (when opinion dynamics enabled)
@@ -957,10 +960,10 @@ class OrchestratorServer:
                     # Get interest IDs for the agent's topics
                     for topic_name, opinion_value in agent_profile.opinions.items():
                         # Get or create the interest/topic in the database
-                        topic_id = self.db.add_or_get_interest(topic_name)
+                        topic_id = self.interest_service.add_or_get_interest(topic_name)
                         if topic_id:
                             # Store initial opinion with no interaction references
-                            self.db.add_agent_opinion(
+                            self.interest_service.add_agent_opinion(
                                 agent_id=agent_id,
                                 round_id=self.current_round_id,
                                 topic_id=topic_id,
@@ -972,7 +975,7 @@ class OrchestratorServer:
             # Batch register websites for page agents
             pages_registered = 0
             if websites_data:
-                pages_registered = self.db.add_websites_batch(websites_data)
+                pages_registered = self.content_service.add_websites_batch(websites_data)
 
             execution_time = (time.time() - start_time) * 1000
 
@@ -1027,7 +1030,7 @@ class OrchestratorServer:
             bool: True if successful, False otherwise
         """
         try:
-            success = self.db.add_follow(follow_data)
+            success = self.follow_service.add_follow(follow_data)
             return success
         except Exception as e:
             self.logger.error(
@@ -1106,7 +1109,7 @@ class OrchestratorServer:
             int: Number of follow relationships successfully added
         """
         try:
-            count = self.db.add_follows_batch(follows_data)
+            count = self.follow_service.add_follows_batch(follows_data)
             self.logger.info(
                 f"Batch added {count} follow relationships",
                 extra={"extra_data": {"count": count, "batch_size": len(follows_data)}},
@@ -1132,7 +1135,7 @@ class OrchestratorServer:
         """
         try:
             # Get or create the first round (day 1, slot 1)
-            first_round_id = self.db.get_or_create_round(1, 1)
+            first_round_id = self.simulation_service.get_or_create_round(1, 1)
             self.logger.info(f"Retrieved first round ID: {first_round_id}")
             return first_round_id
         except Exception as e:
@@ -1192,7 +1195,7 @@ class OrchestratorServer:
         Returns:
             List[Dict]: List of mention records with keys: id, user_id, post_id, round, answered
         """
-        result = self.db.get_unreplied_mentions(user_id)
+        result = self.mention_service.get_unreplied_mentions(user_id)
         self.logger.debug(
             f"[REPLY_SERVER] get_unreplied_mentions for user {user_id}: found {len(result)} unreplied mentions"
         )
@@ -1208,6 +1211,7 @@ class OrchestratorServer:
         Returns:
             bool: True if successful, False otherwise
         """
+        # Use database adapter which has the correct signature for mention_id
         result = self.db.mark_mention_replied(mention_id)
         self.logger.debug(
             f"[REPLY_SERVER] mark_mention_replied for mention {mention_id}: success={result}"
@@ -1218,12 +1222,8 @@ class OrchestratorServer:
     def register_client(self, client_id: str, num_days: int = 0) -> dict:
         """
         Register a new client with the server.
-
-        Provides the current server state (day and slot) as the starting point.
-        The client will handle its own simulation step counting from this point.
-
-        If a client was previously completed, it will be re-registered and removed
-        from the completed clients list, allowing it to run again.
+        
+        Delegates to ClientManager for client lifecycle management.
 
         Args:
             client_id: Unique identifier for the client
@@ -1232,59 +1232,16 @@ class OrchestratorServer:
         Returns:
             dict: {"registered": bool, "start_day": int, "start_slot": int}
         """
-        start_time = time.time()
-
-        # If this client was previously completed, remove it from completed set
-        # This allows the same client to re-run the simulation
-        was_completed = client_id in self.completed_clients
-        if was_completed:
-            self.completed_clients.remove(client_id)
-            self.logger.info(f"Re-registering previously completed client {client_id}")
-
-        if client_id not in self.registered_clients:
-            self.registered_clients.add(client_id)
-            self.last_heartbeat[client_id] = time.time()
-
-            execution_time = (time.time() - start_time) * 1000
-
-            self.logger.info(
-                "Client registered",
-                extra={
-                    "extra_data": {
-                        "client_id": client_id,
-                        "start_day": self.day,
-                        "start_slot": self.slot,
-                        "num_days": num_days,
-                        "total_clients": len(self.registered_clients),
-                        "active_clients": len(self._get_active_clients()),
-                        "execution_time_ms": execution_time,
-                        "was_completed": was_completed,
-                    }
-                },
-            )
-            self.logger.info(
-                f"[Server] 🟢 Client {client_id} joined at day {self.day}, slot {self.slot}. "
-                f"Will run for {num_days if num_days > 0 else '∞'} days. "
-                f"Total: {len(self.registered_clients)}, Active: {len(self._get_active_clients())}"
-            )
-        else:
-            # Client already registered, just update heartbeat
-            self.last_heartbeat[client_id] = time.time()
-
-        # Return current server state as starting point for client
-        return {
-            "registered": True,
-            "start_day": self.day,
-            "start_slot": self.slot,
-        }
+        return self.client_manager.register_client(
+            client_id, num_days, self.day, self.slot
+        )
 
     @log_server_request
     def complete_client(self, client_id: str) -> bool:
         """
         Mark a client as completed (finished all planned activities).
-
-        Completed clients no longer block barrier advancement. This allows
-        clients with different simulation durations to coexist without deadlocks.
+        
+        Delegates to ClientManager for client lifecycle management.
 
         Args:
             client_id: Unique identifier for the client
@@ -1292,127 +1249,64 @@ class OrchestratorServer:
         Returns:
             bool: True if successfully marked as complete
         """
-        if client_id in self.registered_clients:
-            self._mark_client_as_completed(client_id)
-
-            self.logger.info(
-                "Client completed all activities",
-                extra={
-                    "extra_data": {
-                        "client_id": client_id,
-                        "remaining_active": len(self._get_active_clients()),
-                        "total_completed": len(self.completed_clients),
-                    }
-                },
-            )
-            self.logger.info(
-                f"[Server] 🏁 Client {client_id} completed. "
-                f"Active: {len(self._get_active_clients())}, "
-                f"Completed: {len(self.completed_clients)}"
-            )
-
-            # Check if completing this client unblocks the barrier
-            self._check_barrier_and_advance()
-        return True
+        result = self.client_manager.complete_client(client_id)
+        
+        # Check if completing this client unblocks the barrier
+        self._check_barrier_and_advance()
+        
+        return result
 
     @log_server_request
     def heartbeat(self, client_id: str) -> bool:
         """
         Record a heartbeat from a client to indicate it's still alive.
-
-        Prevents the server from considering the client stale and removing it.
+        
+        Delegates to ClientManager for heartbeat tracking.
 
         Args:
             client_id: Unique identifier for the client
 
         Returns:
-            bool: True if heartbeat recorded, False if client not registered
+            bool: True if heartbeat recorded
         """
-        if client_id in self.registered_clients:
-            self.last_heartbeat[client_id] = time.time()
-            return True
-        return False
+        return self.client_manager.heartbeat(client_id)
 
     def _get_active_clients(self) -> set:
         """
         Get the set of active clients (registered but not completed).
+        
+        Delegates to ClientManager.
 
         Returns:
             set: Set of active client IDs
         """
-        return self.registered_clients - self.completed_clients
+        return self.client_manager.get_active_clients()
 
     def _check_for_stale_clients(self):
         """
         Check for clients that haven't sent a heartbeat recently and remove them.
-
-        Heartbeat-based liveness: Clients are only considered stale if they stop
-        sending heartbeats. Processing time doesn't matter - if heartbeats arrive,
-        the client is alive. This prevents false positives on slow/busy clients.
+        
+        Delegates to ClientManager for stale client detection.
         """
-        current_time = time.time()
-        stale_clients = []
-        stale_clients_info = {}  # Store time_since_heartbeat for each stale client
-
-        for client_id in self._get_active_clients():
-            # Check if heartbeat was ever received (should be set during registration)
-            if client_id not in self.last_heartbeat:
-                # This shouldn't happen, but log and skip to avoid crashes
-                self.logger.warning(
-                    f"Active client {client_id} has no heartbeat entry, initializing",
-                    extra={"extra_data": {"client_id": client_id}},
-                )
-                self.last_heartbeat[client_id] = current_time
-                continue
-
-            last_hb = self.last_heartbeat[client_id]
-            time_since_heartbeat = current_time - last_hb
-
-            # Only mark as stale if no heartbeat received within timeout
-            # Note: Clients send heartbeat every heartbeat_interval seconds,
-            # so timeout_seconds should be >> heartbeat_interval to account for
-            # network delays and processing variations
-            if time_since_heartbeat > self.timeout_seconds:
-                stale_clients.append(client_id)
-                stale_clients_info[client_id] = time_since_heartbeat
-
-        for client_id in stale_clients:
-            time_since_heartbeat = stale_clients_info[client_id]
-            self.logger.warning(
-                "Removing stale client (no heartbeat)",
-                extra={
-                    "extra_data": {
-                        "client_id": client_id,
-                        "timeout_seconds": self.timeout_seconds,
-                        "last_heartbeat_ago": time_since_heartbeat,
-                    }
-                },
-            )
-            self.logger.info(
-                f"[Server] ⚠️  Removing stale client {client_id} "
-                f"(no heartbeat for {time_since_heartbeat:.1f}s)"
-            )
-            self._mark_client_as_completed(client_id)
+        self.client_manager.check_for_stale_clients()
 
     def _mark_client_as_completed(self, client_id: str):
         """
         Mark a client as completed internally.
-
-        Helper method to avoid code duplication between complete_client and stale detection.
+        
+        Delegates to ClientManager.
 
         Args:
             client_id: Unique identifier for the client
         """
-        self.completed_clients.add(client_id)
-        self.submitted_clients.discard(client_id)
+        self.client_manager.mark_as_completed(client_id)
 
     @log_server_request
     def deregister_client(self, client_id: str) -> bool:
         """
         Remove a client from the server.
-
-        Optional: Call this if a client shuts down gracefully.
-        Otherwise, the server might hang waiting for a dead client.
+        
+        Delegates to ClientManager for client deregistration.
 
         Args:
             client_id: Unique identifier for the client
@@ -1420,27 +1314,12 @@ class OrchestratorServer:
         Returns:
             bool: True if deregistration successful
         """
-        if client_id in self.registered_clients:
-            self.registered_clients.remove(client_id)
-            # Clean up all tracking data for this client
-            self.submitted_clients.discard(client_id)
-            self.completed_clients.discard(client_id)
-            self.last_heartbeat.pop(client_id, None)
-
-            self.logger.info(
-                "Client deregistered",
-                extra={
-                    "extra_data": {
-                        "client_id": client_id,
-                        "remaining_clients": len(self.registered_clients),
-                    }
-                },
-            )
-            self.logger.info(f"Client {client_id} left. Total: {len(self.registered_clients)}")
-
-            # Check if leaving unblocked the barrier
-            self._check_barrier_and_advance()
-        return True
+        result = self.client_manager.deregister_client(client_id)
+        
+        # Check if leaving unblocked the barrier
+        self._check_barrier_and_advance()
+        
+        return result
 
     @log_server_request
     def get_instruction(self, client_id: str) -> SimulationInstruction:
@@ -1479,6 +1358,8 @@ class OrchestratorServer:
         """
         Submit actions from a client for the current simulation slot.
 
+        Uses ActionRouter to dispatch actions to dedicated processors.
+
         Args:
             client_id: Unique identifier for the client
             actions: List of ActionDTO objects representing agent actions
@@ -1487,432 +1368,23 @@ class OrchestratorServer:
         new_ids = []
 
         try:
+            # Create action context with current simulation state
+            from YSimulator.YServer.action_processors.base_processor import ActionContext
+            context = ActionContext(
+                current_round_id=self.current_round_id,
+                day=self.day,
+                slot=self.slot
+            )
+
+            # Process each action through the router
             for act in actions:
-                if act.action_type == "POST":
-                    post_data = {
-                        "user_id": str(act.agent_id),  # FK to user_mgmt.id (UUID string)
-                        "tweet": act.content,  # Post content field
-                        "round": self.current_round_id,  # FK to rounds.id
-                    }
-                    # Add article_id (news_id) if this is a news post
-                    article_id = None
-                    if hasattr(act, "article_id") and act.article_id:
-                        post_data["news_id"] = act.article_id
-                        article_id = act.article_id
+                result = self.action_router.route(act, context)
+                
+                # Collect new post IDs from successful results
+                if result.success and result.new_ids:
+                    new_ids.extend(result.new_ids)
 
-                    # Add image_id if this is an image post
-                    if hasattr(act, "image_id") and act.image_id:
-                        post_data["image_id"] = act.image_id
-                        self.logger.info(
-                            f"Adding image post: agent={act.agent_id}, image_id={act.image_id}"
-                        )
-
-                    post_id = self.db.add_post(post_data)
-                    if post_id:
-                        new_ids.append(post_id)
-
-                        # If this is an article post, extract and store topics
-                        if article_id:
-                            # Get article details from database
-                            article_data = self.db.get_article(article_id)
-                            if article_data:
-                                # Extract topics using LLM (checks if already extracted)
-                                # Note: We need the LLM service handle - we'll get it from the client context
-                                # For now, check if article already has topics
-                                existing_topic_ids = self.db.get_article_topics(article_id)
-
-                                # Get article content for opinion inference
-                                article_content = (
-                                    article_data.get("content")
-                                    or article_data.get("summary")
-                                    or article_data.get("title", "")
-                                )
-
-                                if existing_topic_ids:
-                                    # Article already has topics, link them to the post
-                                    for topic_id in existing_topic_ids:
-                                        self.db.add_post_topic(post_id, topic_id)
-                                        # Ensure author has opinion on each topic
-                                        topic_name = self.db.get_topic_name_from_id(topic_id)
-                                        if topic_name:
-                                            self._ensure_agent_opinion_exists(
-                                                act.agent_id,
-                                                topic_id,
-                                                topic_name,
-                                                article_content=article_content,
-                                            )
-                                    self.logger.info(
-                                        f"Linked {len(existing_topic_ids)} existing article topics to post {post_id}"
-                                    )
-                                # If no existing topics, they will need to be extracted by client before posting
-
-                        # Handle topic_ids for image posts
-                        elif hasattr(act, "topic_ids") and act.topic_ids:
-                            # Image posts have pre-fetched topic IDs from article
-                            for topic_id in act.topic_ids:
-                                self.db.add_post_topic(post_id, topic_id)
-                                # Ensure author has opinion on each topic
-                                topic_name = self.db.get_topic_name_from_id(topic_id)
-                                if topic_name:
-                                    self._ensure_agent_opinion_exists(
-                                        act.agent_id, topic_id, topic_name
-                                    )
-                            self.logger.info(
-                                f"Linked {len(act.topic_ids)} article topics to image post {post_id}"
-                            )
-
-                        # Save post topic if provided (for non-article posts)
-                        elif hasattr(act, "topic") and act.topic:
-                            # Get or create the topic in interests table
-                            topic_id = self.db.add_or_get_interest(act.topic)
-                            if topic_id:
-                                # Save post-topic association
-                                self.db.add_post_topic(post_id, topic_id)
-
-                                # Increment the agent's interest counter for this topic
-                                self._update_agent_interest_counter(
-                                    act.agent_id, act.topic, increment=1
-                                )
-
-                                # Ensure author has an opinion on the topic they're posting about
-                                self._ensure_agent_opinion_exists(act.agent_id, topic_id, act.topic)
-
-                        # Process annotations AFTER topics are assigned
-                        if hasattr(act, "annotations") and act.annotations:
-                            self._process_annotations(
-                                post_id,
-                                act.agent_id,
-                                act.annotations,
-                                is_post=True,
-                                is_comment=False,
-                            )
-                    else:
-                        self.logger.warning(
-                            f"Failed to add post for agent {act.agent_id}",
-                            extra={"extra_data": {"agent_id": act.agent_id}},
-                        )
-
-                elif act.action_type == "COMMENT":
-                    # Comments are stored as posts with comment_to set
-                    # Get the parent post to inherit thread_id (which points to the root of the thread)
-                    parent_post = self.db.get_post(act.target_post_id)
-                    if parent_post:
-                        # Get thread_id from parent - this will point to the root post
-                        # because:
-                        # 1. If parent is a root post, thread_id equals parent's ID
-                        # 2. If parent is a comment, it already inherited root's thread_id
-                        # So we recursively inherit the correct root thread_id
-                        thread_id = parent_post.get("thread_id")
-
-                        # Fallback: If parent doesn't have thread_id (legacy data),
-                        # assume parent IS the root post
-                        if not thread_id:
-                            thread_id = act.target_post_id
-
-                        post_data = {
-                            "user_id": str(act.agent_id),
-                            "tweet": act.content,
-                            "round": self.current_round_id,
-                            "comment_to": act.target_post_id,  # Points to immediate parent
-                            "thread_id": thread_id,  # Points to root post of thread
-                        }
-                        post_id = self.db.add_post(post_data)
-                        if post_id:
-                            new_ids.append(post_id)
-
-                            # Increment reaction count for the parent post
-                            count_updated = self.db.increment_post_reaction_count(
-                                act.target_post_id
-                            )
-                            if count_updated:
-                                self.logger.info(
-                                    f"Incremented reaction count for post {act.target_post_id} after COMMENT by agent {act.agent_id}"
-                                )
-                            else:
-                                self.logger.warning(
-                                    f"Failed to increment reaction count for post {act.target_post_id}"
-                                )
-
-                            # Process annotations if provided
-                            if hasattr(act, "annotations") and act.annotations:
-                                # Get parent post sentiment for sentiment_parent field
-                                parent_sentiment = None
-                                if parent_post:
-                                    # Query database to get sentiment of parent post
-                                    parent_sentiment_data = self.db.get_post_sentiment(
-                                        act.target_post_id
-                                    )
-                                    if parent_sentiment_data is not None:
-                                        sentiment_parent_compound = parent_sentiment_data.get(
-                                            "compound"
-                                        )
-                                        if sentiment_parent_compound is not None:
-                                            # Apply thresholding
-                                            if sentiment_parent_compound > 0.05:
-                                                parent_sentiment = "pos"
-                                            elif sentiment_parent_compound < -0.05:
-                                                parent_sentiment = "neg"
-                                            else:
-                                                parent_sentiment = "neu"
-                                            self.logger.info(
-                                                f"Parent sentiment for comment {post_id}: compound={sentiment_parent_compound:.3f} -> {parent_sentiment}"
-                                            )
-                                        else:
-                                            parent_sentiment = ""
-                                            self.logger.debug(
-                                                f"Parent sentiment compound is None for post {act.target_post_id}"
-                                            )
-                                    else:
-                                        parent_sentiment = ""
-                                        self.logger.debug(
-                                            f"No sentiment data found for parent post {act.target_post_id}"
-                                        )
-
-                                self._process_annotations(
-                                    post_id,
-                                    act.agent_id,
-                                    act.annotations,
-                                    is_post=False,
-                                    is_comment=True,
-                                    parent_post_id=act.target_post_id,
-                                    parent_sentiment=parent_sentiment,
-                                )
-
-                            # When commenting on a post, save the post's topics as user interests
-                            parent_post_id = act.target_post_id
-                            topic_ids = self.db.get_post_topics(parent_post_id)
-                            for topic_id in topic_ids:
-                                self.db.add_user_interest(
-                                    user_id=str(act.agent_id),
-                                    interest_id=topic_id,
-                                    round_id=self.current_round_id,
-                                )
-
-                                # Increment the agent's interest counter for this topic
-                                topic_name = self._get_topic_name_from_id(topic_id)
-                                if topic_name:
-                                    self._update_agent_interest_counter(
-                                        act.agent_id, topic_name, increment=1
-                                    )
-
-                            # Store opinion updates if calculated by client
-                            if hasattr(act, "updated_opinions") and act.updated_opinions:
-                                parent_author_id = parent_post.get("user_id")
-                                for topic_id, new_opinion in act.updated_opinions.items():
-                                    self.db.add_agent_opinion(
-                                        agent_id=str(act.agent_id),
-                                        round_id=self.current_round_id,
-                                        topic_id=topic_id,
-                                        opinion=new_opinion,
-                                        id_interacted_with=parent_author_id,
-                                        id_post=parent_post_id,
-                                    )
-                                self.logger.info(
-                                    f"Stored {len(act.updated_opinions)} opinion updates for agent {act.agent_id}"
-                                )
-                        else:
-                            self.logger.warning(
-                                f"Failed to add comment for agent {act.agent_id}",
-                                extra={"extra_data": {"agent_id": act.agent_id}},
-                            )
-                    else:
-                        self.logger.warning(
-                            f"Parent post not found for comment: {act.target_post_id}",
-                            extra={
-                                "extra_data": {
-                                    "agent_id": act.agent_id,
-                                    "target_post_id": act.target_post_id,
-                                }
-                            },
-                        )
-
-                elif act.action_type == "SHARE":
-                    # Share action: create a new post referencing the original
-                    # Get the original post to copy news_id if present
-                    original_post = self.db.get_post(act.target_post_id)
-                    if original_post:
-                        post_data = {
-                            "user_id": str(act.agent_id),
-                            "tweet": act.content if act.content else "",  # Optional commentary
-                            "round": self.current_round_id,
-                            "shared_from": act.target_post_id,
-                        }
-                        # If the original post references an article, copy the reference
-                        # Use helper method for consistent empty/default value checking
-                        news_id = original_post.get("news_id")
-                        if not self.db._is_empty_or_default(news_id):
-                            post_data["news_id"] = news_id
-
-                        post_id = self.db.add_post(post_data)
-                        if post_id:
-                            new_ids.append(post_id)
-
-                            # Store opinion updates if calculated by client
-                            if hasattr(act, "updated_opinions") and act.updated_opinions:
-                                parent_author_id = original_post.get("user_id")
-                                for topic_id, new_opinion in act.updated_opinions.items():
-                                    self.db.add_agent_opinion(
-                                        agent_id=str(act.agent_id),
-                                        round_id=self.current_round_id,
-                                        topic_id=topic_id,
-                                        opinion=new_opinion,
-                                        id_interacted_with=parent_author_id,
-                                        id_post=act.target_post_id,
-                                    )
-                                self.logger.info(
-                                    f"Stored {len(act.updated_opinions)} opinion updates for share by agent {act.agent_id}"
-                                )
-                        else:
-                            self.logger.warning(
-                                f"Failed to add share for agent {act.agent_id}",
-                                extra={"extra_data": {"agent_id": act.agent_id}},
-                            )
-                    else:
-                        self.logger.warning(
-                            f"Original post not found for share: {act.target_post_id}",
-                            extra={
-                                "extra_data": {
-                                    "agent_id": act.agent_id,
-                                    "target_post_id": act.target_post_id,
-                                }
-                            },
-                        )
-
-                elif act.action_type == "FOLLOW":
-                    # Follow action: create follow relationship
-                    follow_data = {
-                        "follower_id": str(
-                            act.agent_id
-                        ),  # FK to user_mgmt.id (UUID string) - agent who is following
-                        "user_id": act.target_user_id,  # FK to user_mgmt.id (UUID string) - user being followed
-                        "action": "follow",
-                        "round": self.current_round_id,  # FK to rounds.id
-                    }
-                    success = self.db.add_follow(follow_data)
-                    if not success:
-                        self.logger.warning(
-                            f"Failed to add follow for agent {act.agent_id}",
-                            extra={
-                                "extra_data": {
-                                    "agent_id": act.agent_id,
-                                    "target_user_id": act.target_user_id,
-                                }
-                            },
-                        )
-
-                elif act.action_type == "UNFOLLOW":
-                    # Unfollow action: create unfollow relationship record
-                    unfollow_data = {
-                        "follower_id": str(
-                            act.agent_id
-                        ),  # FK to user_mgmt.id (UUID string) - agent who is unfollowing
-                        "user_id": act.target_user_id,  # FK to user_mgmt.id (UUID string) - user being unfollowed
-                        "action": "unfollow",
-                        "round": self.current_round_id,  # FK to rounds.id
-                    }
-                    success = self.db.add_follow(unfollow_data)
-                    if not success:
-                        self.logger.warning(
-                            f"Failed to add unfollow for agent {act.agent_id}",
-                            extra={
-                                "extra_data": {
-                                    "agent_id": act.agent_id,
-                                    "target_user_id": act.target_user_id,
-                                }
-                            },
-                        )
-
-                else:
-                    # Other interactions (LIKE, LOVE, ANGRY, SAD, LAUGH, etc.)
-                    interaction_data = {
-                        "user_id": str(act.agent_id),  # FK to user_mgmt.id (UUID string)
-                        "post_id": act.target_post_id,  # FK to post.id (UUID string)
-                        "type": act.action_type,  # Field name is 'type' not 'reaction_type'
-                        "round": self.current_round_id,  # FK to rounds.id
-                    }
-                    success = self.db.add_interaction(interaction_data)
-
-                    # Increment reaction count for the post
-                    if success:
-                        count_updated = self.db.increment_post_reaction_count(act.target_post_id)
-                        if count_updated:
-                            self.logger.info(
-                                f"Incremented reaction count for post {act.target_post_id} after {act.action_type} by agent {act.agent_id}"
-                            )
-                        else:
-                            self.logger.warning(
-                                f"Failed to increment reaction count for post {act.target_post_id}"
-                            )
-
-                    # Save sentiment for reactions
-                    # Get the post being reacted to
-                    reacted_post = self.db.get_post(act.target_post_id)
-                    if reacted_post:
-                        # Get topics from the reacted post
-                        topic_ids = self.db.get_post_topics(act.target_post_id)
-
-                        if topic_ids:
-                            # Map reaction type to sentiment values
-                            sentiment_values = self._reaction_to_sentiment(act.action_type)
-
-                            if sentiment_values:
-                                # Get parent post sentiment for sentiment_parent field
-                                parent_sentiment = None
-                                parent_sentiment_data = self.db.get_post_sentiment(
-                                    act.target_post_id
-                                )
-                                if parent_sentiment_data is not None:
-                                    sentiment_parent_compound = parent_sentiment_data.get(
-                                        "compound"
-                                    )
-                                    if sentiment_parent_compound is not None:
-                                        # Apply thresholding
-                                        if sentiment_parent_compound > 0.05:
-                                            parent_sentiment = "pos"
-                                        elif sentiment_parent_compound < -0.05:
-                                            parent_sentiment = "neg"
-                                        else:
-                                            parent_sentiment = "neu"
-                                        self.logger.info(
-                                            f"Parent sentiment for reaction on post {act.target_post_id}: compound={sentiment_parent_compound:.3f} -> {parent_sentiment}"
-                                        )
-                                    else:
-                                        parent_sentiment = ""
-                                else:
-                                    parent_sentiment = ""
-
-                                # Create sentiment entries for each topic
-                                for topic_id in topic_ids:
-                                    sentiment_data = {
-                                        "post_id": act.target_post_id,
-                                        "user_id": str(act.agent_id),
-                                        "topic_id": topic_id,
-                                        "round": self.current_round_id,
-                                        "neg": sentiment_values["neg"],
-                                        "pos": sentiment_values["pos"],
-                                        "neu": sentiment_values["neu"],
-                                        "compound": sentiment_values["compound"],
-                                        "sentiment_parent": parent_sentiment,
-                                        "is_post": 0,
-                                        "is_comment": 0,
-                                        "is_reaction": 1,
-                                    }
-                                    success = self.db.add_post_sentiment(sentiment_data)
-                                    if success:
-                                        self.logger.info(
-                                            f"Added reaction sentiment for {act.action_type} on post {act.target_post_id}, topic {topic_id}"
-                                        )
-                                    else:
-                                        self.logger.error(
-                                            f"Failed to add reaction sentiment for {act.action_type} on post {act.target_post_id}, topic {topic_id}"
-                                        )
-                        else:
-                            self.logger.debug(
-                                f"No topics found for reacted post {act.target_post_id}, skipping reaction sentiment"
-                            )
-                    else:
-                        self.logger.warning(f"Reacted post {act.target_post_id} not found")
-
+            # Update recent posts cache
             if new_ids:
                 self.recent_posts_cache.extend(new_ids)
                 self.recent_posts_cache = self.recent_posts_cache[-50:]  # Keep last 50
@@ -1921,7 +1393,7 @@ class OrchestratorServer:
             if actions:
                 active_agent_ids = set(act.agent_id for act in actions)
                 for agent_id in active_agent_ids:
-                    self.db.update_agent_last_active_day(agent_id, self.day)
+                    self.user_service.update_agent_last_active_day(agent_id, self.day)
 
             execution_time = (time.time() - start_time) * 1000
 
@@ -1947,10 +1419,11 @@ class OrchestratorServer:
             self.logger.error(f"DB Error: {e}")
 
         # Mark this specific client as done
-        self.submitted_clients.add(client_id)
+        self.client_manager.mark_client_submitted(client_id)
 
         # Check if EVERYONE is done
         self._check_barrier_and_advance()
+
 
     def get_current_day(self) -> int:
         """
@@ -1981,7 +1454,7 @@ class OrchestratorServer:
         Returns:
             List of agent IDs (strings) that are inactive
         """
-        return self.db.get_inactive_agents(current_day, inactivity_threshold)
+        return self.user_service.get_inactive_agents(current_day, inactivity_threshold)
 
     def set_agent_churned(self, agent_id: str, round_id: str) -> bool:
         """
@@ -1994,7 +1467,7 @@ class OrchestratorServer:
         Returns:
             bool: True if successful
         """
-        return self.db.set_agent_churned(agent_id, round_id)
+        return self.user_service.set_agent_churned(agent_id, round_id)
 
     def set_agents_churned_batch(self, agent_ids: List[str], round_id: str) -> int:
         """
@@ -2009,7 +1482,7 @@ class OrchestratorServer:
         """
         churned_count = 0
         for agent_id in agent_ids:
-            if self.db.set_agent_churned(agent_id, round_id):
+            if self.user_service.set_agent_churned(agent_id, round_id):
                 churned_count += 1
         return churned_count
 
@@ -2020,7 +1493,7 @@ class OrchestratorServer:
         Returns:
             List of agent IDs (UUID strings) that are churned
         """
-        return self.db.get_churned_agents()
+        return self.user_service.get_churned_agents()
 
     def add_website(self, website_data: dict) -> Optional[str]:
         """
@@ -2034,7 +1507,7 @@ class OrchestratorServer:
         Returns:
             str: Website ID if successful, None otherwise
         """
-        return self.db.add_website(website_data)
+        return self.content_service.add_website(website_data)
 
     def get_website_by_rss(self, rss_url: str) -> Optional[dict]:
         """
@@ -2048,7 +1521,7 @@ class OrchestratorServer:
         Returns:
             dict: Website information if found, None otherwise
         """
-        return self.db.get_website_by_rss(rss_url)
+        return self.content_service.get_website_by_rss(rss_url)
 
     def add_article(self, article_data: dict) -> Optional[str]:
         """
@@ -2062,7 +1535,7 @@ class OrchestratorServer:
         Returns:
             str: Article ID if successful, None otherwise
         """
-        return self.db.add_article(article_data)
+        return self.article_service.add_article(article_data)
 
     def add_image(self, image_data: dict) -> Optional[str]:
         """
@@ -2076,7 +1549,7 @@ class OrchestratorServer:
         Returns:
             str: Image ID if successful, None otherwise
         """
-        return self.db.add_image(image_data)
+        return self.image_service.add_image(image_data)
 
     def get_random_image(self) -> Optional[dict]:
         """
@@ -2087,7 +1560,7 @@ class OrchestratorServer:
         Returns:
             dict: Image data or None if no images available
         """
-        return self.db.get_random_image()
+        return self.image_service.get_random_image()
 
     def get_interest_by_id(self, interest_id: str) -> Optional[dict]:
         """
@@ -2101,239 +1574,41 @@ class OrchestratorServer:
         Returns:
             dict: Interest data or None if not found
         """
-        return self.db.get_interest_by_id(interest_id)
+        return self.interest_service.get_interest_by_id(interest_id)
 
     def _check_barrier_and_advance(self) -> None:
         """
         Check if all active clients have submitted actions and advance simulation state.
-
-        This implements the core dynamic barrier synchronization mechanism.
-        Only waits for active clients (not completed ones).
+        
+        Delegates to BarrierHandler and RoundManager for coordination logic.
         """
         active_clients = self._get_active_clients()
-        active_count = len(active_clients)
-
-        # Do not advance if no one is active
-        if active_count == 0:
-            return
-
-        # Count how many active clients have submitted
-        submitted_active_clients = self.submitted_clients & active_clients
-        active_submitted_count = len(submitted_active_clients)
-
-        # If all active clients have submitted, advance.
-        if active_submitted_count >= active_count:
-            execution_start = time.time()
-
-            self.logger.info(
-                f"[Server] ✅ Day {self.day} Slot {self.slot} complete "
-                f"(Active clients: {active_count}). Advancing..."
+        
+        # Check if barrier should be released
+        should_advance = self.barrier_handler.check_barrier_and_should_advance(
+            active_clients, self.submitted_clients
+        )
+        
+        if should_advance:
+            # Clear submitted clients for next round
+            self.client_manager.clear_submitted_clients()
+            
+            # Advance simulation using RoundManager
+            result = self.round_manager.advance_simulation(
+                recompute_interests_callback=self._recompute_all_agent_interests
             )
-
-            self.submitted_clients.clear()
-            self.slot += 1
-
-            # Check if day is complete and consolidate Redis data if needed
-            day_completed = False
-            if self.slot > 24:
-                day_completed = True
-                completed_day = self.day
-                self.slot = 1
-                self.day += 1
-
-                # Consolidate Redis data to SQLite at end of day
-                consolidation_result = self.db.consolidate_redis_to_sqlite(completed_day)
-                if (
-                    consolidation_result.get("posts", 0) > 0
-                    or consolidation_result.get("interactions", 0) > 0
-                    or consolidation_result.get("removed_posts", 0) > 0
-                ):
-                    self.logger.info(
-                        f"Day {completed_day} complete - data consolidated to SQLite",
-                        extra={
-                            "extra_data": {
-                                "completed_day": completed_day,
-                                "posts_consolidated": consolidation_result.get("posts", 0),
-                                "interactions_consolidated": consolidation_result.get(
-                                    "interactions", 0
-                                ),
-                                "posts_removed_from_redis": consolidation_result.get(
-                                    "removed_posts", 0
-                                ),
-                                "interactions_removed_from_redis": consolidation_result.get(
-                                    "removed_interactions", 0
-                                ),
-                            }
-                        },
-                    )
-                    self.logger.info(
-                        f"[Server] 💾 Day {completed_day} complete - "
-                        f"Consolidated {consolidation_result.get('posts', 0)} posts, "
-                        f"{consolidation_result.get('interactions', 0)} interactions to SQLite. "
-                        f"Removed {consolidation_result.get('removed_posts', 0)} old posts, "
-                        f"{consolidation_result.get('removed_interactions', 0)} old interactions from Redis"
-                    )
-
-                # Recompute all agent interests based on the sliding attention window
-                # This handles the forgetting mechanism - interests decay as entries fall out of window
-                self._recompute_all_agent_interests()
-
-                # Note: Saving updated agent_population.json is handled by clients,
-                # not the server, to respect client-specific naming conventions
-
-                # Clean up old posts from Redis based on visibility_rounds (temporal sliding window)
-                cleanup_result = self.db.cleanup_old_posts_from_redis(self.day, self.slot)
-                if (
-                    cleanup_result.get("removed_posts", 0) > 0
-                    or cleanup_result.get("removed_interactions", 0) > 0
-                ):
-                    self.logger.info(
-                        f"Redis temporal cleanup complete - removed posts older than visibility_rounds",
-                        extra={
-                            "extra_data": {
-                                "day": self.day,
-                                "slot": self.slot,
-                                "removed_posts": cleanup_result.get("removed_posts", 0),
-                                "removed_interactions": cleanup_result.get(
-                                    "removed_interactions", 0
-                                ),
-                                "remaining_posts": cleanup_result.get("remaining_posts", 0),
-                            }
-                        },
-                    )
-                    self.logger.info(
-                        f"[Server] 🧹 Redis cleanup - "
-                        f"Removed {cleanup_result.get('removed_posts', 0)} old posts, "
-                        f"{cleanup_result.get('removed_interactions', 0)} old interactions. "
-                        f"Remaining: {cleanup_result.get('remaining_posts', 0)} posts in Redis"
-                    )
-
-                # Check if it's time for archetype transitions (every 7 days)
-                if self.archetypes_enabled and self.day - self.last_archetype_transition_day >= 7:
-                    self._perform_archetype_transitions()
-                    self.last_archetype_transition_day = self.day
-
-            # Update Round table with new time
-            self.current_round_id = self.db.get_or_create_round(self.day, self.slot)
-            self.interest_manager.set_current_round(self.current_round_id)
-
-            execution_time = (time.time() - execution_start) * 1000
-
-            self.logger.info(
-                "Simulation advanced",
-                extra={
-                    "extra_data": {
-                        "new_day": self.day,
-                        "new_slot": self.slot,
-                        "round_id": self.current_round_id,
-                        "num_active_clients": active_count,
-                        "day_completed": day_completed,
-                        "execution_time_ms": execution_time,
-                    }
-                },
-            )
+            
+            # Check if it's time for archetype transitions (every 7 days)
+            if result["day_completed"] and self.archetype_manager.should_perform_transitions(self.day):
+                self.archetype_manager.perform_transitions(self.day)
 
     def _perform_archetype_transitions(self) -> None:
         """
-        Perform archetype transitions for all registered agents based on transition probabilities.
-
-        Each agent has a probability of transitioning to a different archetype based on their
-        current archetype and the transition matrix defined in the configuration.
-        This is called every 7 days when archetypes are enabled.
+        Perform archetype transitions for all registered agents.
+        
+        Delegates to ArchetypeManager for transition logic.
         """
-        import random
-
-        # Tolerance for probability sum validation
-        PROBABILITY_TOLERANCE = 0.01
-
-        if not self.archetypes_enabled or not self.archetype_transitions:
-            return
-
-        transition_start = time.time()
-        transitioned_count = 0
-        error_count = 0
-
-        # Get all registered agents from database
-        try:
-            # Query all users and their current archetypes
-            agents = self.db.get_all_users()
-
-            for agent in agents:
-                agent_id = agent.get("id")
-                current_archetype = agent.get("archetype")
-
-                # Skip if agent has no archetype
-                if not current_archetype:
-                    continue
-
-                # Normalize archetype to lowercase for comparison
-                current_archetype_lower = current_archetype.lower()
-
-                # Skip if archetype not in transitions
-                if current_archetype_lower not in self.archetype_transitions:
-                    continue
-
-                # Get transition probabilities for current archetype
-                transitions = self.archetype_transitions.get(current_archetype_lower, {})
-
-                if not transitions:
-                    continue
-
-                # Sample new archetype based on transition probabilities
-                archetypes = list(transitions.keys())
-                probabilities = list(transitions.values())
-
-                # Validate probabilities sum to approximately 1.0
-                total_prob = sum(probabilities)
-                if abs(total_prob - 1.0) > PROBABILITY_TOLERANCE:
-                    self.logger.warning(
-                        f"Archetype transition probabilities for '{current_archetype}' sum to {total_prob}, expected 1.0"
-                    )
-                    # Normalize probabilities
-                    probabilities = [p / total_prob for p in probabilities]
-
-                # Select new archetype using weighted random choice
-                new_archetype = random.choices(archetypes, weights=probabilities)[0]
-
-                # Update agent archetype in database if it changed
-                if new_archetype != current_archetype_lower:
-                    # Capitalize first letter to match format
-                    new_archetype_formatted = new_archetype.capitalize()
-
-                    if self.db.update_user_archetype(agent_id, new_archetype_formatted):
-                        transitioned_count += 1
-                        self.logger.debug(
-                            f"Agent {agent_id} transitioned from {current_archetype} to {new_archetype_formatted}"
-                        )
-                    else:
-                        error_count += 1
-
-        except Exception as e:
-            self.logger.error(
-                f"Error during archetype transitions: {e}", extra={"extra_data": {"error": str(e)}}
-            )
-            self.logger.error(f"Archetype transition error: {e}")
-            return
-
-        transition_time = (time.time() - transition_start) * 1000
-
-        self.logger.info(
-            f"Archetype transitions complete at day {self.day}",
-            extra={
-                "extra_data": {
-                    "day": self.day,
-                    "transitioned_count": transitioned_count,
-                    "error_count": error_count,
-                    "total_agents": len(agents),
-                    "execution_time_ms": transition_time,
-                }
-            },
-        )
-
-        self.logger.info(
-            f"[Server] 🔄 Archetype transitions complete - "
-            f"{transitioned_count} agents changed archetypes (day {self.day})"
-        )
+        self.archetype_manager.perform_transitions(self.day)
 
     def _calculate_visibility_params(self, visibility_rounds: int) -> tuple:
         """
@@ -2393,14 +1668,12 @@ class OrchestratorServer:
                 session.close()
 
             # Also save to Redis if enabled
-            if self.db.use_redis:
+            if self.use_redis:
                 # Store recommendation in Redis with key format: ysim:recommendations:{user_id}:{round_id}
-                rec_key = self.db._redis_key(
-                    "recommendations", f"{agent_id}:{self.current_round_id}"
-                )
-                self.db.redis_client.set(rec_key, post_ids_str)
+                rec_key = f"ysim:recommendations:{agent_id}:{self.current_round_id}"
+                self.redis_client.set(rec_key, post_ids_str)
                 # Set TTL to prevent unbounded growth
-                self.db.redis_client.expire(rec_key, RECOMMENDATION_TTL_SECONDS)
+                self.redis_client.expire(rec_key, RECOMMENDATION_TTL_SECONDS)
 
             self.logger.debug(
                 f"Saved recommendation for agent {agent_id}: {len(post_ids)} posts",
@@ -2430,249 +1703,34 @@ class OrchestratorServer:
     ) -> List[str]:
         """
         Get recommended posts for an agent using the specified recommendation strategy.
+        
+        Delegates to ContentRecommender for recommendation logic.
 
         Args:
             agent_id: UUID of the agent requesting recommendations
-            mode: Recommendation mode:
-                - "random": Random post ordering (default)
-                - "rchrono": Reverse chronological ordering (newest first)
-                - "rchrono_popularity": Reverse chronological with popularity boost
-                - "rchrono_followers": Prioritizes posts from followed users
-                - "rchrono_followers_popularity": Followers + popularity
-                - "rchrono_comments": Prioritizes highly commented posts
-                - "common_interests": Posts with common topic interests
-                - "common_user_interests": Posts by users with common interests
-                - "similar_users_react": Posts from similar users (by reactions)
-                - "similar_users_posts": Posts from similar users (by posting)
+            mode: Recommendation mode (random, rchrono, rchrono_popularity, etc.)
             limit: Number of posts to recommend (default: 5)
             followers_ratio: Ratio of posts from followers vs others (default: 0.6)
+            client_id: Client ID (for logging)
 
         Returns:
             List[str]: List of post UUIDs recommended for the agent
         """
-        try:
-            # Use server's configured visibility_rounds
-            # Calculate visibility threshold based on day/hour (not UUID arithmetic)
-            visibility_day, visibility_hour = self._calculate_visibility_params(
-                self.visibility_rounds
-            )
-
-            if self.db.use_redis:
-                # Use Redis for recommendations - dispatch to modular functions
-                # Get recent posts from Redis
-                recent_posts_key = self.db._redis_key("posts", "recent")
-                all_post_ids = self.db.redis_client.lrange(recent_posts_key, 0, -1)
-
-                # Use Redis pipeline to fetch post data efficiently (avoid N+1 queries)
-                if all_post_ids:
-                    pipeline = self.db.redis_client.pipeline()
-                    for post_id in all_post_ids:
-                        post_key = self.db._redis_key("posts", post_id)
-                        pipeline.hgetall(post_key)
-
-                    # Execute pipeline and get all results at once
-                    posts_data = pipeline.execute()
-
-                    # Build list of valid posts with metadata
-                    valid_posts_with_data = []
-                    for i, post_data in enumerate(posts_data):
-                        if post_data:
-                            post_user_id = post_data.get("user_id")
-                            # Exclude own posts
-                            if post_user_id and post_user_id != agent_id:
-                                valid_posts_with_data.append(
-                                    {
-                                        "id": all_post_ids[i],
-                                        "index": i,  # Preserve chronological order (lower index = newer)
-                                        "reaction_count": int(
-                                            post_data.get("reaction_count", 0) or 0
-                                        ),
-                                    }
-                                )
-                else:
-                    valid_posts_with_data = []
-
-                # Prepare common kwargs for all recommendation functions
-                common_kwargs = {
-                    "valid_posts_with_data": valid_posts_with_data,
-                    "limit": limit,
-                    "agent_id": agent_id,
-                    "all_post_ids": all_post_ids,
-                    "posts_data": posts_data,
-                    "followers_ratio": followers_ratio,
-                    "db_engine": self.db.engine,
-                    "redis_client": self.db.redis_client,
-                    "redis_key_fn": self.db._redis_key,
-                    "logger": self.logger,
-                }
-
-                # Dispatch to appropriate recommendation function
-                if mode == "rchrono":
-                    post_ids = content_recsys_redis.recommend_rchrono_redis(**common_kwargs)
-                elif mode == "rchrono_popularity":
-                    post_ids = content_recsys_redis.recommend_rchrono_popularity_redis(
-                        **common_kwargs
-                    )
-                elif mode == "rchrono_followers":
-                    post_ids = content_recsys_redis.recommend_rchrono_followers_redis(
-                        **common_kwargs
-                    )
-                elif mode == "rchrono_followers_popularity":
-                    post_ids = content_recsys_redis.recommend_rchrono_followers_popularity_redis(
-                        **common_kwargs
-                    )
-                elif mode == "rchrono_comments":
-                    post_ids = content_recsys_redis.recommend_rchrono_comments_redis(
-                        **common_kwargs
-                    )
-                elif mode == "common_interests":
-                    post_ids = content_recsys_redis.recommend_common_interests_redis(
-                        **common_kwargs
-                    )
-                elif mode == "common_user_interests":
-                    post_ids = content_recsys_redis.recommend_common_user_interests_redis(
-                        **common_kwargs
-                    )
-                elif mode == "similar_users_react":
-                    post_ids = content_recsys_redis.recommend_similar_users_react_redis(
-                        **common_kwargs
-                    )
-                elif mode == "similar_users_posts":
-                    post_ids = content_recsys_redis.recommend_similar_users_posts_redis(
-                        **common_kwargs
-                    )
-                else:
-                    # Default: random ordering
-                    post_ids = content_recsys_redis.recommend_random_redis(**common_kwargs)
-
-                self.logger.info(
-                    f"Recommended {len(post_ids)} posts (Redis, mode={mode})",
-                    extra={
-                        "extra_data": {
-                            "agent_id": agent_id,
-                            "mode": mode,
-                            "limit": limit,
-                            "found": len(post_ids),
-                        }
-                    },
-                )
-
-                # Save recommendations to database (and Redis if enabled)
-                self._save_recommendation(agent_id, post_ids)
-
-                return post_ids
-
-            else:
-                # Use SQL database for recommendations
-                from sqlalchemy.orm import Session
-
-                session = Session(self.db.engine)
-                try:
-                    if mode == "rchrono":
-                        # Reverse chronological: newest posts first
-                        post_ids = content_recsys_db.recommend_rchrono(
-                            session, agent_id, visibility_day, visibility_hour, limit
-                        )
-
-                    elif mode == "rchrono_popularity":
-                        # Reverse chronological with popularity (reaction count)
-                        post_ids = content_recsys_db.recommend_rchrono_popularity(
-                            session, agent_id, visibility_day, visibility_hour, limit
-                        )
-
-                    elif mode == "rchrono_followers":
-                        # Prioritize posts from followed users
-                        post_ids = content_recsys_db.recommend_rchrono_followers(
-                            session,
-                            agent_id,
-                            visibility_day,
-                            visibility_hour,
-                            limit,
-                            followers_ratio,
-                        )
-
-                    elif mode == "rchrono_followers_popularity":
-                        # Followers with popularity boost
-                        post_ids = content_recsys_db.recommend_rchrono_followers_popularity(
-                            session,
-                            agent_id,
-                            visibility_day,
-                            visibility_hour,
-                            limit,
-                            followers_ratio,
-                        )
-
-                    elif mode == "rchrono_comments":
-                        # Prioritize posts with more comments (thread activity)
-                        post_ids = content_recsys_db.recommend_rchrono_comments(
-                            session, agent_id, visibility_day, visibility_hour, limit
-                        )
-
-                    elif mode == "common_interests":
-                        # Posts with common topic interests
-                        post_ids = content_recsys_db.recommend_common_interests(
-                            session,
-                            agent_id,
-                            visibility_day,
-                            visibility_hour,
-                            limit,
-                            followers_ratio,
-                        )
-
-                    elif mode == "common_user_interests":
-                        # Posts by users with common interests (most interacted)
-                        post_ids = content_recsys_db.recommend_common_user_interests(
-                            session,
-                            agent_id,
-                            visibility_day,
-                            visibility_hour,
-                            limit,
-                            followers_ratio,
-                        )
-
-                    elif mode == "similar_users_react":
-                        # Posts from similar users (based on demographics/personality)
-                        post_ids = content_recsys_db.recommend_similar_users_react(
-                            session, agent_id, visibility_day, visibility_hour, limit
-                        )
-
-                    elif mode == "similar_users_posts":
-                        # Posts created by similar users
-                        post_ids = content_recsys_db.recommend_similar_users_posts(
-                            session, agent_id, visibility_day, visibility_hour, limit
-                        )
-
-                    else:
-                        # Random ordering (default)
-                        post_ids = content_recsys_db.recommend_random(
-                            session, agent_id, visibility_day, visibility_hour, limit
-                        )
-
-                    self.logger.info(
-                        f"Recommended {len(post_ids)} posts (SQL, mode={mode})",
-                        extra={
-                            "extra_data": {
-                                "agent_id": agent_id,
-                                "mode": mode,
-                                "limit": limit,
-                                "found": len(post_ids),
-                            }
-                        },
-                    )
-
-                    # Save recommendations to database (and Redis if enabled)
-                    self._save_recommendation(agent_id, post_ids)
-
-                    return post_ids
-                finally:
-                    session.close()
-
-        except Exception as e:
-            self.logger.error(
-                f"Error getting recommended posts: {e}",
-                extra={"extra_data": {"agent_id": agent_id, "mode": mode, "error": str(e)}},
-            )
-            return []
+        # Delegate to ContentRecommender
+        post_ids = self.content_recommender.get_recommended_posts(
+            agent_id=agent_id,
+            mode=mode,
+            limit=limit,
+            followers_ratio=followers_ratio,
+            day=self.day,
+            slot=self.slot,
+        )
+        
+        # Save recommendations to database (and Redis if enabled)
+        if post_ids:
+            self._save_recommendation(agent_id, post_ids)
+        
+        return post_ids
 
     @log_server_request
     def get_post(self, post_id: str, client_id: str = None) -> Optional[Dict[str, Any]]:
@@ -2686,7 +1744,7 @@ class OrchestratorServer:
         Returns:
             Dictionary with post data or None if not found
         """
-        return self.db.get_post(post_id)
+        return self.post_service.get_post(post_id)
 
     @log_server_request
     def get_thread_context(
@@ -2708,7 +1766,7 @@ class OrchestratorServer:
             List of dicts with keys: id, user_id, username, tweet, round
             in chronological order (oldest first)
         """
-        return self.db.get_thread_context(post_id, max_length)
+        return self.post_service.get_thread_context(post_id, max_length)
 
     @log_server_request
     def get_user(self, user_id: str, client_id: str = None) -> Optional[Dict[str, Any]]:
@@ -2722,7 +1780,7 @@ class OrchestratorServer:
         Returns:
             Dictionary with user data or None if not found
         """
-        return self.db.get_user(user_id)
+        return self.user_service.get_user(user_id)
 
     @log_server_request
     def search_posts_by_topic(
@@ -2739,7 +1797,7 @@ class OrchestratorServer:
         Returns:
             List[str]: List of post UUIDs from other users on this topic
         """
-        return self.db.search_posts_by_topic(topic_id, agent_id, limit)
+        return self.post_service.search_posts_by_topic(topic_id, agent_id, limit)
 
     @log_server_request
     def get_post_topics(self, post_id: str, client_id: str = None) -> List[str]:
@@ -2753,7 +1811,7 @@ class OrchestratorServer:
         Returns:
             List of topic UUIDs
         """
-        return self.db.get_post_topics(post_id)
+        return self.post_service.get_post_topics(post_id)
 
     @log_server_request
     def get_topic_name_from_id(self, topic_id: str, client_id: str = None) -> Optional[str]:
@@ -2775,6 +1833,8 @@ class OrchestratorServer:
     ) -> Optional[float]:
         """
         Get the latest opinion value for an agent on a topic.
+        
+        Delegates to OpinionHandler for opinion retrieval.
 
         Args:
             agent_id: Agent UUID
@@ -2784,7 +1844,7 @@ class OrchestratorServer:
         Returns:
             Latest opinion value or None if not found
         """
-        return self.db.get_latest_agent_opinion(agent_id, topic_id)
+        return self.opinion_handler.get_latest_opinion(agent_id, topic_id)
 
     @log_server_request
     def add_agent_opinion(
@@ -2798,6 +1858,8 @@ class OrchestratorServer:
     ) -> bool:
         """
         Add an agent opinion record to the database.
+        
+        Delegates to OpinionHandler for opinion storage.
 
         Args:
             agent_id: Agent UUID
@@ -2810,8 +1872,8 @@ class OrchestratorServer:
         Returns:
             True if successful, False otherwise
         """
-        return self.db.add_agent_opinion(
-            agent_id, self.current_round_id, topic_id, opinion, id_interacted_with, id_post
+        return self.opinion_handler.add_opinion(
+            agent_id, topic_id, opinion, id_interacted_with, id_post
         )
 
     @log_server_request
@@ -2820,6 +1882,8 @@ class OrchestratorServer:
     ) -> List[float]:
         """
         Get the opinions of an agent's neighbors (followees) on a specific topic.
+        
+        Delegates to OpinionHandler for neighbor opinion retrieval.
 
         This method retrieves the latest opinions of all users that the agent follows
         on the specified topic. Used for LLM-based opinion dynamics with evaluation_scope="neighbors".
@@ -2832,76 +1896,7 @@ class OrchestratorServer:
         Returns:
             List of opinion values (floats in [0, 1]) from the agent's neighbors
         """
-        try:
-            # Query the Follow table to get users that agent_id follows
-            # In the Follow table: follower_id is the agent, user_id is who they follow
-            if self.db.use_redis:
-                # Redis implementation: hybrid approach
-                # Step 1: Get followees from Redis follow keys
-                follow_pattern = self.db.get_redis_key_pattern("follow", "*")
-                # Note: Using KEYS here for consistency with follow_recsys_redis.py
-                # For large-scale production deployments, consider using SCAN instead
-                follow_keys = self.db.redis_client.keys(follow_pattern)
-
-                # Encode agent_id once for efficiency
-                agent_id_bytes = agent_id.encode()
-
-                followee_ids = set()
-                for key in follow_keys:
-                    follow_data = self.db.redis_client.hgetall(key)
-                    # Check if this is a follow relationship for the agent
-                    if (
-                        follow_data.get(b"follower_id") == agent_id_bytes
-                        and follow_data.get(b"action") == b"follow"
-                    ):
-                        user_id = follow_data.get(b"user_id")
-                        if user_id:
-                            followee_ids.add(user_id.decode())
-
-                if not followee_ids:
-                    return []
-
-                # Step 2: Get opinions from Redis for each followee
-                opinions = []
-                for followee_id in followee_ids:
-                    opinion = self.db.get_latest_agent_opinion(followee_id, topic_id)
-                    if opinion is not None:
-                        opinions.append(opinion)
-
-                return opinions
-            else:
-                # SQL implementation
-                from sqlalchemy.orm import Session
-
-                from YSimulator.YServer.classes.models import Follow
-
-                with Session(self.db.engine) as session:
-                    # Get list of user_ids that agent follows (where agent is the follower and action='follow')
-                    followees_query = (
-                        session.query(Follow.user_id)
-                        .filter(Follow.follower_id == agent_id, Follow.action == "follow")
-                        .all()
-                    )
-
-                    followee_ids = [row[0] for row in followees_query]
-
-                    if not followee_ids:
-                        return []
-
-                    # Get opinions of each followee on this topic
-                    opinions = []
-                    for followee_id in followee_ids:
-                        opinion = self.db.get_latest_agent_opinion(followee_id, topic_id)
-                        if opinion is not None:
-                            opinions.append(opinion)
-
-                    return opinions
-        except Exception as e:
-            self.logger.error(
-                f"Error getting neighbors opinions: {e}",
-                extra={"extra_data": {"error": str(e), "agent_id": agent_id, "topic_id": topic_id}},
-            )
-            return []
+        return self.opinion_handler.get_neighbors_opinions(agent_id, topic_id)
 
     @log_server_request
     def get_follow_suggestions(
@@ -2941,174 +1936,28 @@ class OrchestratorServer:
         self, agent_id: str, mode: str, n_neighbors: int, leaning_bias: int
     ) -> List[str]:
         """
-        Get follow suggestions using SQL queries for better scalability.
-
-        Dispatcher method that delegates to modular functions in follow_recsys_db module.
+        Get follow suggestions using SQL queries.
+        
+        Delegates to FollowRecommender for recommendation logic.
         """
-        try:
-            from sqlalchemy import and_, func
-            from sqlalchemy.orm import Session
-
-            from YSimulator.YServer.classes.models import Follow, User_mgmt
-
-            with Session(self.db.engine) as session:
-                # Get agent's info
-                agent = session.query(User_mgmt).filter_by(id=agent_id).first()
-                if not agent:
-                    self.logger.warning(f"Agent {agent_id} not found for follow suggestions")
-                    return []
-
-                # Get users that agent is currently following (with latest action = "follow")
-                latest_follows_subq = (
-                    session.query(
-                        Follow.follower_id,
-                        Follow.user_id,
-                        func.max(Follow.round).label("max_round"),
-                    )
-                    .filter(Follow.follower_id == agent_id)
-                    .group_by(Follow.follower_id, Follow.user_id)
-                    .subquery()
-                )
-
-                following = (
-                    session.query(Follow.user_id)
-                    .join(
-                        latest_follows_subq,
-                        and_(
-                            Follow.follower_id == latest_follows_subq.c.follower_id,
-                            Follow.user_id == latest_follows_subq.c.user_id,
-                            Follow.round == latest_follows_subq.c.max_round,
-                            Follow.action == "follow",
-                        ),
-                    )
-                    .all()
-                )
-                following_ids = {f.user_id for f in following}
-
-                # Dispatch to appropriate recommendation function
-                if mode == "random":
-                    suggestions = follow_recsys_db.recommend_random_follows(
-                        session, agent_id, following_ids, n_neighbors
-                    )
-                elif mode == "common_neighbors":
-                    suggestions = follow_recsys_db.recommend_common_neighbors(
-                        session, agent_id, following_ids, n_neighbors
-                    )
-                elif mode == "jaccard":
-                    suggestions = follow_recsys_db.recommend_jaccard(
-                        session, agent_id, following_ids, n_neighbors
-                    )
-                elif mode == "adamic_adar":
-                    suggestions = follow_recsys_db.recommend_adamic_adar(
-                        session, agent_id, following_ids, n_neighbors
-                    )
-                elif mode == "preferential_attachment":
-                    suggestions = follow_recsys_db.recommend_preferential_attachment(
-                        session, agent_id, following_ids, n_neighbors
-                    )
-                else:
-                    # Unknown mode, fallback to random
-                    suggestions = follow_recsys_db.recommend_random_follows(
-                        session, agent_id, following_ids, n_neighbors
-                    )
-
-                # Apply leaning bias if requested
-                suggestions = follow_recsys_db.apply_leaning_bias(
-                    session, agent_id, suggestions, leaning_bias, n_neighbors
-                )
-
-                return suggestions[:n_neighbors]
-
-        except Exception as e:
-            self.logger.error(
-                f"Error getting SQL follow suggestions: {e}",
-                extra={"extra_data": {"error": str(e), "agent_id": agent_id, "mode": mode}},
-            )
-            # Fallback to simple random
-            try:
-                from sqlalchemy.orm import Session
-
-                from YSimulator.YServer.classes.models import User_mgmt
-
-                with Session(self.db.engine) as session:
-                    candidates = (
-                        session.query(User_mgmt.id)
-                        .filter(User_mgmt.id != agent_id)
-                        .limit(n_neighbors * 2)
-                        .all()
-                    )
-                    candidate_ids = [c.id for c in candidates]
-                    random.shuffle(candidate_ids)
-                    return candidate_ids[:n_neighbors]
-            except Exception as e:
-                # Database query failed, return empty list
-                self.logger.error(f"Failed to get follow suggestions from database: {e}")
-                return []
+        return self.follow_recommender.get_follow_suggestions(
+            agent_id=agent_id,
+            mode=mode,
+            n_neighbors=n_neighbors,
+            leaning_bias=leaning_bias,
+        )
 
     def _get_follow_suggestions_redis(
         self, agent_id: str, mode: str, n_neighbors: int, leaning_bias: int
     ) -> List[str]:
         """
-        Get follow suggestions using Redis for better scalability with key-value storage.
-        Dispatcher method that delegates to specific recommendation functions.
+        Get follow suggestions using Redis.
+        
+        Delegates to FollowRecommender for recommendation logic.
         """
-        from YSimulator.YServer.recsys import follow_recsys_redis
-
-        try:
-            # Dispatch to appropriate recommendation function
-            if mode == "random":
-                recommendations = follow_recsys_redis.recommend_random_follows_redis(
-                    self.db.redis_client, self.db._redis_key, agent_id, n_neighbors, self.logger
-                )
-            elif mode == "preferential_attachment":
-                recommendations = follow_recsys_redis.recommend_preferential_attachment_redis(
-                    self.db.redis_client, self.db._redis_key, agent_id, n_neighbors, self.logger
-                )
-            elif mode == "common_neighbors":
-                recommendations = follow_recsys_redis.recommend_common_neighbors_redis(
-                    self.db.redis_client, self.db._redis_key, agent_id, n_neighbors, self.logger
-                )
-            elif mode == "jaccard":
-                recommendations = follow_recsys_redis.recommend_jaccard_redis(
-                    self.db.redis_client, self.db._redis_key, agent_id, n_neighbors, self.logger
-                )
-            elif mode == "adamic_adar":
-                recommendations = follow_recsys_redis.recommend_adamic_adar_redis(
-                    self.db.redis_client, self.db._redis_key, agent_id, n_neighbors, self.logger
-                )
-            else:
-                # Unknown mode, fallback to random
-                self.logger.warning(f"Unknown follow recommendation mode: {mode}, using random")
-                recommendations = follow_recsys_redis.recommend_random_follows_redis(
-                    self.db.redis_client, self.db._redis_key, agent_id, n_neighbors, self.logger
-                )
-
-            # Apply political leaning bias if specified
-            if leaning_bias > 0 and recommendations:
-                recommendations = follow_recsys_redis.apply_leaning_bias_redis(
-                    self.db.redis_client,
-                    self.db._redis_key,
-                    agent_id,
-                    recommendations,
-                    leaning_bias,
-                    self.logger,
-                )
-
-            return recommendations
-
-        except Exception as e:
-            self.logger.error(
-                f"Error getting Redis follow suggestions: {e}",
-                extra={"extra_data": {"error": str(e), "agent_id": agent_id, "mode": mode}},
-            )
-            # Fallback to random from user_mgmt ids
-            try:
-                user_ids_key = self.db._redis_key("user_mgmt", "ids")
-                all_user_ids = list(self.db.redis_client.smembers(user_ids_key))
-                candidates = [uid for uid in all_user_ids if uid != agent_id]
-                random.shuffle(candidates)
-                return candidates[:n_neighbors]
-            except Exception as e:
-                # Redis query failed, return empty list
-                self.logger.error(f"Failed to get follow suggestions from Redis: {e}")
-                return []
+        return self.follow_recommender.get_follow_suggestions(
+            agent_id=agent_id,
+            mode=mode,
+            n_neighbors=n_neighbors,
+            leaning_bias=leaning_bias,
+        )

@@ -46,15 +46,15 @@ class MetadataService:
             self.logger.error(f"Error adding post emotion: {e}")
             return False
     
-    def get_emotion_by_name(self, emotion_name: str) -> Optional[str]:
+    def get_emotion_by_name(self, emotion_name: str) -> Optional[Dict[str, Any]]:
         """
-        Get emotion ID by name.
+        Get emotion data by name.
         
         Args:
             emotion_name: Emotion name
             
         Returns:
-            Emotion ID or None
+            Dictionary with emotion data (id, emotion, icon) or None
         """
         try:
             return self.post_repo.get_emotion_by_name(emotion_name)
@@ -71,19 +71,18 @@ class MetadataService:
             return None
     
     # Sentiment operations
-    def add_post_sentiment(self, post_id: str, sentiment_score: float) -> bool:
+    def add_post_sentiment(self, sentiment_data: Dict[str, Any]) -> bool:
         """
-        Add sentiment score to a post.
+        Add sentiment data to a post.
         
         Args:
-            post_id: Post ID
-            sentiment_score: Sentiment score
+            sentiment_data: Dictionary containing sentiment scores and metadata
             
         Returns:
             True if successful, False otherwise
         """
         try:
-            return self.post_repo.add_post_sentiment(post_id, sentiment_score)
+            return self.post_repo.add_post_sentiment_full(sentiment_data)
         except Exception as e:
             self.logger.error(f"Error adding post sentiment: {e}")
             return False
@@ -105,19 +104,18 @@ class MetadataService:
             return None
     
     # Toxicity operations
-    def add_post_toxicity(self, post_id: str, toxicity_score: float) -> bool:
+    def add_post_toxicity(self, toxicity_data: Dict[str, Any]) -> bool:
         """
-        Add toxicity score to a post.
+        Add toxicity data to a post.
         
         Args:
-            post_id: Post ID
-            toxicity_score: Toxicity score
+            toxicity_data: Dictionary containing toxicity scores and metadata
             
         Returns:
             True if successful, False otherwise
         """
         try:
-            return self.post_repo.add_post_toxicity(post_id, toxicity_score)
+            return self.post_repo.add_post_toxicity_full(toxicity_data)
         except Exception as e:
             self.logger.error(f"Error adding post toxicity: {e}")
             return False

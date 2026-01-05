@@ -262,16 +262,10 @@ class RedisUserRepository(UserRepository):
             )
             return False
     
-    def get_inactive_agents(self, inactivity_threshold: int) -> List[str]:
-        """Get inactive agents - requires current_day context not available in this signature."""
-        # Note: db_middleware.get_inactive_agents requires current_day parameter
-        # but the base_repository interface only has inactivity_threshold.
-        # This is a signature mismatch. We'll log a warning and return empty list.
-        self.logger.warning(
-            "get_inactive_agents in RedisUserRepository requires current_day parameter "
-            "which is not available in the base interface. Returning empty list."
-        )
-        return []
+    def get_inactive_agents(self, current_day: int, inactivity_threshold: int) -> List[str]:
+        """Get inactive agents."""
+        # Note: db_middleware.get_inactive_agents requires both current_day and inactivity_threshold parameters
+        return self.db_middleware.get_inactive_agents(current_day, inactivity_threshold)
 
 
 class RedisPostRepository(PostRepository):
@@ -333,11 +327,17 @@ class RedisPostRepository(PostRepository):
                 return None
             
             # Decode bytes to strings
-            return {
+            decoded_post = {
                 k.decode() if isinstance(k, bytes) else k: 
                 v.decode() if isinstance(v, bytes) else v
                 for k, v in post_data.items()
             }
+            
+            # Add user_id alias for backward compatibility with client code
+            if "author" in decoded_post:
+                decoded_post["user_id"] = decoded_post["author"]
+            
+            return decoded_post
         except Exception as e:
             self.logger.error(
                 f"Error getting post from Redis: {e}", extra={"extra_data": {"error": str(e)}}
@@ -774,6 +774,26 @@ class RedisPostRepository(PostRepository):
                 extra={"extra_data": {"error": str(e), "user_id": user_id}},
             )
             return []
+    
+    def get_mention_by_id(self, mention_id: str) -> Optional[Dict[str, Any]]:
+        """Get mention by ID."""
+        try:
+            mention_key = self._redis_key("mention", mention_id)
+            mention_data = self.redis.hgetall(mention_key)
+            
+            if not mention_data:
+                return None
+            
+            # Convert bytes to strings
+            mention_dict = {k.decode(): v.decode() for k, v in mention_data.items()}
+            
+            # Add alias for compatibility
+            mention_dict["mentioned_user_id"] = mention_dict.get("user_id", "")
+            
+            return mention_dict
+        except Exception as e:
+            self.logger.error(f"Error getting mention by ID from Redis: {e}")
+            return None
     
     def mark_mention_replied(self, post_id: str, mentioned_user_id: str) -> bool:
         """Mark a mention as replied."""

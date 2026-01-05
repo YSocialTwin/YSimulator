@@ -411,9 +411,25 @@ class DatabaseServiceAdapter:
         Returns:
             bool: True if successful, False otherwise
         """
-        # Old middleware used mention_id, new service expects post_id and mentioned_user_id
-        # We'll add a new method in repository to handle this
-        return self.mention_service.post_repo.mark_mention_replied_by_id(mention_id)
+        # Query the mention to get post_id and mentioned_user_id
+        try:
+            mention_data = self.mention_service.post_repo.get_mention_by_id(mention_id)
+            if not mention_data:
+                self.logger.warning(f"Mention {mention_id} not found")
+                return False
+            
+            post_id = mention_data.get("post_id")
+            mentioned_user_id = mention_data.get("mentioned_user_id")
+            
+            if not post_id or not mentioned_user_id:
+                self.logger.error(f"Invalid mention data for {mention_id}")
+                return False
+            
+            # Call service with correct signature
+            return self.mention_service.mark_mention_replied(post_id, mentioned_user_id)
+        except Exception as e:
+            self.logger.error(f"Error marking mention {mention_id} as replied: {e}")
+            return False
     
     # ========================================================================
     # CONTENT OPERATIONS - ContentService (COMPLETE)

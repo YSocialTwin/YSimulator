@@ -1,7 +1,7 @@
 # YSimulator Documentation Index
 
-**Version:** 2.1  
-**Last Updated:** January 3, 2026
+**Version:** 2.2  
+**Last Updated:** January 5, 2026
 
 Welcome to the YSimulator documentation! This comprehensive guide will help you understand, configure, extend, and optimize your social media simulations.
 
@@ -50,6 +50,11 @@ Welcome to the YSimulator documentation! This comprehensive guide will help you 
 | **[Architecture Overview](../architecture/ARCHITECTURE.md)** | System design and components | Coordinator-worker pattern, layered architecture |
 | **[System Diagrams](../architecture/DIAGRAMS.md)** | Visual architecture (800+ lines) | Component diagrams, sequence diagrams, data flow |
 | **[Repository Pattern](../architecture/REPOSITORY_PATTERN.md)** | Data access abstraction | Repository pattern, service layer, clean architecture |
+| **[Action Processor Framework](../architecture/ACTION_PROCESSOR_FRAMEWORK.md)** | Modular action processing | Strategy pattern, action routing, extensibility |
+| **[Recommendation Engine](../architecture/RECOMMENDATION_ENGINE.md)** | Content & follow recommendation architecture | Pluggable strategies, dual backend support |
+| **[Opinion Dynamics Handler](../architecture/OPINION_DYNAMICS_HANDLER.md)** | Opinion management system | Profile-based initialization, LLM integration |
+| **[Coordination Layer](../architecture/COORDINATION_LAYER.md)** | Simulation orchestration | Client lifecycle, barrier synchronization, time advancement |
+| **[Service Integration](../architecture/SERVICE_INTEGRATION.md)** | Complete service adoption | Direct service access, zero database coupling |
 
 ### 🛠️ Development & Extension
 
@@ -73,6 +78,14 @@ Welcome to the YSimulator documentation! This comprehensive guide will help you 
 |----------|-------------|----------|
 | **[Critical Code Paths](../analysis/CRITICAL_CODE_PATHS.md)** | Performance-critical code (530+ lines) | Hot paths, optimization opportunities |
 | **[Test Coverage Report](../analysis/TEST_COVERAGE_REPORT.md)** | Testing status and progress | Coverage metrics, test phases, testing infrastructure |
+
+### 🔧 Refactoring & Evolution
+
+| Document | Description | Contents |
+|----------|-------------|----------|
+| **[Server Refactoring Report](../refactoring/SERVER_REFACTORING_REPORT.md)** | Complete server modernization | 5-phase transformation, metrics, patterns |
+| **[Refactoring Audit Report](../refactoring/REFACTORING_AUDIT_REPORT.md)** | Comprehensive audit results | Test coverage, regression analysis, validation |
+| **[Client Refactoring Report](../refactoring/CLIENT_REFACTORING_REPORT.md)** | Client architecture improvements | Modularity, testing, maintainability |
 
 ---
 
@@ -263,12 +276,12 @@ Logging System
 | **Configuration** | 1 | 1,550 | Complete reference |
 | **Agent Behavior** | 3 | 2,400 | Actions, Types, Temporal Activities |
 | **Core Features** | 4 | 3,700 | Recommendations, Opinions, Interests, Annotations |
-| **Architecture & Design** | 3 | 2,800 | Architecture, Diagrams, Repository Pattern |
+| **Architecture & Design** | 8 | 5,500 | Architecture, Diagrams, Repository, Refactoring frameworks |
 | **Data & Storage** | 2 | 1,350 | Redis analysis, integration |
 | **Development** | 3 | 2,900 | Extending, Formatting, Codebase Analysis |
 | **Logging** | 3 | 1,000 | Configuration, Server, Actions |
-| **Analysis** | 2 | 1,100 | Critical paths, Test coverage |
-| **Total** | 23 | 18,500 | Comprehensive coverage |
+| **Analysis & Refactoring** | 5 | 2,600 | Critical paths, Test coverage, Refactoring reports |
+| **Total** | 31 | 22,700 | Comprehensive coverage |
 
 ---
 
@@ -362,15 +375,28 @@ Logging System
 ## 📝 Documentation Coverage
 
 ### Recently Added (January 2026)
+
+**Agent Behavior Documentation:**
 1. **[Agent Actions](../agents/AGENT_ACTIONS.md)** - Comprehensive action reference with implementation details
 2. **[Agent Types](../agents/AGENT_TYPES.md)** - Agent types, archetypes, and profile variables
 3. **[Agent Temporal Activities](../agents/AGENT_TEMPORAL_ACTIVITIES.md)** - Temporal patterns, churn, and new agents
+
+**Server Refactoring Documentation (Phases 1-5):**
+4. **[Action Processor Framework](../architecture/ACTION_PROCESSOR_FRAMEWORK.md)** - Modular action processing architecture
+5. **[Recommendation Engine](../architecture/RECOMMENDATION_ENGINE.md)** - Content & follow recommendation system
+6. **[Opinion Dynamics Handler](../architecture/OPINION_DYNAMICS_HANDLER.md)** - Opinion management architecture
+7. **[Coordination Layer](../architecture/COORDINATION_LAYER.md)** - Simulation orchestration framework
+8. **[Service Integration](../architecture/SERVICE_INTEGRATION.md)** - Complete service adoption pattern
+
+**Refactoring Reports:**
+9. **[Server Refactoring Report](../refactoring/SERVER_REFACTORING_REPORT.md)** - 5-phase server modernization (37% reduction)
+10. **[Refactoring Audit Report](../refactoring/REFACTORING_AUDIT_REPORT.md)** - Comprehensive audit results (77/77 tests passing)
 
 ### Previously Available
 Based on analysis of the codebase and existing documentation, the following areas are comprehensively covered:
 - ✅ Configuration and setup
 - ✅ Architecture and system design
-- ✅ Recommendation systems
+- ✅ Recommendation systems  
 - ✅ Opinion dynamics
 - ✅ Interest tracking
 - ✅ Agent behavior and types
@@ -378,6 +404,9 @@ Based on analysis of the codebase and existing documentation, the following area
 - ✅ Database and storage
 - ✅ Development and extension
 - ✅ Logging and monitoring
+- ✅ **Server refactoring (Phases 1-5 complete)**
+- ✅ **Modern architecture patterns (Repository, Service, Coordination)**
+- ✅ **Comprehensive test coverage (77 tests, 100% passing)**
 
 ### Potential Future Additions
 1. **API Reference** - Complete server/client API documentation
@@ -424,8 +453,8 @@ When adding or updating documentation:
 
 ---
 
-**Last Updated:** January 3, 2026  
-**Documentation Version:** 2.1  
+**Last Updated:** January 5, 2026  
+**Documentation Version:** 2.2  
 **YSimulator Version:** 2.0
 
 ## 📁 Documentation Directory Structure
@@ -437,9 +466,14 @@ docs/
 ├── configuration/       # Configuration documentation
 │   └── CONFIG.md       # Complete configuration reference
 ├── architecture/        # System architecture and design
-│   ├── ARCHITECTURE.md         # System design overview
-│   ├── DIAGRAMS.md            # Visual diagrams
-│   └── REPOSITORY_PATTERN.md  # Data access patterns
+│   ├── ARCHITECTURE.md                  # System design overview
+│   ├── DIAGRAMS.md                     # Visual diagrams
+│   ├── REPOSITORY_PATTERN.md           # Data access patterns
+│   ├── ACTION_PROCESSOR_FRAMEWORK.md   # Phase 1 refactoring
+│   ├── RECOMMENDATION_ENGINE.md        # Phase 2 refactoring
+│   ├── OPINION_DYNAMICS_HANDLER.md     # Phase 3 refactoring
+│   ├── COORDINATION_LAYER.md           # Phase 4 refactoring
+│   └── SERVICE_INTEGRATION.md          # Phase 5 refactoring
 ├── agents/             # Agent behavior documentation
 │   ├── AGENT_ACTIONS.md           # Available actions
 │   ├── AGENT_TYPES.md             # Agent types and archetypes
@@ -460,7 +494,11 @@ docs/
 │   ├── LOGGING_CONFIG.md  # Logging configuration
 │   ├── SERVER_LOGGING.md  # Server log analysis
 │   └── ACTION_LOGGING.md  # Action log tracking
-└── analysis/           # Analysis and testing
-    ├── CRITICAL_CODE_PATHS.md  # Performance-critical paths
-    └── TEST_COVERAGE_REPORT.md # Test coverage status
+├── analysis/           # Analysis and testing
+│   ├── CRITICAL_CODE_PATHS.md  # Performance-critical paths
+│   └── TEST_COVERAGE_REPORT.md # Test coverage status
+└── refactoring/        # Refactoring reports and documentation
+    ├── SERVER_REFACTORING_REPORT.md   # 5-phase server modernization
+    ├── REFACTORING_AUDIT_REPORT.md    # Comprehensive audit results
+    └── CLIENT_REFACTORING_REPORT.md   # Client improvements
 ```
