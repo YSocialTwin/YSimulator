@@ -48,6 +48,8 @@ def create_agents_from_config(agent_config: dict, logger: logging.Logger) -> Lis
                 ex=agent_data.get("ex"),
                 ag=agent_data.get("ag"),
                 ne=agent_data.get("ne"),
+                recsys_type=agent_data.get("recsys_type", "random"),  # Content recommendation mode
+                frecsys_type=agent_data.get("frecsys_type", "default"),  # Follow recommendation mode
                 language=agent_data.get("language", "en"),
                 education_level=agent_data.get("education_level"),
                 joined_on=agent_data.get("joined_on"),  # Should be Round UUID or None
