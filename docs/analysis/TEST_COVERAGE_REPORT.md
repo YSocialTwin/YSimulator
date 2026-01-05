@@ -929,7 +929,7 @@ Phase 1 has successfully established a strong testing foundation for YSimulator 
 
 ### Next Steps
 
-1. **Phase 2**: Test core infrastructure (server, client, db_middleware)
+1. **Phase 2**: Test core infrastructure (server, client, service layer)
 2. **Phase 3**: Test additional features (LLM, opinion dynamics, client recsys)
 3. **Integration Tests**: Add end-to-end workflow tests
 4. **Coverage Target**: Achieve 60%+ overall codebase coverage

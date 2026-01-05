@@ -512,7 +512,7 @@ The implementation maintains **full backward compatibility**:
 **Migration Example**:
 ```python
 # Old approach (still works)
-from YSimulator.YServer.classes.db_middleware import DatabaseServiceAdapter
+from YSimulator.YServer.database_adapter import DatabaseServiceAdapter
 middleware = DatabaseServiceAdapter(db_config)
 middleware.register_user(user_data)
 
@@ -669,7 +669,6 @@ user_service.register_user(user_data)
 
 1. **Migration Tracking**
    - Maintain list of migrated vs. legacy code
-   - Monitor usage of db_middleware
    - Plan deprecation timeline
 
 2. **Code Quality**
