@@ -14,6 +14,8 @@ from YSimulator.YServer.services.post_service import PostService
 from YSimulator.YServer.services.follow_service import FollowService
 from YSimulator.YServer.services.interest_service import InterestService
 from YSimulator.YServer.services.content_service import ContentService
+from YSimulator.YServer.services.article_service import ArticleService
+from YSimulator.YServer.services.image_service import ImageService
 from YSimulator.YServer.services.simulation_service import SimulationService
 from YSimulator.YServer.services.metadata_service import MetadataService
 from YSimulator.YServer.services.mention_service import MentionService
@@ -25,6 +27,7 @@ class DatabaseServiceAdapter:
     
     This adapter provides all database operations through services.
     100% migration complete - all operations use modern Repository/Service architecture.
+    Now includes specialized ArticleService and ImageService.
     """
     
     def __init__(
@@ -33,6 +36,8 @@ class DatabaseServiceAdapter:
         post_service: PostService,
         follow_service: FollowService,
         interest_service: InterestService,
+        article_service: ArticleService,
+        image_service: ImageService,
         content_service: ContentService,
         simulation_service: SimulationService,
         metadata_service: MetadataService,
@@ -48,7 +53,9 @@ class DatabaseServiceAdapter:
             post_service: Post service
             follow_service: Follow service
             interest_service: Interest service
-            content_service: Content service
+            article_service: Article service (specialized)
+            image_service: Image service (specialized)
+            content_service: Content service (facade for article/image)
             simulation_service: Simulation service
             metadata_service: Metadata service
             mention_service: Mention service
@@ -59,6 +66,8 @@ class DatabaseServiceAdapter:
         self.post_service = post_service
         self.follow_service = follow_service
         self.interest_service = interest_service
+        self.article_service = article_service
+        self.image_service = image_service
         self.content_service = content_service
         self.simulation_service = simulation_service
         self.metadata_service = metadata_service

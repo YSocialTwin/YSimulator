@@ -244,7 +244,8 @@ class OrchestratorServer:
                 raise ImportError("Repository/Service pattern dependencies not available")
             
             (user_service, post_service, follow_service, interest_service, 
-             content_service, simulation_service, metadata_service, mention_service) = create_all_services(
+             article_service, image_service, content_service, simulation_service, 
+             metadata_service, mention_service) = create_all_services(
                 db_config, 
                 str(self.config_path),
                 self.logger
@@ -256,6 +257,8 @@ class OrchestratorServer:
                 post_service=post_service,
                 follow_service=follow_service,
                 interest_service=interest_service,
+                article_service=article_service,
+                image_service=image_service,
                 content_service=content_service,
                 simulation_service=simulation_service,
                 metadata_service=metadata_service,
@@ -268,7 +271,7 @@ class OrchestratorServer:
                 "Orchestrator server initialized - Repository/Service pattern 100% MIGRATED!",
                 extra={
                     "migration_status": "100_PERCENT_COMPLETE",
-                    "services": "User, Post, Follow, Interest, Content, Simulation, Metadata, Mention",
+                    "services": "User, Post, Follow, Interest, Article, Image, Content, Simulation, Metadata, Mention",
                     "legacy_middleware": "None - fully eliminated"
                 }
             )
@@ -309,6 +312,8 @@ class OrchestratorServer:
                         "PostService",
                         "FollowService",
                         "InterestService",
+                        "ArticleService",
+                        "ImageService",
                         "ContentService",
                         "SimulationService",
                         "MetadataService",
