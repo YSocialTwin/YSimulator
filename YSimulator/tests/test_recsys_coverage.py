@@ -147,7 +147,7 @@ class TestInterestManager:
             db_config = {"type": "sqlite", "sqlite": {"filename": ":memory:"}}
             db_middleware = DatabaseMiddleware(db_config=db_config, config_path=".", redis_config=None)
             
-            manager = InterestManager(db_middleware=db_middleware, attention_window=336)
+            manager = InterestManager(db_service=db_middleware, attention_window=336)
             assert manager is not None
         except ImportError:
             pytest.skip("Interest manager module not available")
@@ -161,7 +161,7 @@ class TestInterestManager:
             db_config = {"type": "sqlite", "sqlite": {"filename": ":memory:"}}
             db_middleware = DatabaseMiddleware(db_config=db_config, config_path=".", redis_config=None)
             
-            manager = InterestManager(db_middleware=db_middleware, attention_window=336)
+            manager = InterestManager(db_service=db_middleware, attention_window=336)
             
             user_id = "test-user-123"
             new_interests = ["technology", "science", "programming"]
@@ -185,7 +185,7 @@ class TestInterestManager:
             db_config = {"type": "sqlite", "sqlite": {"filename": ":memory:"}}
             db_middleware = DatabaseMiddleware(db_config=db_config, config_path=".", redis_config=None)
             
-            manager = InterestManager(db_middleware=db_middleware, attention_window=336)
+            manager = InterestManager(db_service=db_middleware, attention_window=336)
             
             user_id = "test-user-123"
             topic = "technology"
@@ -209,7 +209,7 @@ class TestInterestManager:
             db_config = {"type": "sqlite", "sqlite": {"filename": ":memory:"}}
             db_middleware = DatabaseMiddleware(db_config=db_config, config_path=".", redis_config=None)
             
-            manager = InterestManager(db_middleware=db_middleware, attention_window=336)
+            manager = InterestManager(db_service=db_middleware, attention_window=336)
             
             if hasattr(manager, 'get_trending_topics'):
                 trending = manager.get_trending_topics(limit=10)
