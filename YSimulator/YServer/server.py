@@ -333,6 +333,7 @@ class OrchestratorServer:
             db_adapter=self.db,
             interest_manager=self.interest_manager,
             visibility_rounds=self.visibility_rounds,
+            num_slots_per_day=self.num_slots_per_day,
             logger=self.logger
         )
         self.archetype_manager = ArchetypeManager(
@@ -343,8 +344,8 @@ class OrchestratorServer:
         )
         self.logger.info("Coordination layer initialized (ClientManager, BarrierHandler, RoundManager, ArchetypeManager)")
         
-        # Initialize first round using RoundManager
-        self.current_round_id = self.round_manager.initialize_first_round()
+        # Initialize first round using RoundManager (no need to store, accessed via property)
+        self.round_manager.initialize_first_round()
         
         # Expose properties for backward compatibility
         self.registered_clients = self.client_manager.registered_clients

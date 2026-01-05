@@ -21,6 +21,7 @@ class RoundManager:
         db_adapter,
         interest_manager,
         visibility_rounds: int,
+        num_slots_per_day: int = 24,
         logger: Optional[logging.Logger] = None
     ):
         """
@@ -30,11 +31,13 @@ class RoundManager:
             db_adapter: Database adapter
             interest_manager: Interest manager for attention window updates
             visibility_rounds: Number of rounds posts remain visible
+            num_slots_per_day: Number of slots (hours) per day
             logger: Logger instance
         """
         self.db = db_adapter
         self.interest_manager = interest_manager
         self.visibility_rounds = visibility_rounds
+        self.num_slots_per_day = num_slots_per_day
         self.logger = logger or logging.getLogger(__name__)
         
         # Current simulation state
@@ -76,7 +79,7 @@ class RoundManager:
         day_completed = False
         
         # Check if day is complete
-        if self.slot > 24:
+        if self.slot > self.num_slots_per_day:
             day_completed = True
             completed_day = self.day
             self.slot = 1
