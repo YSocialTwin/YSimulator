@@ -302,6 +302,12 @@ class OrchestratorServer:
         self.action_router = ActionRouter(self.db, self.logger)
         self.logger.info("Action router initialized with processors for POST, COMMENT, SHARE, FOLLOW, UNFOLLOW, and reactions")
 
+        # Initialize recommendation engines
+        from YSimulator.YServer.recommendation import ContentRecommender, FollowRecommender
+        self.content_recommender = ContentRecommender(self.db, self.visibility_rounds, self.logger)
+        self.follow_recommender = FollowRecommender(self.db, self.logger)
+        self.logger.info("Recommendation engines initialized (ContentRecommender, FollowRecommender)")
+
         self.logger.info(
             "Orchestrator server fully initialized - 100% modern architecture!",
             extra={
@@ -2029,249 +2035,34 @@ class OrchestratorServer:
     ) -> List[str]:
         """
         Get recommended posts for an agent using the specified recommendation strategy.
+        
+        Delegates to ContentRecommender for recommendation logic.
 
         Args:
             agent_id: UUID of the agent requesting recommendations
-            mode: Recommendation mode:
-                - "random": Random post ordering (default)
-                - "rchrono": Reverse chronological ordering (newest first)
-                - "rchrono_popularity": Reverse chronological with popularity boost
-                - "rchrono_followers": Prioritizes posts from followed users
-                - "rchrono_followers_popularity": Followers + popularity
-                - "rchrono_comments": Prioritizes highly commented posts
-                - "common_interests": Posts with common topic interests
-                - "common_user_interests": Posts by users with common interests
-                - "similar_users_react": Posts from similar users (by reactions)
-                - "similar_users_posts": Posts from similar users (by posting)
+            mode: Recommendation mode (random, rchrono, rchrono_popularity, etc.)
             limit: Number of posts to recommend (default: 5)
             followers_ratio: Ratio of posts from followers vs others (default: 0.6)
+            client_id: Client ID (for logging)
 
         Returns:
             List[str]: List of post UUIDs recommended for the agent
         """
-        try:
-            # Use server's configured visibility_rounds
-            # Calculate visibility threshold based on day/hour (not UUID arithmetic)
-            visibility_day, visibility_hour = self._calculate_visibility_params(
-                self.visibility_rounds
-            )
-
-            if self.db.use_redis:
-                # Use Redis for recommendations - dispatch to modular functions
-                # Get recent posts from Redis
-                recent_posts_key = self.db._redis_key("posts", "recent")
-                all_post_ids = self.db.redis_client.lrange(recent_posts_key, 0, -1)
-
-                # Use Redis pipeline to fetch post data efficiently (avoid N+1 queries)
-                if all_post_ids:
-                    pipeline = self.db.redis_client.pipeline()
-                    for post_id in all_post_ids:
-                        post_key = self.db._redis_key("posts", post_id)
-                        pipeline.hgetall(post_key)
-
-                    # Execute pipeline and get all results at once
-                    posts_data = pipeline.execute()
-
-                    # Build list of valid posts with metadata
-                    valid_posts_with_data = []
-                    for i, post_data in enumerate(posts_data):
-                        if post_data:
-                            post_user_id = post_data.get("user_id")
-                            # Exclude own posts
-                            if post_user_id and post_user_id != agent_id:
-                                valid_posts_with_data.append(
-                                    {
-                                        "id": all_post_ids[i],
-                                        "index": i,  # Preserve chronological order (lower index = newer)
-                                        "reaction_count": int(
-                                            post_data.get("reaction_count", 0) or 0
-                                        ),
-                                    }
-                                )
-                else:
-                    valid_posts_with_data = []
-
-                # Prepare common kwargs for all recommendation functions
-                common_kwargs = {
-                    "valid_posts_with_data": valid_posts_with_data,
-                    "limit": limit,
-                    "agent_id": agent_id,
-                    "all_post_ids": all_post_ids,
-                    "posts_data": posts_data,
-                    "followers_ratio": followers_ratio,
-                    "db_engine": self.db.engine,
-                    "redis_client": self.db.redis_client,
-                    "redis_key_fn": self.db._redis_key,
-                    "logger": self.logger,
-                }
-
-                # Dispatch to appropriate recommendation function
-                if mode == "rchrono":
-                    post_ids = content_recsys_redis.recommend_rchrono_redis(**common_kwargs)
-                elif mode == "rchrono_popularity":
-                    post_ids = content_recsys_redis.recommend_rchrono_popularity_redis(
-                        **common_kwargs
-                    )
-                elif mode == "rchrono_followers":
-                    post_ids = content_recsys_redis.recommend_rchrono_followers_redis(
-                        **common_kwargs
-                    )
-                elif mode == "rchrono_followers_popularity":
-                    post_ids = content_recsys_redis.recommend_rchrono_followers_popularity_redis(
-                        **common_kwargs
-                    )
-                elif mode == "rchrono_comments":
-                    post_ids = content_recsys_redis.recommend_rchrono_comments_redis(
-                        **common_kwargs
-                    )
-                elif mode == "common_interests":
-                    post_ids = content_recsys_redis.recommend_common_interests_redis(
-                        **common_kwargs
-                    )
-                elif mode == "common_user_interests":
-                    post_ids = content_recsys_redis.recommend_common_user_interests_redis(
-                        **common_kwargs
-                    )
-                elif mode == "similar_users_react":
-                    post_ids = content_recsys_redis.recommend_similar_users_react_redis(
-                        **common_kwargs
-                    )
-                elif mode == "similar_users_posts":
-                    post_ids = content_recsys_redis.recommend_similar_users_posts_redis(
-                        **common_kwargs
-                    )
-                else:
-                    # Default: random ordering
-                    post_ids = content_recsys_redis.recommend_random_redis(**common_kwargs)
-
-                self.logger.info(
-                    f"Recommended {len(post_ids)} posts (Redis, mode={mode})",
-                    extra={
-                        "extra_data": {
-                            "agent_id": agent_id,
-                            "mode": mode,
-                            "limit": limit,
-                            "found": len(post_ids),
-                        }
-                    },
-                )
-
-                # Save recommendations to database (and Redis if enabled)
-                self._save_recommendation(agent_id, post_ids)
-
-                return post_ids
-
-            else:
-                # Use SQL database for recommendations
-                from sqlalchemy.orm import Session
-
-                session = Session(self.db.engine)
-                try:
-                    if mode == "rchrono":
-                        # Reverse chronological: newest posts first
-                        post_ids = content_recsys_db.recommend_rchrono(
-                            session, agent_id, visibility_day, visibility_hour, limit
-                        )
-
-                    elif mode == "rchrono_popularity":
-                        # Reverse chronological with popularity (reaction count)
-                        post_ids = content_recsys_db.recommend_rchrono_popularity(
-                            session, agent_id, visibility_day, visibility_hour, limit
-                        )
-
-                    elif mode == "rchrono_followers":
-                        # Prioritize posts from followed users
-                        post_ids = content_recsys_db.recommend_rchrono_followers(
-                            session,
-                            agent_id,
-                            visibility_day,
-                            visibility_hour,
-                            limit,
-                            followers_ratio,
-                        )
-
-                    elif mode == "rchrono_followers_popularity":
-                        # Followers with popularity boost
-                        post_ids = content_recsys_db.recommend_rchrono_followers_popularity(
-                            session,
-                            agent_id,
-                            visibility_day,
-                            visibility_hour,
-                            limit,
-                            followers_ratio,
-                        )
-
-                    elif mode == "rchrono_comments":
-                        # Prioritize posts with more comments (thread activity)
-                        post_ids = content_recsys_db.recommend_rchrono_comments(
-                            session, agent_id, visibility_day, visibility_hour, limit
-                        )
-
-                    elif mode == "common_interests":
-                        # Posts with common topic interests
-                        post_ids = content_recsys_db.recommend_common_interests(
-                            session,
-                            agent_id,
-                            visibility_day,
-                            visibility_hour,
-                            limit,
-                            followers_ratio,
-                        )
-
-                    elif mode == "common_user_interests":
-                        # Posts by users with common interests (most interacted)
-                        post_ids = content_recsys_db.recommend_common_user_interests(
-                            session,
-                            agent_id,
-                            visibility_day,
-                            visibility_hour,
-                            limit,
-                            followers_ratio,
-                        )
-
-                    elif mode == "similar_users_react":
-                        # Posts from similar users (based on demographics/personality)
-                        post_ids = content_recsys_db.recommend_similar_users_react(
-                            session, agent_id, visibility_day, visibility_hour, limit
-                        )
-
-                    elif mode == "similar_users_posts":
-                        # Posts created by similar users
-                        post_ids = content_recsys_db.recommend_similar_users_posts(
-                            session, agent_id, visibility_day, visibility_hour, limit
-                        )
-
-                    else:
-                        # Random ordering (default)
-                        post_ids = content_recsys_db.recommend_random(
-                            session, agent_id, visibility_day, visibility_hour, limit
-                        )
-
-                    self.logger.info(
-                        f"Recommended {len(post_ids)} posts (SQL, mode={mode})",
-                        extra={
-                            "extra_data": {
-                                "agent_id": agent_id,
-                                "mode": mode,
-                                "limit": limit,
-                                "found": len(post_ids),
-                            }
-                        },
-                    )
-
-                    # Save recommendations to database (and Redis if enabled)
-                    self._save_recommendation(agent_id, post_ids)
-
-                    return post_ids
-                finally:
-                    session.close()
-
-        except Exception as e:
-            self.logger.error(
-                f"Error getting recommended posts: {e}",
-                extra={"extra_data": {"agent_id": agent_id, "mode": mode, "error": str(e)}},
-            )
-            return []
+        # Delegate to ContentRecommender
+        post_ids = self.content_recommender.get_recommended_posts(
+            agent_id=agent_id,
+            mode=mode,
+            limit=limit,
+            followers_ratio=followers_ratio,
+            day=self.day,
+            slot=self.slot,
+        )
+        
+        # Save recommendations to database (and Redis if enabled)
+        if post_ids:
+            self._save_recommendation(agent_id, post_ids)
+        
+        return post_ids
 
     @log_server_request
     def get_post(self, post_id: str, client_id: str = None) -> Optional[Dict[str, Any]]:
@@ -2540,174 +2331,28 @@ class OrchestratorServer:
         self, agent_id: str, mode: str, n_neighbors: int, leaning_bias: int
     ) -> List[str]:
         """
-        Get follow suggestions using SQL queries for better scalability.
-
-        Dispatcher method that delegates to modular functions in follow_recsys_db module.
+        Get follow suggestions using SQL queries.
+        
+        Delegates to FollowRecommender for recommendation logic.
         """
-        try:
-            from sqlalchemy import and_, func
-            from sqlalchemy.orm import Session
-
-            from YSimulator.YServer.classes.models import Follow, User_mgmt
-
-            with Session(self.db.engine) as session:
-                # Get agent's info
-                agent = session.query(User_mgmt).filter_by(id=agent_id).first()
-                if not agent:
-                    self.logger.warning(f"Agent {agent_id} not found for follow suggestions")
-                    return []
-
-                # Get users that agent is currently following (with latest action = "follow")
-                latest_follows_subq = (
-                    session.query(
-                        Follow.follower_id,
-                        Follow.user_id,
-                        func.max(Follow.round).label("max_round"),
-                    )
-                    .filter(Follow.follower_id == agent_id)
-                    .group_by(Follow.follower_id, Follow.user_id)
-                    .subquery()
-                )
-
-                following = (
-                    session.query(Follow.user_id)
-                    .join(
-                        latest_follows_subq,
-                        and_(
-                            Follow.follower_id == latest_follows_subq.c.follower_id,
-                            Follow.user_id == latest_follows_subq.c.user_id,
-                            Follow.round == latest_follows_subq.c.max_round,
-                            Follow.action == "follow",
-                        ),
-                    )
-                    .all()
-                )
-                following_ids = {f.user_id for f in following}
-
-                # Dispatch to appropriate recommendation function
-                if mode == "random":
-                    suggestions = follow_recsys_db.recommend_random_follows(
-                        session, agent_id, following_ids, n_neighbors
-                    )
-                elif mode == "common_neighbors":
-                    suggestions = follow_recsys_db.recommend_common_neighbors(
-                        session, agent_id, following_ids, n_neighbors
-                    )
-                elif mode == "jaccard":
-                    suggestions = follow_recsys_db.recommend_jaccard(
-                        session, agent_id, following_ids, n_neighbors
-                    )
-                elif mode == "adamic_adar":
-                    suggestions = follow_recsys_db.recommend_adamic_adar(
-                        session, agent_id, following_ids, n_neighbors
-                    )
-                elif mode == "preferential_attachment":
-                    suggestions = follow_recsys_db.recommend_preferential_attachment(
-                        session, agent_id, following_ids, n_neighbors
-                    )
-                else:
-                    # Unknown mode, fallback to random
-                    suggestions = follow_recsys_db.recommend_random_follows(
-                        session, agent_id, following_ids, n_neighbors
-                    )
-
-                # Apply leaning bias if requested
-                suggestions = follow_recsys_db.apply_leaning_bias(
-                    session, agent_id, suggestions, leaning_bias, n_neighbors
-                )
-
-                return suggestions[:n_neighbors]
-
-        except Exception as e:
-            self.logger.error(
-                f"Error getting SQL follow suggestions: {e}",
-                extra={"extra_data": {"error": str(e), "agent_id": agent_id, "mode": mode}},
-            )
-            # Fallback to simple random
-            try:
-                from sqlalchemy.orm import Session
-
-                from YSimulator.YServer.classes.models import User_mgmt
-
-                with Session(self.db.engine) as session:
-                    candidates = (
-                        session.query(User_mgmt.id)
-                        .filter(User_mgmt.id != agent_id)
-                        .limit(n_neighbors * 2)
-                        .all()
-                    )
-                    candidate_ids = [c.id for c in candidates]
-                    random.shuffle(candidate_ids)
-                    return candidate_ids[:n_neighbors]
-            except Exception as e:
-                # Database query failed, return empty list
-                self.logger.error(f"Failed to get follow suggestions from database: {e}")
-                return []
+        return self.follow_recommender.get_follow_suggestions(
+            agent_id=agent_id,
+            mode=mode,
+            n_neighbors=n_neighbors,
+            leaning_bias=leaning_bias,
+        )
 
     def _get_follow_suggestions_redis(
         self, agent_id: str, mode: str, n_neighbors: int, leaning_bias: int
     ) -> List[str]:
         """
-        Get follow suggestions using Redis for better scalability with key-value storage.
-        Dispatcher method that delegates to specific recommendation functions.
+        Get follow suggestions using Redis.
+        
+        Delegates to FollowRecommender for recommendation logic.
         """
-        from YSimulator.YServer.recsys import follow_recsys_redis
-
-        try:
-            # Dispatch to appropriate recommendation function
-            if mode == "random":
-                recommendations = follow_recsys_redis.recommend_random_follows_redis(
-                    self.db.redis_client, self.db._redis_key, agent_id, n_neighbors, self.logger
-                )
-            elif mode == "preferential_attachment":
-                recommendations = follow_recsys_redis.recommend_preferential_attachment_redis(
-                    self.db.redis_client, self.db._redis_key, agent_id, n_neighbors, self.logger
-                )
-            elif mode == "common_neighbors":
-                recommendations = follow_recsys_redis.recommend_common_neighbors_redis(
-                    self.db.redis_client, self.db._redis_key, agent_id, n_neighbors, self.logger
-                )
-            elif mode == "jaccard":
-                recommendations = follow_recsys_redis.recommend_jaccard_redis(
-                    self.db.redis_client, self.db._redis_key, agent_id, n_neighbors, self.logger
-                )
-            elif mode == "adamic_adar":
-                recommendations = follow_recsys_redis.recommend_adamic_adar_redis(
-                    self.db.redis_client, self.db._redis_key, agent_id, n_neighbors, self.logger
-                )
-            else:
-                # Unknown mode, fallback to random
-                self.logger.warning(f"Unknown follow recommendation mode: {mode}, using random")
-                recommendations = follow_recsys_redis.recommend_random_follows_redis(
-                    self.db.redis_client, self.db._redis_key, agent_id, n_neighbors, self.logger
-                )
-
-            # Apply political leaning bias if specified
-            if leaning_bias > 0 and recommendations:
-                recommendations = follow_recsys_redis.apply_leaning_bias_redis(
-                    self.db.redis_client,
-                    self.db._redis_key,
-                    agent_id,
-                    recommendations,
-                    leaning_bias,
-                    self.logger,
-                )
-
-            return recommendations
-
-        except Exception as e:
-            self.logger.error(
-                f"Error getting Redis follow suggestions: {e}",
-                extra={"extra_data": {"error": str(e), "agent_id": agent_id, "mode": mode}},
-            )
-            # Fallback to random from user_mgmt ids
-            try:
-                user_ids_key = self.db._redis_key("user_mgmt", "ids")
-                all_user_ids = list(self.db.redis_client.smembers(user_ids_key))
-                candidates = [uid for uid in all_user_ids if uid != agent_id]
-                random.shuffle(candidates)
-                return candidates[:n_neighbors]
-            except Exception as e:
-                # Redis query failed, return empty list
-                self.logger.error(f"Failed to get follow suggestions from Redis: {e}")
-                return []
+        return self.follow_recommender.get_follow_suggestions(
+            agent_id=agent_id,
+            mode=mode,
+            n_neighbors=n_neighbors,
+            leaning_bias=leaning_bias,
+        )
