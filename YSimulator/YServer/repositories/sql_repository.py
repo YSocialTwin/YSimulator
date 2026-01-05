@@ -410,6 +410,7 @@ class SQLPostRepository(PostRepository):
                     "parent_post": post.comment_to,  # API: parent_post <-> Model: comment_to
                     "shared_from": post.shared_from,
                     "author": post.user_id,  # API: author <-> Model: user_id
+                    "user_id": post.user_id,  # Alias for backward compatibility with client code
                     "text": post.tweet,  # API: text <-> Model: tweet
                     "round": post.round,
                     "num_reactions": post.reaction_count,  # API: num_reactions <-> Model: reaction_count

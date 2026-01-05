@@ -205,7 +205,7 @@ class CommentProcessor(BaseActionProcessor):
         topic_ids = self.services.post_service.get_post_topics(parent_post_id)
         
         for topic_id in topic_ids:
-            self.services.metadata_service.add_user_interest(
+            self.services.interest_service.add_user_interest(
                 user_id=str(action.agent_id),
                 interest_id=topic_id,
                 round_id=current_round_id,

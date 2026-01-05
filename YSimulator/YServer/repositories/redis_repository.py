@@ -327,11 +327,17 @@ class RedisPostRepository(PostRepository):
                 return None
             
             # Decode bytes to strings
-            return {
+            decoded_post = {
                 k.decode() if isinstance(k, bytes) else k: 
                 v.decode() if isinstance(v, bytes) else v
                 for k, v in post_data.items()
             }
+            
+            # Add user_id alias for backward compatibility with client code
+            if "author" in decoded_post:
+                decoded_post["user_id"] = decoded_post["author"]
+            
+            return decoded_post
         except Exception as e:
             self.logger.error(
                 f"Error getting post from Redis: {e}", extra={"extra_data": {"error": str(e)}}
