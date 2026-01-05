@@ -41,7 +41,16 @@ class ContentService:
             article_service: Specialized article service (preferred)
             image_service: Specialized image service (preferred)
             logger: Logger instance
+            
+        Raises:
+            ValueError: If neither repositories nor services are provided for articles
         """
+        # Validate that we have at least one way to handle articles
+        if not article_repository and not article_service:
+            raise ValueError(
+                "ContentService requires either article_repository or article_service to be provided"
+            )
+        
         # Support both new pattern (with services) and old pattern (direct repositories)
         self.article_service = article_service
         self.image_service = image_service
