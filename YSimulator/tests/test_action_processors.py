@@ -30,7 +30,7 @@ def mock_services():
     services.add_follow = Mock(return_value=True)
     services.add_interaction = Mock(return_value=True)
     services.increment_post_reaction_count = Mock(return_value=True)
-    services.get_post_topics = Mock(return_value=["topic_1"])
+    services.get_post_topics = Mock(return_value=["topic_1"])  # Returns list
     services.get_post_sentiment = Mock(return_value={"compound": 0.5})
     services.add_post_sentiment = Mock(return_value=True)
     services._is_empty_or_default = Mock(return_value=False)
@@ -39,10 +39,13 @@ def mock_services():
     })
     services._ensure_agent_opinion_exists = Mock()
     services._update_agent_interest_counter = Mock()
-    services._process_annotations = Mock()
+    services._process_annotations = Mock(return_value=[])  # Returns empty list
     services.add_user_interest = Mock(return_value=True)
     services.add_agent_opinion = Mock(return_value=True)
     services._get_topic_name_from_id = Mock(return_value="Politics")
+    # Additional methods that need to return iterables
+    services.get_article_reference = Mock(return_value=None)
+    services.copy_article_reference = Mock()
     return services
 
 
@@ -96,11 +99,17 @@ class TestPostProcessor:
         """Test processing a post with topic."""
         processor = PostProcessor(mock_services)
         mock_action.topic = "Technology"
+        mock_action.article_id = None  # Not an article post
+        mock_action.image_id = None  # Not an image post
+        # Don't set topic_ids attribute at all (use hasattr check)
+        if hasattr(mock_action, 'topic_ids'):
+            delattr(mock_action, 'topic_ids')
         
         result = processor.process(mock_action, action_context)
         
         assert result.success is True
-        mock_services.add_or_get_interest.assert_called()
+        # Verify add_or_get_interest was called with the topic
+        mock_services.add_or_get_interest.assert_called_with("Technology")
 
 
 class TestCommentProcessor:
@@ -111,6 +120,8 @@ class TestCommentProcessor:
         processor = CommentProcessor(mock_services)
         mock_action.action_type = "COMMENT"
         mock_action.target_post_id = "post_1"
+        mock_action.annotations = None  # No annotations for simplicity
+        mock_action.updated_opinions = None  # No opinion updates
         
         result = processor.process(mock_action, action_context)
         
@@ -141,6 +152,8 @@ class TestShareProcessor:
         processor = ShareProcessor(mock_services)
         mock_action.action_type = "SHARE"
         mock_action.target_post_id = "post_1"
+        mock_action.content = "Sharing this post"
+        mock_action.updated_opinions = None  # No opinion updates
         
         result = processor.process(mock_action, action_context)
         
@@ -251,6 +264,8 @@ class TestActionRouter:
         router = ActionRouter(mock_services)
         mock_action.action_type = "COMMENT"
         mock_action.target_post_id = "post_1"
+        mock_action.annotations = None  # No annotations
+        mock_action.updated_opinions = None  # No opinion updates
         
         result = router.route(mock_action, action_context)
         

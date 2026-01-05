@@ -174,35 +174,41 @@ class TestOpinionHandler:
         assert result is True
         mock_db_adapter.add_agent_opinion.assert_called_once()
     
-    @patch('YSimulator.YServer.opinion_dynamics.opinion_handler.Session')
-    def test_get_neighbors_opinions_sql(self, mock_session_class, mock_db_adapter):
+    def test_get_neighbors_opinions_sql(self, mock_db_adapter):
         """Test getting neighbors opinions using SQL backend."""
-        # Mock session and query results
-        mock_session = MagicMock()
-        mock_session_class.return_value.__enter__ = Mock(return_value=mock_session)
-        mock_session_class.return_value.__exit__ = Mock(return_value=False)
+        mock_db_adapter.use_redis = False
         
-        # Mock followees query
-        mock_session.query.return_value.filter.return_value.all.return_value = [
-            ("followee1",),
-            ("followee2",),
-        ]
-        
-        # Mock opinion retrieval
-        mock_db_adapter.get_latest_agent_opinion = Mock(side_effect=[0.6, 0.8])
-        
-        handler = OpinionHandler(
-            db_adapter=mock_db_adapter,
-            simulation_config={"opinion_dynamics": {"enabled": True}},
-            agent_profiles_cache={},
-            current_round_id_getter=lambda: "round_1",
-        )
-        
-        result = handler.get_neighbors_opinions("agent1", "topic1")
-        
-        assert len(result) == 2
-        assert 0.6 in result
-        assert 0.8 in result
+        # The code uses 'from sqlalchemy.orm import Session' inside the method
+        # We need to mock Session from sqlalchemy.orm
+        with patch('sqlalchemy.orm.Session') as mock_session_class:
+            # Mock the session context manager
+            mock_session = MagicMock()
+            mock_session_class.return_value.__enter__ = Mock(return_value=mock_session)
+            mock_session_class.return_value.__exit__ = Mock(return_value=False)
+            
+            # Mock the query results - simulate followees query
+            mock_query = MagicMock()
+            mock_query.filter.return_value.all.return_value = [
+                ("followee1",),
+                ("followee2",),
+            ]
+            mock_session.query.return_value = mock_query
+            
+            # Mock opinion retrieval for each followee
+            mock_db_adapter.get_latest_agent_opinion = Mock(side_effect=[0.6, 0.8])
+            
+            handler = OpinionHandler(
+                db_adapter=mock_db_adapter,
+                simulation_config={"opinion_dynamics": {"enabled": True}},
+                agent_profiles_cache={},
+                current_round_id_getter=lambda: "round_1",
+            )
+            
+            result = handler.get_neighbors_opinions("agent1", "topic1")
+            
+            assert len(result) == 2
+            assert 0.6 in result
+            assert 0.8 in result
     
     def test_get_neighbors_opinions_redis(self, mock_db_adapter):
         """Test getting neighbors opinions using Redis backend."""
