@@ -41,10 +41,28 @@ class UnfollowProcessor(BaseActionProcessor):
             ActionResult indicating success/failure
         """
         try:
+            # Validate required fields
+            if not action.target_user_id:
+                self.logger.error(
+                    f"UNFOLLOW action missing target_user_id for agent {action.agent_id}",
+                    extra={
+                        "extra_data": {
+                            "agent_id": action.agent_id,
+                            "target_user_id": action.target_user_id,
+                        }
+                    },
+                )
+                return ActionResult(
+                    success=False,
+                    action_type="UNFOLLOW",
+                    agent_id=action.agent_id,
+                    error="Missing required field: target_user_id"
+                )
+            
             # Build unfollow relationship data
             unfollow_data = {
                 "follower_id": str(action.agent_id),  # Agent who is unfollowing
-                "user_id": action.target_user_id,  # User being unfollowed
+                "user_id": str(action.target_user_id),  # User being unfollowed (ensure string)
                 "action": "unfollow",
                 "round": context.current_round_id,
             }

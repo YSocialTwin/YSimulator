@@ -41,10 +41,28 @@ class FollowProcessor(BaseActionProcessor):
             ActionResult indicating success/failure
         """
         try:
+            # Validate required fields
+            if not action.target_user_id:
+                self.logger.error(
+                    f"FOLLOW action missing target_user_id for agent {action.agent_id}",
+                    extra={
+                        "extra_data": {
+                            "agent_id": action.agent_id,
+                            "target_user_id": action.target_user_id,
+                        }
+                    },
+                )
+                return ActionResult(
+                    success=False,
+                    action_type="FOLLOW",
+                    agent_id=action.agent_id,
+                    error="Missing required field: target_user_id"
+                )
+            
             # Build follow relationship data
             follow_data = {
                 "follower_id": str(action.agent_id),  # Agent who is following
-                "user_id": action.target_user_id,  # User being followed
+                "user_id": str(action.target_user_id),  # User being followed (ensure string)
                 "action": "follow",
                 "round": context.current_round_id,
             }
