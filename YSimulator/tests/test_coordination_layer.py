@@ -353,7 +353,7 @@ class TestArchetypeManager:
             {"id": "agent2", "archetype": "poster"},
             {"id": "agent3", "archetype": "commenter"}
         ]
-        # Return list of agents (will be iterated in the method)
+        # Return list - the perform_transitions method will iterate over it
         mock_db.get_all_users.return_value = mock_agents
         mock_db.update_user_archetype.return_value = True
         

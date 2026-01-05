@@ -181,10 +181,13 @@ class TestPhase5Completion:
         """Test that service framework is in place."""
         import os
         
-        services_dir = "/home/runner/work/YSimulator/YSimulator/YSimulator/YServer/services"
+        # Use relative path from this file
+        test_dir = os.path.dirname(os.path.abspath(__file__))
+        yserver_dir = os.path.join(os.path.dirname(test_dir), "YServer")
+        services_dir = os.path.join(yserver_dir, "services")
         
         # Check that services directory exists
-        assert os.path.exists(services_dir), "Services directory should exist"
+        assert os.path.exists(services_dir), f"Services directory should exist at {services_dir}"
         
         # Check that key service files exist
         expected_files = [
@@ -207,10 +210,13 @@ class TestPhase5Completion:
         """Test that coordination layer from Phase 4 exists."""
         import os
         
-        coordination_dir = "/home/runner/work/YSimulator/YSimulator/YSimulator/YServer/coordination"
+        # Use relative path from this file
+        test_dir = os.path.dirname(os.path.abspath(__file__))
+        yserver_dir = os.path.join(os.path.dirname(test_dir), "YServer")
+        coordination_dir = os.path.join(yserver_dir, "coordination")
         
         # Check that coordination directory exists
-        assert os.path.exists(coordination_dir), "Coordination directory should exist"
+        assert os.path.exists(coordination_dir), f"Coordination directory should exist at {coordination_dir}"
         
         # Check that key coordination files exist
         expected_files = [
@@ -222,7 +228,7 @@ class TestPhase5Completion:
         
         for file in expected_files:
             file_path = os.path.join(coordination_dir, file)
-            assert os.path.exists(file_path), f"Expected {file} to exist"
+            assert os.path.exists(file_path), f"Expected {file} to exist at {file_path}"
 
 
 if __name__ == "__main__":
