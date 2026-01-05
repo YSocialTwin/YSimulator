@@ -46,15 +46,15 @@ class MetadataService:
             self.logger.error(f"Error adding post emotion: {e}")
             return False
     
-    def get_emotion_by_name(self, emotion_name: str) -> Optional[str]:
+    def get_emotion_by_name(self, emotion_name: str) -> Optional[Dict[str, Any]]:
         """
-        Get emotion ID by name.
+        Get emotion data by name.
         
         Args:
             emotion_name: Emotion name
             
         Returns:
-            Emotion ID or None
+            Dictionary with emotion data (id, emotion, icon) or None
         """
         try:
             return self.post_repo.get_emotion_by_name(emotion_name)

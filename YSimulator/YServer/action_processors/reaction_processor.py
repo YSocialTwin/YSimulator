@@ -143,11 +143,8 @@ class ReactionProcessor(BaseActionProcessor):
                 "is_comment": 0,
                 "is_reaction": 1,
             }
-            # MetadataService.add_post_sentiment expects (post_id, sentiment_score)
-            success = self.services.metadata_service.add_post_sentiment(
-                post_id=sentiment_data["post_id"],
-                sentiment_score=sentiment_data["compound"]
-            )
+            # MetadataService.add_post_sentiment expects sentiment_data dict
+            success = self.services.metadata_service.add_post_sentiment(sentiment_data)
             if success:
                 self.logger.info(
                     f"Added reaction sentiment for {action.action_type} on post {action.target_post_id}, topic {topic_id}"
