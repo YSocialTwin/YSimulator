@@ -96,11 +96,23 @@ class ShareProcessor(BaseActionProcessor):
             # Link original post topics to share (shares inherit topics from original)
             original_topic_ids = self.services.post_service.get_post_topics(action.target_post_id)
             if original_topic_ids:
+                topics_linked = 0
                 for topic_id in original_topic_ids:
-                    self.services.post_service.add_post_topic(post_id, topic_id)
-                self.logger.info(
-                    f"Linked {len(original_topic_ids)} topics from original post {action.target_post_id} to share {post_id}"
-                )
+                    try:
+                        if self.services.post_service.add_post_topic(post_id, topic_id):
+                            topics_linked += 1
+                        else:
+                            self.logger.warning(
+                                f"Failed to link topic {topic_id} from original post {action.target_post_id} to share {post_id}"
+                            )
+                    except Exception as e:
+                        self.logger.error(
+                            f"Error linking topic {topic_id} to share {post_id}: {e}"
+                        )
+                if topics_linked > 0:
+                    self.logger.info(
+                        f"Linked {topics_linked}/{len(original_topic_ids)} topics from original post {action.target_post_id} to share {post_id}"
+                    )
             else:
                 self.logger.warning(
                     f"No topics found on original post {action.target_post_id} for share {post_id}"

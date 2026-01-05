@@ -115,11 +115,23 @@ class CommentProcessor(BaseActionProcessor):
             # Link parent post topics to comment (comments inherit topics from parent)
             parent_topic_ids = self.services.post_service.get_post_topics(action.target_post_id)
             if parent_topic_ids:
+                topics_linked = 0
                 for topic_id in parent_topic_ids:
-                    self.services.post_service.add_post_topic(post_id, topic_id)
-                self.logger.info(
-                    f"Linked {len(parent_topic_ids)} topics from parent post {action.target_post_id} to comment {post_id}"
-                )
+                    try:
+                        if self.services.post_service.add_post_topic(post_id, topic_id):
+                            topics_linked += 1
+                        else:
+                            self.logger.warning(
+                                f"Failed to link topic {topic_id} from parent post {action.target_post_id} to comment {post_id}"
+                            )
+                    except Exception as e:
+                        self.logger.error(
+                            f"Error linking topic {topic_id} to comment {post_id}: {e}"
+                        )
+                if topics_linked > 0:
+                    self.logger.info(
+                        f"Linked {topics_linked}/{len(parent_topic_ids)} topics from parent post {action.target_post_id} to comment {post_id}"
+                    )
             else:
                 self.logger.warning(
                     f"No topics found on parent post {action.target_post_id} for comment {post_id}"
