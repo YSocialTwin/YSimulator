@@ -2235,7 +2235,7 @@ class SimulationClient(ActionExecutorMixin):
                     # The structure of pending_calls depends on action type
                     if action_type in ["post", "image", "cast", "share_link"]:
                         pending_llm_posts.extend(pending_calls)
-                    elif action_type in ["comment", "read", "search"]:
+                    elif action_type in ["comment", "read", "search", "share"]:
                         pending_llm_reactions.extend(pending_calls)
                     elif action_type == "follow":
                         pending_llm_follows.extend(pending_calls)
@@ -2406,13 +2406,14 @@ class SimulationClient(ActionExecutorMixin):
 
     def _gather_pending_llm_reactions(self, pending_llm_reactions: list, actions: list) -> list:
         """
-        Gather and resolve all pending LLM reaction/comment generation calls.
+        Gather and resolve all pending LLM reaction/comment/share generation calls.
 
         Args:
             pending_llm_reactions: List of tuples:
                 - (agent_id, cluster_id, target_post_id, future) for regular reactions/comments
                 - (agent_id, cluster_id, target_post_id, future, mention_id) for replies to mentions
-            actions: List to append resolved reaction/comment actions to
+                - (agent_id, cluster_id, target_post_id, future, "SHARE") for share with commentary
+            actions: List to append resolved reaction/comment/share actions to
 
         Returns:
             list: Secondary follow candidates [(agent_id, cluster_id, author_id, post_content, is_llm)]
@@ -2436,22 +2437,39 @@ class SimulationClient(ActionExecutorMixin):
         results = ray.get(futures)  # Blocks once for ALL reactions/comments
 
         for i, res_act in enumerate(results):
-            # Handle both 4-element and 5-element tuples
+            # Handle tuples of varying lengths:
+            # 4-element: (agent_id, cluster_id, target_post_id, future) - regular comment/reaction
+            # 5-element: (agent_id, cluster_id, target_post_id, future, mention_id_or_action_type)
+            #   - If 5th element is a UUID string -> mention_id (reply to mention)
+            #   - If 5th element is "SHARE" -> action_type (share with commentary)
             reaction_tuple = pending_llm_reactions[i]
             a_id = reaction_tuple[0]
             cid = reaction_tuple[1]
             target = reaction_tuple[2]
-            # Check if this is a reply to mention (5th element is mention_id)
-            mention_id = reaction_tuple[4] if len(reaction_tuple) > 4 else None
 
-            # Check if result is a comment (text) or a reaction type
+            # Check 5th element: mention_id or action_type
+            mention_id = None
+            action_type_override = None
+            if len(reaction_tuple) > 4:
+                fifth_element = reaction_tuple[4]
+                # Check if it's a UUID (mention_id) or action type string
+                if fifth_element == "SHARE":
+                    action_type_override = "SHARE"
+                else:
+                    # Assume it's a mention_id (UUID or other identifier)
+                    mention_id = fifth_element
+
+            # Check if result is a comment/share commentary (text) or a reaction type
             if res_act and res_act.upper() not in REACTION_TYPES:
-                # This is a comment text from LLM
+                # This is comment/share commentary text from LLM
+                # Determine action type: SHARE (with commentary) or COMMENT
+                determined_action_type = action_type_override if action_type_override else "COMMENT"
+
                 self.logger.debug(
-                    f"[REPLY] LLM generated comment for agent {a_id}: '{res_act[:50]}...' (is_mention_reply: {mention_id is not None})"
+                    f"[REPLY] LLM generated {determined_action_type} for agent {a_id}: '{res_act[:50]}...' (is_mention_reply: {mention_id is not None})"
                 )
 
-                # Annotate the comment text
+                # Annotate the text
                 annotations = annotate_text(
                     res_act,
                     enable_sentiment=self.enable_sentiment,
@@ -2461,10 +2479,10 @@ class SimulationClient(ActionExecutorMixin):
                     llm_handle=self.llm,
                 )
                 self.logger.info(
-                    f"LLM comment annotated for agent {a_id}: has_sentiment={bool(annotations.get('sentiment'))}, has_toxicity={bool(annotations.get('toxicity'))}, has_emotions={bool(annotations.get('emotions'))}, hashtags={len(annotations.get('hashtags', []))}, mentions={len(annotations.get('mentions', []))}"
+                    f"LLM {determined_action_type} annotated for agent {a_id}: has_sentiment={bool(annotations.get('sentiment'))}, has_toxicity={bool(annotations.get('toxicity'))}, has_emotions={bool(annotations.get('emotions'))}, hashtags={len(annotations.get('hashtags', []))}, mentions={len(annotations.get('mentions', []))}"
                 )
 
-                # Calculate opinion updates before creating action
+                # Calculate opinion updates
                 post_data = ray.get(self.server.get_post.remote(target, client_id=self.client_id))
                 updated_opinions = None
                 if post_data:
@@ -2473,7 +2491,7 @@ class SimulationClient(ActionExecutorMixin):
                 action = ActionDTO(
                     a_id,
                     cid,
-                    "COMMENT",
+                    determined_action_type,
                     content=res_act,
                     target_post_id=target,
                     annotations=annotations,
@@ -2491,7 +2509,7 @@ class SimulationClient(ActionExecutorMixin):
                         f"[REPLY] Successfully marked mention {mention_id} as replied (LLM)"
                     )
 
-                # Track for secondary follow (comment action)
+                # Track for secondary follow
                 if post_data:
                     secondary_follow_candidates.append(
                         (a_id, cid, post_data.get("user_id"), post_data.get("tweet", ""), True)
