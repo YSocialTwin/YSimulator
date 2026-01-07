@@ -247,7 +247,7 @@ class SimulationClient(ActionExecutorMixin):
         # Initialize action generator factory (Phase 1 refactoring - COMPLETED)
         # The framework is integrated and can be enabled via _use_action_generators flag
         self._action_generator_factory = None
-        self._use_action_generators = False  # Feature flag for gradual rollout
+        self._use_action_generators = True  # Feature flag for gradual rollout
 
         self.logger.info(
             "Simulation client initialized",
