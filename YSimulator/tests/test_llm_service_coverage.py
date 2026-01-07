@@ -8,10 +8,22 @@ and error handling for various edge cases.
 import pytest
 from typing import Dict, Any, Optional
 from unittest.mock import Mock, patch, MagicMock
+import ray
+import importlib
+import sys
 
 
 class TestLLMServiceInitialization:
     """Test LLM service initialization and configuration."""
+
+    @pytest.fixture(autouse=True)
+    def ensure_llm_service_module_fresh(self):
+        """Ensure LLMService module is reloaded with Ray initialized."""
+        # Remove module from cache to force fresh import
+        module_name = 'YSimulator.YClient.LLM_interactions.llm_service'
+        if module_name in sys.modules:
+            del sys.modules[module_name]
+        yield
 
     def test_llm_service_init_with_valid_config(self):
         """Test LLM service initialization with valid configuration."""
