@@ -1,6 +1,6 @@
+import logging
 import random
 from typing import Any, Dict, List, Optional
-import logging
 
 import ray
 from langchain_core.output_parsers import StrOutputParser
@@ -312,6 +312,81 @@ class LLMService:
         except Exception as e:
             # Fallback if LLM fails
             return "Interesting perspective!"
+
+    def generate_share_commentary(
+        self,
+        cluster_id: int,
+        post_content: str,
+        agent_attrs: dict = None,
+        author_name: str = "Someone",
+    ) -> str:
+        """
+        Generate commentary for sharing/resharing a post.
+
+        This method is called remotely via Ray actor for LLM-based share actions.
+        Unlike rule-based sharing (simple reshare), this generates personalized
+        commentary explaining why the agent is sharing the post.
+
+        Args:
+            cluster_id: Cluster/persona ID of the agent
+            post_content: Content of the post being reshared
+            agent_attrs: Dict with agent attributes (name, opinions on post topics, etc.)
+            author_name: Username of the original post author
+
+        Returns:
+            str: Generated share commentary text (max 200 characters)
+        """
+        # Build persona using attributes or fallback
+        persona = self._build_persona(cluster_id, agent_attrs)
+
+        # Get toxicity level (default to "no" if not provided)
+        toxicity = agent_attrs.get("toxicity", "no") if agent_attrs else "no"
+
+        # Get opinions on the post's topics if available
+        opinion_instruction = ""
+        if agent_attrs and "post_topics" in agent_attrs and agent_attrs["post_topics"]:
+            topics = agent_attrs["post_topics"]
+            opinions = agent_attrs.get("post_opinions", {})
+
+            if topics and opinions:
+                opinion_parts = []
+                for topic in topics:
+                    if topic in opinions:
+                        opinion_parts.append(f"{topic}: {opinions[topic]}")
+
+                if opinion_parts:
+                    opinion_str = ", ".join(opinion_parts)
+                    opinion_instruction = f" Your opinions on the discussed topics: {opinion_str}. Reflect your viewpoint in your commentary."
+
+        # Get prompt templates from configuration
+        system_template = self.prompts_config["generate_share_commentary"]["system_template"]
+        user_template = self.prompts_config["generate_share_commentary"]["user_template"]
+
+        # Format templates
+        system_msg = system_template.format(persona=persona, toxicity=toxicity)
+        user_msg = user_template.format(
+            author_name=author_name,
+            post_content=post_content,
+        )
+
+        # Add opinion instruction if available
+        if opinion_instruction:
+            user_msg += opinion_instruction
+
+        prompt = ChatPromptTemplate.from_messages([("system", system_msg), ("user", user_msg)])
+
+        try:
+            chain = prompt | self.llm | StrOutputParser()
+            commentary = chain.invoke({}).strip()
+
+            # Ensure commentary doesn't exceed 200 characters as specified
+            if len(commentary) > 200:
+                commentary = commentary[:197] + "..."
+
+            return commentary
+        except Exception as e:
+            # Fallback if LLM fails
+            return "Sharing this!"
 
     def generate_read_reaction(
         self, cluster_id: int, post_content: str, agent_attrs: dict = None
