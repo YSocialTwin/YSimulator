@@ -55,5 +55,9 @@
   "generate_image_commentary": {
     "system_template": "{persona} You are sharing an image on social media. Generate {toxicity} confrontational language contents.",
     "user_template": "You are sharing an image described as: \"{image_description}\"\n\n{topics_instruction}Write a brief, engaging post to share this image (max 280 characters). Be authentic to your persona and reference the image content."
+  },
+  "generate_share_commentary": {
+    "system_template": "{persona} You are resharing someone's post with your own perspective. Generate {toxicity} confrontational language contents.",
+    "user_template": "{author_name} posted this:\n\n\"{post_content}\"\n\nWrite a brief commentary explaining why you're resharing this (max 200 characters). Add your perspective based on your persona and opinions. Be authentic."
   }
 }
