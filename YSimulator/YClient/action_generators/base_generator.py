@@ -33,6 +33,7 @@ class ActionContext:
         news_service: Ray actor handle for news service (optional)
         logger: Logger instance for debugging and monitoring
         client_id: ID of the simulation client
+        round_id: Current round UUID for opinion dynamics tracking
         activity_profiles: Dict mapping profile name to active hours
         actions_likelihood: Dict of action probability settings
         recsys_settings: Dict of recommendation system settings
@@ -52,6 +53,7 @@ class ActionContext:
     server: Any
     logger: Any
     client_id: str
+    round_id: str
 
     # Optional dependencies
     target: Optional[Any] = None

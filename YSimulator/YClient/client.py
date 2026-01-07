@@ -276,6 +276,9 @@ class SimulationClient(ActionExecutorMixin):
         Returns:
             ActionGeneratorFactory: Configured factory for generating actions
         """
+        # Get current round_id for opinion dynamics tracking
+        round_id = ray.get(self.server.get_current_round_id.remote())
+
         # Build action context with all dependencies
         context = ActionContext(
             day=day,
@@ -284,6 +287,7 @@ class SimulationClient(ActionExecutorMixin):
             server=self.server,
             logger=self.logger,
             client_id=self.client_id,
+            round_id=round_id,
             llm=self.llm,
             news_service=self.news_service,
             activity_profiles=self.activity_profiles,

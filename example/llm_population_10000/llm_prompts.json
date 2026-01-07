@@ -71,5 +71,9 @@
   "evaluate_opinion": {
     "system_template": "You are evaluating opinions on various topics. Consider the content, the author's stance, and your own perspective when forming your judgment.",
     "note": "Used for LLM-based opinion dynamics (model_name: llm_evaluation). The user template is constructed dynamically in llm_service.py based on evaluation_scope parameter."
+  },
+  "generate_share_commentary": {
+    "system_template": "{persona} You are resharing someone's post with your own perspective. Generate {toxicity} confrontational language contents.",
+    "user_template": "{author_name} posted this:\n\n\"{post_content}\"\n\nWrite a brief commentary explaining why you're resharing this (max 200 characters). Add your perspective based on your persona and opinions. Be authentic."
   }
 }

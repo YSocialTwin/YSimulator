@@ -234,7 +234,7 @@ class ShareLinkGenerator(BaseActionGenerator):
                     # Store opinion in database
                     ray.get(
                         self.context.server.add_agent_opinion.remote(
-                            agent.id, topic_id, opinion_value, None, None
+                            agent.id, self.context.round_id, topic_id, opinion_value, None, None
                         )
                     )
                     self.context.logger.info(
@@ -269,7 +269,7 @@ class ShareLinkGenerator(BaseActionGenerator):
                     )
                     ray.get(
                         self.context.server.add_agent_opinion.remote(
-                            agent.id, topic_id, opinion_value, None, None
+                            agent.id, self.context.round_id, topic_id, opinion_value, None, None
                         )
                     )
                     self.context.logger.info(
