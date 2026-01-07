@@ -2030,6 +2030,11 @@ class SimulationClient(ActionExecutorMixin):
                 pending_llm_calls: List of tuples for async LLM calls to gather later
                 metadata: Dict with debugging/tracking information
         """
+        # Check if action_type is None (can happen from activity_selector)
+        if action_type is None:
+            self.logger.debug(f"Action type is None for agent {agent.username}, skipping")
+            return [], [], {"skipped": True, "reason": "action_type_none"}
+
         # Update the generator factory's context with target if provided
         if target:
             self._action_generator_factory.context.target = target

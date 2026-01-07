@@ -91,8 +91,11 @@ class ActionGeneratorFactory:
             BaseActionGenerator: Instance of the appropriate generator
 
         Raises:
-            ValueError: If action_type is not registered
+            ValueError: If action_type is None or not registered
         """
+        if action_type is None:
+            raise ValueError("action_type cannot be None")
+
         action_type_lower = action_type.lower()
 
         if action_type_lower not in self._registry:
