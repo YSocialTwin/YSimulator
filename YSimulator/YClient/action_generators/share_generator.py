@@ -44,12 +44,12 @@ class ShareGenerator(BaseActionGenerator):
             result.metadata["error"] = "no_target_post"
             return result
 
-        if agent_type == "llm":
-            # TODO: Implement LLM share with commentary in future enhancement
-            # For now, use rule-based approach
-            self.context.logger.warning(
-                f"LLM SHARE not yet implemented for agent {agent.username}, using rule-based"
-            )
+        # For now, only rule-based agents share (matches original implementation)
+        # LLM share with commentary is not implemented - silently skip for LLM agents
+        if agent_type != "rule_based":
+            result.metadata["skipped"] = True
+            result.metadata["reason"] = "llm_share_not_implemented"
+            return result
 
         # Generate rule-based share action
         action = generate_rule_based_share(agent.id, agent.cluster, target_post)
