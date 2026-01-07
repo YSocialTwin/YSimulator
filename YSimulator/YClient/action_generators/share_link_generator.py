@@ -53,28 +53,47 @@ class ShareLinkGenerator(BaseActionGenerator):
         """
         result = ActionGeneratorResult()
 
+        # Log the action initiation
+        self.context.logger.info(
+            f"share_link action: agent={agent.username}, is_page={agent.is_page}, "
+            f"feed_url={agent.feed_url[:50] if agent.feed_url else None}, "
+            f"news_service={self.context.news_service is not None}"
+        )
+
         # Validate agent is a page
         if agent.is_page != 1:
+            self.context.logger.warning(f"share_link skipped: {agent.username} is not a page agent")
             result.metadata["error"] = "not_page_agent"
             return result
 
         if not agent.feed_url:
+            self.context.logger.warning(f"share_link skipped: {agent.username} has no feed_url")
             result.metadata["error"] = "no_feed_url"
             return result
 
         if not self.context.news_service:
+            self.context.logger.warning(
+                f"share_link skipped: {agent.username} - news_service is None"
+            )
             result.metadata["error"] = "no_news_service"
             return result
 
         # Get an article from this page's specific feed
         try:
+            self.context.logger.info(
+                f"Page {agent.username} fetching article from {agent.feed_url[:50]}"
+            )
             article_future = self.context.news_service.get_article_from_feed.remote(agent.feed_url)
             article = ray.get(article_future)
 
             if not article:
+                self.context.logger.warning(f"Page {agent.username} got no article from feed")
                 result.metadata["error"] = "no_article"
                 return result
 
+            self.context.logger.info(
+                f"Page {agent.username} got article: {article.get('title', 'NO TITLE')[:50]}"
+            )
             result.metadata["article_title"] = article.get("title", "")[:50]
 
             # Verify the article's website_id matches the page's user_id
@@ -83,11 +102,16 @@ class ShareLinkGenerator(BaseActionGenerator):
                 normalized_article_id = str(article_website_id).lower()
                 normalized_agent_id = str(agent.id).lower()
                 if normalized_article_id != normalized_agent_id:
+                    self.context.logger.warning(
+                        f"Page {agent.username} attempted to share from wrong feed. "
+                        f"Page ID: {agent.id}, Article Website ID: {article_website_id}"
+                    )
                     result.metadata["error"] = "website_id_mismatch"
                     return result
 
             if agent_type == "llm":
                 # LLM page posts news with commentary
+                self.context.logger.info(f"LLM Page {agent.username} generating news post async")
                 future, article_id = generate_news_post_async(
                     self.context.news_service,
                     self.context.llm,
@@ -95,6 +119,7 @@ class ShareLinkGenerator(BaseActionGenerator):
                     article,
                     agent.username,
                 )
+                self.context.logger.info(f"LLM Page {agent.username} got article_id: {article_id}")
 
                 # Extract and store article topics (if we have article_id)
                 if article_id:
@@ -105,8 +130,12 @@ class ShareLinkGenerator(BaseActionGenerator):
                 result.metadata["article_id"] = article_id
             else:
                 # Rule-based page posts news directly
+                self.context.logger.info(f"Rule-based Page {agent.username} generating news post")
                 action, article_id = generate_rule_based_news_post(
                     agent.id, agent.cluster, article, self.context.news_service
+                )
+                self.context.logger.info(
+                    f"Rule-based Page {agent.username} got article_id: {article_id}"
                 )
 
                 # Extract and store article topics
@@ -122,6 +151,9 @@ class ShareLinkGenerator(BaseActionGenerator):
             result.metadata["error"] = "exception"
             result.metadata["exception"] = str(e)
             self.context.logger.warning(f"Share link action failed for page {agent.username}: {e}")
+            import traceback
+
+            self.context.logger.warning(f"Traceback: {traceback.format_exc()}")
 
         return result
 
@@ -151,6 +183,7 @@ class ShareLinkGenerator(BaseActionGenerator):
                     article.get("title", ""), article.get("summary", "")
                 )
                 topic_names = ray.get(topics_future)
+                self.context.logger.info(f"LLM extracted topics: {topic_names}")
 
                 if topic_names:
                     # Store topics in database (server-side)
@@ -160,9 +193,17 @@ class ShareLinkGenerator(BaseActionGenerator):
                         )
                     )
 
-                    if topic_ids and self._is_opinion_dynamics_enabled():
-                        self._store_page_agent_opinions(agent, article, topic_names[:2])
+                    if topic_ids:
+                        self.context.logger.info(
+                            f"Stored {len(topic_ids)} topics for article {article_id}"
+                        )
+
+                        if self._is_opinion_dynamics_enabled():
+                            self._store_page_agent_opinions(agent, article, topic_names[:2])
             else:
+                self.context.logger.info(
+                    f"Article {article_id} already has {len(existing_topics)} topics"
+                )
                 # Ensure opinions exist for existing article topics
                 if self._is_opinion_dynamics_enabled():
                     self._ensure_page_agent_opinions(agent, article, existing_topics)
@@ -171,6 +212,9 @@ class ShareLinkGenerator(BaseActionGenerator):
             self.context.logger.warning(
                 f"Failed to extract/store topics for article {article_id}: {e}"
             )
+            import traceback
+
+            self.context.logger.warning(f"Traceback: {traceback.format_exc()}")
 
     def _store_page_agent_opinions(self, agent: AgentProfile, article: dict, topic_names: list):
         """Store page agent opinions for newly extracted topics."""
