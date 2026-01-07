@@ -535,6 +535,36 @@ class RedisPostRepository(PostRepository):
             )
             return None
     
+    def get_emotion_by_name_full(self, emotion_name: str) -> Optional[Dict[str, str]]:
+        """Get full emotion data by name (id, emotion, icon)."""
+        try:
+            # Look up emotion ID from name index
+            emotion_name_key = self._redis_key("emotion:by_name", emotion_name)
+            emotion_id = self.redis_client.get(emotion_name_key)
+            
+            if emotion_id:
+                # Decode if bytes
+                emotion_id_str = emotion_id.decode() if isinstance(emotion_id, bytes) else emotion_id
+                # Get emotion data from hash
+                emotion_key = self._redis_key("emotion", emotion_id_str)
+                emotion_data = self.redis_client.hgetall(emotion_key)
+                
+                if emotion_data:
+                    # Decode all keys and values
+                    return {
+                        k.decode() if isinstance(k, bytes) else k: (
+                            v.decode() if isinstance(v, bytes) else v
+                        )
+                        for k, v in emotion_data.items()
+                    }
+            return None
+        except Exception as e:
+            self.logger.error(
+                f"Error getting emotion by name (full) from Redis: {e}",
+                extra={"extra_data": {"error": str(e), "emotion_name": emotion_name}},
+            )
+            return None
+    
     def initialize_emotions_table(self):
         """Initialize emotions table with standard emotions."""
         # Note: db_middleware uses SQL-only implementation for this

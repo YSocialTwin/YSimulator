@@ -209,6 +209,9 @@ class OrchestratorServer:
 
         # Store visibility_rounds for server use
         self.visibility_rounds = simulation_config.get("posts", {}).get("visibility_rounds", 36)
+        
+        # Store default_limit for recommendations
+        self.default_recommendation_limit = simulation_config.get("recommendations", {}).get("default_limit", 5)
 
         # Store attention_window for interest decay (sliding window)
         self.attention_window = simulation_config.get("agents", {}).get("attention_window", 336)
@@ -309,7 +312,12 @@ class OrchestratorServer:
 
         # Initialize recommendation engines
         from YSimulator.YServer.recommendation import ContentRecommender, FollowRecommender
-        self.content_recommender = ContentRecommender(self.db, self.visibility_rounds, self.logger)
+        self.content_recommender = ContentRecommender(
+            self.db, 
+            self.visibility_rounds, 
+            self.num_slots_per_day,
+            self.logger
+        )
         self.follow_recommender = FollowRecommender(self.db, self.logger)
         self.logger.info("Recommendation engines initialized (ContentRecommender, FollowRecommender)")
 
@@ -1697,7 +1705,7 @@ class OrchestratorServer:
         self,
         agent_id: str,
         mode: str = "random",
-        limit: int = 5,
+        limit: int = None,
         followers_ratio: float = 0.6,
         client_id: str = None,
     ) -> List[str]:
@@ -1709,13 +1717,17 @@ class OrchestratorServer:
         Args:
             agent_id: UUID of the agent requesting recommendations
             mode: Recommendation mode (random, rchrono, rchrono_popularity, etc.)
-            limit: Number of posts to recommend (default: 5)
+            limit: Number of posts to recommend (default: from config, typically 5)
             followers_ratio: Ratio of posts from followers vs others (default: 0.6)
             client_id: Client ID (for logging)
 
         Returns:
             List[str]: List of post UUIDs recommended for the agent
         """
+        # Use configured default if limit not specified
+        if limit is None:
+            limit = self.default_recommendation_limit
+        
         # Delegate to ContentRecommender
         post_ids = self.content_recommender.get_recommended_posts(
             agent_id=agent_id,

@@ -57,7 +57,16 @@ class MetadataService:
             Dictionary with emotion data (id, emotion, icon) or None
         """
         try:
-            return self.post_repo.get_emotion_by_name(emotion_name)
+            # Use get_emotion_by_name_full to get the full dictionary
+            # Fall back to get_emotion_by_name for repositories that don't implement _full
+            if hasattr(self.post_repo, 'get_emotion_by_name_full'):
+                return self.post_repo.get_emotion_by_name_full(emotion_name)
+            else:
+                # For repositories without _full method, get ID and construct dict
+                emotion_id = self.post_repo.get_emotion_by_name(emotion_name)
+                if emotion_id:
+                    return {"id": emotion_id, "emotion": emotion_name, "icon": ""}
+                return None
         except Exception as e:
             self.logger.error(f"Error getting emotion by name: {e}")
             return None

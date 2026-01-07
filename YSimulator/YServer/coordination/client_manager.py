@@ -138,11 +138,12 @@ class ClientManager:
             client_id: Unique identifier for the client
             
         Returns:
-            bool: True if heartbeat recorded
+            bool: True if heartbeat recorded, False if client not registered
         """
         if client_id in self.registered_clients:
             self.last_heartbeat[client_id] = time.time()
-        return True
+            return True
+        return False
     
     def deregister_client(self, client_id: str) -> bool:
         """

@@ -20,32 +20,44 @@ from YSimulator.YServer.action_processors.action_router import ActionRouter
 def mock_services():
     """Create mock services for testing."""
     services = Mock()
-    services.add_post = Mock(return_value="post_123")
-    services.get_post = Mock(return_value={"user_id": "user_1", "thread_id": "thread_1"})
-    services.add_post_topic = Mock(return_value=True)
-    services.get_article = Mock(return_value={"title": "Test", "content": "Content"})
-    services.get_article_topics = Mock(return_value=["topic_1", "topic_2"])
-    services.get_topic_name_from_id = Mock(return_value="Politics")
-    services.add_or_get_interest = Mock(return_value="topic_1")
-    services.add_follow = Mock(return_value=True)
-    services.add_interaction = Mock(return_value=True)
-    services.increment_post_reaction_count = Mock(return_value=True)
-    services.get_post_topics = Mock(return_value=["topic_1"])  # Returns list
-    services.get_post_sentiment = Mock(return_value={"compound": 0.5})
-    services.add_post_sentiment = Mock(return_value=True)
-    services._is_empty_or_default = Mock(return_value=False)
-    services._reaction_to_sentiment = Mock(return_value={
-        "neg": 0.0, "pos": 1.0, "neu": 0.0, "compound": 1.0
-    })
+    
+    # Create nested service mocks to match actual service structure
+    services.post_service = Mock()
+    services.post_service.create_post = Mock(return_value="post_123")
+    services.post_service.get_post = Mock(return_value={"user_id": "user_1", "thread_id": "thread_1"})
+    services.post_service.add_post_topic = Mock(return_value=True)
+    services.post_service.get_post_topics = Mock(return_value=["topic_1"])
+    services.post_service.get_post_sentiment = Mock(return_value={"compound": 0.5})
+    services.post_service.add_post_sentiment = Mock(return_value=True)
+    services.post_service.increment_post_reaction_count = Mock(return_value=True)
+    services.post_service.add_interaction = Mock(return_value=True)
+    
+    services.article_service = Mock()
+    services.article_service.get_article = Mock(return_value={"title": "Test", "content": "Content"})
+    services.article_service.get_article_topics = Mock(return_value=["topic_1", "topic_2"])
+    services.article_service.get_article_reference = Mock(return_value=None)
+    services.article_service.copy_article_reference = Mock()
+    
+    services.interest_service = Mock()
+    services.interest_service.get_topic_name_from_id = Mock(return_value="Politics")
+    services.interest_service.add_or_get_interest = Mock(return_value="topic_1")
+    services.interest_service.add_user_interest = Mock(return_value=True)
+    services.interest_service.add_agent_opinion = Mock(return_value=True)
+    
+    services.follow_service = Mock()
+    services.follow_service.add_follow = Mock(return_value=True)
+    
+    services.metadata_service = Mock()
+    services.metadata_service.get_post_sentiment = Mock(return_value={"compound": 0.5})
+    services.metadata_service.add_post_sentiment = Mock(return_value=True)
+    services.metadata_service._is_empty_or_default = Mock(return_value=False)
+    
+    # Server-level helper methods (on services object itself)
     services._ensure_agent_opinion_exists = Mock()
     services._update_agent_interest_counter = Mock()
-    services._process_annotations = Mock(return_value=[])  # Returns empty list
-    services.add_user_interest = Mock(return_value=True)
-    services.add_agent_opinion = Mock(return_value=True)
+    services._process_annotations = Mock(return_value=[])
     services._get_topic_name_from_id = Mock(return_value="Politics")
-    # Additional methods that need to return iterables
-    services.get_article_reference = Mock(return_value=None)
-    services.copy_article_reference = Mock()
+    
     return services
 
 
@@ -82,7 +94,7 @@ class TestPostProcessor:
         assert result.success is True
         assert result.action_type == "POST"
         assert "post_123" in result.new_ids
-        assert mock_services.add_post.called
+        assert mock_services.post_service.create_post.called
     
     def test_process_article_post(self, mock_services, action_context, mock_action):
         """Test processing an article post."""
@@ -92,8 +104,8 @@ class TestPostProcessor:
         result = processor.process(mock_action, action_context)
         
         assert result.success is True
-        mock_services.get_article.assert_called()
-        mock_services.add_post_topic.assert_called()
+        mock_services.article_service.get_article.assert_called()
+        mock_services.post_service.add_post_topic.assert_called()
     
     def test_process_post_with_topic(self, mock_services, action_context, mock_action):
         """Test processing a post with topic."""
@@ -109,7 +121,7 @@ class TestPostProcessor:
         
         assert result.success is True
         # Verify add_or_get_interest was called with the topic
-        mock_services.add_or_get_interest.assert_called_with("Technology")
+        mock_services.interest_service.add_or_get_interest.assert_called_with("Technology")
 
 
 class TestCommentProcessor:
@@ -127,16 +139,16 @@ class TestCommentProcessor:
         
         assert result.success is True
         assert result.action_type == "COMMENT"
-        mock_services.get_post.assert_called()
-        mock_services.add_post.assert_called()
-        mock_services.increment_post_reaction_count.assert_called()
+        mock_services.post_service.get_post.assert_called()
+        mock_services.post_service.create_post.assert_called()
+        mock_services.post_service.increment_post_reaction_count.assert_called()
     
     def test_comment_parent_not_found(self, mock_services, action_context, mock_action):
         """Test comment when parent post not found."""
         processor = CommentProcessor(mock_services)
         mock_action.action_type = "COMMENT"
         mock_action.target_post_id = "post_1"
-        mock_services.get_post = Mock(return_value=None)
+        mock_services.post_service.get_post = Mock(return_value=None)
         
         result = processor.process(mock_action, action_context)
         
@@ -159,15 +171,15 @@ class TestShareProcessor:
         
         assert result.success is True
         assert result.action_type == "SHARE"
-        mock_services.get_post.assert_called()
-        mock_services.add_post.assert_called()
+        mock_services.post_service.get_post.assert_called()
+        mock_services.post_service.create_post.assert_called()
     
     def test_share_original_not_found(self, mock_services, action_context, mock_action):
         """Test share when original post not found."""
         processor = ShareProcessor(mock_services)
         mock_action.action_type = "SHARE"
         mock_action.target_post_id = "post_1"
-        mock_services.get_post = Mock(return_value=None)
+        mock_services.post_service.get_post = Mock(return_value=None)
         
         result = processor.process(mock_action, action_context)
         
@@ -188,14 +200,14 @@ class TestFollowProcessor:
         
         assert result.success is True
         assert result.action_type == "FOLLOW"
-        mock_services.add_follow.assert_called()
+        mock_services.follow_service.add_follow.assert_called()
     
     def test_follow_failure(self, mock_services, action_context, mock_action):
         """Test follow when database operation fails."""
         processor = FollowProcessor(mock_services)
         mock_action.action_type = "FOLLOW"
         mock_action.target_user_id = "user_2"
-        mock_services.add_follow = Mock(return_value=False)
+        mock_services.follow_service.add_follow = Mock(return_value=False)
         
         result = processor.process(mock_action, action_context)
         
@@ -215,7 +227,7 @@ class TestUnfollowProcessor:
         
         assert result.success is True
         assert result.action_type == "UNFOLLOW"
-        mock_services.add_follow.assert_called()
+        mock_services.follow_service.add_follow.assert_called()
 
 
 class TestReactionProcessor:
@@ -231,8 +243,8 @@ class TestReactionProcessor:
         
         assert result.success is True
         assert result.action_type == "LIKE"
-        mock_services.add_interaction.assert_called()
-        mock_services.increment_post_reaction_count.assert_called()
+        mock_services.post_service.add_interaction.assert_called()
+        mock_services.post_service.increment_post_reaction_count.assert_called()
     
     def test_process_reaction_with_sentiment(self, mock_services, action_context, mock_action):
         """Test reaction processing includes sentiment."""
@@ -243,7 +255,7 @@ class TestReactionProcessor:
         result = processor.process(mock_action, action_context)
         
         assert result.success is True
-        mock_services.add_post_sentiment.assert_called()
+        mock_services.metadata_service.add_post_sentiment.assert_called()
 
 
 class TestActionRouter:
