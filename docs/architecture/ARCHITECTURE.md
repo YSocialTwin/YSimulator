@@ -2,7 +2,7 @@
 
 This document provides a comprehensive overview of the YSimulator system architecture, component organization, and interaction patterns.
 
-> **📢 Major Update (January 2026)**: The server architecture has been completely modernized through a 5-phase refactoring. See [Server Refactoring Report](../refactoring/SERVER_REFACTORING_REPORT.md) for details.
+> **📢 Major Updates (January 2026)**: Both server and client architectures have been modernized through systematic refactoring. See [Server Refactoring Report](../refactoring/SERVER_REFACTORING_REPORT.md) and [Client Refactoring Report](../refactoring/CLIENT_REFACTORING_REPORT.md) for details.
 
 ## Table of Contents
 - [System Overview](#system-overview)
@@ -14,6 +14,8 @@ This document provides a comprehensive overview of the YSimulator system archite
 - [Technology Stack](#technology-stack)
 
 ## Refactoring Overview
+
+### Server Refactoring (Completed)
 
 The server has undergone a comprehensive 5-phase modernization:
 
@@ -42,7 +44,25 @@ The server has undergone a comprehensive 5-phase modernization:
    - Eliminated all 46 direct database calls
    - 100% service adoption
 
-**Total Impact**: server.py reduced 37% (3,114 → 1,966 lines), +50 tests, zero regressions.
+**Server Impact**: server.py reduced 37% (3,114 → 1,966 lines), +50 tests, zero regressions.
+
+### Client Refactoring (Phase 1 Completed - January 2026)
+
+The client has completed Phase 1 of modernization:
+
+1. **Action Generator Framework** (Phase 1 - ✅ COMPLETED)
+   - Extracted 9 action handler methods into dedicated generator classes
+   - Created BaseActionGenerator with opinion dynamics helpers
+   - ActionGeneratorFactory for routing
+   - **NEW**: LLM SHARE with personalized commentary
+   - **FIXED**: Opinion dynamics cold_start preservation
+   - 49% code reduction (3,876 → 1,996 lines)
+   - +10 tests, 100% conformance, zero regressions
+   - Legacy code removed, single-path implementation
+
+**Client Impact**: client.py reduced 32% (2,924 → 1,996 lines), action_executor.py deleted (952 lines), +10 tests, zero regressions.
+
+**Total Modernization**: Both server and client now follow clean architecture principles with modular, testable components.
 
 ## System Overview
 

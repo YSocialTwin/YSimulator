@@ -68,9 +68,20 @@ YSimulator/
 │   │   ├── follow_recsys*.py   # Follow recommendation algorithms
 │   │   └── utils.py            # Shared utilities
 │   └── interests_modeling/     # Interest tracking and modeling
-├── YClient/                    # Client-side agent simulation (~8,000 lines)
-│   ├── client.py               # Main agent actor (extends ActionExecutorMixin)
-│   ├── action_executor.py      # Action handling mixin (all _handle_*_action methods)
+├── YClient/                    # Client-side agent simulation (~3,600 lines after Phase 1)
+│   ├── client.py               # Main agent actor (1,996 lines, -32% after refactoring)
+│   ├── action_generators/      # ✅ NEW: Modular action generation (9 generators, 1,582 lines)
+│   │   ├── base_generator.py   # Abstract base with opinion dynamics helpers
+│   │   ├── factory.py          # Generator routing and instantiation
+│   │   ├── post_generator.py   # POST action generation
+│   │   ├── comment_generator.py # COMMENT with opinion dynamics
+│   │   ├── read_generator.py   # READ with reactions
+│   │   ├── follow_generator.py # FOLLOW decisions
+│   │   ├── share_generator.py  # SHARE with LLM commentary (NEW feature)
+│   │   ├── share_link_generator.py # SHARE_LINK with topic extraction
+│   │   ├── search_generator.py # SEARCH with reactions
+│   │   ├── image_generator.py  # IMAGE posts
+│   │   └── cast_generator.py   # CAST actions
 │   ├── agent_manager.py        # Agent lifecycle and population management
 │   ├── activity_selector.py    # Action type selection logic
 │   ├── churn_manager.py        # Agent churn and new agent handling
