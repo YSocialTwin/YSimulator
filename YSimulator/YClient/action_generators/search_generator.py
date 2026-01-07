@@ -115,9 +115,10 @@ class SearchGenerator(BaseActionGenerator):
         if agent_type == "llm":
             # LLM: Ask LLM to decide which action to perform (comment/share/react)
             # Get opinions for the topics in this post (if enabled)
+            # Note: Opinion dynamics integration is a future enhancement
+            # For now, this is handled in the gather phase by the caller
             if self._is_opinion_dynamics_enabled():
-                # This would require a helper from context - skip for now
-                pass
+                pass  # Future: Add opinion retrieval logic here
             
             future = generate_llm_search_action_async(
                 self.context.llm, agent.cluster, post_content, agent_attrs

@@ -2,6 +2,9 @@
 Share action generator for YSimulator agents.
 
 This module generates SHARE actions where agents reshare existing posts.
+
+Note: LLM-based SHARE with custom commentary is not yet implemented.
+Currently, LLM agents fall back to rule-based sharing behavior.
 """
 
 from YSimulator.YClient.action_generators.base_generator import (
@@ -40,7 +43,7 @@ class ShareGenerator(BaseActionGenerator):
             return result
         
         if agent_type == "llm":
-            # TODO: Implement LLM share with commentary
+            # TODO: Implement LLM share with commentary in future enhancement
             # For now, use rule-based approach
             self.context.logger.warning(
                 f"LLM SHARE not yet implemented for agent {agent.username}, using rule-based"

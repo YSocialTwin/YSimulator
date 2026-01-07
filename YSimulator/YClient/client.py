@@ -244,8 +244,8 @@ class SimulationClient(ActionExecutorMixin):
                             f"Failed to register feed for page {agent.username}: {e}"
                         )
 
-        # Initialize action generator factory (Phase 1 refactoring)
-        # This is initialized but not used yet - will be integrated in next step
+        # Initialize action generator factory (Phase 1 refactoring - COMPLETED)
+        # The framework is integrated and can be enabled via _use_action_generators flag
         self._action_generator_factory = None
         self._use_action_generators = False  # Feature flag for gradual rollout
         

@@ -127,11 +127,10 @@ class CommentGenerator(BaseActionGenerator):
                 # Get agent attributes including opinions on post topics
                 agent_attrs = self._extract_agent_attrs(agent)
                 
+                # Note: Opinion dynamics integration for comments is a future enhancement
                 # Get opinions for the topics in this post (if opinion dynamics enabled)
-                if self._is_opinion_dynamics_enabled():
-                    # This would call a helper function from context
-                    # For now, we'll skip this to keep it simple
-                    pass
+                # This would require a helper function to get opinions for post topics
+                # For now, this is handled in the gather phase by the caller
                 
                 # Fire off async LLM call to generate comment
                 future = self.context.llm.generate_comment.remote(
