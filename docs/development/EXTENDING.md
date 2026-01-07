@@ -24,17 +24,25 @@ Adding a new action requires modifications to:
 
 ## Architecture Review
 
-### Client Architecture (Updated)
+### Client Architecture (Updated - Post Phase 1 Refactoring)
 ```
-SimulationClient (Ray Actor) extends ActionExecutorMixin
+SimulationClient (Ray Actor)
 ├── run() - Main simulation loop
 ├── _execute_slot() - Execute one time slot
-├── ActionExecutorMixin - Action handling methods
-│   ├── _handle_post_action()
-│   ├── _handle_read_action()
-│   ├── _handle_comment_action()
-│   ├── _handle_share_action()
-│   └── _handle_follow_action()
+├── _dispatch_action_with_generator() - ✅ NEW: Unified action dispatch
+├── action_generators/ - ✅ NEW: Modular action generation framework
+│   ├── factory.py - Generator routing (10 action types)
+│   ├── base_generator.py - Abstract base with opinion dynamics
+│   ├── post_generator.py - POST action generation
+│   ├── comment_generator.py - COMMENT with opinion dynamics
+│   ├── read_generator.py - READ with reactions
+│   ├── follow_generator.py - FOLLOW decisions
+│   ├── share_generator.py - SHARE with LLM commentary
+│   ├── share_link_generator.py - SHARE_LINK with topic extraction
+│   ├── search_generator.py - SEARCH with reactions
+│   ├── image_generator.py - IMAGE posts
+│   ├── cast_generator.py - CAST actions
+│   └── reply_generator.py - ✅ REPLY-TO-MENTION (refactored)
 ├── actions/ - Action implementation modules
 │   ├── llm_actions.py - LLM-powered action generation
 │   └── rule_based_actions.py - Rule-based action generation
@@ -66,9 +74,9 @@ OrchestratorServer (Ray Actor)
     └── interest_manager.py
 ```
 
-### Action Flow (Modern Architecture)
+### Action Flow (Modern Architecture - Post Phase 1)
 ```
-Client Agent → ActionExecutorMixin → submit_action() → Server
+Client Agent → ActionGeneratorFactory → Generator → submit_action() → Server
                                                          ↓
                                             DatabaseServiceAdapter
                                                          ↓
@@ -1668,13 +1676,15 @@ YSimulator has evolved to support a modern, modular architecture for extending a
 
 ### Modern Approach (Recommended)
 
-1. **Client Side**: Use Action Generator Framework (Updated January 2026)
+1. **Client Side**: Use Action Generator Framework (Updated January 2026 - Phase 1 Complete)
    - Create new generator class in `action_generators/` (e.g., `my_action_generator.py`)
    - Extend `BaseActionGenerator` abstract class
    - Implement `generate(agent, target, agent_type)` method
    - Add generator to `ActionGeneratorFactory` routing
    - Use opinion dynamics helpers from base class for consistency
    - Action automatically integrated via factory pattern
+   - **Current Generators** (10 total): POST, COMMENT, READ, FOLLOW, SHARE, SHARE_LINK, SEARCH, IMAGE, CAST, REPLY
+   - **Example**: See `reply_generator.py` for complete generator implementation with LLM/rule-based paths
 
 2. **Server Side**: Use Repository/Service pattern
    - Define interface in `repositories/base_repository.py`

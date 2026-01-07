@@ -70,7 +70,7 @@ YSimulator/
 │   └── interests_modeling/     # Interest tracking and modeling
 ├── YClient/                    # Client-side agent simulation (~3,600 lines after Phase 1)
 │   ├── client.py               # Main agent actor (1,996 lines, -32% after refactoring)
-│   ├── action_generators/      # ✅ NEW: Modular action generation (9 generators, 1,582 lines)
+│   ├── action_generators/      # ✅ NEW: Modular action generation (10 generators, 1,787 lines)
 │   │   ├── base_generator.py   # Abstract base with opinion dynamics helpers
 │   │   ├── factory.py          # Generator routing and instantiation
 │   │   ├── post_generator.py   # POST action generation
@@ -81,11 +81,12 @@ YSimulator/
 │   │   ├── share_link_generator.py # SHARE_LINK with topic extraction
 │   │   ├── search_generator.py # SEARCH with reactions
 │   │   ├── image_generator.py  # IMAGE posts
-│   │   └── cast_generator.py   # CAST actions
+│   │   ├── cast_generator.py   # CAST actions
+│   │   └── reply_generator.py  # ✅ REPLY-TO-MENTION (refactored follow-up)
 │   ├── agent_manager.py        # Agent lifecycle and population management
 │   ├── activity_selector.py    # Action type selection logic
 │   ├── churn_manager.py        # Agent churn and new agent handling
-│   ├── reply_handler.py        # Mention/reply processing
+│   ├── reply_handler.py        # ⚠️  LEGACY: Mention/reply (kept for reference, no longer used)
 │   ├── actions/                # Modular action implementations
 │   │   ├── llm_actions.py      # LLM-based action generators (async)
 │   │   └── rule_based_actions.py # Rule-based action generators

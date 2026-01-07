@@ -24,13 +24,14 @@ Phase 1 refactoring has been successfully completed, tested, and consolidated:
 - **Test Pass Rate**: 100% (436 existing + 10 new tests pass)
 
 ### What Was Delivered
-1. ✅ **Action Generator Framework** - 9 specialized generators
+1. ✅ **Action Generator Framework** - 10 specialized generators (9 + reply)
 2. ✅ **LLM SHARE Enhancement** - NEW personalized commentary feature
 3. ✅ **Opinion Dynamics Fixes** - Correct cold_start handling preserved
 4. ✅ **Configuration Consolidation** - Single prompts.json across all examples
 5. ✅ **SQL Bug Fixes** - All parameter order issues resolved
 6. ✅ **Legacy Code Removal** - Feature flag and old handlers deleted
-7. ✅ **100% Conformance** - All business logic preserved exactly
+7. ✅ **Reply-to-Mention Refactoring** - Aligned with generator framework
+8. ✅ **100% Conformance** - All business logic preserved exactly
 
 ### New Architecture
 ```
@@ -46,9 +47,11 @@ YClient/
 │   ├── share_link_generator.py # SHARE_LINK with topic extraction
 │   ├── search_generator.py     # SEARCH with reactions
 │   ├── image_generator.py      # IMAGE posts
-│   └── cast_generator.py       # CAST actions
+│   ├── cast_generator.py       # CAST actions
+│   └── reply_generator.py      # ✅ REPLY-TO-MENTION (refactored follow-up)
 ├── client.py                   # ✅ SIMPLIFIED (1,996 lines, -928)
-└── action_executor.py          # ❌ DELETED (952 lines removed)
+├── action_executor.py          # ❌ DELETED (952 lines removed)
+└── reply_handler.py            # ⚠️  LEGACY (kept for reference, no longer used)
 ```
 
 ### Validation Checklist
@@ -62,6 +65,7 @@ All functionalities verified 100% aligned with original implementation:
 - ✅ SHARE action - **LLM commentary (NEW)**, rule-based reshare, opinion updates
 - ✅ SEARCH action - Comment/share generation, opinion dynamics
 - ✅ CAST action - Topic-based casting
+- ✅ REPLY action - **Refactored to generator framework (follow-up)**, mention handling, thread context
 
 ### Production Status
 - ✅ **Feature Flag Removed** - No dual code paths
