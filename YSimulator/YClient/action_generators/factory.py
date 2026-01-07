@@ -50,6 +50,7 @@ class ActionGeneratorFactory:
         from YSimulator.YClient.action_generators.image_generator import ImageGenerator
         from YSimulator.YClient.action_generators.post_generator import PostGenerator
         from YSimulator.YClient.action_generators.read_generator import ReadGenerator
+        from YSimulator.YClient.action_generators.reply_generator import ReplyGenerator
         from YSimulator.YClient.action_generators.search_generator import SearchGenerator
         from YSimulator.YClient.action_generators.share_generator import ShareGenerator
         from YSimulator.YClient.action_generators.share_link_generator import (
@@ -66,6 +67,7 @@ class ActionGeneratorFactory:
         self._registry["search"] = SearchGenerator
         self._registry["image"] = ImageGenerator
         self._registry["cast"] = CastGenerator
+        self._registry["reply"] = ReplyGenerator
 
     def register_generator(self, action_type: str, generator_class: Type[BaseActionGenerator]):
         """

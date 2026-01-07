@@ -1134,23 +1134,21 @@ class SimulationClient(ActionExecutorMixin):
     def _handle_reply_to_mention(self, agent, agent_type, pending_llm_reactions, actions):
         """
         Handle reply to mention for an agent.
-        Delegates to reply_handler module.
+        Uses the reply action generator framework for consistency.
         """
-        from YSimulator.YClient.reply_handler import handle_reply_to_mention
-
-        return handle_reply_to_mention(
-            agent,
-            agent_type,
-            pending_llm_reactions,
-            actions,
-            self.server,
-            self.client_id,
-            self.llm,
-            self.max_length_thread_reading,
-            self.logger,
-            self._extract_agent_attrs,
-            self._annotate_action_content,
+        # Use the reply generator via the action generator framework
+        immediate_actions, pending_calls, metadata = self._dispatch_action_with_generator(
+            "reply", agent, agent_type
         )
+        
+        # Add immediate actions (rule-based) to the actions list
+        actions.extend(immediate_actions)
+        
+        # Add pending LLM calls to the pending_llm_reactions list
+        pending_llm_reactions.extend(pending_calls)
+        
+        # Return mention_id if one was processed (for tracking)
+        return metadata.get("mention_id")
 
     def _dispatch_action_with_generator(
         self, action_type: str, agent: AgentProfile, agent_type: str, target=None
