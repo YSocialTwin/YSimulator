@@ -2689,13 +2689,15 @@ class SimulationClient(ActionExecutorMixin):
                     )
                 )
 
-                # Author must have an opinion on their own post's topics
+                # Check if author has opinion on topic
+                # If not, this is expected - opinion will be created during interaction
+                # The opinion dynamics model will handle cold_start properly
                 if author_opinion is None:
-                    self.logger.error(
-                        f"Data inconsistency: Author {parent_author_id} has no recorded opinion on topic "
-                        f"'{topic_name}' (topic_id: {topic_id}) in their own post {parent_post_id}. "
-                        f"This indicates the author posted about a topic they don't have in agent_opinion table. "
-                        f"Skipping opinion update for this topic."
+                    self.logger.debug(
+                        f"Author {parent_author_id} has no opinion yet on topic '{topic_name}' "
+                        f"(topic_id: {topic_id}) in their post {parent_post_id}. "
+                        f"Opinion will be created during this interaction with cold_start strategy. "
+                        f"Skipping opinion update calculation for now."
                     )
                     continue
 

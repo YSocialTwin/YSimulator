@@ -52,18 +52,20 @@ class OpinionHandler:
         article_content: str = None
     ) -> None:
         """
-        Ensure an agent has an opinion recorded for a topic.
+        Check if agent has opinion on topic (for logging/monitoring purposes).
         
-        This is a safety fallback that creates opinions if they don't exist.
-        For page agents, the client should have already inferred opinions via LLM
-        before submitting the POST action. This method just provides defaults.
+        IMPORTANT: This method NO LONGER creates opinions preemptively.
+        Opinion creation is deferred to interaction time when the opinion dynamics
+        model can properly handle the cold_start parameter.
         
-        For regular agents: Use cached profile opinion or neutral (0.5) as fallback.
-        For page agents: Use neutral (0.5) as placeholder (client should set opinion first).
+        The opinion dynamics models have a cold_start parameter that defines
+        how to handle interactions where the agent doesn't have an opinion:
+        - cold_start="neutral": Initialize with 0.5
+        - cold_start="inherited": Adopt the interlocutor's opinion
         
-        Only executes when opinion dynamics is enabled in simulation config.
-        
-        NOTE: Server does NOT call LLM service. All LLM interactions happen on client side.
+        Creating opinions preemptively with 0.5 would bypass the cold_start logic
+        and break the "inherited" strategy. Therefore, opinions are created ONLY
+        during interactions via the opinion dynamics model on the client side.
         
         Args:
             agent_id: Agent UUID
@@ -71,62 +73,21 @@ class OpinionHandler:
             topic_name: Topic name for looking up in cached profile
             article_content: Unused (kept for backwards compatibility)
         """
-        # Only enforce this constraint when opinion dynamics is enabled
+        # Only check when opinion dynamics is enabled
         if not self.enabled:
-            return  # Opinion dynamics disabled, no need to ensure opinions exist
+            return  # Opinion dynamics disabled
         
         # Check if agent already has an opinion on this topic
         existing_opinion = self.db.get_latest_agent_opinion(agent_id, topic_id)
         if existing_opinion is not None:
             return  # Opinion already exists
         
-        # Agent doesn't have opinion - need to create one as fallback
-        cached_profile = self.agent_profiles_cache.get(agent_id)
-        is_page_agent = cached_profile and cached_profile.is_page == 1
-        
-        opinion_value = None
-        
-        if is_page_agent:
-            # Page agent: Client should have already set opinion via LLM/random
-            # This is just a fallback - use neutral placeholder
-            opinion_value = 0.5
-            self.logger.warning(
-                f"Page agent {agent_id}: no opinion found for topic '{topic_name}'. "
-                f"Using neutral fallback (0.5). Client should have set opinion first."
-            )
-        else:
-            # Regular agent: try to get from cached profile
-            if cached_profile and cached_profile.opinions:
-                # Try exact match first
-                opinion_value = cached_profile.opinions.get(topic_name)
-                # If not found, try case-insensitive match
-                if opinion_value is None:
-                    for key, value in cached_profile.opinions.items():
-                        if key.lower() == topic_name.lower():
-                            opinion_value = value
-                            break
-                
-                if opinion_value is not None:
-                    self.logger.info(
-                        f"Regular agent {agent_id}: using initial opinion {opinion_value} from profile for topic '{topic_name}'"
-                    )
-            
-            # Default to neutral opinion if not found in profile
-            if opinion_value is None:
-                opinion_value = 0.5
-                self.logger.info(
-                    f"Regular agent {agent_id}: creating default neutral opinion {opinion_value} for topic '{topic_name}'"
-                )
-        
-        # Store the opinion
-        current_round_id = self._get_current_round_id()
-        self.db.add_agent_opinion(
-            agent_id=agent_id,
-            round_id=current_round_id,
-            topic_id=topic_id,
-            opinion=opinion_value,
-            id_interacted_with=None,
-            id_post=None,
+        # Agent doesn't have opinion - this is OK and expected
+        # Opinions will be created during interactions via opinion dynamics model
+        # with proper cold_start handling (neutral or inherited strategy)
+        self.logger.debug(
+            f"Agent {agent_id} has no opinion on topic '{topic_name}' yet. "
+            f"Opinion will be created during first interaction with cold_start strategy."
         )
     
     def get_latest_opinion(self, agent_id: str, topic_id: str) -> Optional[float]:
