@@ -322,15 +322,11 @@ class SQLUserRepository(UserRepository):
             )
             return False
     
-    def get_inactive_agents(self, inactivity_threshold: int) -> List[str]:
+    def get_inactive_agents(self, current_day: int, inactivity_threshold: int) -> List[str]:
         """Get inactive agents."""
         try:
             session = Session(self.engine)
             try:
-                from datetime import datetime, timedelta
-                
-                # Get current day (you may need to adjust this based on your simulation logic)
-                current_day = 1  # This should be passed from somewhere
                 cutoff_day = current_day - inactivity_threshold
                 
                 users = session.query(User_mgmt).filter(
@@ -414,6 +410,7 @@ class SQLPostRepository(PostRepository):
                     "parent_post": post.comment_to,  # API: parent_post <-> Model: comment_to
                     "shared_from": post.shared_from,
                     "author": post.user_id,  # API: author <-> Model: user_id
+                    "user_id": post.user_id,  # Alias for backward compatibility with client code
                     "text": post.tweet,  # API: text <-> Model: tweet
                     "round": post.round,
                     "num_reactions": post.reaction_count,  # API: num_reactions <-> Model: reaction_count
@@ -662,31 +659,59 @@ class SQLPostRepository(PostRepository):
             return None
     
     def initialize_emotions_table(self):
-        """Initialize emotions table with standard emotions."""
+        """Initialize emotions table with GoEmotions taxonomy (28 emotions)."""
         try:
             session = Session(self.engine)
             try:
-                # Check if emotions already exist
-                count = session.query(func.count(Emotion.id)).scalar()
-                if count > 0:
-                    return True
-                
-                # Standard emotions with IDs and icons
+                # GoEmotions taxonomy with Material Design icon mappings
                 import uuid
-                emotions = [
-                    {"id": str(uuid.uuid4()), "emotion": "joy", "icon": "😊"},
-                    {"id": str(uuid.uuid4()), "emotion": "sadness", "icon": "😢"},
-                    {"id": str(uuid.uuid4()), "emotion": "anger", "icon": "😠"},
-                    {"id": str(uuid.uuid4()), "emotion": "fear", "icon": "😨"},
-                    {"id": str(uuid.uuid4()), "emotion": "surprise", "icon": "😲"},
-                    {"id": str(uuid.uuid4()), "emotion": "disgust", "icon": "🤢"},
+                emotions_data = [
+                    ("amusement", "mdi-emoticon-happy"),
+                    ("admiration", "mdi-weather-sunny"),
+                    ("anger", "mdi-emoticon-devil"),
+                    ("annoyance", "mdi-emoticon-tongue"),
+                    ("approval", "mdi-thumb-up-outline"),
+                    ("caring", "mdi-cake"),
+                    ("confusion", "mdi-emoticon-neutral"),
+                    ("curiosity", "mdi-beaker-outline"),
+                    ("desire", "mdi-cash-multiple"),
+                    ("disappointment", "mdi-close-circle"),
+                    ("disapproval", "mdi-thumb-down-outline"),
+                    ("disgust", "mdi-emoticon-poop"),
+                    ("embarrassment", "mdi-minus-circle"),
+                    ("excitement", "mdi-rocket"),
+                    ("fear", "mdi-weather-lightning"),
+                    ("gratitude", "mdi-panda"),
+                    ("grief", "mdi-weather-pouring"),
+                    ("joy", "mdi-emoticon"),
+                    ("love", "mdi-heart"),
+                    ("nervousness", "mdi-alert"),
+                    ("optimism", "mdi-leaf"),
+                    ("pride", "mdi-emoticon-cool"),
+                    ("realization", "mdi-lightbulb-outline"),
+                    ("relief", "mdi-weather-sunset-up"),
+                    ("remorse", "mdi-ambulance"),
+                    ("sadness", "mdi-emoticon-sad"),
+                    ("surprise", "mdi-wallet-giftcard"),
+                    ("trust", "mdi-brightness-5"),
                 ]
                 
-                for emotion_data in emotions:
-                    emotion = Emotion(**emotion_data)
-                    session.add(emotion)
+                created_count = 0
+                for emotion_name, icon in emotions_data:
+                    # Check if emotion already exists
+                    existing = session.query(Emotion).filter(Emotion.emotion == emotion_name).first()
+                    
+                    if not existing:
+                        # Create new emotion
+                        emotion_id = str(uuid.uuid4())
+                        emotion = Emotion(id=emotion_id, emotion=emotion_name, icon=icon)
+                        session.add(emotion)
+                        created_count += 1
                 
                 session.commit()
+                self.logger.info(
+                    f"Initialized emotions table: {created_count} new emotions added, {len(emotions_data) - created_count} already existed"
+                )
                 return True
             finally:
                 session.close()
@@ -987,6 +1012,33 @@ class SQLPostRepository(PostRepository):
                 f"Error getting unreplied mentions: {e}", extra={"extra_data": {"error": str(e)}}
             )
             return []
+    
+    def get_mention_by_id(self, mention_id: str) -> Optional[Dict[str, Any]]:
+        """Get mention by ID."""
+        try:
+            from YSimulator.YServer.classes.models import Mention
+            session = Session(self.engine)
+            try:
+                mention = session.query(Mention).filter(Mention.id == mention_id).first()
+                
+                if not mention:
+                    return None
+                
+                return {
+                    "id": mention.id,
+                    "user_id": mention.user_id,
+                    "mentioned_user_id": mention.user_id,  # Alias for compatibility
+                    "post_id": mention.post_id,
+                    "round": mention.round,
+                    "answered": mention.answered
+                }
+            finally:
+                session.close()
+        except Exception as e:
+            self.logger.error(
+                f"Error getting mention by ID: {e}", extra={"extra_data": {"error": str(e)}}
+            )
+            return None
     
     def mark_mention_replied(self, post_id: str, mentioned_user_id: str) -> bool:
         """Mark a mention as replied."""

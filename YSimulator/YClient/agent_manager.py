@@ -48,6 +48,8 @@ def create_agents_from_config(agent_config: dict, logger: logging.Logger) -> Lis
                 ex=agent_data.get("ex"),
                 ag=agent_data.get("ag"),
                 ne=agent_data.get("ne"),
+                recsys_type=agent_data.get("recsys_type", "random"),  # Content recommendation mode
+                frecsys_type=agent_data.get("frecsys_type", "default"),  # Follow recommendation mode
                 language=agent_data.get("language", "en"),
                 education_level=agent_data.get("education_level"),
                 joined_on=agent_data.get("joined_on"),  # Should be Round UUID or None
@@ -182,7 +184,7 @@ def parse_network_edges(network_csv_path: Path, logger: logging.Logger) -> List[
 
 
 def load_and_create_social_network(
-    network_csv_path: Path, server, client_id: str, logger: logging.Logger
+    network_csv_path: Path, server, client_id: str, logger: logging.Logger, batch_size: int = 100
 ) -> int:
     """
     Load network edges from CSV and create follow relationships on server.
@@ -192,6 +194,7 @@ def load_and_create_social_network(
         server: Ray server actor handle
         client_id: Client identifier
         logger: Logger instance
+        batch_size: Number of edges to process in each batch (default: 100)
 
     Returns:
         int: Number of follow relationships successfully created
@@ -203,7 +206,6 @@ def load_and_create_social_network(
         return 0
 
     # Create follow relationships in batches
-    batch_size = 100
     success_count = 0
     failed_count = 0
 

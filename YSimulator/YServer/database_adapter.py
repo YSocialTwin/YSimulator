@@ -14,6 +14,8 @@ from YSimulator.YServer.services.post_service import PostService
 from YSimulator.YServer.services.follow_service import FollowService
 from YSimulator.YServer.services.interest_service import InterestService
 from YSimulator.YServer.services.content_service import ContentService
+from YSimulator.YServer.services.article_service import ArticleService
+from YSimulator.YServer.services.image_service import ImageService
 from YSimulator.YServer.services.simulation_service import SimulationService
 from YSimulator.YServer.services.metadata_service import MetadataService
 from YSimulator.YServer.services.mention_service import MentionService
@@ -25,6 +27,7 @@ class DatabaseServiceAdapter:
     
     This adapter provides all database operations through services.
     100% migration complete - all operations use modern Repository/Service architecture.
+    Now includes specialized ArticleService and ImageService.
     """
     
     def __init__(
@@ -33,6 +36,8 @@ class DatabaseServiceAdapter:
         post_service: PostService,
         follow_service: FollowService,
         interest_service: InterestService,
+        article_service: ArticleService,
+        image_service: ImageService,
         content_service: ContentService,
         simulation_service: SimulationService,
         metadata_service: MetadataService,
@@ -48,7 +53,9 @@ class DatabaseServiceAdapter:
             post_service: Post service
             follow_service: Follow service
             interest_service: Interest service
-            content_service: Content service
+            article_service: Article service (specialized)
+            image_service: Image service (specialized)
+            content_service: Content service (facade for article/image)
             simulation_service: Simulation service
             metadata_service: Metadata service
             mention_service: Mention service
@@ -59,6 +66,8 @@ class DatabaseServiceAdapter:
         self.post_service = post_service
         self.follow_service = follow_service
         self.interest_service = interest_service
+        self.article_service = article_service
+        self.image_service = image_service
         self.content_service = content_service
         self.simulation_service = simulation_service
         self.metadata_service = metadata_service
@@ -402,9 +411,25 @@ class DatabaseServiceAdapter:
         Returns:
             bool: True if successful, False otherwise
         """
-        # Old middleware used mention_id, new service expects post_id and mentioned_user_id
-        # We'll add a new method in repository to handle this
-        return self.mention_service.post_repo.mark_mention_replied_by_id(mention_id)
+        # Query the mention to get post_id and mentioned_user_id
+        try:
+            mention_data = self.mention_service.post_repo.get_mention_by_id(mention_id)
+            if not mention_data:
+                self.logger.warning(f"Mention {mention_id} not found")
+                return False
+            
+            post_id = mention_data.get("post_id")
+            mentioned_user_id = mention_data.get("mentioned_user_id")
+            
+            if not post_id or not mentioned_user_id:
+                self.logger.error(f"Invalid mention data for {mention_id}")
+                return False
+            
+            # Call service with correct signature
+            return self.mention_service.mark_mention_replied(post_id, mentioned_user_id)
+        except Exception as e:
+            self.logger.error(f"Error marking mention {mention_id} as replied: {e}")
+            return False
     
     # ========================================================================
     # CONTENT OPERATIONS - ContentService (COMPLETE)

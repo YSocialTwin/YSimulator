@@ -424,9 +424,9 @@ class TestGetFirstRoundId:
             db_config = {"type": "sqlite", "sqlite": {"filename": ":memory:"}}
             server = OrchestratorServer(db_config=db_config, config_path=tmpdir)
             
-            # Advance to day 2
-            server.day = 2
-            server.slot = 5
+            # Advance to day 2 by setting it on round_manager
+            server.round_manager.day = 2
+            server.round_manager.slot = 5
             
             result = server.get_first_round_id()
             
@@ -510,8 +510,8 @@ class TestGetCurrentDay:
             # Default is day 1
             assert server.get_current_day() == 1
             
-            # Change day
-            server.day = 5
+            # Change day via round_manager
+            server.round_manager.day = 5
             assert server.get_current_day() == 5
 
 
@@ -599,9 +599,9 @@ class TestGetActiveClients:
             db_config = {"type": "sqlite", "sqlite": {"filename": ":memory:"}}
             server = OrchestratorServer(db_config=db_config, config_path=tmpdir)
             
-            # Register clients
-            server.registered_clients = {"client_1", "client_2"}
-            server.completed_clients = set()
+            # Register clients via client_manager
+            server.client_manager.registered_clients = {"client_1", "client_2"}
+            server.client_manager.completed_clients = set()
             
             active = server._get_active_clients()
             
@@ -620,9 +620,9 @@ class TestGetActiveClients:
             db_config = {"type": "sqlite", "sqlite": {"filename": ":memory:"}}
             server = OrchestratorServer(db_config=db_config, config_path=tmpdir)
             
-            # Register clients
-            server.registered_clients = {"client_1", "client_2", "client_3"}
-            server.completed_clients = {"client_2"}
+            # Register clients via client_manager
+            server.client_manager.registered_clients = {"client_1", "client_2", "client_3"}
+            server.client_manager.completed_clients = {"client_2"}
             
             active = server._get_active_clients()
             
@@ -647,8 +647,8 @@ class TestCalculateVisibilityParams:
             
             # Set num_slots_per_day
             server.num_slots_per_day = 24
-            server.day = 3
-            server.slot = 10
+            server.round_manager.day = 3
+            server.round_manager.slot = 10
             
             visibility_rounds = 48  # 2 days
             visibility_day, visibility_slot = server._calculate_visibility_params(visibility_rounds)

@@ -67,7 +67,7 @@ class UserRepository(BaseRepository):
         pass
     
     @abstractmethod
-    def get_inactive_agents(self, inactivity_threshold: int) -> List[str]:
+    def get_inactive_agents(self, current_day: int, inactivity_threshold: int) -> List[str]:
         """Get inactive agents."""
         pass
 
@@ -170,6 +170,11 @@ class PostRepository(BaseRepository):
     @abstractmethod
     def get_unreplied_mentions(self, user_id: str) -> List[Dict[str, Any]]:
         """Get unreplied mentions for a user."""
+        pass
+    
+    @abstractmethod
+    def get_mention_by_id(self, mention_id: str) -> Optional[Dict[str, Any]]:
+        """Get mention by ID."""
         pass
     
     @abstractmethod

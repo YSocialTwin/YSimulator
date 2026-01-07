@@ -32,6 +32,8 @@ try:
     from YSimulator.YServer.services.follow_service import FollowService
     from YSimulator.YServer.services.interest_service import InterestService
     from YSimulator.YServer.services.content_service import ContentService
+    from YSimulator.YServer.services.article_service import ArticleService
+    from YSimulator.YServer.services.image_service import ImageService
     from YSimulator.YServer.services.simulation_service import SimulationService
     from YSimulator.YServer.services.metadata_service import MetadataService
     from YSimulator.YServer.services.mention_service import MentionService
@@ -127,7 +129,7 @@ def create_all_services(
         logger: Optional logger instance
     
     Returns:
-        Tuple of (UserService, PostService, FollowService, InterestService, ContentService, SimulationService, MetadataService, MentionService)
+        Tuple of (UserService, PostService, FollowService, InterestService, ArticleService, ImageService, ContentService, SimulationService, MetadataService, MentionService)
     """
     if not SERVICES_AVAILABLE:
         raise ImportError(
@@ -150,7 +152,7 @@ def create_all_services(
     image_repo = SQLImageRepository(engine, logger)
     recommendation_repo = SQLRecommendationRepository(engine, logger)
     
-    # Create all services
+    # Create specialized services
     user_service = UserService(
         user_repository=user_repo,
         interest_repository=interest_repo,
@@ -173,9 +175,24 @@ def create_all_services(
         logger=logger,
     )
     
+    # Create new specialized services for articles and images
+    article_service = ArticleService(
+        article_repository=article_repo,
+        interest_repository=interest_repo,
+        logger=logger,
+    )
+    
+    image_service = ImageService(
+        image_repository=image_repo,
+        logger=logger,
+    )
+    
+    # Create ContentService that uses ArticleService and ImageService
     content_service = ContentService(
         article_repository=article_repo,
         image_repository=image_repo,
+        article_service=article_service,
+        image_service=image_service,
         logger=logger,
     )
     
@@ -195,7 +212,8 @@ def create_all_services(
     )
     
     return (user_service, post_service, follow_service, interest_service, 
-            content_service, simulation_service, metadata_service, mention_service)
+            article_service, image_service, content_service, simulation_service, 
+            metadata_service, mention_service)
 
 
 def create_services(

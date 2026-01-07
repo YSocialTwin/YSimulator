@@ -63,6 +63,7 @@ RECSYS_CLASS_MAP = {
     "common_user_interests": CommonUserInterests,
     "similar_users_react": SimilarUsersReact,
     "similar_users_posts": SimilarUsersPosts,
+    "default": ReverseChrono,  # Default to reverse chronological
 }
 
 # Follow recommendation system class mapping
@@ -72,6 +73,7 @@ FOLLOW_RECSYS_CLASS_MAP = {
     "jaccard": JaccardFollowRecSys,
     "adamic_adar": AdamicAdarFollowRecSys,
     "preferential_attachment": PreferentialAttachmentFollowRecSys,
+    "default": CommonNeighborsFollowRecSys,  # Default to common neighbors algorithm
 }
 
 
@@ -117,7 +119,7 @@ class ActionExecutorMixin:
     ):
         """Handle comment action for an agent."""
         # Use recsys to get recommended posts to comment on
-        agent_recsys_mode = getattr(agent, "recsys_type", None) or self.recsys_mode
+        agent_recsys_mode = agent.recsys_type if (hasattr(agent, "recsys_type") and agent.recsys_type) else self.recsys_mode
         recsys_class = RECSYS_CLASS_MAP.get(agent_recsys_mode, RandomOrder)
         recsys = recsys_class(n_posts=self.recsys_n_posts)
 
@@ -201,7 +203,7 @@ class ActionExecutorMixin:
     ):
         """Handle read action for an agent."""
         # Use recsys to get recommended posts
-        agent_recsys_mode = getattr(agent, "recsys_type", None) or self.recsys_mode
+        agent_recsys_mode = agent.recsys_type if (hasattr(agent, "recsys_type") and agent.recsys_type) else self.recsys_mode
         recsys_class = RECSYS_CLASS_MAP.get(agent_recsys_mode, RandomOrder)
         recsys = recsys_class(n_posts=self.recsys_n_posts)
 
@@ -312,7 +314,7 @@ class ActionExecutorMixin:
     def _handle_follow_action(self, agent, agent_type, pending_llm_follows, actions):
         """Handle follow action for an agent."""
         # Use follow recsys to get suggested users
-        agent_frecsys_mode = getattr(agent, "frecsys_type", None) or "random"
+        agent_frecsys_mode = agent.frecsys_type if (hasattr(agent, "frecsys_type") and agent.frecsys_type) else "random"
         frecsys_class = FOLLOW_RECSYS_CLASS_MAP.get(agent_frecsys_mode, RandomFollowRecSys)
         frecsys = frecsys_class(n_neighbors=10, leaning_bias=1)
 

@@ -2,13 +2,47 @@
 
 This document provides a comprehensive overview of the YSimulator system architecture, component organization, and interaction patterns.
 
+> **📢 Major Update (January 2026)**: The server architecture has been completely modernized through a 5-phase refactoring. See [Server Refactoring Report](../refactoring/SERVER_REFACTORING_REPORT.md) for details.
+
 ## Table of Contents
 - [System Overview](#system-overview)
+- [Refactoring Overview](#refactoring-overview)
 - [High-Level Architecture](#high-level-architecture)
 - [Component Details](#component-details)
 - [Data Flow](#data-flow)
 - [Coordination Mechanisms](#coordination-mechanisms)
 - [Technology Stack](#technology-stack)
+
+## Refactoring Overview
+
+The server has undergone a comprehensive 5-phase modernization:
+
+1. **[Action Processor Framework](ACTION_PROCESSOR_FRAMEWORK.md)** (Phase 1)
+   - Extracted 476-line monolithic method into 6 specialized processors
+   - Strategy pattern with ActionRouter for extensibility
+   - 85% reduction in submit_actions() complexity
+
+2. **[Recommendation Engine](RECOMMENDATION_ENGINE.md)** (Phase 2)
+   - Separated content and follow recommendation logic
+   - 10+ content strategies, 5 follow algorithms
+   - 86% reduction in recommendation methods
+
+3. **[Opinion Dynamics Handler](OPINION_DYNAMICS_HANDLER.md)** (Phase 3)
+   - Centralized opinion management
+   - Profile-based initialization with LLM support
+   - 76% reduction in opinion methods
+
+4. **[Coordination Layer](COORDINATION_LAYER.md)** (Phase 4)
+   - Extracted client lifecycle, barrier sync, time advancement
+   - 4 specialized coordinators (Client, Barrier, Round, Archetype)
+   - 77-93% reduction in coordination methods
+
+5. **[Service Integration](SERVICE_INTEGRATION.md)** (Phase 5)
+   - Complete migration to Repository/Service pattern
+   - Eliminated all 46 direct database calls
+   - 100% service adoption
+
+**Total Impact**: server.py reduced 37% (3,114 → 1,966 lines), +50 tests, zero regressions.
 
 ## System Overview
 

@@ -2,6 +2,8 @@
 Content service for business logic related to articles, images, and websites.
 
 This service encapsulates all content-related business operations.
+It can optionally use specialized ArticleService and ImageService instances,
+or work directly with repositories for backward compatibility.
 """
 
 import logging
@@ -14,24 +16,49 @@ from YSimulator.YServer.repositories.base_repository import (
 
 
 class ContentService:
-    """Service for content (articles, images, websites) business logic."""
+    """
+    Service for content (articles, images, websites) business logic.
+    
+    This service acts as a facade that can either:
+    1. Use specialized ArticleService and ImageService (recommended)
+    2. Work directly with repositories (backward compatible)
+    """
     
     def __init__(
         self,
-        article_repository: ArticleRepository,
+        article_repository: ArticleRepository = None,
         image_repository: ImageRepository = None,
+        article_service: "ArticleService" = None,
+        image_service: "ImageService" = None,
         logger: logging.Logger = None,
     ):
         """
         Initialize content service.
         
         Args:
-            article_repository: Repository for article/website data access
-            image_repository: Repository for image data access (optional)
+            article_repository: Repository for article/website data access (for backward compatibility)
+            image_repository: Repository for image data access (for backward compatibility)
+            article_service: Specialized article service (preferred)
+            image_service: Specialized image service (preferred)
             logger: Logger instance
+            
+        Raises:
+            ValueError: If neither repositories nor services are provided for articles
         """
+        # Validate that we have at least one way to handle articles
+        if not article_repository and not article_service:
+            raise ValueError(
+                "ContentService requires either article_repository or article_service to be provided"
+            )
+        
+        # Support both new pattern (with services) and old pattern (direct repositories)
+        self.article_service = article_service
+        self.image_service = image_service
+        
+        # Keep repository references for backward compatibility
         self.article_repo = article_repository
         self.image_repo = image_repository
+        
         self.logger = logger or logging.getLogger(__name__)
     
     # Article operations
@@ -45,6 +72,9 @@ class ContentService:
         Returns:
             Article ID or None
         """
+        if self.article_service:
+            return self.article_service.add_article(article_data)
+        
         try:
             return self.article_repo.add_article(article_data)
         except Exception as e:
@@ -61,6 +91,9 @@ class ContentService:
         Returns:
             Article data or None
         """
+        if self.article_service:
+            return self.article_service.get_article(article_id)
+        
         try:
             return self.article_repo.get_article(article_id)
         except Exception as e:
@@ -77,6 +110,9 @@ class ContentService:
         Returns:
             List of topic IDs
         """
+        if self.article_service:
+            return self.article_service.get_article_topics(article_id)
+        
         try:
             return self.article_repo.get_article_topics(article_id)
         except Exception as e:
@@ -94,6 +130,9 @@ class ContentService:
         Returns:
             Website ID or None
         """
+        if self.article_service:
+            return self.article_service.add_website(website_data)
+        
         try:
             return self.article_repo.add_website(website_data)
         except Exception as e:
@@ -110,6 +149,9 @@ class ContentService:
         Returns:
             Number of websites added
         """
+        if self.article_service:
+            return self.article_service.add_websites_batch(websites_data)
+        
         try:
             return self.article_repo.add_websites_batch(websites_data)
         except Exception as e:
@@ -126,6 +168,9 @@ class ContentService:
         Returns:
             Website data or None
         """
+        if self.article_service:
+            return self.article_service.get_website_by_rss(rss_url)
+        
         try:
             return self.article_repo.get_website_by_rss(rss_url)
         except Exception as e:
@@ -143,6 +188,9 @@ class ContentService:
         Returns:
             Image ID or None
         """
+        if self.image_service:
+            return self.image_service.add_image(image_data)
+        
         if not self.image_repo:
             self.logger.warning("Image repository not available")
             return None
@@ -160,6 +208,9 @@ class ContentService:
         Returns:
             Image data or None
         """
+        if self.image_service:
+            return self.image_service.get_random_image()
+        
         if not self.image_repo:
             self.logger.warning("Image repository not available")
             return None

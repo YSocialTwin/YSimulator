@@ -6,6 +6,7 @@ This module provides:
 - NLTK data downloads
 - Common test fixtures
 - Test database setup/teardown
+- Ray initialization for distributed tests
 """
 
 import os
@@ -15,8 +16,14 @@ from typing import Generator
 
 import nltk
 import pytest
+import ray
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
+
+# Initialize Ray BEFORE any other imports that might use Ray decorators
+# This ensures @ray.remote decorators work correctly
+if not ray.is_initialized():
+    ray.init(ignore_reinit_error=True, num_cpus=1)
 
 # Download required NLTK data
 try:
