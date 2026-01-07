@@ -57,6 +57,10 @@ class LLMService:
                     "system_template": "{persona} You searched for posts on a topic you're interested in and found relevant content. Decide how to engage with it.",
                     "user_template": 'You found this post on your topic of interest:\n\n"{post_content}"\n\nHow do you want to engage? Reply with ONLY ONE WORD from these options:\n- COMMENT (engage in discussion, share your thoughts)\n- SHARE (reshare with your followers)\n- LIKE (positive, agree)\n- LOVE (strongly positive)\n- LAUGH (funny, humorous)\n- ANGRY (negative, disagree)\n- SAD (disappointing, concerning)\n- IGNORE (not interested, skip)\n\nYour choice:',
                 },
+                "generate_share_commentary": {
+                    "system_template": "{persona} You are resharing someone's post with your own perspective. Generate {toxicity} confrontational language contents.",
+                    "user_template": '{author_name} posted this:\n\n"{post_content}"\n\nWrite a brief commentary explaining why you\'re resharing this (max 200 characters). Add your perspective based on your persona and opinions. Be authentic.',
+                },
             }
 
         # Store prompts configuration
@@ -358,7 +362,12 @@ class LLMService:
                     opinion_str = ", ".join(opinion_parts)
                     opinion_instruction = f" Your opinions on the discussed topics: {opinion_str}. Reflect your viewpoint in your commentary."
 
-        # Get prompt templates from configuration
+        # Get prompt templates from configuration with fallback
+        if "generate_share_commentary" not in self.prompts_config:
+            # Fallback if prompt not configured
+            logger.warning("generate_share_commentary prompt not found in config, using fallback")
+            return "Sharing this!"
+        
         system_template = self.prompts_config["generate_share_commentary"]["system_template"]
         user_template = self.prompts_config["generate_share_commentary"]["user_template"]
 
