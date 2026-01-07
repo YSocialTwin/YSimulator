@@ -20,6 +20,7 @@ from typing import Optional
 import ray
 
 from YSimulator.YClient.action_executor import ActionExecutorMixin
+from YSimulator.YClient.action_generators import ActionContext, ActionGeneratorFactory
 from YSimulator.YClient.actions import (
     generate_image_post_async,
     generate_llm_follow_async,
@@ -243,6 +244,11 @@ class SimulationClient(ActionExecutorMixin):
                             f"Failed to register feed for page {agent.username}: {e}"
                         )
 
+        # Initialize action generator factory (Phase 1 refactoring)
+        # This is initialized but not used yet - will be integrated in next step
+        self._action_generator_factory = None
+        self._use_action_generators = False  # Feature flag for gradual rollout
+        
         self.logger.info(
             "Simulation client initialized",
             extra={
@@ -253,6 +259,49 @@ class SimulationClient(ActionExecutorMixin):
                 }
             },
         )
+
+    def _create_action_generator_factory(self, day: int, slot: int, recent_posts: list):
+        """
+        Create action generator factory for the current simulation context.
+        
+        This is part of Phase 1 refactoring to extract action generation logic
+        into pluggable generators. The factory pattern enables clean separation
+        of action generation from simulation orchestration.
+        
+        Args:
+            day: Current simulation day
+            slot: Current time slot
+            recent_posts: List of recent post UUIDs for reactions
+            
+        Returns:
+            ActionGeneratorFactory: Configured factory for generating actions
+        """
+        # Build action context with all dependencies
+        context = ActionContext(
+            day=day,
+            slot=slot,
+            recent_posts=recent_posts,
+            server=self.server,
+            logger=self.logger,
+            client_id=self.client_id,
+            llm=self.llm,
+            news_service=self.news_service,
+            activity_profiles=self.activity_profiles,
+            actions_likelihood=self.actions_likelihood,
+            recsys_settings={
+                "recsys_mode": self.recsys_mode,
+                "recsys_n_posts": self.recsys_n_posts,
+                "max_length_thread_reading": self.max_length_thread_reading,
+            },
+            opinion_dynamics_config=self.opinion_dynamics_config if hasattr(self, "opinion_dynamics_config") else None,
+            extract_agent_attrs_fn=self._extract_agent_attrs,
+            annotate_action_fn=self._annotate_action_content,
+            is_opinion_dynamics_enabled_fn=self._is_opinion_dynamics_enabled,
+            map_opinion_to_group_fn=self._map_opinion_to_group if hasattr(self, "_map_opinion_to_group") else None,
+            infer_page_agent_opinion_fn=self._infer_page_agent_opinion if hasattr(self, "_infer_page_agent_opinion") else None,
+        )
+        
+        return ActionGeneratorFactory(context)
 
     def _setup_logging(self):
         """Set up JSON logging for the client actor with gzip compression."""
@@ -1941,6 +1990,51 @@ class SimulationClient(ActionExecutorMixin):
             self._annotate_action_content,
         )
 
+    def _dispatch_action_with_generator(
+        self, action_type: str, agent: AgentProfile, agent_type: str, target=None
+    ) -> tuple:
+        """
+        Dispatch action using action generator framework.
+        
+        This method is part of Phase 1 refactoring. It provides a clean interface
+        to generate actions using the new generator framework. The old _handle_*
+        methods are gradually being replaced by this approach.
+        
+        Args:
+            action_type: Type of action to generate (e.g., "post", "comment", "read")
+            agent: Agent profile
+            agent_type: "llm" or "rule_based"
+            target: Optional target for the action (e.g., post UUID for reactions)
+            
+        Returns:
+            tuple: (immediate_actions, pending_llm_calls, metadata)
+                immediate_actions: List of ActionDTO objects to submit immediately
+                pending_llm_calls: List of tuples for async LLM calls to gather later
+                metadata: Dict with debugging/tracking information
+        """
+        # Update the generator factory's context with target if provided
+        if target:
+            self._action_generator_factory.context.target = target
+        
+        # Get the appropriate generator for this action type
+        try:
+            generator = self._action_generator_factory.get_generator(action_type)
+        except ValueError as e:
+            self.logger.warning(f"No generator found for action type '{action_type}': {e}")
+            return [], [], {"error": str(e)}
+        
+        # Check if generator can handle this agent
+        if not generator.can_generate(agent, agent_type):
+            self.logger.debug(
+                f"Generator {generator.__class__.__name__} cannot generate for agent {agent.username}"
+            )
+            return [], [], {"skipped": True, "reason": "cannot_generate"}
+        
+        # Generate the action
+        result = generator.generate(agent, agent_type)
+        
+        return result.actions, result.pending_llm_calls, result.metadata
+
     def _simulate(self, day: int, slot: int, recent_posts: list) -> list:
         """
         Simulate agent behaviors for a given time slot using modular action implementations.
@@ -2056,6 +2150,13 @@ class SimulationClient(ActionExecutorMixin):
 
         self.logger.info(f"[REPLY] Starting simulation for {len(active_agents)} active agents")
 
+        # Initialize action generator factory if using new framework (Phase 1 refactoring)
+        if self._use_action_generators:
+            self._action_generator_factory = self._create_action_generator_factory(
+                day, slot, recent_posts
+            )
+            self.logger.info("Using action generator framework (Phase 1 refactoring)")
+
         # --- SCATTER PHASE: Select and dispatch actions ---
         for agent in active_agents:
             # Determine agent type (llm or rule_based)
@@ -2097,36 +2198,76 @@ class SimulationClient(ActionExecutorMixin):
                     )
 
                 # Dispatch to appropriate action handler
-                if action_type == "post":
-                    self._handle_post_action(
-                        agent, agent_type, day, slot, pending_llm_posts, actions
+                # Phase 1 refactoring: Support both old and new approaches
+                if self._use_action_generators and self._action_generator_factory:
+                    # NEW APPROACH: Use action generator framework
+                    immediate_actions, pending_calls, metadata = self._dispatch_action_with_generator(
+                        action_type, agent, agent_type, target
                     )
-                elif action_type == "comment":
-                    self._handle_comment_action(
-                        agent, agent_type, pending_llm_reactions, actions, rule_based_interactions
-                    )
-                elif action_type == "read":
-                    self._handle_read_action(
-                        agent, agent_type, pending_llm_reactions, actions, rule_based_interactions
-                    )
-                elif action_type == "follow":
-                    self._handle_follow_action(agent, agent_type, pending_llm_follows, actions)
-                elif action_type == "image":
-                    self._handle_image_action(
-                        agent, agent_type, day, slot, pending_llm_posts, actions
-                    )
-                elif action_type == "share_link":
-                    self._handle_share_link_action(
-                        agent, agent_type, day, slot, pending_llm_posts, actions
-                    )
-                elif action_type == "share":
-                    self._handle_share_action(agent, agent_type, target, actions)
-                elif action_type == "search":
-                    self._handle_search_action(agent, agent_type, pending_llm_reactions, actions)
-                elif action_type == "cast":
-                    self._handle_cast_action(
-                        agent, agent_type, day, slot, pending_llm_posts, actions
-                    )
+                    
+                    # Add immediate actions
+                    actions.extend(immediate_actions)
+                    
+                    # Route pending LLM calls to appropriate lists
+                    # The structure of pending_calls depends on action type
+                    if action_type in ["post", "image", "cast", "share_link"]:
+                        pending_llm_posts.extend(pending_calls)
+                    elif action_type in ["comment", "read", "search"]:
+                        pending_llm_reactions.extend(pending_calls)
+                    elif action_type == "follow":
+                        pending_llm_follows.extend(pending_calls)
+                    
+                    # Track rule-based interactions if metadata indicates it
+                    if metadata.get("rule_based_interaction"):
+                        rb_interaction = metadata["rule_based_interaction"]
+                        # Need to fetch post data for secondary follow
+                        post_data = ray.get(
+                            self.server.get_post.remote(
+                                rb_interaction["target_post"], client_id=self.client_id
+                            )
+                        )
+                        if post_data:
+                            rule_based_interactions.append(
+                                (
+                                    rb_interaction["agent_id"],
+                                    rb_interaction["cluster_id"],
+                                    post_data.get("user_id"),
+                                    post_data.get("tweet", ""),
+                                    False,
+                                )
+                            )
+                else:
+                    # OLD APPROACH: Use existing _handle_* methods
+                    if action_type == "post":
+                        self._handle_post_action(
+                            agent, agent_type, day, slot, pending_llm_posts, actions
+                        )
+                    elif action_type == "comment":
+                        self._handle_comment_action(
+                            agent, agent_type, pending_llm_reactions, actions, rule_based_interactions
+                        )
+                    elif action_type == "read":
+                        self._handle_read_action(
+                            agent, agent_type, pending_llm_reactions, actions, rule_based_interactions
+                        )
+                    elif action_type == "follow":
+                        self._handle_follow_action(agent, agent_type, pending_llm_follows, actions)
+                    elif action_type == "image":
+                        self._handle_image_action(
+                            agent, agent_type, day, slot, pending_llm_posts, actions
+                        )
+                    elif action_type == "share_link":
+                        self._handle_share_link_action(
+                            agent, agent_type, day, slot, pending_llm_posts, actions
+                        )
+                    elif action_type == "share":
+                        self._handle_share_action(agent, agent_type, target, actions)
+                    elif action_type == "search":
+                        self._handle_search_action(agent, agent_type, pending_llm_reactions, actions)
+                    elif action_type == "cast":
+                        self._handle_cast_action(
+                            agent, agent_type, day, slot, pending_llm_posts, actions
+                        )
 
         # --- GATHER PHASE: Wait for all LLM results in parallel ---
 
