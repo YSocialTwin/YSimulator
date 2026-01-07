@@ -16,28 +16,28 @@ from YSimulator.YClient.classes.ray_models import AgentProfile
 class CastGenerator(BaseActionGenerator):
     """
     Generator for CAST actions.
-    
+
     Handles both LLM and rule-based agents creating broadcast posts.
     CAST actions are similar to POST but may have broader reach.
     """
-    
+
     def generate(self, agent: AgentProfile, agent_type: str) -> ActionGeneratorResult:
         """
         Generate a CAST action for the agent.
-        
+
         Args:
             agent: Agent profile
             agent_type: "llm" or "rule_based"
-        
+
         Returns:
             ActionGeneratorResult with action or pending LLM call
         """
         result = ActionGeneratorResult()
-        
+
         # Extract agent attributes for context
         agent_attrs = self._extract_agent_attrs(agent)
         selected_topic = agent_attrs.get("topic")
-        
+
         if agent_type == "llm":
             # LLM: Fire off async call (similar to POST)
             future = generate_llm_post_async(
@@ -58,5 +58,5 @@ class CastGenerator(BaseActionGenerator):
             self._annotate_action(action)
             result.actions.append(action)
             result.metadata["selected_topic"] = selected_topic
-        
+
         return result

@@ -20,25 +20,25 @@ from YSimulator.YClient.classes.ray_models import AgentProfile
 class ReadGenerator(BaseActionGenerator):
     """
     Generator for READ actions.
-    
+
     Handles agents discovering posts through recommendations and reacting to them.
     LLM agents make nuanced decisions about how to react.
     Rule-based agents randomly choose simple reactions.
     """
-    
+
     def generate(self, agent: AgentProfile, agent_type: str) -> ActionGeneratorResult:
         """
         Generate a READ action for the agent.
-        
+
         Args:
             agent: Agent profile
             agent_type: "llm" or "rule_based"
-        
+
         Returns:
             ActionGeneratorResult with action or pending LLM call
         """
         result = ActionGeneratorResult()
-        
+
         # Get recommendation system for this agent
         from YSimulator.YClient.recsys import (
             CommonInterests,
@@ -52,7 +52,7 @@ class ReadGenerator(BaseActionGenerator):
             SimilarUsersPosts,
             SimilarUsersReact,
         )
-        
+
         recsys_class_map = {
             "random": RandomOrder,
             "rchrono": ReverseChrono,
@@ -66,30 +66,29 @@ class ReadGenerator(BaseActionGenerator):
             "similar_users_posts": SimilarUsersPosts,
             "default": ReverseChrono,
         }
-        
+
         # Get agent's recsys mode from config
-        agent_recsys_mode = (
-            getattr(agent, "recsys_type", None)
-            or self.context.recsys_settings.get("recsys_mode", "rchrono")
+        agent_recsys_mode = getattr(agent, "recsys_type", None) or self.context.recsys_settings.get(
+            "recsys_mode", "rchrono"
         )
         recsys_class = recsys_class_map.get(agent_recsys_mode, RandomOrder)
         recsys_n_posts = self.context.recsys_settings.get("recsys_n_posts", 10)
         recsys = recsys_class(n_posts=recsys_n_posts)
-        
+
         # Get recommended posts from server
         recommended_posts = recsys.get_recommendations(
             self.context.server, agent.id, client_id=self.context.client_id
         )
-        
+
         if not recommended_posts:
             result.metadata["reason"] = "no_recommendations"
             return result
-        
+
         # Select one post randomly from recommendations
         target_post = random.choice(recommended_posts)
         result.metadata["target_post"] = target_post
         result.metadata["num_recommendations"] = len(recommended_posts)
-        
+
         if agent_type == "llm":
             # LLM: Get post content and decide reaction
             post_data = ray.get(
@@ -97,10 +96,10 @@ class ReadGenerator(BaseActionGenerator):
             )
             if post_data:
                 post_content = post_data.get("tweet", "")
-                
+
                 # Get agent attributes for persona
                 agent_attrs = self._extract_agent_attrs(agent)
-                
+
                 # Fire off async LLM call to decide reaction
                 future = generate_llm_read_async(
                     self.context.llm, agent.cluster, post_content, agent_attrs
@@ -121,5 +120,5 @@ class ReadGenerator(BaseActionGenerator):
                 }
             else:
                 result.metadata["reaction_type"] = "IGNORE"
-        
+
         return result

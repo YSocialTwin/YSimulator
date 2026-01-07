@@ -17,28 +17,28 @@ from YSimulator.YClient.classes.ray_models import AgentProfile
 class ImageGenerator(BaseActionGenerator):
     """
     Generator for IMAGE actions.
-    
+
     Handles both LLM and rule-based agents posting images.
     LLM agents generate contextual image posts with captions.
     Rule-based agents create simple image posts.
     """
-    
+
     def generate(self, agent: AgentProfile, agent_type: str) -> ActionGeneratorResult:
         """
         Generate an IMAGE action for the agent.
-        
+
         Args:
             agent: Agent profile
             agent_type: "llm" or "rule_based"
-        
+
         Returns:
             ActionGeneratorResult with action or pending LLM call
         """
         result = ActionGeneratorResult()
-        
+
         # Extract agent attributes for context
         agent_attrs = self._extract_agent_attrs(agent)
-        
+
         if agent_type == "llm":
             # LLM: Fire off async call to generate image post
             future = generate_image_post_async(
@@ -58,5 +58,5 @@ class ImageGenerator(BaseActionGenerator):
             self._annotate_action(action)
             result.actions.append(action)
             result.metadata["image_id"] = image_id
-        
+
         return result

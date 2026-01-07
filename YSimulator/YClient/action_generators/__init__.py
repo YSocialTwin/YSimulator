@@ -15,7 +15,7 @@ The framework follows the Strategy pattern to enable:
 
 Usage:
     from YSimulator.YClient.action_generators import ActionGeneratorFactory
-    
+
     factory = ActionGeneratorFactory(server, llm, news_service, logger, ...)
     generator = factory.get_generator("POST", "llm")
     result = generator.generate(agent, context)

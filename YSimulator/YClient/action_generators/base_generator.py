@@ -19,10 +19,10 @@ from YSimulator.YClient.classes.ray_models import ActionDTO, AgentProfile
 class ActionContext:
     """
     Context information needed for action generation.
-    
+
     This encapsulates all the external state and dependencies that an
     action generator needs to make decisions and generate actions.
-    
+
     Attributes:
         day: Current simulation day
         slot: Current time slot (hour 0-23)
@@ -43,25 +43,25 @@ class ActionContext:
         map_opinion_to_group_fn: Function to map opinion value to group
         infer_page_agent_opinion_fn: Function to infer page agent opinion
     """
-    
+
     day: int
     slot: int
     recent_posts: List[str]
     server: Any
     logger: Any
     client_id: str
-    
+
     # Optional dependencies
     target: Optional[Any] = None
     llm: Optional[Any] = None
     news_service: Optional[Any] = None
-    
+
     # Configuration
     activity_profiles: Dict[str, List[int]] = field(default_factory=dict)
     actions_likelihood: Dict[str, Any] = field(default_factory=dict)
     recsys_settings: Dict[str, Any] = field(default_factory=dict)
     opinion_dynamics_config: Optional[Dict[str, Any]] = None
-    
+
     # Helper functions
     extract_agent_attrs_fn: Optional[Any] = None
     annotate_action_fn: Optional[Any] = None
@@ -74,10 +74,10 @@ class ActionContext:
 class ActionGeneratorResult:
     """
     Result from an action generator.
-    
+
     This encapsulates both immediate actions (for rule-based agents)
     and pending LLM calls (for LLM agents) that need to be gathered later.
-    
+
     Attributes:
         actions: List of immediate ActionDTO objects to be submitted
         pending_llm_calls: List of tuples for async LLM calls to be gathered
@@ -85,7 +85,7 @@ class ActionGeneratorResult:
                           (agent_id, cluster_id, future, [optional metadata])
         metadata: Optional metadata about the action generation (for debugging)
     """
-    
+
     actions: List[ActionDTO] = field(default_factory=list)
     pending_llm_calls: List[tuple] = field(default_factory=list)
     metadata: Dict[str, Any] = field(default_factory=dict)
@@ -94,83 +94,83 @@ class ActionGeneratorResult:
 class BaseActionGenerator(ABC):
     """
     Abstract base class for all action generators.
-    
+
     Each action generator is responsible for generating actions of a specific type
     (POST, COMMENT, READ, etc.) for both LLM and rule-based agents.
-    
+
     Subclasses must implement:
     - generate(): Main method to generate actions for an agent
     - can_generate(): Check if this generator can handle the given agent/context
     """
-    
+
     def __init__(self, context: ActionContext):
         """
         Initialize the action generator.
-        
+
         Args:
             context: Action context with all dependencies and configuration
         """
         self.context = context
-    
+
     @abstractmethod
     def generate(self, agent: AgentProfile, agent_type: str) -> ActionGeneratorResult:
         """
         Generate action(s) for the given agent.
-        
+
         This is the main method that subclasses must implement. It should:
         1. Check if the agent can perform this action
         2. Generate the action based on agent type (llm or rule_based)
         3. Return immediate actions and/or pending LLM calls
-        
+
         Args:
             agent: Agent profile containing agent attributes
             agent_type: "llm" or "rule_based"
-        
+
         Returns:
             ActionGeneratorResult with actions and/or pending LLM calls
         """
         pass
-    
+
     def can_generate(self, agent: AgentProfile, agent_type: str) -> bool:
         """
         Check if this generator can generate actions for the given agent.
-        
+
         Default implementation returns True. Subclasses can override to add
         specific constraints (e.g., only page agents can share_link).
-        
+
         Args:
             agent: Agent profile to check
             agent_type: "llm" or "rule_based"
-        
+
         Returns:
             bool: True if this generator can handle the agent/context
         """
         return True
-    
+
     def _extract_agent_attrs(self, agent: AgentProfile) -> Dict[str, Any]:
         """
         Extract agent attributes for dynamic persona building.
-        
+
         Args:
             agent: Agent profile
-        
+
         Returns:
             Dict with agent attributes (name, age, interests, opinions, etc.)
         """
         if self.context.extract_agent_attrs_fn:
             return self.context.extract_agent_attrs_fn(agent)
         return {}
-    
+
     def _annotate_action(self, action: ActionDTO) -> None:
         """
         Annotate action content (e.g., extract topics, entities).
-        
+
         Args:
             action: Action to annotate
         """
         if self.context.annotate_action_fn:
             self.context.annotate_action_fn(action)
-    
+
     def _is_opinion_dynamics_enabled(self) -> bool:
         """Check if opinion dynamics is enabled."""
         if self.context.is_opinion_dynamics_enabled_fn:

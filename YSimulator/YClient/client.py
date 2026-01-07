@@ -248,7 +248,7 @@ class SimulationClient(ActionExecutorMixin):
         # The framework is integrated and can be enabled via _use_action_generators flag
         self._action_generator_factory = None
         self._use_action_generators = False  # Feature flag for gradual rollout
-        
+
         self.logger.info(
             "Simulation client initialized",
             extra={
@@ -263,16 +263,16 @@ class SimulationClient(ActionExecutorMixin):
     def _create_action_generator_factory(self, day: int, slot: int, recent_posts: list):
         """
         Create action generator factory for the current simulation context.
-        
+
         This is part of Phase 1 refactoring to extract action generation logic
         into pluggable generators. The factory pattern enables clean separation
         of action generation from simulation orchestration.
-        
+
         Args:
             day: Current simulation day
             slot: Current time slot
             recent_posts: List of recent post UUIDs for reactions
-            
+
         Returns:
             ActionGeneratorFactory: Configured factory for generating actions
         """
@@ -293,14 +293,22 @@ class SimulationClient(ActionExecutorMixin):
                 "recsys_n_posts": self.recsys_n_posts,
                 "max_length_thread_reading": self.max_length_thread_reading,
             },
-            opinion_dynamics_config=self.opinion_dynamics_config if hasattr(self, "opinion_dynamics_config") else None,
+            opinion_dynamics_config=(
+                self.opinion_dynamics_config if hasattr(self, "opinion_dynamics_config") else None
+            ),
             extract_agent_attrs_fn=self._extract_agent_attrs,
             annotate_action_fn=self._annotate_action_content,
             is_opinion_dynamics_enabled_fn=self._is_opinion_dynamics_enabled,
-            map_opinion_to_group_fn=self._map_opinion_to_group if hasattr(self, "_map_opinion_to_group") else None,
-            infer_page_agent_opinion_fn=self._infer_page_agent_opinion if hasattr(self, "_infer_page_agent_opinion") else None,
+            map_opinion_to_group_fn=(
+                self._map_opinion_to_group if hasattr(self, "_map_opinion_to_group") else None
+            ),
+            infer_page_agent_opinion_fn=(
+                self._infer_page_agent_opinion
+                if hasattr(self, "_infer_page_agent_opinion")
+                else None
+            ),
         )
-        
+
         return ActionGeneratorFactory(context)
 
     def _setup_logging(self):
@@ -384,6 +392,7 @@ class SimulationClient(ActionExecutorMixin):
         Delegates to activity_selector module.
         """
         from YSimulator.YClient.activity_selector import parse_activity_profiles
+
         return parse_activity_profiles(activity_profiles_config, self.logger)
 
     def _sample_agents_by_archetype(self, available_agents, num_active):
@@ -392,6 +401,7 @@ class SimulationClient(ActionExecutorMixin):
         Delegates to activity_selector module.
         """
         from YSimulator.YClient.activity_selector import sample_agents_by_archetype
+
         return sample_agents_by_archetype(
             available_agents, num_active, self.archetype_distribution, self.logger
         )
@@ -402,6 +412,7 @@ class SimulationClient(ActionExecutorMixin):
         Delegates to agent_manager module.
         """
         from YSimulator.YClient.agent_manager import create_agents_from_config
+
         return create_agents_from_config(agent_config, self.logger)
 
     def _parse_network_edges(self, network_csv_path: Path) -> list:
@@ -921,6 +932,7 @@ class SimulationClient(ActionExecutorMixin):
         Delegates to activity_selector module.
         """
         from YSimulator.YClient.activity_selector import select_action
+
         return select_action(
             agent_profile,
             recent_posts,
@@ -934,6 +946,7 @@ class SimulationClient(ActionExecutorMixin):
         Delegates to agent_manager module.
         """
         from YSimulator.YClient.agent_manager import extract_agent_attrs
+
         return extract_agent_attrs(
             agent,
             self._validate_and_extract_interests,
@@ -947,6 +960,7 @@ class SimulationClient(ActionExecutorMixin):
         Delegates to agent_manager module.
         """
         from YSimulator.YClient.agent_manager import save_updated_agent_population
+
         save_updated_agent_population(
             updated_interests,
             self.config_path,
@@ -960,6 +974,7 @@ class SimulationClient(ActionExecutorMixin):
         Delegates to agent_manager module.
         """
         from YSimulator.YClient.agent_manager import validate_and_extract_interests
+
         return validate_and_extract_interests(interests)
 
     def _log_action(
@@ -1976,6 +1991,7 @@ class SimulationClient(ActionExecutorMixin):
         Delegates to reply_handler module.
         """
         from YSimulator.YClient.reply_handler import handle_reply_to_mention
+
         return handle_reply_to_mention(
             agent,
             agent_type,
@@ -1995,17 +2011,17 @@ class SimulationClient(ActionExecutorMixin):
     ) -> tuple:
         """
         Dispatch action using action generator framework.
-        
+
         This method is part of Phase 1 refactoring. It provides a clean interface
         to generate actions using the new generator framework. The old _handle_*
         methods are gradually being replaced by this approach.
-        
+
         Args:
             action_type: Type of action to generate (e.g., "post", "comment", "read")
             agent: Agent profile
             agent_type: "llm" or "rule_based"
             target: Optional target for the action (e.g., post UUID for reactions)
-            
+
         Returns:
             tuple: (immediate_actions, pending_llm_calls, metadata)
                 immediate_actions: List of ActionDTO objects to submit immediately
@@ -2015,24 +2031,24 @@ class SimulationClient(ActionExecutorMixin):
         # Update the generator factory's context with target if provided
         if target:
             self._action_generator_factory.context.target = target
-        
+
         # Get the appropriate generator for this action type
         try:
             generator = self._action_generator_factory.get_generator(action_type)
         except ValueError as e:
             self.logger.warning(f"No generator found for action type '{action_type}': {e}")
             return [], [], {"error": str(e)}
-        
+
         # Check if generator can handle this agent
         if not generator.can_generate(agent, agent_type):
             self.logger.debug(
                 f"Generator {generator.__class__.__name__} cannot generate for agent {agent.username}"
             )
             return [], [], {"skipped": True, "reason": "cannot_generate"}
-        
+
         # Generate the action
         result = generator.generate(agent, agent_type)
-        
+
         return result.actions, result.pending_llm_calls, result.metadata
 
     def _simulate(self, day: int, slot: int, recent_posts: list) -> list:
@@ -2201,13 +2217,13 @@ class SimulationClient(ActionExecutorMixin):
                 # Phase 1 refactoring: Support both old and new approaches
                 if self._use_action_generators and self._action_generator_factory:
                     # NEW APPROACH: Use action generator framework
-                    immediate_actions, pending_calls, metadata = self._dispatch_action_with_generator(
-                        action_type, agent, agent_type, target
+                    immediate_actions, pending_calls, metadata = (
+                        self._dispatch_action_with_generator(action_type, agent, agent_type, target)
                     )
-                    
+
                     # Add immediate actions
                     actions.extend(immediate_actions)
-                    
+
                     # Route pending LLM calls to appropriate lists
                     # The structure of pending_calls depends on action type
                     if action_type in ["post", "image", "cast", "share_link"]:
@@ -2216,7 +2232,7 @@ class SimulationClient(ActionExecutorMixin):
                         pending_llm_reactions.extend(pending_calls)
                     elif action_type == "follow":
                         pending_llm_follows.extend(pending_calls)
-                    
+
                     # Track rule-based interactions if metadata indicates it
                     if metadata.get("rule_based_interaction"):
                         rb_interaction = metadata["rule_based_interaction"]
@@ -2244,11 +2260,19 @@ class SimulationClient(ActionExecutorMixin):
                         )
                     elif action_type == "comment":
                         self._handle_comment_action(
-                            agent, agent_type, pending_llm_reactions, actions, rule_based_interactions
+                            agent,
+                            agent_type,
+                            pending_llm_reactions,
+                            actions,
+                            rule_based_interactions,
                         )
                     elif action_type == "read":
                         self._handle_read_action(
-                            agent, agent_type, pending_llm_reactions, actions, rule_based_interactions
+                            agent,
+                            agent_type,
+                            pending_llm_reactions,
+                            actions,
+                            rule_based_interactions,
                         )
                     elif action_type == "follow":
                         self._handle_follow_action(agent, agent_type, pending_llm_follows, actions)
@@ -2263,7 +2287,9 @@ class SimulationClient(ActionExecutorMixin):
                     elif action_type == "share":
                         self._handle_share_action(agent, agent_type, target, actions)
                     elif action_type == "search":
-                        self._handle_search_action(agent, agent_type, pending_llm_reactions, actions)
+                        self._handle_search_action(
+                            agent, agent_type, pending_llm_reactions, actions
+                        )
                     elif action_type == "cast":
                         self._handle_cast_action(
                             agent, agent_type, day, slot, pending_llm_posts, actions
@@ -3039,6 +3065,7 @@ class SimulationClient(ActionExecutorMixin):
         Delegates to churn_manager module.
         """
         from YSimulator.YClient.churn_manager import evaluate_churn
+
         return evaluate_churn(
             self.server,
             self.client_id,
@@ -3056,6 +3083,7 @@ class SimulationClient(ActionExecutorMixin):
         Delegates to agent_manager module.
         """
         from YSimulator.YClient.agent_manager import add_agent_to_population_file
+
         add_agent_to_population_file(
             agent,
             self.config_path,
@@ -3066,7 +3094,7 @@ class SimulationClient(ActionExecutorMixin):
     def _evaluate_new_agents(self, current_round_id: str) -> int:
         """
         Evaluate and create new agents at end of day.
-        
+
         Creates new agents by:
         1. Calculating available slots based on non-churned population
         2. For each slot, rolling probability to create agent
@@ -3074,41 +3102,42 @@ class SimulationClient(ActionExecutorMixin):
         4. Generating realistic name with Faker
         5. Batch registering with server
         6. Updating agent_population.json
-        
+
         Args:
             current_round_id: Current round UUID
-            
+
         Returns:
             int: Number of new agents created
         """
         if not self.new_agents_enabled:
             return 0
-            
+
         try:
-            from faker import Faker
             import uuid
-            
+
+            from faker import Faker
+
             # Count non-churned agents
             non_churned_agents = [a for a in self.agent_profiles if a.left_on is None]
             num_non_churned = len(non_churned_agents)
-            
+
             # Calculate available slots
             num_slots = int(num_non_churned * self.percentage_new_agents)
-            
+
             if num_slots == 0:
                 self.logger.info("No new agent slots available")
                 return 0
-            
+
             # Roll probability for each slot
             new_agents = []
             fake = Faker()
             existing_usernames = {a.username for a in self.agent_profiles}
-            
+
             for _ in range(num_slots):
                 if random.random() < self.probability_new_agents:
                     # Select random template
                     template = random.choice(non_churned_agents)
-                    
+
                     # Generate name based on template gender
                     gender = getattr(template, "gender", "male")
                     max_attempts = 10
@@ -3117,16 +3146,16 @@ class SimulationClient(ActionExecutorMixin):
                             name = fake.name_female()
                         else:
                             name = fake.name_male()
-                        
+
                         # Convert to username format
                         username = name.replace(" ", "_").replace(".", "_")
-                        
+
                         if username not in existing_usernames:
                             break
                     else:
                         # Fallback with UUID if can't find unique name
                         username = f"{name.replace(' ', '_')}_{str(uuid.uuid4())[:8]}"
-                    
+
                     # Create new agent from template
                     new_agent = AgentProfile(
                         id=str(uuid.uuid4()),
@@ -3148,29 +3177,31 @@ class SimulationClient(ActionExecutorMixin):
                         profile=getattr(template, "profile", ""),
                         action_likelihoods=getattr(template, "action_likelihoods", {}),
                     )
-                    
+
                     new_agents.append(new_agent)
                     existing_usernames.add(username)
-                    self.logger.info(f"Created new agent: {username} (template: {template.username})")
-            
+                    self.logger.info(
+                        f"Created new agent: {username} (template: {template.username})"
+                    )
+
             if not new_agents:
                 self.logger.info("No new agents created this evaluation")
                 return 0
-            
+
             # Batch register with server
             self.logger.info(f"Batch registering {len(new_agents)} new agents")
             ray.get(self.server.register_agents.remote(new_agents))
-            
+
             # Add to local agent_profiles
             self.agent_profiles.extend(new_agents)
-            
+
             # Update agent_population.json for persistence
             for agent in new_agents:
                 self._add_agent_to_population_file(agent)
-            
+
             self.logger.info(f"Successfully created and registered {len(new_agents)} new agents")
             return len(new_agents)
-            
+
         except Exception as e:
             self.logger.error(f"Error evaluating new agents: {e}", exc_info=True)
             return 0
