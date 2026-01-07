@@ -52,7 +52,7 @@ class OpinionHandler:
         article_content: str = None
     ) -> None:
         """
-        Check if agent has opinion on topic (for logging/monitoring purposes).
+        Check if agent has opinion on topic and log status.
         
         IMPORTANT: This method NO LONGER creates opinions preemptively.
         Opinion creation is deferred to interaction time when the opinion dynamics
