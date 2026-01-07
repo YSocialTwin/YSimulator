@@ -1131,6 +1131,27 @@ class SimulationClient(ActionExecutorMixin):
                 f"Annotated action content: has_sentiment={bool(annotations.get('sentiment'))}, has_toxicity={bool(annotations.get('toxicity'))}, has_emotions={bool(annotations.get('emotions'))}, hashtags={len(annotations.get('hashtags', []))}, mentions={len(annotations.get('mentions', []))}"
             )
 
+    def _handle_reply_to_mention(self, agent, agent_type, pending_llm_reactions, actions):
+        """
+        Handle reply to mention for an agent.
+        Delegates to reply_handler module.
+        """
+        from YSimulator.YClient.reply_handler import handle_reply_to_mention
+
+        return handle_reply_to_mention(
+            agent,
+            agent_type,
+            pending_llm_reactions,
+            actions,
+            self.server,
+            self.client_id,
+            self.llm,
+            self.max_length_thread_reading,
+            self.logger,
+            self._extract_agent_attrs,
+            self._annotate_action_content,
+        )
+
     def _dispatch_action_with_generator(
         self, action_type: str, agent: AgentProfile, agent_type: str, target=None
     ) -> tuple:
