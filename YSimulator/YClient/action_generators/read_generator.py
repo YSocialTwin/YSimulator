@@ -14,7 +14,7 @@ from YSimulator.YClient.action_generators.base_generator import (
     BaseActionGenerator,
 )
 from YSimulator.YClient.actions import generate_llm_read_async, generate_rule_based_read
-from YSimulator.YClient.classes.ray_models import AgentProfile
+from YSimulator.YClient.classes.ray_models import ActionDTO, AgentProfile
 
 
 class ReadGenerator(BaseActionGenerator):
@@ -100,6 +100,14 @@ class ReadGenerator(BaseActionGenerator):
                 # Get agent attributes for persona
                 agent_attrs = self._extract_agent_attrs(agent)
 
+                # Get opinions for the topics in this post
+                opinion_info = self._get_opinions_for_post(agent.id, target_post)
+                if opinion_info["topics"]:
+                    # Add opinion information to agent attrs
+                    agent_attrs["post_topics"] = opinion_info["topics"]
+                    agent_attrs["post_opinions"] = opinion_info["opinions"]
+                    agent_attrs["post_opinion_values"] = opinion_info["opinion_values"]
+
                 # Fire off async LLM call to decide reaction
                 future = generate_llm_read_async(
                     self.context.llm, agent.cluster, post_content, agent_attrs
@@ -107,18 +115,70 @@ class ReadGenerator(BaseActionGenerator):
                 # Store: (agent_id, cluster_id, target_post_id, future)
                 result.pending_llm_calls.append((agent.id, agent.cluster, target_post, future))
         else:
-            # Rule-based: Random reaction (LIKE, ANGRY, or IGNORE)
-            action = generate_rule_based_read(agent.id, agent.cluster, target_post)
-            if action:  # None if IGNORE
-                self._annotate_action(action)
-                result.actions.append(action)
-                result.metadata["reaction_type"] = action.action_type
-                result.metadata["rule_based_interaction"] = {
-                    "agent_id": agent.id,
-                    "cluster_id": agent.cluster,
-                    "target_post": target_post,
-                }
-            else:
-                result.metadata["reaction_type"] = "IGNORE"
+            # Rule-based: Consider opinion when choosing reaction
+            post_data = ray.get(
+                self.context.server.get_post.remote(target_post, client_id=self.context.client_id)
+            )
+            if post_data:
+                # Get opinions for the topics in this post
+                opinion_info = self._get_opinions_for_post(agent.id, target_post)
+
+                # Generate reaction based on opinion if available
+                if opinion_info["topics"] and opinion_info["opinion_values"]:
+                    # Calculate average opinion
+                    avg_opinion = sum(opinion_info["opinion_values"].values()) / len(
+                        opinion_info["opinion_values"]
+                    )
+
+                    # Choose reaction based on opinion
+                    # Higher opinion -> more likely to LIKE, lower -> more likely to express negative reaction
+                    if avg_opinion > 0.6:
+                        # Positive opinion - mostly LIKE
+                        reaction_type = random.choices(
+                            ["LIKE", "LOVE", "IGNORE"], weights=[0.6, 0.3, 0.1]
+                        )[0]
+                    elif avg_opinion < 0.4:
+                        # Negative opinion - more likely to express disagreement or ignore
+                        reaction_type = random.choices(
+                            ["ANGRY", "SAD", "IGNORE"], weights=[0.4, 0.2, 0.4]
+                        )[0]
+                    else:
+                        # Neutral - balanced reactions
+                        reaction_type = random.choices(
+                            ["LIKE", "IGNORE", "ANGRY"], weights=[0.4, 0.4, 0.2]
+                        )[0]
+
+                    if reaction_type != "IGNORE":
+                        action = ActionDTO(
+                            agent.id, agent.cluster, reaction_type, target_post_id=target_post
+                        )
+                        result.actions.append(action)
+                        result.metadata["reaction_type"] = reaction_type
+                        # Track for secondary follow
+                        result.metadata["rule_based_interaction"] = {
+                            "agent_id": agent.id,
+                            "cluster_id": agent.cluster,
+                            "post_author_id": post_data.get("user_id"),
+                            "post_content": post_data.get("tweet", ""),
+                            "is_llm": False,
+                        }
+                    else:
+                        result.metadata["reaction_type"] = "IGNORE"
+                else:
+                    # No opinion information, use default rule-based behavior
+                    action = generate_rule_based_read(agent.id, agent.cluster, target_post)
+                    if action:  # Only add if not IGNORE
+                        result.actions.append(action)
+                        result.metadata["reaction_type"] = action.action_type
+                        # Track for secondary follow (rule-based read)
+                        result.metadata["rule_based_interaction"] = {
+                            "agent_id": agent.id,
+                            "cluster_id": agent.cluster,
+                            "post_author_id": post_data.get("user_id"),
+                            "post_content": post_data.get("tweet", ""),
+                            "is_llm": False,
+                        }
+                    else:
+                        result.metadata["reaction_type"] = "IGNORE"
 
         return result

@@ -42,6 +42,8 @@ class ActionContext:
         is_opinion_dynamics_enabled_fn: Function to check if opinion dynamics is enabled
         map_opinion_to_group_fn: Function to map opinion value to group
         infer_page_agent_opinion_fn: Function to infer page agent opinion
+        get_opinions_for_post_fn: Function to get agent opinions on post topics
+        calculate_opinion_updates_fn: Function to calculate opinion updates from interactions
     """
 
     day: int
@@ -68,6 +70,8 @@ class ActionContext:
     is_opinion_dynamics_enabled_fn: Optional[Any] = None
     map_opinion_to_group_fn: Optional[Any] = None
     infer_page_agent_opinion_fn: Optional[Any] = None
+    get_opinions_for_post_fn: Optional[Any] = None
+    calculate_opinion_updates_fn: Optional[Any] = None
 
 
 @dataclass
@@ -176,3 +180,38 @@ class BaseActionGenerator(ABC):
         if self.context.is_opinion_dynamics_enabled_fn:
             return self.context.is_opinion_dynamics_enabled_fn()
         return False
+
+    def _get_opinions_for_post(self, agent_id: str, post_id: str) -> dict:
+        """
+        Get agent's opinions on the topics discussed in a post.
+
+        Args:
+            agent_id: UUID of the agent
+            post_id: UUID of the post
+
+        Returns:
+            dict: {"topics": [...], "opinions": [...], "opinion_values": [...]}
+        """
+        if self.context.get_opinions_for_post_fn:
+            return self.context.get_opinions_for_post_fn(agent_id, post_id)
+        return {"topics": [], "opinions": [], "opinion_values": []}
+
+    def _calculate_opinion_updates(
+        self, agent_id: str, parent_post_id: str, parent_post_data: dict
+    ):
+        """
+        Calculate opinion updates when an agent interacts with a post.
+
+        Args:
+            agent_id: UUID of the agent
+            parent_post_id: UUID of the post
+            parent_post_data: Post data dictionary
+
+        Returns:
+            Optional[dict]: Mapping of topic_id to new opinion value, or None
+        """
+        if self.context.calculate_opinion_updates_fn:
+            return self.context.calculate_opinion_updates_fn(
+                agent_id, parent_post_id, parent_post_data
+            )
+        return None

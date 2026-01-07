@@ -307,6 +307,8 @@ class SimulationClient(ActionExecutorMixin):
                 if hasattr(self, "_infer_page_agent_opinion")
                 else None
             ),
+            get_opinions_for_post_fn=self._get_opinions_for_post,
+            calculate_opinion_updates_fn=self._calculate_opinion_updates,
         )
 
         return ActionGeneratorFactory(context)

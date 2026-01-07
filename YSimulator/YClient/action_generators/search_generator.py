@@ -114,11 +114,13 @@ class SearchGenerator(BaseActionGenerator):
 
         if agent_type == "llm":
             # LLM: Ask LLM to decide which action to perform (comment/share/react)
-            # Get opinions for the topics in this post (if enabled)
-            # Note: Opinion dynamics integration is a future enhancement
-            # For now, this is handled in the gather phase by the caller
-            if self._is_opinion_dynamics_enabled():
-                pass  # Future: Add opinion retrieval logic here
+            # Get opinions for the topics in this post
+            opinion_info = self._get_opinions_for_post(agent.id, target_post)
+            if opinion_info["topics"]:
+                # Add opinion information to agent attrs
+                agent_attrs["post_topics"] = opinion_info["topics"]
+                agent_attrs["post_opinions"] = opinion_info["opinions"]
+                agent_attrs["post_opinion_values"] = opinion_info["opinion_values"]
 
             future = generate_llm_search_action_async(
                 self.context.llm, agent.cluster, post_content, agent_attrs
@@ -133,8 +135,22 @@ class SearchGenerator(BaseActionGenerator):
 
             if selected_action == "comment":
                 action = generate_rule_based_comment(agent.id, agent.cluster, target_post)
+                # Calculate opinion updates for the comment
+                if post_data:
+                    updated_opinions = self._calculate_opinion_updates(
+                        agent.id, target_post, post_data
+                    )
+                    if updated_opinions:
+                        action.updated_opinions = updated_opinions
             elif selected_action == "share":
                 action = generate_rule_based_share(agent.id, agent.cluster, target_post)
+                # Calculate opinion updates for the share
+                if post_data:
+                    updated_opinions = self._calculate_opinion_updates(
+                        agent.id, target_post, post_data
+                    )
+                    if updated_opinions:
+                        action.updated_opinions = updated_opinions
             else:  # react
                 # Use basic reactions (simple positive/negative responses)
                 reaction_type = random.choice(BASIC_REACTIONS)

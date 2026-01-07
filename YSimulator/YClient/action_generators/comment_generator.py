@@ -126,10 +126,13 @@ class CommentGenerator(BaseActionGenerator):
                 # Get agent attributes including opinions on post topics
                 agent_attrs = self._extract_agent_attrs(agent)
 
-                # Note: Opinion dynamics integration for comments is a future enhancement
-                # Get opinions for the topics in this post (if opinion dynamics enabled)
-                # This would require a helper function to get opinions for post topics
-                # For now, this is handled in the gather phase by the caller
+                # Get opinions for the topics in this post
+                opinion_info = self._get_opinions_for_post(agent.id, target_post)
+                if opinion_info["topics"]:
+                    # Add opinion information to agent attrs
+                    agent_attrs["post_topics"] = opinion_info["topics"]
+                    agent_attrs["post_opinions"] = opinion_info["opinions"]
+                    agent_attrs["post_opinion_values"] = opinion_info["opinion_values"]
 
                 # Fire off async LLM call to generate comment
                 future = self.context.llm.generate_comment.remote(
@@ -143,13 +146,24 @@ class CommentGenerator(BaseActionGenerator):
             action = generate_rule_based_comment(agent.id, agent.cluster, target_post)
             self._annotate_action(action)
 
-            # Note: Opinion dynamics and secondary follow tracking would be handled
-            # by the caller (client.py) in the gather phase
+            # Calculate opinion updates for rule-based comment
+            post_data = ray.get(
+                self.context.server.get_post.remote(target_post, client_id=self.context.client_id)
+            )
+            if post_data:
+                updated_opinions = self._calculate_opinion_updates(agent.id, target_post, post_data)
+                if updated_opinions:
+                    action.updated_opinions = updated_opinions
+
+                # Track for secondary follow (rule-based comment)
+                result.metadata["rule_based_interaction"] = {
+                    "agent_id": agent.id,
+                    "cluster_id": agent.cluster,
+                    "post_author_id": post_data.get("user_id"),
+                    "post_content": post_data.get("tweet", ""),
+                    "is_llm": False,
+                }
+
             result.actions.append(action)
-            result.metadata["rule_based_interaction"] = {
-                "agent_id": agent.id,
-                "cluster_id": agent.cluster,
-                "target_post": target_post,
-            }
 
         return result

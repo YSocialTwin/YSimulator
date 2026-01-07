@@ -7,6 +7,8 @@ Note: LLM-based SHARE with custom commentary is not yet implemented.
 Currently, LLM agents fall back to rule-based sharing behavior.
 """
 
+import ray
+
 from YSimulator.YClient.action_generators.base_generator import (
     ActionGeneratorResult,
     BaseActionGenerator,
@@ -51,6 +53,16 @@ class ShareGenerator(BaseActionGenerator):
 
         # Generate rule-based share action
         action = generate_rule_based_share(agent.id, agent.cluster, target_post)
+
+        # Calculate opinion updates for the share
+        post_data = ray.get(
+            self.context.server.get_post.remote(target_post, client_id=self.context.client_id)
+        )
+        if post_data:
+            updated_opinions = self._calculate_opinion_updates(agent.id, target_post, post_data)
+            if updated_opinions:
+                action.updated_opinions = updated_opinions
+
         result.actions.append(action)
         result.metadata["target_post"] = target_post
 
