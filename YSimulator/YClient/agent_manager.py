@@ -184,7 +184,7 @@ def parse_network_edges(network_csv_path: Path, logger: logging.Logger) -> List[
 
 
 def load_and_create_social_network(
-    network_csv_path: Path, server, client_id: str, logger: logging.Logger
+    network_csv_path: Path, server, client_id: str, logger: logging.Logger, batch_size: int = 100
 ) -> int:
     """
     Load network edges from CSV and create follow relationships on server.
@@ -194,6 +194,7 @@ def load_and_create_social_network(
         server: Ray server actor handle
         client_id: Client identifier
         logger: Logger instance
+        batch_size: Number of edges to process in each batch (default: 100)
 
     Returns:
         int: Number of follow relationships successfully created
@@ -205,7 +206,6 @@ def load_and_create_social_network(
         return 0
 
     # Create follow relationships in batches
-    batch_size = 100
     success_count = 0
     failed_count = 0
 

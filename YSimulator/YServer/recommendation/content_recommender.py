@@ -22,6 +22,7 @@ class ContentRecommender:
         self,
         db_adapter,
         visibility_rounds: int,
+        num_slots_per_day: int = 24,
         logger: Optional[logging.Logger] = None
     ):
         """
@@ -30,10 +31,12 @@ class ContentRecommender:
         Args:
             db_adapter: Database adapter (with engine, redis_client, use_redis flag)
             visibility_rounds: Number of rounds posts remain visible
+            num_slots_per_day: Number of time slots per simulation day (default: 24)
             logger: Logger instance
         """
         self.db = db_adapter
         self.visibility_rounds = visibility_rounds
+        self.num_slots_per_day = num_slots_per_day
         self.logger = logger or logging.getLogger(__name__)
     
     def get_recommended_posts(
@@ -243,14 +246,13 @@ class ContentRecommender:
             Tuple of (visibility_day, visibility_hour)
         """
         # Calculate how many full days worth of slots are in visibility_rounds
-        slots_per_day = 24  # Assuming 24 slots per day
-        visibility_total_slots = day * slots_per_day + slot - visibility_rounds
+        visibility_total_slots = day * self.num_slots_per_day + slot - visibility_rounds
         
         if visibility_total_slots < 0:
             visibility_day = 0
             visibility_hour = 0
         else:
-            visibility_day = visibility_total_slots // slots_per_day
-            visibility_hour = visibility_total_slots % slots_per_day
+            visibility_day = visibility_total_slots // self.num_slots_per_day
+            visibility_hour = visibility_total_slots % self.num_slots_per_day
         
         return visibility_day, visibility_hour
