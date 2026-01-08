@@ -1006,6 +1006,17 @@ class SimulationClient(ActionExecutorMixin):
             self.logger.debug(f"Action type is None for agent {agent.username}, skipping")
             return [], [], {"skipped": True, "reason": "action_type_none"}
 
+        # Ensure action generator factory is initialized
+        # This is needed because the factory may not be created yet when called from
+        # _handle_reply_to_mention or other contexts before the main simulation loop
+        if self._action_generator_factory is None:
+            # Create a temporary factory with minimal context
+            # The actual context values (day, slot, recent_posts) may not be accurate
+            # but this allows the method to work in all contexts
+            self._action_generator_factory = self._create_action_generator_factory(
+                day=0, slot=0, recent_posts=[]
+            )
+
         # Update the generator factory's context with target if provided
         if target:
             self._action_generator_factory.context.target = target
