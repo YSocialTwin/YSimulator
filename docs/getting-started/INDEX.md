@@ -95,8 +95,8 @@ Step-by-step guides for extending YSimulator with new features:
 
 | Document | Description | Contents |
 |----------|-------------|----------|
-| **[Critical Code Paths](../analysis/CRITICAL_CODE_PATHS.md)** | Performance-critical code (530+ lines) | Hot paths, optimization opportunities |
-| **[Test Coverage Report](../analysis/TEST_COVERAGE_REPORT.md)** | Testing status and progress | Coverage metrics, test phases, testing infrastructure |
+| **[Critical Code Paths](../architecture/CRITICAL_CODE_PATHS.md)** | Performance-critical code (530+ lines) | Hot paths, optimization opportunities |
+| **[Test Coverage Report](../testing/TEST_COVERAGE_REPORT.md)** | Testing status and progress (v3.1 with Phase 6) | Coverage metrics, all phases tested, recommendations |
 
 ### 🔧 Refactoring & Evolution
 
