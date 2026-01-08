@@ -72,7 +72,7 @@ class TestOpinionHandler:
         mock_db_adapter.add_agent_opinion.assert_not_called()
     
     def test_ensure_opinion_exists_regular_agent(self, mock_db_adapter):
-        """Test creating opinion for regular agent."""
+        """Test that ensure_agent_opinion_exists checks but doesn't create opinion."""
         # Mock agent profile with opinions
         profile = Mock()
         profile.is_page = 0
@@ -91,13 +91,11 @@ class TestOpinionHandler:
             topic_name="Politics"
         )
         
-        # Should create opinion with value from profile
-        mock_db_adapter.add_agent_opinion.assert_called_once()
-        call_args = mock_db_adapter.add_agent_opinion.call_args[1]
-        assert call_args["opinion"] == 0.8
+        # Should NOT create opinion preemptively (deferred to interaction time)
+        mock_db_adapter.add_agent_opinion.assert_not_called()
     
     def test_ensure_opinion_exists_page_agent(self, mock_db_adapter):
-        """Test creating opinion for page agent (fallback)."""
+        """Test that ensure_agent_opinion_exists checks but doesn't create opinion for page agent."""
         # Mock page agent profile
         profile = Mock()
         profile.is_page = 1
@@ -115,23 +113,19 @@ class TestOpinionHandler:
             topic_name="Politics"
         )
         
-        # Should create neutral opinion (0.5) as fallback
-        mock_db_adapter.add_agent_opinion.assert_called_once()
-        call_args = mock_db_adapter.add_agent_opinion.call_args[1]
-        assert call_args["opinion"] == 0.5
+        # Should NOT create opinion preemptively (deferred to interaction time)
+        mock_db_adapter.add_agent_opinion.assert_not_called()
     
     def test_ensure_opinion_exists_neutral_fallback(self, opinion_handler, mock_db_adapter):
-        """Test creating neutral opinion when not in profile."""
+        """Test that ensure_agent_opinion_exists doesn't create opinion when not in profile."""
         opinion_handler.ensure_agent_opinion_exists(
             agent_id="agent1",
             topic_id="topic1",
             topic_name="Unknown Topic"
         )
         
-        # Should create neutral opinion (0.5)
-        mock_db_adapter.add_agent_opinion.assert_called_once()
-        call_args = mock_db_adapter.add_agent_opinion.call_args[1]
-        assert call_args["opinion"] == 0.5
+        # Should NOT create opinion preemptively (deferred to interaction time)
+        mock_db_adapter.add_agent_opinion.assert_not_called()
     
     def test_ensure_opinion_disabled(self, mock_db_adapter):
         """Test that ensure_opinion_exists does nothing when disabled."""
@@ -257,7 +251,7 @@ class TestOpinionHandler:
         assert result == []
     
     def test_case_insensitive_topic_match(self, mock_db_adapter):
-        """Test case-insensitive topic name matching."""
+        """Test that ensure_agent_opinion_exists doesn't create opinion (even with case mismatch)."""
         # Mock agent profile with mixed case opinions
         profile = Mock()
         profile.is_page = 0
@@ -276,7 +270,5 @@ class TestOpinionHandler:
             topic_name="politics"  # lowercase
         )
         
-        # Should find the opinion despite case difference
-        mock_db_adapter.add_agent_opinion.assert_called_once()
-        call_args = mock_db_adapter.add_agent_opinion.call_args[1]
-        assert call_args["opinion"] == 0.8
+        # Should NOT create opinion preemptively (deferred to interaction time)
+        mock_db_adapter.add_agent_opinion.assert_not_called()
