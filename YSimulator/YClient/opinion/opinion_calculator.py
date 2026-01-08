@@ -10,6 +10,10 @@ from typing import Any, Callable, Dict, Optional
 
 import ray
 
+from YSimulator.YClient.opinion_dynamics.confidence_bound import bounded_confidence
+from YSimulator.YClient.opinion_dynamics.llm_evaluation import llm_evaluation
+from YSimulator.YClient.opinion_dynamics.utils import get_opinion_group
+
 
 class OpinionCalculator:
     """
@@ -191,8 +195,6 @@ class OpinionCalculator:
         Returns:
             float: Updated opinion value
         """
-        from YSimulator.YClient.opinion_dynamics.confidence_bound import bounded_confidence
-        
         return bounded_confidence(
             x=agent_opinion,
             y=author_opinion,
@@ -227,9 +229,6 @@ class OpinionCalculator:
         Returns:
             float: Updated opinion value
         """
-        from YSimulator.YClient.opinion_dynamics.llm_evaluation import llm_evaluation
-        from YSimulator.YClient.opinion_dynamics.utils import get_opinion_group
-        
         # Get evaluation scope and prepare neighbors' opinions if needed
         evaluation_scope = params.get("evaluation_scope", "interlocutor_only")
         peers_opinions = None
