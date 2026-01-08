@@ -118,15 +118,33 @@ class RetryHandler:
             True if error is retryable, False otherwise
         """
         # Common retryable errors
-        retryable_error_types = (
+        retryable_error_types = [
             ConnectionError,
             TimeoutError,
-            ray.exceptions.RayTaskError,
-        )
+        ]
+        
+        # Add Ray-specific errors if available and valid
+        try:
+            if hasattr(ray, 'exceptions') and hasattr(ray.exceptions, 'RayTaskError'):
+                ray_error = ray.exceptions.RayTaskError
+                # Only add if it's actually a type (not a mock)
+                if isinstance(ray_error, type):
+                    retryable_error_types.append(ray_error)
+        except (AttributeError, ImportError, TypeError):
+            pass
         
         # Check error type
-        if isinstance(error, retryable_error_types):
-            return True
+        try:
+            if isinstance(error, tuple(retryable_error_types)):
+                return True
+        except TypeError:
+            # If tuple conversion fails, check individually
+            for error_type in retryable_error_types:
+                try:
+                    if isinstance(error, error_type):
+                        return True
+                except TypeError:
+                    continue
         
         # Check error message for rate limits
         error_message = str(error).lower()

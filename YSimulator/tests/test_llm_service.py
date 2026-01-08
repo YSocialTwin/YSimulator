@@ -10,346 +10,353 @@ Tests cover:
 """
 
 import logging
+import sys
+import unittest
 from unittest.mock import MagicMock, Mock, patch
 
-import pytest
+# Mock ray before importing llm_utils components
+sys.modules['ray'] = MagicMock()
 
-from YSimulator.YClient.llm_utils import (
-    LLMManager,
-    BatchHandler,
-    RetryHandler,
-    ResponseParser,
-    CostTracker,
-)
-
-
-@pytest.fixture
-def mock_logger():
-    """Create a mock logger."""
-    return MagicMock(spec=logging.Logger)
+from YSimulator.YClient.llm_utils.llm_manager import LLMManager
+from YSimulator.YClient.llm_utils.batch_handler import BatchHandler
+from YSimulator.YClient.llm_utils.retry_handler import RetryHandler
+from YSimulator.YClient.llm_utils.response_parser import ResponseParser
+from YSimulator.YClient.llm_utils.cost_tracker import CostTracker
 
 
-@pytest.fixture
-def mock_llm():
-    """Create a mock LLM actor handle."""
-    llm = MagicMock()
-    llm.generate_post = MagicMock()
-    llm.generate_comment = MagicMock()
-    llm.decide_follow = MagicMock()
-    return llm
-
-
-class TestLLMManager:
+class TestLLMManager(unittest.TestCase):
     """Test LLMManager functionality."""
 
-    def test_initialization(self, mock_llm, mock_logger):
-        """Test LLMManager initialization."""
-        manager = LLMManager(mock_llm, logger=mock_logger)
-        assert manager.llm == mock_llm
-        assert manager.logger == mock_logger
+    def setUp(self):
+        """Set up test fixtures."""
+        self.mock_logger = MagicMock(spec=logging.Logger)
+        self.mock_llm = MagicMock()
+        self.mock_llm.generate_post = MagicMock()
+        self.mock_llm.generate_comment = MagicMock()
+        self.mock_llm.decide_follow = MagicMock()
 
-    def test_is_available(self, mock_llm):
+    def test_initialization(self):
+        """Test LLMManager initialization."""
+        manager = LLMManager(self.mock_llm, logger=self.mock_logger)
+        self.assertEqual(manager.llm, self.mock_llm)
+        self.assertEqual(manager.logger, self.mock_logger)
+
+    def test_is_available(self):
         """Test LLM availability check."""
-        manager = LLMManager(mock_llm)
-        assert manager.is_available() is True
+        manager = LLMManager(self.mock_llm)
+        self.assertTrue(manager.is_available())
 
         manager_none = LLMManager(None)
-        assert manager_none.is_available() is False
+        self.assertFalse(manager_none.is_available())
 
-    def test_generate_post(self, mock_llm, mock_logger):
+    def test_generate_post(self):
         """Test generate_post method."""
-        manager = LLMManager(mock_llm, logger=mock_logger)
+        manager = LLMManager(self.mock_llm, logger=self.mock_logger)
         
         future = manager.generate_post(1, {"name": "Alice"}, "technology")
         
-        mock_llm.generate_post.remote.assert_called_once_with(1, {"name": "Alice"}, "technology")
-        assert future is not None
+        self.mock_llm.generate_post.remote.assert_called_once_with(1, {"name": "Alice"}, "technology")
+        self.assertIsNotNone(future)
 
-    def test_generate_comment(self, mock_llm):
+    def test_generate_comment(self):
         """Test generate_comment method."""
-        manager = LLMManager(mock_llm)
+        manager = LLMManager(self.mock_llm)
         
         future = manager.generate_comment(
             1, "Great post!", {"name": "Bob"}, "Alice", "Previous context"
         )
         
-        mock_llm.generate_comment.remote.assert_called_once()
-        assert future is not None
+        self.mock_llm.generate_comment.remote.assert_called_once()
+        self.assertIsNotNone(future)
 
 
-class TestBatchHandler:
+class TestBatchHandler(unittest.TestCase):
     """Test BatchHandler functionality."""
 
-    def test_initialization(self, mock_logger):
+    def setUp(self):
+        """Set up test fixtures."""
+        self.mock_logger = MagicMock(spec=logging.Logger)
+
+    def test_initialization(self):
         """Test BatchHandler initialization."""
-        handler = BatchHandler(logger=mock_logger)
-        assert handler.logger == mock_logger
+        handler = BatchHandler(logger=self.mock_logger)
+        self.assertEqual(handler.logger, self.mock_logger)
 
-    @patch('YSimulator.YClient.llm_service.batch_handler.ray.get')
-    def test_gather_futures_success(self, mock_ray_get, mock_logger):
+    def test_gather_futures_success(self):
         """Test successful future gathering."""
-        mock_ray_get.return_value = ["result1", "result2", "result3"]
-        
-        handler = BatchHandler(logger=mock_logger)
-        futures = [Mock(), Mock(), Mock()]
-        
-        results = handler.gather_futures(futures)
-        
-        assert len(results) == 3
-        assert results == ["result1", "result2", "result3"]
-        mock_ray_get.assert_called_once_with(futures)
+        with patch('ray.get', return_value=["result1", "result2", "result3"]) as mock_ray_get:
+            handler = BatchHandler(logger=self.mock_logger)
+            futures = [Mock(), Mock(), Mock()]
+            
+            results = handler.gather_futures(futures)
+            
+            self.assertEqual(len(results), 3)
+            self.assertEqual(results, ["result1", "result2", "result3"])
+            mock_ray_get.assert_called_once_with(futures)
 
-    def test_gather_futures_empty(self, mock_logger):
+    def test_gather_futures_empty(self):
         """Test gathering empty list."""
-        handler = BatchHandler(logger=mock_logger)
+        handler = BatchHandler(logger=self.mock_logger)
         results = handler.gather_futures([])
-        assert results == []
+        self.assertEqual(results, [])
 
-    @patch('YSimulator.YClient.llm_service.batch_handler.ray.get')
-    def test_gather_futures_error(self, mock_ray_get, mock_logger):
+    def test_gather_futures_error(self):
         """Test future gathering with error."""
-        mock_ray_get.side_effect = Exception("Ray error")
-        
-        handler = BatchHandler(logger=mock_logger)
-        futures = [Mock(), Mock()]
-        
-        results = handler.gather_futures(futures)
-        
-        # Should return None for each future on error
-        assert results == [None, None]
+        with patch('ray.get', side_effect=Exception("Ray error")):
+            handler = BatchHandler(logger=self.mock_logger)
+            futures = [Mock(), Mock()]
+            
+            results = handler.gather_futures(futures)
+            
+            # Should return None for each future on error
+            self.assertEqual(results, [None, None])
 
-    @patch('YSimulator.YClient.llm_service.batch_handler.ray.get')
-    def test_gather_with_metadata(self, mock_ray_get, mock_logger):
+    def test_gather_with_metadata(self):
         """Test gathering with metadata preservation."""
-        mock_ray_get.return_value = ["result1", "result2"]
-        
-        handler = BatchHandler(logger=mock_logger)
-        futures_with_meta = [
-            (Mock(), {"agent_id": "a1", "cluster": 1}),
-            (Mock(), {"agent_id": "a2", "cluster": 2}),
-        ]
-        
-        results = handler.gather_with_metadata(futures_with_meta)
-        
-        assert len(results) == 2
-        assert results[0] == ("result1", {"agent_id": "a1", "cluster": 1})
-        assert results[1] == ("result2", {"agent_id": "a2", "cluster": 2})
+        with patch('ray.get', return_value=["result1", "result2"]):
+            handler = BatchHandler(logger=self.mock_logger)
+            futures_with_meta = [
+                (Mock(), {"agent_id": "a1", "cluster": 1}),
+                (Mock(), {"agent_id": "a2", "cluster": 2}),
+            ]
+            
+            results = handler.gather_with_metadata(futures_with_meta)
+            
+            self.assertEqual(len(results), 2)
+            self.assertEqual(results[0], ("result1", {"agent_id": "a1", "cluster": 1}))
+            self.assertEqual(results[1], ("result2", {"agent_id": "a2", "cluster": 2}))
 
 
-class TestRetryHandler:
+class TestRetryHandler(unittest.TestCase):
     """Test RetryHandler functionality."""
 
-    def test_initialization(self, mock_logger):
+    def setUp(self):
+        """Set up test fixtures."""
+        self.mock_logger = MagicMock(spec=logging.Logger)
+
+    def test_initialization(self):
         """Test RetryHandler initialization."""
         handler = RetryHandler(
             max_retries=3,
             initial_delay=1.0,
             backoff_factor=2.0,
-            logger=mock_logger,
+            logger=self.mock_logger,
         )
-        assert handler.max_retries == 3
-        assert handler.initial_delay == 1.0
-        assert handler.backoff_factor == 2.0
+        self.assertEqual(handler.max_retries, 3)
+        self.assertEqual(handler.initial_delay, 1.0)
+        self.assertEqual(handler.backoff_factor, 2.0)
 
-    def test_retry_with_backoff_success(self, mock_logger):
+    def test_retry_with_backoff_success(self):
         """Test successful retry."""
-        handler = RetryHandler(max_retries=3, logger=mock_logger)
+        handler = RetryHandler(max_retries=3, logger=self.mock_logger)
         
         mock_func = Mock(return_value="success")
         result = handler.retry_with_backoff(mock_func, error_message="test")
         
-        assert result == "success"
+        self.assertEqual(result, "success")
         mock_func.assert_called_once()
 
-    def test_retry_with_backoff_eventual_success(self, mock_logger):
+    def test_retry_with_backoff_eventual_success(self):
         """Test retry that succeeds after failures."""
-        handler = RetryHandler(max_retries=3, initial_delay=0.01, logger=mock_logger)
+        handler = RetryHandler(max_retries=3, initial_delay=0.01, logger=self.mock_logger)
         
         # Fail twice, then succeed
         mock_func = Mock(side_effect=[Exception("Error 1"), Exception("Error 2"), "success"])
         
         result = handler.retry_with_backoff(mock_func, error_message="test")
         
-        assert result == "success"
-        assert mock_func.call_count == 3
+        self.assertEqual(result, "success")
+        self.assertEqual(mock_func.call_count, 3)
 
-    def test_is_retryable_error(self, mock_logger):
+    def test_is_retryable_error(self):
         """Test retryable error detection."""
-        handler = RetryHandler(logger=mock_logger)
+        handler = RetryHandler(logger=self.mock_logger)
         
         # Test retryable errors
-        assert handler.is_retryable_error(ConnectionError()) is True
-        assert handler.is_retryable_error(TimeoutError()) is True
+        self.assertTrue(handler.is_retryable_error(ConnectionError()))
+        self.assertTrue(handler.is_retryable_error(TimeoutError()))
         
         # Test non-retryable errors
-        assert handler.is_retryable_error(ValueError()) is False
-        assert handler.is_retryable_error(KeyError()) is False
+        self.assertFalse(handler.is_retryable_error(ValueError()))
+        self.assertFalse(handler.is_retryable_error(KeyError()))
 
 
-class TestResponseParser:
+class TestResponseParser(unittest.TestCase):
     """Test ResponseParser functionality."""
 
-    def test_initialization(self, mock_logger):
-        """Test ResponseParser initialization."""
-        parser = ResponseParser(logger=mock_logger)
-        assert parser.logger == mock_logger
+    def setUp(self):
+        """Set up test fixtures."""
+        self.mock_logger = MagicMock(spec=logging.Logger)
 
-    def test_parse_text_response_valid(self, mock_logger):
+    def test_initialization(self):
+        """Test ResponseParser initialization."""
+        parser = ResponseParser(logger=self.mock_logger)
+        self.assertEqual(parser.logger, self.mock_logger)
+
+    def test_parse_text_response_valid(self):
         """Test parsing valid text response."""
-        parser = ResponseParser(logger=mock_logger)
+        parser = ResponseParser(logger=self.mock_logger)
         
         result = parser.parse_text_response("Hello world")
-        assert result == "Hello world"
+        self.assertEqual(result, "Hello world")
 
-    def test_parse_text_response_none(self, mock_logger):
+    def test_parse_text_response_none(self):
         """Test parsing None response."""
-        parser = ResponseParser(logger=mock_logger)
+        parser = ResponseParser(logger=self.mock_logger)
         
         result = parser.parse_text_response(None, default="default text")
-        assert result == "default text"
+        self.assertEqual(result, "default text")
 
-    def test_parse_text_response_empty(self, mock_logger):
+    def test_parse_text_response_empty(self):
         """Test parsing empty text."""
-        parser = ResponseParser(logger=mock_logger)
+        parser = ResponseParser(logger=self.mock_logger)
         
         result = parser.parse_text_response("   ", default="default")
-        assert result == "default"
+        self.assertEqual(result, "default")
 
-    def test_parse_text_response_truncate(self, mock_logger):
+    def test_parse_text_response_truncate(self):
         """Test text truncation."""
-        parser = ResponseParser(logger=mock_logger)
+        parser = ResponseParser(logger=self.mock_logger)
         
         long_text = "a" * 100
         result = parser.parse_text_response(long_text, max_length=50)
-        assert len(result) == 50
+        self.assertEqual(len(result), 50)
 
-    def test_parse_boolean_response_bool(self, mock_logger):
+    def test_parse_boolean_response_bool(self):
         """Test parsing boolean response."""
-        parser = ResponseParser(logger=mock_logger)
+        parser = ResponseParser(logger=self.mock_logger)
         
-        assert parser.parse_boolean_response(True) is True
-        assert parser.parse_boolean_response(False) is False
+        self.assertTrue(parser.parse_boolean_response(True))
+        self.assertFalse(parser.parse_boolean_response(False))
 
-    def test_parse_boolean_response_string(self, mock_logger):
+    def test_parse_boolean_response_string(self):
         """Test parsing string to boolean."""
-        parser = ResponseParser(logger=mock_logger)
+        parser = ResponseParser(logger=self.mock_logger)
         
-        assert parser.parse_boolean_response("true") is True
-        assert parser.parse_boolean_response("yes") is True
-        assert parser.parse_boolean_response("false") is False
-        assert parser.parse_boolean_response("no") is False
+        self.assertTrue(parser.parse_boolean_response("true"))
+        self.assertTrue(parser.parse_boolean_response("yes"))
+        self.assertFalse(parser.parse_boolean_response("false"))
+        self.assertFalse(parser.parse_boolean_response("no"))
 
-    def test_parse_list_response_valid(self, mock_logger):
+    def test_parse_list_response_valid(self):
         """Test parsing valid list."""
-        parser = ResponseParser(logger=mock_logger)
+        parser = ResponseParser(logger=self.mock_logger)
         
         result = parser.parse_list_response([1, 2, 3])
-        assert result == [1, 2, 3]
+        self.assertEqual(result, [1, 2, 3])
 
-    def test_parse_list_response_invalid(self, mock_logger):
+    def test_parse_list_response_invalid(self):
         """Test parsing invalid list."""
-        parser = ResponseParser(logger=mock_logger)
+        parser = ResponseParser(logger=self.mock_logger)
         
         result = parser.parse_list_response("not a list", default=[])
-        assert result == []
+        self.assertEqual(result, [])
 
-    def test_parse_dict_response_valid(self, mock_logger):
+    def test_parse_dict_response_valid(self):
         """Test parsing valid dict."""
-        parser = ResponseParser(logger=mock_logger)
+        parser = ResponseParser(logger=self.mock_logger)
         
         result = parser.parse_dict_response({"key": "value"})
-        assert result == {"key": "value"}
+        self.assertEqual(result, {"key": "value"})
 
-    def test_parse_emotion_response_valid(self, mock_logger):
+    def test_parse_emotion_response_valid(self):
         """Test parsing valid emotion."""
-        parser = ResponseParser(logger=mock_logger)
+        parser = ResponseParser(logger=self.mock_logger)
         
-        assert parser.parse_emotion_response("joy") == "joy"
-        assert parser.parse_emotion_response("anger") == "anger"
-        assert parser.parse_emotion_response("neutral") == "neutral"
+        self.assertEqual(parser.parse_emotion_response("joy"), "joy")
+        self.assertEqual(parser.parse_emotion_response("anger"), "anger")
+        self.assertEqual(parser.parse_emotion_response("neutral"), "neutral")
 
-    def test_parse_emotion_response_invalid(self, mock_logger):
+    def test_parse_emotion_response_invalid(self):
         """Test parsing invalid emotion."""
-        parser = ResponseParser(logger=mock_logger)
+        parser = ResponseParser(logger=self.mock_logger)
         
         result = parser.parse_emotion_response("invalid_emotion")
-        assert result is None
+        self.assertIsNone(result)
 
-    def test_sanitize_text(self, mock_logger):
+    def test_sanitize_text(self):
         """Test text sanitization."""
-        parser = ResponseParser(logger=mock_logger)
+        parser = ResponseParser(logger=self.mock_logger)
         
         dirty_text = "  Hello   <b>world</b>  "
         clean_text = parser.sanitize_text(dirty_text, remove_html=True)
-        assert clean_text == "Hello world"
+        self.assertEqual(clean_text, "Hello world")
 
 
-class TestCostTracker:
+class TestCostTracker(unittest.TestCase):
     """Test CostTracker functionality."""
 
-    def test_initialization(self, mock_logger):
-        """Test CostTracker initialization."""
-        tracker = CostTracker(logger=mock_logger)
-        assert tracker.logger == mock_logger
-        assert len(tracker.call_counts) == 0
+    def setUp(self):
+        """Set up test fixtures."""
+        self.mock_logger = MagicMock(spec=logging.Logger)
 
-    def test_record_call(self, mock_logger):
+    def test_initialization(self):
+        """Test CostTracker initialization."""
+        tracker = CostTracker(logger=self.mock_logger)
+        self.assertEqual(tracker.logger, self.mock_logger)
+        self.assertEqual(len(tracker.call_counts), 0)
+
+    def test_record_call(self):
         """Test recording a call."""
-        tracker = CostTracker(logger=mock_logger)
+        tracker = CostTracker(logger=self.mock_logger)
         
         tracker.record_call("generate_post", input_tokens=10, output_tokens=20)
         
-        assert tracker.get_call_count("generate_post") == 1
-        assert tracker.get_token_count("generate_post") == 30
+        self.assertEqual(tracker.get_call_count("generate_post"), 1)
+        self.assertEqual(tracker.get_token_count("generate_post"), 30)
 
-    def test_get_call_count(self, mock_logger):
+    def test_get_call_count(self):
         """Test getting call counts."""
-        tracker = CostTracker(logger=mock_logger)
+        tracker = CostTracker(logger=self.mock_logger)
         
         tracker.record_call("generate_post", input_tokens=10, output_tokens=20)
         tracker.record_call("generate_post", input_tokens=15, output_tokens=25)
         tracker.record_call("generate_comment", input_tokens=5, output_tokens=10)
         
-        assert tracker.get_call_count("generate_post") == 2
-        assert tracker.get_call_count("generate_comment") == 1
-        assert tracker.get_call_count() == 3  # Total
+        self.assertEqual(tracker.get_call_count("generate_post"), 2)
+        self.assertEqual(tracker.get_call_count("generate_comment"), 1)
+        self.assertEqual(tracker.get_call_count(), 3)  # Total
 
-    def test_get_estimated_cost(self, mock_logger):
+    def test_get_estimated_cost(self):
         """Test cost estimation."""
         token_costs = {
             "generate_post": 0.002,  # $0.002 per 1K tokens
             "generate_comment": 0.001,
         }
-        tracker = CostTracker(token_costs=token_costs, logger=mock_logger)
+        tracker = CostTracker(token_costs=token_costs, logger=self.mock_logger)
         
         tracker.record_call("generate_post", input_tokens=1000, output_tokens=500)
         
         # 1500 tokens * $0.002 / 1000 = $0.003
         cost = tracker.get_estimated_cost("generate_post")
-        assert abs(cost - 0.003) < 0.0001
+        self.assertLess(abs(cost - 0.003), 0.0001)
 
-    def test_get_summary(self, mock_logger):
+    def test_get_summary(self):
         """Test getting usage summary."""
-        tracker = CostTracker(logger=mock_logger)
+        tracker = CostTracker(logger=self.mock_logger)
         
         tracker.record_call("generate_post", input_tokens=100, output_tokens=200)
         tracker.record_call("generate_comment", input_tokens=50, output_tokens=100)
         
         summary = tracker.get_summary()
         
-        assert summary["total_calls"] == 2
-        assert summary["total_tokens"] == 450
-        assert "by_method" in summary
-        assert "generate_post" in summary["by_method"]
-        assert "generate_comment" in summary["by_method"]
+        self.assertEqual(summary["total_calls"], 2)
+        self.assertEqual(summary["total_tokens"], 450)
+        self.assertIn("by_method", summary)
+        self.assertIn("generate_post", summary["by_method"])
+        self.assertIn("generate_comment", summary["by_method"])
 
-    def test_reset(self, mock_logger):
+    def test_reset(self):
         """Test resetting tracker."""
-        tracker = CostTracker(logger=mock_logger)
+        tracker = CostTracker(logger=self.mock_logger)
         
         tracker.record_call("generate_post", input_tokens=100, output_tokens=200)
-        assert tracker.get_call_count() == 1
+        self.assertEqual(tracker.get_call_count(), 1)
         
         tracker.reset()
-        assert tracker.get_call_count() == 0
-        assert tracker.get_token_count() == 0
+        self.assertEqual(tracker.get_call_count(), 0)
+        self.assertEqual(tracker.get_token_count(), 0)
+
+
+if __name__ == '__main__':
+    unittest.main()
