@@ -26,7 +26,9 @@ This directory contains system architecture and design pattern documentation.
 
 ### Refactoring Framework Documentation
 
-These documents describe the modular frameworks created during the 5-phase server refactoring:
+These documents describe the modular frameworks created during refactoring:
+
+#### Server Refactoring (5 Phases - All Complete)
 
 - **[ACTION_PROCESSOR_FRAMEWORK.md](ACTION_PROCESSOR_FRAMEWORK.md)** - Phase 1 refactoring (270+ lines)
   - Strategy pattern for action processing
@@ -59,9 +61,33 @@ These documents describe the modular frameworks created during the 5-phase serve
   - Eliminated 46 direct database calls (100%)
   - Clear service boundaries
 
+#### Client Refactoring (3 Phases Complete)
+
+- **[CLIENT_REFACTORING_REPORT.md](../refactoring/CLIENT_REFACTORING_REPORT.md)** - Phases 1-3 overview (1,300+ lines)
+  - Phase 1: Action Generator Framework (10 generators, +10 tests)
+  - Phase 2: Simulation Orchestrator (5 modules, +9 tests)
+  - Phase 3: LLM Utilities Layer (5 modules, +32 tests)
+  - Complete client modernization details
+
+- **[SIMULATION_ORCHESTRATOR.md](SIMULATION_ORCHESTRATOR.md)** - Phase 2 client refactoring (430+ lines)
+  - Simulator for main coordination
+  - RoundExecutor for per-round execution
+  - AgentScheduler for agent selection
+  - BatchProcessor for LLM batching
+  - LifecycleManager for agent lifecycle
+  - Reduced run() from 297 to 18 lines (94% reduction)
+
+- **[LLM_UTILITIES_LAYER.md](LLM_UTILITIES_LAYER.md)** - Phase 3 client refactoring (430+ lines)
+  - LLMManager for unified LLM interface (11 methods)
+  - BatchHandler for scatter/gather pattern
+  - RetryHandler for automatic retry with exponential backoff
+  - ResponseParser for response validation
+  - CostTracker for usage monitoring and logging
+  - 100% LLM call coverage achieved
+
 ## Refactoring Impact
 
-The 5-phase refactoring transformed the monolithic server architecture:
+### Server Refactoring (5 Phases Complete)
 
 | Metric | Before | After | Change |
 |--------|--------|-------|--------|
@@ -70,6 +96,17 @@ The 5-phase refactoring transformed the monolithic server architecture:
 | **Direct DB calls** | 46 | 0 | -46 (-100%) |
 | **Modules created** | 0 | 4 | +4 frameworks |
 | **Unit tests** | ~27 | ~77 | +50 tests |
+
+### Client Refactoring (3 Phases Complete)
+
+| Metric | Before | After | Change |
+|--------|--------|-------|--------|
+| **client.py lines** | 2,924 | 2,161 | -763 (-26%) |
+| **action_executor.py** | 952 | 0 (deleted) | -952 (-100%) |
+| **run() method** | 297 lines | 18 lines | -279 (-94%) |
+| **Modules created** | 0 | 3 packages | +20 new modules |
+| **Unit tests** | 2 | 53 | +51 tests |
+| **LLM coverage** | Scattered | 100% | All calls centralized |
 
 ## Quick Links
 

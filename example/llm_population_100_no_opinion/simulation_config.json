@@ -113,7 +113,8 @@
     "enable_execution_log": true,
     "enable_actor_log": true,
     "enable_client_log": true,
-    "enable_console_log": true
+    "enable_console_log": true,
+    "enable_llm_usage_log": true
   },
   "opinion_dynamics": {
     "enabled": false,

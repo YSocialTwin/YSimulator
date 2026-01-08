@@ -168,7 +168,7 @@ class ActionExecutorMixin:
                     agent_attrs["post_opinion_values"] = opinion_info["opinion_values"]
 
                 # Fire off async LLM call to generate comment with agent attributes, author name, and thread context
-                future = self.llm.generate_comment.remote(
+                future = self.llm_manager.generate_comment(
                     agent.cluster, post_content, agent_attrs, author_name, thread_context
                 )
                 pending_llm_reactions.append((agent.id, agent.cluster, target_post, future))
@@ -398,7 +398,7 @@ class ActionExecutorMixin:
                                 self.logger.info(
                                     f"Extracting topics for article {article_id}: {article.get('title', '')[:50]}..."
                                 )
-                                topics_future = self.llm.extract_topics_from_article.remote(
+                                topics_future = self.llm_manager.extract_topics_from_article(
                                     article.get("title", ""), article.get("summary", "")
                                 )
                                 topic_names = ray.get(topics_future)
@@ -525,7 +525,7 @@ class ActionExecutorMixin:
                                 self.logger.info(
                                     f"Extracting topics for article {article_id}: {article.get('title', '')[:50]}..."
                                 )
-                                topics_future = self.llm.extract_topics_from_article.remote(
+                                topics_future = self.llm_manager.extract_topics_from_article(
                                     article.get("title", ""), article.get("summary", "")
                                 )
                                 topic_names = ray.get(topics_future)

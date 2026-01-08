@@ -24,11 +24,15 @@ This directory contains reports and analysis of major refactoring efforts in YSi
 
 ### Client Refactoring
 
-- **[CLIENT_REFACTORING_REPORT.md](CLIENT_REFACTORING_REPORT.md)** - Client architecture improvements (660+ lines)
+- **[CLIENT_REFACTORING_REPORT.md](CLIENT_REFACTORING_REPORT.md)** - Client architecture improvements (1,300+ lines)
+  - Phase 1: Action Generator Framework (✅ COMPLETED)
+  - Phase 2: Simulation Orchestrator (✅ COMPLETED)
+  - Phase 3: LLM Utilities Layer (✅ COMPLETED)
   - Modularity enhancements
   - Testing infrastructure
   - Code organization improvements
   - Maintainability upgrades
+  - Complete LLM centralization
 
 ## Refactoring Impact Summary
 
@@ -44,15 +48,36 @@ This directory contains reports and analysis of major refactoring efforts in YSi
 | **Unit tests** | ~27 | ~77 | +50 tests |
 | **Test pass rate** | N/A | 100% | 77/77 passing |
 
+### Client Refactoring Results
+
+| Metric | Before | After | Change |
+|--------|--------|-------|--------|
+| **client.py lines** | 2,924 | 2,161 | -763 (-26%) |
+| **action_executor.py** | 952 | 0 (deleted) | -952 (-100%) |
+| **Modules created** | 0 | 3 packages | +20 new modules |
+| **Action generators** | 0 | 10 | +10 generators |
+| **Simulation modules** | 0 | 5 | +5 orchestrators |
+| **LLM utilities** | 0 | 5 | +5 modules |
+| **Unit tests** | 2 | 53 | +51 tests |
+| **Test pass rate** | N/A | 100% | 810/810 passing |
+| **run() method** | 297 lines | 18 lines | -279 (-94%) |
+| **LLM coverage** | Scattered | 100% | All calls centralized |
+
 ### Architecture Documentation
 
 Each refactoring phase has dedicated architecture documentation:
 
+**Server Refactoring:**
 1. **[Action Processor Framework](../architecture/ACTION_PROCESSOR_FRAMEWORK.md)** - Modular action processing
 2. **[Recommendation Engine](../architecture/RECOMMENDATION_ENGINE.md)** - Content & follow recommendations
 3. **[Opinion Dynamics Handler](../architecture/OPINION_DYNAMICS_HANDLER.md)** - Opinion management
 4. **[Coordination Layer](../architecture/COORDINATION_LAYER.md)** - Simulation orchestration
 5. **[Service Integration](../architecture/SERVICE_INTEGRATION.md)** - Complete service adoption
+
+**Client Refactoring:**
+1. **[Action Generator Framework](CLIENT_REFACTORING_REPORT.md#phase-1)** - 10 specialized generators
+2. **[Simulation Orchestrator](../architecture/SIMULATION_ORCHESTRATOR.md)** - 5 orchestration modules
+3. **[LLM Utilities Layer](../architecture/LLM_UTILITIES_LAYER.md)** - 5 LLM management modules
 
 ## Quick Links
 

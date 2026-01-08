@@ -28,6 +28,7 @@ def mock_context():
         server=MagicMock(),
         logger=MagicMock(),
         client_id="test_client",
+        round_id="test_round_id",
         llm=MagicMock(),
         news_service=MagicMock(),
     )
@@ -184,7 +185,7 @@ def test_factory_list_action_types(mock_context):
     action_types = factory.list_action_types()
 
     assert isinstance(action_types, list)
-    assert len(action_types) == 9  # We have 9 action types
+    assert len(action_types) == 10  # We have 10 action types (including reply)
     assert "post" in action_types
     assert "follow" in action_types
 

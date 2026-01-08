@@ -1,0 +1,172 @@
+"""
+Batch Handler for processing LLM calls in scatter/gather pattern.
+
+This module provides generic batch processing functionality for LLM calls,
+implementing the scatter/gather pattern for optimal performance.
+"""
+
+import logging
+from typing import Any, List, Tuple, Optional
+
+import ray
+
+
+class BatchHandler:
+    """
+    Handles batch processing of LLM futures using scatter/gather pattern.
+    
+    The scatter/gather pattern:
+    - Scatter: Fire off all LLM calls immediately without waiting
+    - Gather: Wait once for all LLM results simultaneously (ray.get on list)
+    
+    This preserves parallelism for best performance.
+    """
+    
+    def __init__(self, logger: Optional[logging.Logger] = None):
+        """
+        Initialize the BatchHandler.
+        
+        Args:
+            logger: Logger instance for debugging
+        """
+        self.logger = logger or logging.getLogger(__name__)
+    
+    def gather_futures(self, futures: List[Any]) -> List[Any]:
+        """
+        Gather multiple LLM futures in parallel.
+        
+        Uses ray.get() to wait for all futures simultaneously,
+        maintaining the scatter/gather pattern for performance.
+        
+        Args:
+            futures: List of Ray ObjectRef futures
+            
+        Returns:
+            List of results in the same order as futures
+        """
+        if not futures:
+            return []
+        
+        self.logger.debug(f"Gathering {len(futures)} LLM futures in parallel")
+        
+        try:
+            results = ray.get(futures)
+            self.logger.debug(f"Successfully gathered {len(results)} results")
+            return results
+        except Exception as e:
+            self.logger.error(f"Error gathering futures: {e}")
+            # Return None for each future on error
+            return [None] * len(futures)
+    
+    def gather_with_metadata(
+        self, futures_with_metadata: List[Tuple[Any, dict]]
+    ) -> List[Tuple[Any, dict]]:
+        """
+        Gather futures while preserving associated metadata.
+        
+        This is useful when you need to track additional information
+        about each LLM call (e.g., agent_id, cluster_id, etc.).
+        
+        Args:
+            futures_with_metadata: List of tuples (future, metadata_dict)
+            
+        Returns:
+            List of tuples (result, metadata_dict) in the same order
+        """
+        if not futures_with_metadata:
+            return []
+        
+        # Separate futures and metadata
+        futures = [item[0] for item in futures_with_metadata]
+        metadata_list = [item[1] for item in futures_with_metadata]
+        
+        self.logger.debug(f"Gathering {len(futures)} LLM futures with metadata")
+        
+        # Gather all futures
+        results = self.gather_futures(futures)
+        
+        # Combine results with metadata
+        return list(zip(results, metadata_list))
+    
+    def batch_process(
+        self,
+        items: List[Tuple],
+        process_fn: callable,
+        batch_size: Optional[int] = None,
+    ) -> List[Any]:
+        """
+        Process items in batches with a custom processing function.
+        
+        This is useful for rate limiting or memory management when
+        dealing with large numbers of LLM calls.
+        
+        Args:
+            items: List of items to process
+            process_fn: Function that takes a batch and returns results
+            batch_size: Optional batch size (None = process all at once)
+            
+        Returns:
+            List of results from all batches combined
+        """
+        if not items:
+            return []
+        
+        if batch_size is None or batch_size >= len(items):
+            # Process everything in one batch
+            return process_fn(items)
+        
+        # Process in batches
+        results = []
+        for i in range(0, len(items), batch_size):
+            batch = items[i : i + batch_size]
+            self.logger.debug(f"Processing batch {i // batch_size + 1}: {len(batch)} items")
+            batch_results = process_fn(batch)
+            results.extend(batch_results)
+        
+        return results
+    
+    def gather_with_timeout(
+        self, futures: List[Any], timeout: Optional[float] = None
+    ) -> List[Any]:
+        """
+        Gather futures with an optional timeout.
+        
+        Args:
+            futures: List of Ray ObjectRef futures
+            timeout: Optional timeout in seconds (None = no timeout)
+            
+        Returns:
+            List of results, with None for any that timed out
+        """
+        if not futures:
+            return []
+        
+        self.logger.debug(
+            f"Gathering {len(futures)} futures with timeout={timeout}s"
+            if timeout
+            else f"Gathering {len(futures)} futures (no timeout)"
+        )
+        
+        try:
+            if timeout:
+                results = ray.get(futures, timeout=timeout)
+            else:
+                results = ray.get(futures)
+            return results
+        except ray.exceptions.GetTimeoutError:
+            self.logger.warning(f"Timeout gathering futures after {timeout}s")
+            # Try to get what we can
+            ready_futures, _ = ray.wait(futures, num_returns=len(futures), timeout=0)
+            results = []
+            for future in futures:
+                if future in ready_futures:
+                    try:
+                        results.append(ray.get(future, timeout=0))
+                    except:
+                        results.append(None)
+                else:
+                    results.append(None)
+            return results
+        except Exception as e:
+            self.logger.error(f"Error gathering futures: {e}")
+            return [None] * len(futures)
