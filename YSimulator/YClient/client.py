@@ -248,6 +248,13 @@ class SimulationClient(ActionExecutorMixin):
         # The framework is now the sole implementation (legacy handlers removed)
         self._action_generator_factory = None
 
+        # Initialize simulation orchestrator (Phase 2 refactoring)
+        self._simulator = None
+        self._agent_scheduler = None
+        self._batch_processor = None
+        self._lifecycle_manager = None
+        self._round_executor = None
+
         self.logger.info(
             "Simulation client initialized",
             extra={
@@ -315,6 +322,106 @@ class SimulationClient(ActionExecutorMixin):
         )
 
         return ActionGeneratorFactory(context)
+
+    def _initialize_simulation_orchestrator(self):
+        """
+        Initialize the simulation orchestrator with all required components.
+
+        This is part of Phase 2 refactoring to extract simulation orchestration logic
+        into dedicated modules. Creates instances of:
+        - AgentScheduler: Selects active agents for each round
+        - BatchProcessor: Processes LLM calls in parallel (scatter/gather)
+        - LifecycleManager: Handles agent lifecycle (churn, follows, new agents)
+        - RoundExecutor: Executes simulation for a single round
+        - Simulator: Main coordination of simulation loop
+        """
+        from YSimulator.YClient.simulation import (
+            AgentScheduler,
+            BatchProcessor,
+            LifecycleManager,
+            RoundExecutor,
+            Simulator,
+        )
+
+        # Initialize AgentScheduler
+        self._agent_scheduler = AgentScheduler(
+            agent_profiles=self.agent_profiles,
+            hourly_activity=self.hourly_activity,
+            activity_profiles=self.activity_profiles,
+            archetypes_enabled=self.archetypes_enabled,
+            archetype_distribution=self.archetype_distribution,
+            churn_enabled=self.churn_enabled,
+            server=self.server,
+            logger=self.logger,
+        )
+
+        # Initialize BatchProcessor
+        self._batch_processor = BatchProcessor(
+            server=self.server,
+            client_id=self.client_id,
+            llm=self.llm,
+            enable_sentiment=self.enable_sentiment,
+            enable_toxicity=self.enable_toxicity,
+            enable_emotions=self.enable_emotions,
+            perspective_api_key=self.perspective_api_key,
+            logger=self.logger,
+        )
+
+        # Initialize LifecycleManager
+        self._lifecycle_manager = LifecycleManager(
+            server=self.server,
+            client_id=self.client_id,
+            agent_profiles=self.agent_profiles,
+            config_path=self.config_path,
+            probability_of_daily_follow=self.probability_of_daily_follow,
+            churn_enabled=self.churn_enabled,
+            churn_probability=self.churn_probability,
+            inactivity_threshold=self.inactivity_threshold,
+            churn_percentage=self.churn_percentage,
+            new_agents_enabled=self.new_agents_enabled,
+            percentage_new_agents=self.percentage_new_agents,
+            probability_new_agents=self.probability_new_agents,
+            logger=self.logger,
+        )
+
+        # Initialize RoundExecutor
+        self._round_executor = RoundExecutor(
+            agent_profiles=self.agent_profiles,
+            server=self.server,
+            client_id=self.client_id,
+            logger=self.logger,
+            agent_downcast=self.agent_downcast,
+            actions_likelihood=self.actions_likelihood,
+            select_action_fn=self.__select_action,
+            determine_agent_type_fn=self._determine_agent_type,
+            handle_reply_to_mention_fn=self._handle_reply_to_mention,
+            dispatch_action_with_generator_fn=self._dispatch_action_with_generator,
+            process_secondary_follows_fn=self._process_secondary_follows,
+        )
+
+        # Initialize Simulator
+        self._simulator = Simulator(
+            server=self.server,
+            client_id=self.client_id,
+            agent_profiles=self.agent_profiles,
+            config_path=self.config_path,
+            num_days=self.num_days,
+            num_slots_per_day=self.num_slots_per_day,
+            heartbeat_interval=self.heartbeat_interval,
+            agent_scheduler=self._agent_scheduler,
+            batch_processor=self._batch_processor,
+            lifecycle_manager=self._lifecycle_manager,
+            round_executor=self._round_executor,
+            logger=self.logger,
+            parse_network_edges_fn=self._parse_network_edges,
+            load_and_create_social_network_fn=self._load_and_create_social_network,
+            create_action_generator_factory_fn=self._create_action_generator_factory,
+            log_action_fn=self._log_action,
+            log_hourly_summary_fn=self._log_hourly_summary,
+            log_daily_summary_fn=self._log_daily_summary,
+        )
+
+        self.logger.info("Simulation orchestrator initialized (Phase 2)")
 
     def _setup_logging(self):
         """Set up JSON logging for the client actor with gzip compression."""
@@ -616,299 +723,21 @@ class SimulationClient(ActionExecutorMixin):
         """
         Main simulation loop for the client.
 
-        This method:
-        1. Registers agents with the server
-        2. Registers the client
-        3. Runs the simulation loop until completion or max days reached
-        4. Sends periodic heartbeats to prevent being marked as stale
-        5. Notifies server on completion
+        This method delegates to the Simulator class (Phase 2 refactoring).
+        The simulator handles:
+        1. Agent and client registration
+        2. Network loading
+        3. Main simulation loop execution
+        4. Heartbeat management
+        5. Lifecycle operations
+        6. Completion notification
         """
-        # Register agents with the server
-        start_time = time.time()
-        self.logger.info(f" Registering {len(self.agent_profiles)} agents with server...")
+        # Initialize simulation orchestrator if not already done
+        if self._simulator is None:
+            self._initialize_simulation_orchestrator()
 
-        registration_result = ray.get(
-            self.server.register_agents.remote(self.agent_profiles, client_id=self.client_id)
-        )
-        reg_time = (time.time() - start_time) * 1000
-
-        self.logger.info(
-            "Agents registered with server",
-            extra={"extra_data": {**registration_result, "execution_time_ms": reg_time}},
-        )
-        self.logger.info(f" Agent registration complete: {registration_result}")
-
-        # Register client with the server, passing num_days for informational purposes
-        client_reg = ray.get(self.server.register_client.remote(self.client_id, self.num_days))
-
-        # Validate registration response has all required fields
-        required_fields = ["registered", "start_day", "start_slot"]
-        if not isinstance(client_reg, dict):
-            raise RuntimeError(f"Client registration failed: expected dict, got {type(client_reg)}")
-
-        missing_fields = [f for f in required_fields if f not in client_reg]
-        if missing_fields:
-            raise RuntimeError(f"Client registration response missing fields: {missing_fields}")
-
-        if not client_reg["registered"]:
-            raise RuntimeError(f"Client registration failed: {client_reg}")
-
-        # Server tells us where to start - we count from here
-        start_day = client_reg["start_day"]
-        start_slot = client_reg["start_slot"]
-
-        # Check if we should load the social network topology from network.csv
-        # This works regardless of when the client joins (multi-client scenarios)
-        # Try client-specific network file first, then fall back to generic
-        network_csv_path = self.config_path / f"{self.client_id}_network.csv"
-        if not network_csv_path.exists():
-            network_csv_path = self.config_path / "network.csv"
-
-        if network_csv_path.exists():
-            # First, parse the network edges from CSV
-            self.logger.info(
-                f"[{self.client_id}] Checking if social network needs to be loaded from {network_csv_path.name}..."
-            )
-            edges = self._parse_network_edges(network_csv_path)
-
-            if edges:
-                # Ask server if any of these edges already exist in the database
-                edges_exist = ray.get(self.server.check_network_edges_exist.remote(edges))
-
-                if not edges_exist:
-                    self.logger.info(
-                        f"[{self.client_id}] Loading social network topology from {network_csv_path.name}..."
-                    )
-                    self._load_and_create_social_network(network_csv_path)
-                else:
-                    self.logger.info("Network already loaded (edges exist in database)")
-                    self.logger.info(f" Social network already loaded, skipping")
-            else:
-                self.logger.warning(f"No valid edges found in {network_csv_path.name}")
-        else:
-            self.logger.info("No network.csv found, skipping social network creation")
-
-        # Calculate our personal max_day for local tracking
-        # num_days=0 means infinite simulation
-        max_day = start_day + self.num_days if self.num_days > 0 else float("inf")
-        max_day_str = "∞" if max_day == float("inf") else str(max_day)
-
-        self.logger.info(
-            "Client registered with server",
-            extra={
-                "extra_data": {
-                    "start_day": start_day,
-                    "start_slot": start_slot,
-                    "num_days": self.num_days,
-                    "max_day": max_day,
-                }
-            },
-        )
-        self.logger.info(
-            f"[{self.client_id}] Client registered. Starting at day {start_day}, slot {start_slot}. "
-            f"Will run for {self.num_days if self.num_days > 0 else '∞'} days (until day {max_day_str})."
-        )
-
-        slot_count = 0
-        last_heartbeat_time = time.time()
-
-        # Track active agents per day for daily follow evaluation
-        current_day = start_day
-        active_agents_today = set()  # Set of agent IDs active during current day
-
-        try:
-            while True:
-                # Send heartbeat periodically (configurable interval, default: 5 seconds)
-                if time.time() - last_heartbeat_time > self.heartbeat_interval:
-                    ray.get(self.server.heartbeat.remote(self.client_id))
-                    last_heartbeat_time = time.time()
-
-                instruction = ray.get(self.server.get_instruction.remote(self.client_id))
-
-                if instruction.status == "WAIT":
-                    time.sleep(1)
-                    continue
-
-                # Check if we've reached our personal maximum day (client-side tracking)
-                if self.num_days > 0 and instruction.day >= max_day:
-                    self.logger.info(
-                        "Reached maximum days (client-side check)",
-                        extra={
-                            "extra_data": {
-                                "final_day": instruction.day,
-                                "start_day": start_day,
-                                "num_days": self.num_days,
-                                "total_slots": slot_count,
-                            }
-                        },
-                    )
-                    self.logger.info(
-                        f"[{self.client_id}] Completed {self.num_days} days "
-                        f"(day {start_day} to {instruction.day - 1}). Total slots: {slot_count}"
-                    )
-                    break
-
-                # Process Logic
-                sim_start = time.time()
-                actions, active_agent_ids = self._simulate(
-                    instruction.day, instruction.slot, instruction.recent_post_ids
-                )
-                sim_time = (time.time() - sim_start) * 1000
-
-                # Track active agents for this day
-                active_agents_today.update(active_agent_ids)
-
-                # Check if this is the last slot of the day (end of day)
-                is_last_slot = instruction.slot == self.num_slots_per_day - 1
-                day_changed = instruction.day != current_day
-
-                # Evaluate daily follows at the end of each day
-                if (
-                    (is_last_slot or day_changed)
-                    and self.probability_of_daily_follow > 0
-                    and active_agents_today
-                ):
-                    self.logger.info(
-                        f"End of day {current_day}: Evaluating daily follows for {len(active_agents_today)} active agents, probability={self.probability_of_daily_follow}"
-                    )
-                    daily_follow_actions = self._evaluate_daily_follows(
-                        active_agents_today, instruction.day
-                    )
-                    if daily_follow_actions:
-                        actions.extend(daily_follow_actions)
-                        self.logger.info(f"Added {len(daily_follow_actions)} daily follow actions")
-
-                    # Reset for next day
-                    active_agents_today = set()
-                    current_day = instruction.day
-
-                # Evaluate churn at the end of each day
-                if (is_last_slot or day_changed) and self.churn_enabled:
-                    try:
-                        self.logger.info(
-                            f"End of day {current_day}: Evaluating churn (enabled={self.churn_enabled})"
-                        )
-                        churn_stats = self._evaluate_churn()
-                        self.logger.info(
-                            f"Churn evaluation complete: inactive={churn_stats['inactive_agents']}, candidates={churn_stats['candidates']}, churned={churn_stats['churned']}"
-                        )
-                        if churn_stats["churned"] > 0:
-                            self.logger.info(
-                                f"Churn evaluation: {churn_stats['churned']} agents churned out of {churn_stats['candidates']} candidates ({churn_stats['inactive_agents']} inactive)"
-                            )
-                            # Invalidate churned agents cache after new churns
-                            self._churned_agents_cache_valid = False
-                    except Exception as e:
-                        self.logger.error(
-                            f"Error evaluating churn: {e}",
-                            extra={"extra_data": {"error": str(e)}},
-                        )
-
-                # Evaluate new agents at the end of each day
-                if (is_last_slot or day_changed) and self.new_agents_enabled:
-                    try:
-                        self.logger.info(
-                            f"End of day {current_day}: Evaluating new agents (enabled={self.new_agents_enabled})"
-                        )
-                        # Get current round_id from server
-                        current_round_id = ray.get(self.server.get_current_round_id.remote())
-                        new_agents_count = self._evaluate_new_agents(current_round_id)
-                        self.logger.info(
-                            f"New agents evaluation complete: {new_agents_count} agents added"
-                        )
-                        if new_agents_count > 0:
-                            self.logger.info(
-                                f"New agents evaluation: {new_agents_count} agents added to population"
-                            )
-                    except Exception as e:
-                        self.logger.error(
-                            f"Error evaluating new agents: {e}",
-                            extra={"extra_data": {"error": str(e)}},
-                        )
-
-                # At end of day, save updated agent interests from server
-                if is_last_slot or day_changed:
-                    try:
-                        # Get updated interests from server
-                        updated_interests = ray.get(
-                            self.server.get_updated_agent_interests.remote()
-                        )
-                        if updated_interests:
-                            self._save_updated_agent_population(updated_interests)
-                    except Exception as e:
-                        self.logger.error(
-                            f"Error saving updated agent interests: {e}",
-                            extra={"extra_data": {"error": str(e)}},
-                        )
-
-                # Log individual actions before submission
-                for action in actions:
-                    # Get agent username from agent_id
-                    agent_profile = next(
-                        (a for a in self.agent_profiles if a.id == action.agent_id), None
-                    )
-                    agent_name = agent_profile.username if agent_profile else str(action.agent_id)
-
-                    # Normalize action type to method name (lowercase)
-                    method_name = action.action_type.lower()
-
-                    # Estimate execution time based on simulation time divided by number of actions
-                    # This is an approximation since we don't track individual action times
-                    execution_time = (sim_time / 1000.0) / len(actions) if len(actions) > 0 else 0
-
-                    # All actions that reach this point are considered successful
-                    self._log_action(
-                        agent_name,
-                        method_name,
-                        execution_time,
-                        True,
-                        instruction.day,
-                        instruction.slot,
-                    )
-
-                # Log hourly summary after processing all actions for this slot
-                self._log_hourly_summary(instruction.day, instruction.slot)
-
-                # Log daily summary if this is the end of a day
-                if is_last_slot:
-                    self._log_daily_summary(instruction.day)
-
-                # Submit
-                submit_start = time.time()
-                ray.get(self.server.submit_actions.remote(self.client_id, actions))
-                submit_time = (time.time() - submit_start) * 1000
-
-                slot_count += 1
-
-                self.logger.info(
-                    "Slot completed",
-                    extra={
-                        "extra_data": {
-                            "day": instruction.day,
-                            "slot": instruction.slot,
-                            "num_actions": len(actions),
-                            "simulation_time_ms": sim_time,
-                            "submit_time_ms": submit_time,
-                        }
-                    },
-                )
-
-                self.logger.info(
-                    f"[{self.client_id}] Day {instruction.day} Slot {instruction.slot} -> "
-                    f"Submitted {len(actions)} actions."
-                )
-
-        finally:
-            # Notify server that this client has completed all activities
-            try:
-                ray.get(self.server.complete_client.remote(self.client_id))
-                self.logger.info("Notified server of completion")
-                self.logger.info(f" Simulation complete. Server notified.")
-            except Exception as e:
-                self.logger.warning(
-                    f"Failed to notify server of completion: {e}",
-                    extra={"extra_data": {"error": str(e)}},
-                )
+        # Delegate to simulator
+        self._simulator.run(calculate_opinion_updates_fn=self._calculate_opinion_updates)
 
     def _determine_agent_type(self, agent_profile: AgentProfile) -> str:
         """
