@@ -119,24 +119,33 @@ class NetworkLoader:
         
         for i in range(0, len(edges), batch_size):
             batch = edges[i : i + batch_size]
+            batch_num = i // batch_size + 1
+            total_batches = (len(edges) + batch_size - 1) // batch_size
             
             try:
-                # Send batch to server
-                result = ray.get(
-                    self.server.create_follow_relationships_batch.remote(batch, client_id=self.client_id)
+                # Send batch to server using the correct method name
+                batch_count = ray.get(
+                    self.server.add_follow_relationships_batch.remote(batch, client_id=self.client_id)
                 )
                 
-                if result:
-                    success_count += len(batch)
+                success_count += batch_count
+                
+                if batch_count == len(batch):
                     self.logger.info(
-                        f"Successfully created {len(batch)} follow relationships "
-                        f"(batch {i // batch_size + 1}/{(len(edges) + batch_size - 1) // batch_size})"
+                        f"Successfully created {batch_count} follow relationships "
+                        f"(batch {batch_num}/{total_batches})"
+                    )
+                elif batch_count > 0:
+                    failed_count += len(batch) - batch_count
+                    self.logger.warning(
+                        f"Partial batch success: {batch_count}/{len(batch)} follow relationships created "
+                        f"(batch {batch_num}/{total_batches})"
                     )
                 else:
                     failed_count += len(batch)
                     self.logger.warning(
                         f"Failed to create batch of {len(batch)} follow relationships "
-                        f"(batch {i // batch_size + 1}/{(len(edges) + batch_size - 1) // batch_size})"
+                        f"(batch {batch_num}/{total_batches})"
                     )
             
             except Exception as e:
