@@ -124,7 +124,6 @@ class ShareProcessor(BaseActionProcessor):
                 for topic_id, new_opinion in action.updated_opinions.items():
                     self.services.add_agent_opinion(
                         agent_id=str(action.agent_id),
-                        round_id=context.current_round_id,
                         topic_id=topic_id,
                         opinion=new_opinion,
                         id_interacted_with=parent_author_id,

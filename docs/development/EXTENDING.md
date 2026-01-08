@@ -24,17 +24,25 @@ Adding a new action requires modifications to:
 
 ## Architecture Review
 
-### Client Architecture (Updated)
+### Client Architecture (Updated - Post Phase 1 Refactoring)
 ```
-SimulationClient (Ray Actor) extends ActionExecutorMixin
+SimulationClient (Ray Actor)
 ├── run() - Main simulation loop
 ├── _execute_slot() - Execute one time slot
-├── ActionExecutorMixin - Action handling methods
-│   ├── _handle_post_action()
-│   ├── _handle_read_action()
-│   ├── _handle_comment_action()
-│   ├── _handle_share_action()
-│   └── _handle_follow_action()
+├── _dispatch_action_with_generator() - ✅ NEW: Unified action dispatch
+├── action_generators/ - ✅ NEW: Modular action generation framework
+│   ├── factory.py - Generator routing (10 action types)
+│   ├── base_generator.py - Abstract base with opinion dynamics
+│   ├── post_generator.py - POST action generation
+│   ├── comment_generator.py - COMMENT with opinion dynamics
+│   ├── read_generator.py - READ with reactions
+│   ├── follow_generator.py - FOLLOW decisions
+│   ├── share_generator.py - SHARE with LLM commentary
+│   ├── share_link_generator.py - SHARE_LINK with topic extraction
+│   ├── search_generator.py - SEARCH with reactions
+│   ├── image_generator.py - IMAGE posts
+│   ├── cast_generator.py - CAST actions
+│   └── reply_generator.py - ✅ REPLY-TO-MENTION (refactored)
 ├── actions/ - Action implementation modules
 │   ├── llm_actions.py - LLM-powered action generation
 │   └── rule_based_actions.py - Rule-based action generation
@@ -66,9 +74,9 @@ OrchestratorServer (Ray Actor)
     └── interest_manager.py
 ```
 
-### Action Flow (Modern Architecture)
+### Action Flow (Modern Architecture - Post Phase 1)
 ```
-Client Agent → ActionExecutorMixin → submit_action() → Server
+Client Agent → ActionGeneratorFactory → Generator → submit_action() → Server
                                                          ↓
                                             DatabaseServiceAdapter
                                                          ↓
@@ -588,46 +596,97 @@ def _execute_slot(self, day: int, slot: int):
 3. **Activity selector**: Update action probabilities/logic if needed
 4. **Main loop**: Add routing to your handler in `_execute_slot()`
 
-#### Example: Complete Share Action Integration
+#### Example: Complete Share Action Integration (Updated - January 2026)
+
+**Note**: As of January 2026, action handlers have been refactored into dedicated generator classes. Below shows the new pattern:
 
 ```python
-# 1. In action_executor.py (ActionExecutorMixin)
-def _handle_share_action(self, agent, agent_type, day, slot, pending_llm_shares, actions):
-    """Handle share action for an agent."""
-    # Get recommended posts
-    posts = self._get_recommended_posts(agent)
-    if not posts:
-        return
+# 1. In action_generators/share_generator.py (NEW)
+class ShareGenerator(BaseActionGenerator):
+    """Handles SHARE actions with LLM commentary support."""
     
-    # Select post to share (first one for simplicity)
-    post_to_share = posts[0]
-    
-    if agent_type == "llm":
-        # Async LLM call
-        agent_attrs = self._extract_agent_attrs(agent)
-        future = generate_llm_share_async(
-            self.llm, agent.cluster, post_to_share["content"], agent_attrs
-        )
-        pending_llm_shares.append((
-            agent.id, agent.cluster, post_to_share["id"], future
-        ))
-    else:
-        # Rule-based: immediate
-        comment = generate_rule_based_share(agent.cluster, post_to_share["content"])
-        actions.append(ActionDTO(
-            agent_id=agent.id,
-            cluster_id=agent.cluster,
-            action_type="SHARE",
-            content=comment,
-            target_post_id=post_to_share["id"]
-        ))
+    def generate(self, agent, target, agent_type):
+        """Generate share action for an agent."""
+        # Get recommended posts
+        posts = self.server.get_recommended_posts.remote(
+            self.context.client_id, agent.id
+        ).get()
+        
+        if not posts:
+            return [], [], {}
+        
+        # Select post to share (first one for simplicity)
+        post_to_share = posts[0]
+        
+        if agent_type == "llm":
+            # Async LLM call for personalized commentary
+            agent_attrs = self._extract_agent_attrs(agent)
+            future = generate_llm_share_async(
+                self.context.llm, agent.cluster, 
+                post_to_share["content"], agent_attrs,
+                post_to_share["author_name"]
+            )
+            pending_calls = [(
+                agent.id, agent.cluster, post_to_share["id"], future, "SHARE"
+            )]
+            return [], pending_calls, {}
+        else:
+            # Rule-based: immediate reshare
+            immediate_actions = [ActionDTO(
+                agent_id=agent.id,
+                cluster_id=agent.cluster,
+                action_type="SHARE",
+                content=post_to_share["content"],  # No commentary
+                target_post_id=post_to_share["id"]
+            )]
+            return immediate_actions, [], {}
 
 # 2. In actions/llm_actions.py
-def generate_llm_share_async(llm_handle, cluster_id, content, attrs):
-    """Generate LLM share comment asynchronously."""
-    return llm_handle.generate_share_comment.remote(cluster_id, content, attrs)
+def generate_llm_share_async(llm_handle, cluster_id, content, attrs, author_name):
+    """Generate LLM share commentary asynchronously."""
+    return llm_handle.generate_share_commentary.remote(
+        cluster_id, content, attrs, author_name
+    )
 
-# 3. In actions/rule_based_actions.py  
+# 3. In LLM_interactions/llm_service.py
+def generate_share_commentary(self, cluster_id, post_content, agent_attrs, author_name):
+    """Generate personalized share commentary using LLM."""
+    # Build persona from agent attributes
+    persona = self._build_persona(agent_attrs)
+    
+    # Get prompt from prompts.json
+    system_prompt = self.prompts_config["generate_share_commentary"]["system_template"]
+    user_prompt = self.prompts_config["generate_share_commentary"]["user_template"]
+    
+    # Fill in placeholders
+    system_text = system_prompt.format(
+        persona=persona, 
+        toxicity=self._get_toxicity_instruction(agent_attrs)
+    )
+    user_text = user_prompt.format(
+        author_name=author_name,
+        post_content=post_content
+    )
+    
+    # Call LLM
+    commentary = self.llm_client.generate(system_text, user_text, max_tokens=50)
+    return commentary[:200]  # Max 200 chars
+
+# 4. In action_generators/factory.py
+class ActionGeneratorFactory:
+    """Routes action types to appropriate generators."""
+    
+    def get_generator(self, action_type: str) -> BaseActionGenerator:
+        generators = {
+            "share": ShareGenerator,
+            "post": PostGenerator,
+            "comment": CommentGenerator,
+            # ... other generators
+        }
+        generator_class = generators.get(action_type.lower())
+        if not generator_class:
+            raise ValueError(f"No generator for action type: {action_type}")
+        return generator_class(self.context)  
 def generate_rule_based_share(cluster_id, content):
     """Generate simple share comment."""
     return random.choice(["Check this out!", "Interesting!", "Worth reading"])
@@ -1617,11 +1676,15 @@ YSimulator has evolved to support a modern, modular architecture for extending a
 
 ### Modern Approach (Recommended)
 
-1. **Client Side**: Use modular action system
-   - Add action generation functions to `actions/llm_actions.py` or `actions/rule_based_actions.py`
-   - Create handler method in `ActionExecutorMixin` (`action_executor.py`)
-   - Integrate into main execution loop in `client.py`
-   - Use scatter-gather pattern for parallel LLM calls
+1. **Client Side**: Use Action Generator Framework (Updated January 2026 - Phase 1 Complete)
+   - Create new generator class in `action_generators/` (e.g., `my_action_generator.py`)
+   - Extend `BaseActionGenerator` abstract class
+   - Implement `generate(agent, target, agent_type)` method
+   - Add generator to `ActionGeneratorFactory` routing
+   - Use opinion dynamics helpers from base class for consistency
+   - Action automatically integrated via factory pattern
+   - **Current Generators** (10 total): POST, COMMENT, READ, FOLLOW, SHARE, SHARE_LINK, SEARCH, IMAGE, CAST, REPLY
+   - **Example**: See `reply_generator.py` for complete generator implementation with LLM/rule-based paths
 
 2. **Server Side**: Use Repository/Service pattern
    - Define interface in `repositories/base_repository.py`
@@ -1631,12 +1694,13 @@ YSimulator has evolved to support a modern, modular architecture for extending a
    - Use service in server handler methods
 
 3. **Benefits**:
-   - ✅ Better testability with mocked dependencies
-   - ✅ Clear separation of concerns
+   - ✅ Better testability with isolated generators and mocked dependencies
+   - ✅ Clear separation of concerns (action generation vs execution)
    - ✅ Parallel LLM execution (10x faster for large populations)
    - ✅ Support for multiple storage backends
-   - ✅ Easier to maintain and extend
+   - ✅ Easier to maintain and extend (single responsibility per generator)
    - ✅ Archetype-aware action selection
+   - ✅ Opinion dynamics helpers shared across all generators
 
 ### Legacy Approach (Still Supported)
 

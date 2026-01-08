@@ -20,6 +20,7 @@ from typing import Optional
 import ray
 
 from YSimulator.YClient.action_executor import ActionExecutorMixin
+from YSimulator.YClient.action_generators import ActionContext, ActionGeneratorFactory
 from YSimulator.YClient.actions import (
     generate_image_post_async,
     generate_llm_follow_async,
@@ -243,6 +244,10 @@ class SimulationClient(ActionExecutorMixin):
                             f"Failed to register feed for page {agent.username}: {e}"
                         )
 
+        # Initialize action generator factory (Phase 1 refactoring - COMPLETED)
+        # The framework is now the sole implementation (legacy handlers removed)
+        self._action_generator_factory = None
+
         self.logger.info(
             "Simulation client initialized",
             extra={
@@ -253,6 +258,63 @@ class SimulationClient(ActionExecutorMixin):
                 }
             },
         )
+
+    def _create_action_generator_factory(self, day: int, slot: int, recent_posts: list):
+        """
+        Create action generator factory for the current simulation context.
+
+        This is part of Phase 1 refactoring to extract action generation logic
+        into pluggable generators. The factory pattern enables clean separation
+        of action generation from simulation orchestration.
+
+        Args:
+            day: Current simulation day
+            slot: Current time slot
+            recent_posts: List of recent post UUIDs for reactions
+
+        Returns:
+            ActionGeneratorFactory: Configured factory for generating actions
+        """
+        # Get current round_id for opinion dynamics tracking
+        round_id = ray.get(self.server.get_current_round_id.remote())
+
+        # Build action context with all dependencies
+        context = ActionContext(
+            day=day,
+            slot=slot,
+            recent_posts=recent_posts,
+            server=self.server,
+            logger=self.logger,
+            client_id=self.client_id,
+            round_id=round_id,
+            llm=self.llm,
+            news_service=self.news_service,
+            activity_profiles=self.activity_profiles,
+            actions_likelihood=self.actions_likelihood,
+            recsys_settings={
+                "recsys_mode": self.recsys_mode,
+                "recsys_n_posts": self.recsys_n_posts,
+                "max_length_thread_reading": self.max_length_thread_reading,
+            },
+            opinion_dynamics_config=(
+                self.opinion_dynamics_config if hasattr(self, "opinion_dynamics_config") else None
+            ),
+            extract_agent_attrs_fn=self._extract_agent_attrs,
+            annotate_action_fn=self._annotate_action_content,
+            is_opinion_dynamics_enabled_fn=self._is_opinion_dynamics_enabled,
+            map_opinion_to_group_fn=(
+                self._map_opinion_to_group if hasattr(self, "_map_opinion_to_group") else None
+            ),
+            infer_page_agent_opinion_fn=(
+                self._infer_page_agent_opinion
+                if hasattr(self, "_infer_page_agent_opinion")
+                else None
+            ),
+            get_opinions_for_post_fn=self._get_opinions_for_post,
+            calculate_opinion_updates_fn=self._calculate_opinion_updates,
+        )
+
+        return ActionGeneratorFactory(context)
 
     def _setup_logging(self):
         """Set up JSON logging for the client actor with gzip compression."""
@@ -335,6 +397,7 @@ class SimulationClient(ActionExecutorMixin):
         Delegates to activity_selector module.
         """
         from YSimulator.YClient.activity_selector import parse_activity_profiles
+
         return parse_activity_profiles(activity_profiles_config, self.logger)
 
     def _sample_agents_by_archetype(self, available_agents, num_active):
@@ -343,6 +406,7 @@ class SimulationClient(ActionExecutorMixin):
         Delegates to activity_selector module.
         """
         from YSimulator.YClient.activity_selector import sample_agents_by_archetype
+
         return sample_agents_by_archetype(
             available_agents, num_active, self.archetype_distribution, self.logger
         )
@@ -353,6 +417,7 @@ class SimulationClient(ActionExecutorMixin):
         Delegates to agent_manager module.
         """
         from YSimulator.YClient.agent_manager import create_agents_from_config
+
         return create_agents_from_config(agent_config, self.logger)
 
     def _parse_network_edges(self, network_csv_path: Path) -> list:
@@ -872,6 +937,7 @@ class SimulationClient(ActionExecutorMixin):
         Delegates to activity_selector module.
         """
         from YSimulator.YClient.activity_selector import select_action
+
         return select_action(
             agent_profile,
             recent_posts,
@@ -885,6 +951,7 @@ class SimulationClient(ActionExecutorMixin):
         Delegates to agent_manager module.
         """
         from YSimulator.YClient.agent_manager import extract_agent_attrs
+
         return extract_agent_attrs(
             agent,
             self._validate_and_extract_interests,
@@ -898,6 +965,7 @@ class SimulationClient(ActionExecutorMixin):
         Delegates to agent_manager module.
         """
         from YSimulator.YClient.agent_manager import save_updated_agent_population
+
         save_updated_agent_population(
             updated_interests,
             self.config_path,
@@ -911,6 +979,7 @@ class SimulationClient(ActionExecutorMixin):
         Delegates to agent_manager module.
         """
         from YSimulator.YClient.agent_manager import validate_and_extract_interests
+
         return validate_and_extract_interests(interests)
 
     def _log_action(
@@ -1062,884 +1131,74 @@ class SimulationClient(ActionExecutorMixin):
                 f"Annotated action content: has_sentiment={bool(annotations.get('sentiment'))}, has_toxicity={bool(annotations.get('toxicity'))}, has_emotions={bool(annotations.get('emotions'))}, hashtags={len(annotations.get('hashtags', []))}, mentions={len(annotations.get('mentions', []))}"
             )
 
-    def _handle_post_action(self, agent, agent_type, day, slot, pending_llm_posts, actions):
-        """Handle post action for an agent."""
-        if agent_type == "llm":
-            # LLM: Fire off async call (don't wait for result yet)
-            agent_attrs = self._extract_agent_attrs(agent)
-            selected_topic = agent_attrs.get("topic")  # Get the sampled topic
-            future = generate_llm_post_async(self.llm, agent.cluster, day, slot, agent_attrs)
-            pending_llm_posts.append((agent.id, agent.cluster, future, selected_topic))
-        else:
-            # Rule-based: Execute immediately with sampled topic
-            # Sample a topic from agent's interests (same as LLM agents)
-            agent_attrs = self._extract_agent_attrs(agent)
-            selected_topic = agent_attrs.get("topic")
-            action = generate_rule_based_post(agent.id, agent.cluster)
-            # Attach the sampled topic to the action
-            if selected_topic:
-                action.topic = selected_topic
-            # Annotate rule-based post
-            self._annotate_action_content(action)
-            actions.append(action)
-
-    def _handle_comment_action(
-        self, agent, agent_type, pending_llm_reactions, actions, rule_based_interactions
-    ):
-        """Handle comment action for an agent."""
-        # Use recsys to get recommended posts to comment on
-        agent_recsys_mode = getattr(agent, "recsys_type", None) or self.recsys_mode
-        recsys_class = RECSYS_CLASS_MAP.get(agent_recsys_mode, RandomOrder)
-        recsys = recsys_class(n_posts=self.recsys_n_posts)
-
-        # Get recommended posts from server
-        recommended_posts = recsys.get_recommendations(
-            self.server, agent.id, client_id=self.client_id
-        )
-
-        if not recommended_posts:
-            return  # No posts available to comment on
-
-        # Select one post randomly from recommendations
-        target_post = random.choice(recommended_posts)
-
-        if agent_type == "llm":
-            # LLM: Get the post content and ask for a comment
-            post_data = ray.get(self.server.get_post.remote(target_post, client_id=self.client_id))
-            if post_data:
-                post_content = post_data.get("tweet", "")
-                author_id = post_data.get("user_id")
-                # Get author username
-                author_name = "Someone"
-                if author_id:
-                    author_user = ray.get(
-                        self.server.get_user.remote(author_id, client_id=self.client_id)
-                    )
-                    if author_user:
-                        author_name = author_user.get("username", "Someone")
-
-                # Get thread context (preceding posts/comments in chronological order)
-                thread_context = ray.get(
-                    self.server.get_thread_context.remote(
-                        target_post, self.max_length_thread_reading, client_id=self.client_id
-                    )
-                )
-
-                # Get agent attributes including opinions on post topics
-                agent_attrs = self._extract_agent_attrs(agent)
-
-                # Get opinions for the topics in this post
-                opinion_info = self._get_opinions_for_post(agent.id, target_post)
-                if opinion_info["topics"]:
-                    # Add opinion information to agent attrs
-                    agent_attrs["post_topics"] = opinion_info["topics"]
-                    agent_attrs["post_opinions"] = opinion_info["opinions"]
-                    agent_attrs["post_opinion_values"] = opinion_info["opinion_values"]
-
-                # Fire off async LLM call to generate comment with agent attributes, author name, and thread context
-                future = self.llm.generate_comment.remote(
-                    agent.cluster, post_content, agent_attrs, author_name, thread_context
-                )
-                pending_llm_reactions.append((agent.id, agent.cluster, target_post, future))
-        else:
-            # Rule-based: Just comment "COMMENT"
-            action = generate_rule_based_comment(agent.id, agent.cluster, target_post)
-            # Annotate rule-based comment
-            self._annotate_action_content(action)
-
-            # Calculate opinion updates for rule-based comment
-            post_data = ray.get(self.server.get_post.remote(target_post, client_id=self.client_id))
-            if post_data:
-                updated_opinions = self._calculate_opinion_updates(agent.id, target_post, post_data)
-                if updated_opinions:
-                    action.updated_opinions = updated_opinions
-
-                # Track for secondary follow (rule-based comment)
-                rule_based_interactions.append(
-                    (
-                        agent.id,
-                        agent.cluster,
-                        post_data.get("user_id"),
-                        post_data.get("tweet", ""),
-                        False,
-                    )
-                )
-
-            actions.append(action)
-
-    def _handle_read_action(
-        self, agent, agent_type, pending_llm_reactions, actions, rule_based_interactions
-    ):
-        """Handle read action for an agent."""
-        # Use recsys to get recommended posts
-        agent_recsys_mode = getattr(agent, "recsys_type", None) or self.recsys_mode
-        recsys_class = RECSYS_CLASS_MAP.get(agent_recsys_mode, RandomOrder)
-        recsys = recsys_class(n_posts=self.recsys_n_posts)
-
-        # Get recommended posts from server
-        recommended_posts = recsys.get_recommendations(
-            self.server, agent.id, client_id=self.client_id
-        )
-
-        if not recommended_posts:
-            return  # No posts available to read
-
-        # Select one post randomly from recommendations
-        target_post = random.choice(recommended_posts)
-
-        if agent_type == "llm":
-            # LLM: Get the post content and ask for a reaction decision
-            post_data = ray.get(self.server.get_post.remote(target_post, client_id=self.client_id))
-            if post_data:
-                post_content = post_data.get("tweet", "")
-                # Get agent attributes
-                agent_attrs = self._extract_agent_attrs(agent)
-
-                # Get opinions for the topics in this post
-                opinion_info = self._get_opinions_for_post(agent.id, target_post)
-                if opinion_info["topics"]:
-                    # Add opinion information to agent attrs
-                    agent_attrs["post_topics"] = opinion_info["topics"]
-                    agent_attrs["post_opinions"] = opinion_info["opinions"]
-                    agent_attrs["post_opinion_values"] = opinion_info["opinion_values"]
-
-                # Fire off async LLM call to decide reaction with agent attributes
-                future = generate_llm_read_async(self.llm, agent.cluster, post_content, agent_attrs)
-                pending_llm_reactions.append((agent.id, agent.cluster, target_post, future))
-        else:
-            # Rule-based: Randomly choose LIKE, DISLIKE (ANGRY), or IGNORE
-            # Consider opinion when choosing reaction
-            post_data = ray.get(self.server.get_post.remote(target_post, client_id=self.client_id))
-            if post_data:
-                # Get opinions for the topics in this post
-                opinion_info = self._get_opinions_for_post(agent.id, target_post)
-
-                # Generate reaction based on opinion if available
-                if opinion_info["topics"] and opinion_info["opinion_values"]:
-                    # Calculate average opinion
-                    avg_opinion = sum(opinion_info["opinion_values"].values()) / len(
-                        opinion_info["opinion_values"]
-                    )
-
-                    # Choose reaction based on opinion
-                    # Higher opinion -> more likely to LIKE, lower -> more likely to express negative reaction
-                    if avg_opinion > 0.6:
-                        # Positive opinion - mostly LIKE
-                        reaction_type = random.choices(
-                            ["LIKE", "LOVE", "IGNORE"], weights=[0.6, 0.3, 0.1]
-                        )[0]
-                    elif avg_opinion < 0.4:
-                        # Negative opinion - more likely to express disagreement or ignore
-                        reaction_type = random.choices(
-                            ["ANGRY", "SAD", "IGNORE"], weights=[0.4, 0.2, 0.4]
-                        )[0]
-                    else:
-                        # Neutral - balanced reactions
-                        reaction_type = random.choices(
-                            ["LIKE", "IGNORE", "ANGRY"], weights=[0.4, 0.4, 0.2]
-                        )[0]
-
-                    if reaction_type != "IGNORE":
-                        action = ActionDTO(
-                            agent.id, agent.cluster, reaction_type, target_post_id=target_post
-                        )
-                        actions.append(action)
-                        # Track for secondary follow
-                        rule_based_interactions.append(
-                            (
-                                agent.id,
-                                agent.cluster,
-                                post_data.get("user_id"),
-                                post_data.get("tweet", ""),
-                                False,
-                            )
-                        )
-                else:
-                    # No opinion information, use default rule-based behavior
-                    action = generate_rule_based_read(agent.id, agent.cluster, target_post)
-                    if action:  # Only add if not IGNORE
-                        actions.append(action)
-                        # Track for secondary follow (rule-based read)
-                        rule_based_interactions.append(
-                            (
-                                agent.id,
-                                agent.cluster,
-                                post_data.get("user_id"),
-                                post_data.get("tweet", ""),
-                                False,
-                            )
-                        )
-                if post_data:
-                    rule_based_interactions.append(
-                        (
-                            agent.id,
-                            agent.cluster,
-                            post_data.get("user_id"),
-                            post_data.get("tweet", ""),
-                            False,
-                        )
-                    )
-
-    def _handle_follow_action(self, agent, agent_type, pending_llm_follows, actions):
-        """Handle follow action for an agent."""
-        # Use follow recsys to get suggested users
-        agent_frecsys_mode = getattr(agent, "frecsys_type", None) or "random"
-        frecsys_class = FOLLOW_RECSYS_CLASS_MAP.get(agent_frecsys_mode, RandomFollowRecSys)
-        frecsys = frecsys_class(n_neighbors=10, leaning_bias=1)
-
-        # Get follow suggestions from server
-        suggested_users = frecsys.get_follow_suggestions(
-            self.server, agent.id, client_id=self.client_id
-        )
-
-        if not suggested_users:
-            return  # No users available to follow
-
-        if agent_type == "llm":
-            # LLM: Ask to decide which user to follow
-            future = generate_llm_follow_async(self.llm, agent.cluster, suggested_users)
-            pending_llm_follows.append((agent.id, agent.cluster, future))
-        else:
-            # Rule-based: Randomly select one user to follow
-            target_user = random.choice(suggested_users)
-            action = generate_rule_based_follow(agent.id, agent.cluster, target_user)
-            actions.append(action)
-
-    def _handle_share_link_action(self, agent, agent_type, day, slot, pending_llm_posts, actions):
-        """Handle share_link action for page agents (news sharing)."""
-        self.logger.info(
-            f"share_link action: agent={agent.username}, is_page={agent.is_page}, feed_url={agent.feed_url[:50] if agent.feed_url else None}, news_service={self.news_service is not None}"
-        )
-
-        if agent.is_page != 1:
-            self.logger.warning(f"share_link skipped: {agent.username} is not a page agent")
-            return
-
-        if not agent.feed_url:
-            self.logger.warning(f"share_link skipped: {agent.username} has no feed_url")
-            return
-
-        if not self.news_service:
-            self.logger.warning(f"share_link skipped: {agent.username} - news_service is None")
-            return
-
-        # Get an article from this page's specific feed
-        try:
-            self.logger.info(f"Page {agent.username} fetching article from {agent.feed_url[:50]}")
-            article_future = self.news_service.get_article_from_feed.remote(agent.feed_url)
-            article = ray.get(article_future)
-
-            if article:
-                self.logger.info(
-                    f"Page {agent.username} got article: {article.get('title', 'NO TITLE')[:50]}"
-                )
-
-                # Verify the article's website_id matches the page's user_id
-                article_website_id = article.get("website_id")
-                if article_website_id:
-                    normalized_article_id = str(article_website_id).lower()
-                    normalized_agent_id = str(agent.id).lower()
-                    if normalized_article_id != normalized_agent_id:
-                        self.logger.warning(
-                            f"Page {agent.username} attempted to share from wrong feed. "
-                            f"Page ID: {agent.id}, Article Website ID: {article_website_id}"
-                        )
-                        return
-
-                if agent_type == "llm":
-                    # LLM page posts news with commentary
-                    self.logger.info(f"LLM Page {agent.username} generating news post async")
-                    future, article_id = generate_news_post_async(
-                        self.news_service, self.llm, agent.cluster, article, agent.username
-                    )
-                    self.logger.info(f"LLM Page {agent.username} got article_id: {article_id}")
-
-                    # Extract and store article topics after article is saved
-                    if article_id:
-                        try:
-                            # Check if article already has topics (avoid duplicate extraction)
-                            existing_topics = ray.get(
-                                self.server.get_article_topics.remote(article_id)
-                            )
-
-                            if not existing_topics:
-                                # Extract topics using LLM (client-side)
-                                self.logger.info(
-                                    f"Extracting topics for article {article_id}: {article.get('title', '')[:50]}..."
-                                )
-                                topics_future = self.llm.extract_topics_from_article.remote(
-                                    article.get("title", ""), article.get("summary", "")
-                                )
-                                topic_names = ray.get(topics_future)
-                                self.logger.info(f"LLM extracted topics: {topic_names}")
-
-                                if topic_names:
-                                    # Store topics in database (server-side)
-                                    topic_ids = ray.get(
-                                        self.server.store_article_topics.remote(
-                                            article_id, topic_names[:2]  # Up to 2 topics
-                                        )
-                                    )
-                                    if topic_ids:
-                                        self.logger.info(
-                                            f"Stored {len(topic_ids)} topics for article {article_id}"
-                                        )
-
-                                        # CLIENT-SIDE: Infer and store opinions for LLM page agent on article topics
-                                        if self._is_opinion_dynamics_enabled():
-                                            article_content = f"{article.get('title', '')} {article.get('summary', '')}"
-                                            for topic_name in topic_names[:2]:
-                                                try:
-                                                    opinion_value = self._infer_page_agent_opinion(
-                                                        agent.id, article_content, topic_name
-                                                    )
-                                                    # Get topic ID
-                                                    topic_id = ray.get(
-                                                        self.server.get_topic_id_by_name.remote(
-                                                            topic_name
-                                                        )
-                                                    )
-                                                    if topic_id:
-                                                        # Store opinion in database
-                                                        ray.get(
-                                                            self.server.add_agent_opinion.remote(
-                                                                agent.id,
-                                                                topic_id,
-                                                                opinion_value,
-                                                                None,
-                                                                None,
-                                                            )
-                                                        )
-                                                        self.logger.info(
-                                                            f"Stored opinion {opinion_value:.3f} for LLM page {agent.username} on topic '{topic_name}'"
-                                                        )
-                                                except Exception as e:
-                                                    self.logger.warning(
-                                                        f"Failed to infer/store opinion for topic '{topic_name}': {e}"
-                                                    )
-                            else:
-                                self.logger.info(
-                                    f"Article {article_id} already has {len(existing_topics)} topics"
-                                )
-                                # CLIENT-SIDE: Ensure opinions exist for existing article topics
-                                if self._is_opinion_dynamics_enabled():
-                                    article_content = (
-                                        f"{article.get('title', '')} {article.get('summary', '')}"
-                                    )
-                                    # existing_topics is List[str] of topic IDs
-                                    for topic_id in existing_topics:
-                                        try:
-                                            # Get topic name from ID
-                                            topic_name = ray.get(
-                                                self.server.get_topic_name_from_id.remote(topic_id)
-                                            )
-                                            if not topic_name:
-                                                continue
-
-                                            # Check if opinion already exists
-                                            existing_opinion = ray.get(
-                                                self.server.get_latest_agent_opinion.remote(
-                                                    agent.id, topic_id
-                                                )
-                                            )
-                                            if existing_opinion is None:
-                                                opinion_value = self._infer_page_agent_opinion(
-                                                    agent.id, article_content, topic_name
-                                                )
-                                                ray.get(
-                                                    self.server.add_agent_opinion.remote(
-                                                        agent.id,
-                                                        topic_id,
-                                                        opinion_value,
-                                                        None,
-                                                        None,
-                                                    )
-                                                )
-                                                self.logger.info(
-                                                    f"Stored opinion {opinion_value:.3f} for LLM page {agent.username} on existing topic '{topic_name}'"
-                                                )
-                                        except Exception as e:
-                                            self.logger.warning(
-                                                f"Failed to ensure opinion for existing topic: {e}"
-                                            )
-                        except Exception as e:
-                            self.logger.warning(
-                                f"Failed to extract/store topics for article {article_id}: {e}"
-                            )
-                            import traceback
-
-                            self.logger.warning(f"Traceback: {traceback.format_exc()}")
-
-                    pending_llm_posts.append((agent.id, agent.cluster, future, article_id))
-                else:
-                    # Rule-based page posts news directly
-                    self.logger.info(f"Rule-based Page {agent.username} generating news post")
-                    action, article_id = generate_rule_based_news_post(
-                        agent.id, agent.cluster, article, self.news_service
-                    )
-                    self.logger.info(
-                        f"Rule-based Page {agent.username} got article_id: {article_id}"
-                    )
-
-                    # Extract and store article topics after article is saved
-                    if article_id:
-                        try:
-                            # Check if article already has topics (avoid duplicate extraction)
-                            existing_topics = ray.get(
-                                self.server.get_article_topics.remote(article_id)
-                            )
-
-                            if not existing_topics:
-                                # Extract topics using LLM (client-side)
-                                self.logger.info(
-                                    f"Extracting topics for article {article_id}: {article.get('title', '')[:50]}..."
-                                )
-                                topics_future = self.llm.extract_topics_from_article.remote(
-                                    article.get("title", ""), article.get("summary", "")
-                                )
-                                topic_names = ray.get(topics_future)
-                                self.logger.info(f"LLM extracted topics: {topic_names}")
-
-                                if topic_names:
-                                    # Store topics in database (server-side)
-                                    topic_ids = ray.get(
-                                        self.server.store_article_topics.remote(
-                                            article_id, topic_names[:2]  # Up to 2 topics
-                                        )
-                                    )
-                                    if topic_ids:
-                                        self.logger.info(
-                                            f"Stored {len(topic_ids)} topics for article {article_id}"
-                                        )
-
-                                        # CLIENT-SIDE: Infer and store opinions for rule-based page agent on article topics
-                                        if self._is_opinion_dynamics_enabled():
-                                            article_content = f"{article.get('title', '')} {article.get('summary', '')}"
-                                            for topic_name in topic_names[:2]:
-                                                try:
-                                                    opinion_value = self._infer_page_agent_opinion(
-                                                        agent.id, article_content, topic_name
-                                                    )
-                                                    # Get topic ID
-                                                    topic_id = ray.get(
-                                                        self.server.get_topic_id_by_name.remote(
-                                                            topic_name
-                                                        )
-                                                    )
-                                                    if topic_id:
-                                                        # Store opinion in database
-                                                        ray.get(
-                                                            self.server.add_agent_opinion.remote(
-                                                                agent.id,
-                                                                topic_id,
-                                                                opinion_value,
-                                                                None,
-                                                                None,
-                                                            )
-                                                        )
-                                                        self.logger.info(
-                                                            f"Stored opinion {opinion_value:.3f} for rule-based page {agent.username} on topic '{topic_name}'"
-                                                        )
-                                                except Exception as e:
-                                                    self.logger.warning(
-                                                        f"Failed to infer/store opinion for topic '{topic_name}': {e}"
-                                                    )
-
-                            else:
-                                self.logger.info(
-                                    f"Article {article_id} already has {len(existing_topics)} topics"
-                                )
-                                # CLIENT-SIDE: Ensure opinions exist for existing article topics
-                                if self._is_opinion_dynamics_enabled():
-                                    article_content = (
-                                        f"{article.get('title', '')} {article.get('summary', '')}"
-                                    )
-                                    # existing_topics is List[str] of topic IDs
-                                    for topic_id in existing_topics:
-                                        try:
-                                            # Get topic name from ID
-                                            topic_name = ray.get(
-                                                self.server.get_topic_name_from_id.remote(topic_id)
-                                            )
-                                            if not topic_name:
-                                                continue
-
-                                            # Check if opinion already exists
-                                            existing_opinion = ray.get(
-                                                self.server.get_latest_agent_opinion.remote(
-                                                    agent.id, topic_id
-                                                )
-                                            )
-                                            if existing_opinion is None:
-                                                opinion_value = self._infer_page_agent_opinion(
-                                                    agent.id, article_content, topic_name
-                                                )
-                                                ray.get(
-                                                    self.server.add_agent_opinion.remote(
-                                                        agent.id,
-                                                        topic_id,
-                                                        opinion_value,
-                                                        None,
-                                                        None,
-                                                    )
-                                                )
-                                                self.logger.info(
-                                                    f"Stored opinion {opinion_value:.3f} for rule-based page {agent.username} on existing topic '{topic_name}'"
-                                                )
-                                        except Exception as e:
-                                            self.logger.warning(
-                                                f"Failed to ensure opinion for existing topic: {e}"
-                                            )
-                        except Exception as e:
-                            self.logger.warning(
-                                f"Failed to extract/store topics for article {article_id}: {e}"
-                            )
-                            import traceback
-
-                            self.logger.warning(f"Traceback: {traceback.format_exc()}")
-
-                    action.article_id = article_id
-                    # Annotate rule-based news post
-                    self._annotate_action_content(action)
-                    actions.append(action)
-            else:
-                self.logger.warning(f"Page {agent.username} got no article from feed")
-        except Exception as e:
-            self.logger.warning(f"Share link action failed for page {agent.username}: {e}")
-            import traceback
-
-            self.logger.warning(f"Traceback: {traceback.format_exc()}")
-
-    def _handle_share_action(self, agent, agent_type, target, actions):
-        """Handle share action (reshare existing post)."""
-        # For now, only rule-based agents share
-        if agent_type == "rule_based" and target:
-            action = generate_rule_based_share(agent.id, agent.cluster, target)
-            # Calculate opinion updates for the share
-            post_data = ray.get(self.server.get_post.remote(target, client_id=self.client_id))
-            if post_data:
-                updated_opinions = self._calculate_opinion_updates(agent.id, target, post_data)
-                if updated_opinions:
-                    action.updated_opinions = updated_opinions
-            actions.append(action)
-
-    def _handle_search_action(self, agent, agent_type, pending_llm_reactions, actions):
-        """
-        Handle search action for an agent.
-
-        Agent searches for posts on a topic of interest:
-        1. Sample a topic from agent's interests (same as post action)
-        2. Search for up to 10 recent posts on that topic from other users
-        3. Randomly sample one of the found posts
-        4. Decide whether to comment, share, or react to it
-        5. Execute the selected action
-        """
-        self.logger.info(
-            f"search action initiated: agent={agent.username}, type={agent_type}",
-            extra={
-                "extra_data": {
-                    "agent_id": agent.id,
-                    "agent_type": agent_type,
-                    "archetype": agent.archetype,
-                }
-            },
-        )
-
-        # Sample a topic from agent's interests
-        agent_attrs = self._extract_agent_attrs(agent)
-        selected_topic = agent_attrs.get("topic")
-
-        if not selected_topic:
-            # No topics available, skip search action
-            self.logger.debug(
-                f"search action skipped: no topics available for agent {agent.username}",
-                extra={"extra_data": {"agent_id": agent.id}},
-            )
-            return
-
-        self.logger.info(
-            f"search action: topic sampled '{selected_topic}' for agent {agent.username}",
-            extra={"extra_data": {"agent_id": agent.id, "topic": selected_topic}},
-        )
-
-        # Get topic_id from topic name
-        try:
-            topic_id = ray.get(self.server.get_topic_id_by_name.remote(selected_topic))
-            if not topic_id:
-                self.logger.debug(
-                    f"search action: topic '{selected_topic}' not found in database, skipping for agent {agent.username}",
-                    extra={"extra_data": {"agent_id": agent.id, "topic": selected_topic}},
-                )
-                return
-        except Exception as e:
-            self.logger.warning(
-                f"search action error: failed to get topic_id for '{selected_topic}' for agent {agent.username}: {e}",
-                extra={
-                    "extra_data": {"agent_id": agent.id, "topic": selected_topic, "error": str(e)}
-                },
-            )
-            return
-
-        # Search for posts on this topic (up to 10 recent posts from other users)
-        try:
-            found_posts = ray.get(
-                self.server.search_posts_by_topic.remote(
-                    topic_id, agent.id, limit=10, client_id=self.client_id
-                )
-            )
-        except Exception as e:
-            self.logger.warning(
-                f"search action error: failed to search posts for topic '{selected_topic}' for agent {agent.username}: {e}",
-                extra={
-                    "extra_data": {
-                        "agent_id": agent.id,
-                        "topic": selected_topic,
-                        "topic_id": topic_id,
-                        "error": str(e),
-                    }
-                },
-            )
-            return
-
-        if not found_posts:
-            # No posts found on this topic
-            self.logger.debug(
-                f"search action: no posts found for topic '{selected_topic}' for agent {agent.username}",
-                extra={
-                    "extra_data": {
-                        "agent_id": agent.id,
-                        "topic": selected_topic,
-                        "topic_id": topic_id,
-                    }
-                },
-            )
-            return
-
-        self.logger.info(
-            f"search action: found {len(found_posts)} posts on topic '{selected_topic}' for agent {agent.username}",
-            extra={
-                "extra_data": {
-                    "agent_id": agent.id,
-                    "topic": selected_topic,
-                    "posts_found": len(found_posts),
-                }
-            },
-        )
-
-        # Randomly sample one post from the found posts
-        target_post = random.choice(found_posts)
-
-        # Get the post content
-        try:
-            post_data = ray.get(self.server.get_post.remote(target_post, client_id=self.client_id))
-            if not post_data:
-                self.logger.warning(
-                    f"search action: post {target_post} not found for agent {agent.username}",
-                    extra={"extra_data": {"agent_id": agent.id, "target_post_id": target_post}},
-                )
-                return
-            post_content = post_data.get("tweet", "")
-            post_author_id = post_data.get("user_id", "unknown")
-        except Exception as e:
-            self.logger.warning(
-                f"search action error: failed to get post {target_post} for agent {agent.username}: {e}",
-                extra={
-                    "extra_data": {
-                        "agent_id": agent.id,
-                        "target_post_id": target_post,
-                        "error": str(e),
-                    }
-                },
-            )
-            return
-
-        self.logger.info(
-            f"search action: selected post {target_post} on topic '{selected_topic}' for agent {agent.username}",
-            extra={
-                "extra_data": {
-                    "agent_id": agent.id,
-                    "topic": selected_topic,
-                    "target_post_id": target_post,
-                    "post_author_id": post_author_id,
-                    "post_length": len(post_content),
-                }
-            },
-        )
-
-        if agent_type == "llm":
-            # LLM: Ask LLM to decide which action to perform (comment/share/react)
-            self.logger.info(
-                f"search action: LLM deciding engagement for agent {agent.username}",
-                extra={"extra_data": {"agent_id": agent.id, "target_post_id": target_post}},
-            )
-
-            # Get opinions for the topics in this post
-            opinion_info = self._get_opinions_for_post(agent.id, target_post)
-            if opinion_info["topics"]:
-                # Add opinion information to agent attrs
-                agent_attrs["post_topics"] = opinion_info["topics"]
-                agent_attrs["post_opinions"] = opinion_info["opinions"]
-                agent_attrs["post_opinion_values"] = opinion_info["opinion_values"]
-
-            future = generate_llm_search_action_async(
-                self.llm, agent.cluster, post_content, agent_attrs
-            )
-            pending_llm_reactions.append((agent.id, agent.cluster, target_post, future))
-        else:
-            # Rule-based: Randomly select action among comment, share, or react
-            possible_actions = ["comment", "share", "react"]
-            selected_action = random.choice(possible_actions)
-
-            self.logger.info(
-                f"search action: rule-based agent {agent.username} selected '{selected_action}' action",
-                extra={
-                    "extra_data": {
-                        "agent_id": agent.id,
-                        "selected_action": selected_action,
-                        "target_post_id": target_post,
-                    }
-                },
-            )
-
-            if selected_action == "comment":
-                action = generate_rule_based_comment(agent.id, agent.cluster, target_post)
-                # Calculate opinion updates for the comment
-                if post_data:
-                    updated_opinions = self._calculate_opinion_updates(
-                        agent.id, target_post, post_data
-                    )
-                    if updated_opinions:
-                        action.updated_opinions = updated_opinions
-            elif selected_action == "share":
-                action = generate_rule_based_share(agent.id, agent.cluster, target_post)
-                # Calculate opinion updates for the share
-                if post_data:
-                    updated_opinions = self._calculate_opinion_updates(
-                        agent.id, target_post, post_data
-                    )
-                    if updated_opinions:
-                        action.updated_opinions = updated_opinions
-            else:  # react
-                # Use basic reactions (simple positive/negative responses)
-                reaction_type = random.choice(BASIC_REACTIONS)
-                action = ActionDTO(
-                    agent.id, agent.cluster, reaction_type, target_post_id=target_post
-                )
-                self.logger.info(
-                    f"search action: rule-based agent {agent.username} reacting with {reaction_type}",
-                    extra={
-                        "extra_data": {
-                            "agent_id": agent.id,
-                            "reaction_type": reaction_type,
-                            "target_post_id": target_post,
-                        }
-                    },
-                )
-
-            # Annotate rule-based action if it has content
-            if hasattr(action, "content") and action.content:
-                self._annotate_action_content(action)
-            actions.append(action)
-
-            self.logger.info(
-                f"search action completed: rule-based action created for agent {agent.username}",
-                extra={
-                    "extra_data": {
-                        "agent_id": agent.id,
-                        "action_type": action.action_type,
-                        "target_post_id": target_post,
-                    }
-                },
-            )
-
-    def _handle_image_action(self, agent, agent_type, day, slot, pending_llm_posts, actions):
-        """Handle image post action - share an image with commentary."""
-        # Get a random image from the database
-        try:
-            image_data = ray.get(self.server.get_random_image.remote())
-
-            if not image_data:
-                self.logger.info(f"No images available for agent {agent.username} to share")
-                return
-
-            image_id = image_data.get("id")
-            article_id = image_data.get("article_id")
-
-            # Get topics associated with the article
-            topic_ids = []
-            topic_names = []
-            if article_id:
-                topic_ids = ray.get(self.server.get_article_topics.remote(article_id))
-                # Get topic names from interest table
-                for topic_id in topic_ids:
-                    interest = ray.get(self.server.get_interest_by_id.remote(topic_id))
-                    if interest:
-                        topic_names.append(interest.get("interest", ""))
-
-            if agent_type == "llm":
-                # LLM agent: Generate personalized commentary
-                agent_attrs = self._extract_agent_attrs(agent)
-                future, img_id = generate_image_post_async(
-                    self.server, self.llm, agent.cluster, image_data, topic_names, agent_attrs
-                )
-                # Store future along with image_id and topic_ids
-                pending_llm_posts.append((agent.id, agent.cluster, future, None, img_id, topic_ids))
-            else:
-                # Rule-based: Share with "IMAGE" text
-                action = generate_rule_based_image_post(agent.id, agent.cluster, image_id)
-                # Store topic_ids to be added after post creation
-                action.topic_ids = topic_ids
-                # Log the action details
-                self.logger.info(
-                    f"Rule-based image action created for agent {agent.username}: image_id={action.image_id if hasattr(action, 'image_id') else 'NOT SET'}, topics={len(topic_ids)}"
-                )
-                # Annotate content
-                self._annotate_action_content(action)
-                actions.append(action)
-
-        except Exception as e:
-            self.logger.error(f"Error handling image action for agent {agent.username}: {e}")
-            import traceback
-
-            traceback.print_exc()
-
-    def _handle_cast_action(self, agent, agent_type, day, slot, pending_llm_posts, actions):
-        """Handle cast/broadcast action (stub for future broadcast mechanism)."""
-        if agent_type == "llm":
-            future = generate_llm_post_async(self.llm, agent.cluster, day, slot)
-            pending_llm_posts.append((agent.id, agent.cluster, future, None))
-        else:
-            # Rule-based: Execute immediately with sampled topic
-            # Sample a topic from agent's interests (same as LLM agents)
-            agent_attrs = self._extract_agent_attrs(agent)
-            selected_topic = agent_attrs.get("topic")
-            action = generate_rule_based_post(agent.id, agent.cluster)
-            # Attach the sampled topic to the action
-            if selected_topic:
-                action.topic = selected_topic
-            # Annotate rule-based post
-            self._annotate_action_content(action)
-            actions.append(action)
-
     def _handle_reply_to_mention(self, agent, agent_type, pending_llm_reactions, actions):
         """
         Handle reply to mention for an agent.
-        Delegates to reply_handler module.
+        Uses the reply action generator framework for consistency.
         """
-        from YSimulator.YClient.reply_handler import handle_reply_to_mention
-        return handle_reply_to_mention(
-            agent,
-            agent_type,
-            pending_llm_reactions,
-            actions,
-            self.server,
-            self.client_id,
-            self.llm,
-            self.max_length_thread_reading,
-            self.logger,
-            self._extract_agent_attrs,
-            self._annotate_action_content,
+        # Use the reply generator via the action generator framework
+        immediate_actions, pending_calls, metadata = self._dispatch_action_with_generator(
+            "reply", agent, agent_type
         )
+        
+        # Add immediate actions (rule-based) to the actions list
+        actions.extend(immediate_actions)
+        
+        # Add pending LLM calls to the pending_llm_reactions list
+        pending_llm_reactions.extend(pending_calls)
+        
+        # Return mention_id if one was processed (for tracking)
+        return metadata.get("mention_id")
+
+    def _dispatch_action_with_generator(
+        self, action_type: str, agent: AgentProfile, agent_type: str, target=None
+    ) -> tuple:
+        """
+        Dispatch action using action generator framework.
+
+        This method is part of Phase 1 refactoring. It provides a clean interface
+        to generate actions using the new generator framework. The old _handle_*
+        methods are gradually being replaced by this approach.
+
+        Args:
+            action_type: Type of action to generate (e.g., "post", "comment", "read")
+            agent: Agent profile
+            agent_type: "llm" or "rule_based"
+            target: Optional target for the action (e.g., post UUID for reactions)
+
+        Returns:
+            tuple: (immediate_actions, pending_llm_calls, metadata)
+                immediate_actions: List of ActionDTO objects to submit immediately
+                pending_llm_calls: List of tuples for async LLM calls to gather later
+                metadata: Dict with debugging/tracking information
+        """
+        # Check if action_type is None (can happen from activity_selector)
+        if action_type is None:
+            self.logger.debug(f"Action type is None for agent {agent.username}, skipping")
+            return [], [], {"skipped": True, "reason": "action_type_none"}
+
+        # Update the generator factory's context with target if provided
+        if target:
+            self._action_generator_factory.context.target = target
+
+        # Get the appropriate generator for this action type
+        try:
+            generator = self._action_generator_factory.get_generator(action_type)
+        except ValueError as e:
+            self.logger.warning(f"No generator found for action type '{action_type}': {e}")
+            return [], [], {"error": str(e)}
+
+        # Check if generator can handle this agent
+        if not generator.can_generate(agent, agent_type):
+            self.logger.debug(
+                f"Generator {generator.__class__.__name__} cannot generate for agent {agent.username}"
+            )
+            return [], [], {"skipped": True, "reason": "cannot_generate"}
+
+        # Generate the action
+        result = generator.generate(agent, agent_type)
+
+        return result.actions, result.pending_llm_calls, result.metadata
 
     def _simulate(self, day: int, slot: int, recent_posts: list) -> list:
         """
@@ -2056,10 +1315,15 @@ class SimulationClient(ActionExecutorMixin):
 
         self.logger.info(f"[REPLY] Starting simulation for {len(active_agents)} active agents")
 
+        # Initialize action generator factory (Phase 1 refactoring - consolidated)
+        self._action_generator_factory = self._create_action_generator_factory(
+            day, slot, recent_posts
+        )
+
         # --- SCATTER PHASE: Select and dispatch actions ---
         for agent in active_agents:
-            # Determine agent type (llm or rule_based)
-            agent_type = "llm" if agent.llm else "rule_based"
+            # Determine agent type (llm or rule_based) with agent_downcast logic
+            agent_type = self._determine_agent_type(agent)
 
             # REPLY PIPELINE: Check for unreplied mentions and reply to one if present
             # This happens BEFORE the agent's normal actions
@@ -2096,37 +1360,42 @@ class SimulationClient(ActionExecutorMixin):
                         f"Page agent {agent.username} action {action_idx+1}/{num_actions}: type={action_type}, agent_type={agent_type}"
                     )
 
-                # Dispatch to appropriate action handler
-                if action_type == "post":
-                    self._handle_post_action(
-                        agent, agent_type, day, slot, pending_llm_posts, actions
-                    )
-                elif action_type == "comment":
-                    self._handle_comment_action(
-                        agent, agent_type, pending_llm_reactions, actions, rule_based_interactions
-                    )
-                elif action_type == "read":
-                    self._handle_read_action(
-                        agent, agent_type, pending_llm_reactions, actions, rule_based_interactions
-                    )
+                # Dispatch action using action generator framework
+                immediate_actions, pending_calls, metadata = (
+                    self._dispatch_action_with_generator(action_type, agent, agent_type, target)
+                )
+
+                # Add immediate actions
+                actions.extend(immediate_actions)
+
+                # Route pending LLM calls to appropriate lists
+                # The structure of pending_calls depends on action type
+                if action_type in ["post", "image", "cast", "share_link"]:
+                    pending_llm_posts.extend(pending_calls)
+                elif action_type in ["comment", "read", "search", "share"]:
+                    pending_llm_reactions.extend(pending_calls)
                 elif action_type == "follow":
-                    self._handle_follow_action(agent, agent_type, pending_llm_follows, actions)
-                elif action_type == "image":
-                    self._handle_image_action(
-                        agent, agent_type, day, slot, pending_llm_posts, actions
+                    pending_llm_follows.extend(pending_calls)
+
+                # Track rule-based interactions if metadata indicates it
+                if metadata.get("rule_based_interaction"):
+                    rb_interaction = metadata["rule_based_interaction"]
+                    # Need to fetch post data for secondary follow
+                    post_data = ray.get(
+                        self.server.get_post.remote(
+                            rb_interaction["target_post"], client_id=self.client_id
+                        )
                     )
-                elif action_type == "share_link":
-                    self._handle_share_link_action(
-                        agent, agent_type, day, slot, pending_llm_posts, actions
-                    )
-                elif action_type == "share":
-                    self._handle_share_action(agent, agent_type, target, actions)
-                elif action_type == "search":
-                    self._handle_search_action(agent, agent_type, pending_llm_reactions, actions)
-                elif action_type == "cast":
-                    self._handle_cast_action(
-                        agent, agent_type, day, slot, pending_llm_posts, actions
-                    )
+                    if post_data:
+                        rule_based_interactions.append(
+                            (
+                                rb_interaction["agent_id"],
+                                rb_interaction["cluster_id"],
+                                post_data.get("user_id"),
+                                post_data.get("tweet", ""),
+                                False,
+                            )
+                        )
 
         # --- GATHER PHASE: Wait for all LLM results in parallel ---
 
@@ -2232,13 +1501,14 @@ class SimulationClient(ActionExecutorMixin):
 
     def _gather_pending_llm_reactions(self, pending_llm_reactions: list, actions: list) -> list:
         """
-        Gather and resolve all pending LLM reaction/comment generation calls.
+        Gather and resolve all pending LLM reaction/comment/share generation calls.
 
         Args:
             pending_llm_reactions: List of tuples:
                 - (agent_id, cluster_id, target_post_id, future) for regular reactions/comments
                 - (agent_id, cluster_id, target_post_id, future, mention_id) for replies to mentions
-            actions: List to append resolved reaction/comment actions to
+                - (agent_id, cluster_id, target_post_id, future, "SHARE") for share with commentary
+            actions: List to append resolved reaction/comment/share actions to
 
         Returns:
             list: Secondary follow candidates [(agent_id, cluster_id, author_id, post_content, is_llm)]
@@ -2262,22 +1532,39 @@ class SimulationClient(ActionExecutorMixin):
         results = ray.get(futures)  # Blocks once for ALL reactions/comments
 
         for i, res_act in enumerate(results):
-            # Handle both 4-element and 5-element tuples
+            # Handle tuples of varying lengths:
+            # 4-element: (agent_id, cluster_id, target_post_id, future) - regular comment/reaction
+            # 5-element: (agent_id, cluster_id, target_post_id, future, mention_id_or_action_type)
+            #   - If 5th element is a UUID string -> mention_id (reply to mention)
+            #   - If 5th element is "SHARE" -> action_type (share with commentary)
             reaction_tuple = pending_llm_reactions[i]
             a_id = reaction_tuple[0]
             cid = reaction_tuple[1]
             target = reaction_tuple[2]
-            # Check if this is a reply to mention (5th element is mention_id)
-            mention_id = reaction_tuple[4] if len(reaction_tuple) > 4 else None
 
-            # Check if result is a comment (text) or a reaction type
+            # Check 5th element: mention_id or action_type
+            mention_id = None
+            action_type_override = None
+            if len(reaction_tuple) > 4:
+                fifth_element = reaction_tuple[4]
+                # Check if it's a UUID (mention_id) or action type string
+                if fifth_element == "SHARE":
+                    action_type_override = "SHARE"
+                else:
+                    # Assume it's a mention_id (UUID or other identifier)
+                    mention_id = fifth_element
+
+            # Check if result is a comment/share commentary (text) or a reaction type
             if res_act and res_act.upper() not in REACTION_TYPES:
-                # This is a comment text from LLM
+                # This is comment/share commentary text from LLM
+                # Determine action type: SHARE (with commentary) or COMMENT
+                determined_action_type = action_type_override if action_type_override else "COMMENT"
+
                 self.logger.debug(
-                    f"[REPLY] LLM generated comment for agent {a_id}: '{res_act[:50]}...' (is_mention_reply: {mention_id is not None})"
+                    f"[REPLY] LLM generated {determined_action_type} for agent {a_id}: '{res_act[:50]}...' (is_mention_reply: {mention_id is not None})"
                 )
 
-                # Annotate the comment text
+                # Annotate the text
                 annotations = annotate_text(
                     res_act,
                     enable_sentiment=self.enable_sentiment,
@@ -2287,10 +1574,10 @@ class SimulationClient(ActionExecutorMixin):
                     llm_handle=self.llm,
                 )
                 self.logger.info(
-                    f"LLM comment annotated for agent {a_id}: has_sentiment={bool(annotations.get('sentiment'))}, has_toxicity={bool(annotations.get('toxicity'))}, has_emotions={bool(annotations.get('emotions'))}, hashtags={len(annotations.get('hashtags', []))}, mentions={len(annotations.get('mentions', []))}"
+                    f"LLM {determined_action_type} annotated for agent {a_id}: has_sentiment={bool(annotations.get('sentiment'))}, has_toxicity={bool(annotations.get('toxicity'))}, has_emotions={bool(annotations.get('emotions'))}, hashtags={len(annotations.get('hashtags', []))}, mentions={len(annotations.get('mentions', []))}"
                 )
 
-                # Calculate opinion updates before creating action
+                # Calculate opinion updates
                 post_data = ray.get(self.server.get_post.remote(target, client_id=self.client_id))
                 updated_opinions = None
                 if post_data:
@@ -2299,7 +1586,7 @@ class SimulationClient(ActionExecutorMixin):
                 action = ActionDTO(
                     a_id,
                     cid,
-                    "COMMENT",
+                    determined_action_type,
                     content=res_act,
                     target_post_id=target,
                     annotations=annotations,
@@ -2317,7 +1604,7 @@ class SimulationClient(ActionExecutorMixin):
                         f"[REPLY] Successfully marked mention {mention_id} as replied (LLM)"
                     )
 
-                # Track for secondary follow (comment action)
+                # Track for secondary follow
                 if post_data:
                     secondary_follow_candidates.append(
                         (a_id, cid, post_data.get("user_id"), post_data.get("tweet", ""), True)
@@ -2493,13 +1780,15 @@ class SimulationClient(ActionExecutorMixin):
                     )
                 )
 
-                # Author must have an opinion on their own post's topics
+                # Check if author has opinion on topic
+                # If not, this is expected - opinion will be created during interaction
+                # The opinion dynamics model will handle cold_start properly
                 if author_opinion is None:
-                    self.logger.error(
-                        f"Data inconsistency: Author {parent_author_id} has no recorded opinion on topic "
-                        f"'{topic_name}' (topic_id: {topic_id}) in their own post {parent_post_id}. "
-                        f"This indicates the author posted about a topic they don't have in agent_opinion table. "
-                        f"Skipping opinion update for this topic."
+                    self.logger.debug(
+                        f"Author {parent_author_id} has no opinion yet on topic '{topic_name}' "
+                        f"(topic_id: {topic_id}) in their post {parent_post_id}. "
+                        f"Opinion will be created during this interaction with cold_start strategy. "
+                        f"Skipping opinion update calculation for now."
                     )
                     continue
 
@@ -2898,6 +2187,7 @@ class SimulationClient(ActionExecutorMixin):
         Delegates to churn_manager module.
         """
         from YSimulator.YClient.churn_manager import evaluate_churn
+
         return evaluate_churn(
             self.server,
             self.client_id,
@@ -2915,6 +2205,7 @@ class SimulationClient(ActionExecutorMixin):
         Delegates to agent_manager module.
         """
         from YSimulator.YClient.agent_manager import add_agent_to_population_file
+
         add_agent_to_population_file(
             agent,
             self.config_path,
@@ -2925,7 +2216,7 @@ class SimulationClient(ActionExecutorMixin):
     def _evaluate_new_agents(self, current_round_id: str) -> int:
         """
         Evaluate and create new agents at end of day.
-        
+
         Creates new agents by:
         1. Calculating available slots based on non-churned population
         2. For each slot, rolling probability to create agent
@@ -2933,41 +2224,42 @@ class SimulationClient(ActionExecutorMixin):
         4. Generating realistic name with Faker
         5. Batch registering with server
         6. Updating agent_population.json
-        
+
         Args:
             current_round_id: Current round UUID
-            
+
         Returns:
             int: Number of new agents created
         """
         if not self.new_agents_enabled:
             return 0
-            
+
         try:
-            from faker import Faker
             import uuid
-            
+
+            from faker import Faker
+
             # Count non-churned agents
             non_churned_agents = [a for a in self.agent_profiles if a.left_on is None]
             num_non_churned = len(non_churned_agents)
-            
+
             # Calculate available slots
             num_slots = int(num_non_churned * self.percentage_new_agents)
-            
+
             if num_slots == 0:
                 self.logger.info("No new agent slots available")
                 return 0
-            
+
             # Roll probability for each slot
             new_agents = []
             fake = Faker()
             existing_usernames = {a.username for a in self.agent_profiles}
-            
+
             for _ in range(num_slots):
                 if random.random() < self.probability_new_agents:
                     # Select random template
                     template = random.choice(non_churned_agents)
-                    
+
                     # Generate name based on template gender
                     gender = getattr(template, "gender", "male")
                     max_attempts = 10
@@ -2976,16 +2268,16 @@ class SimulationClient(ActionExecutorMixin):
                             name = fake.name_female()
                         else:
                             name = fake.name_male()
-                        
+
                         # Convert to username format
                         username = name.replace(" ", "_").replace(".", "_")
-                        
+
                         if username not in existing_usernames:
                             break
                     else:
                         # Fallback with UUID if can't find unique name
                         username = f"{name.replace(' ', '_')}_{str(uuid.uuid4())[:8]}"
-                    
+
                     # Create new agent from template
                     new_agent = AgentProfile(
                         id=str(uuid.uuid4()),
@@ -3007,29 +2299,31 @@ class SimulationClient(ActionExecutorMixin):
                         profile=getattr(template, "profile", ""),
                         action_likelihoods=getattr(template, "action_likelihoods", {}),
                     )
-                    
+
                     new_agents.append(new_agent)
                     existing_usernames.add(username)
-                    self.logger.info(f"Created new agent: {username} (template: {template.username})")
-            
+                    self.logger.info(
+                        f"Created new agent: {username} (template: {template.username})"
+                    )
+
             if not new_agents:
                 self.logger.info("No new agents created this evaluation")
                 return 0
-            
+
             # Batch register with server
             self.logger.info(f"Batch registering {len(new_agents)} new agents")
             ray.get(self.server.register_agents.remote(new_agents))
-            
+
             # Add to local agent_profiles
             self.agent_profiles.extend(new_agents)
-            
+
             # Update agent_population.json for persistence
             for agent in new_agents:
                 self._add_agent_to_population_file(agent)
-            
+
             self.logger.info(f"Successfully created and registered {len(new_agents)} new agents")
             return len(new_agents)
-            
+
         except Exception as e:
             self.logger.error(f"Error evaluating new agents: {e}", exc_info=True)
             return 0

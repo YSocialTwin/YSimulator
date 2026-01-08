@@ -200,7 +200,7 @@ class PostProcessor(BaseActionProcessor):
         article_content: Optional[str] = None
     ) -> None:
         """
-        Ensure agent has opinion on topic (delegates to services).
+        Ensure agent has opinion on topic (delegates to server).
         
         Args:
             agent_id: Agent identifier
@@ -208,27 +208,26 @@ class PostProcessor(BaseActionProcessor):
             topic_name: Topic name
             article_content: Optional article content for opinion inference
         """
-        # This is a helper method that calls the server's method
-        # We'll need to pass this through or have it available in services
-        # For now, we'll call it on services if available
-        if hasattr(self.services, '_ensure_agent_opinion_exists'):
-            self.services._ensure_agent_opinion_exists(
-                agent_id, topic_id, topic_name, article_content=article_content
-            )
+        # Services object is the server instance, which always has this method
+        # Remove conditional check to prevent silent failures
+        self.services._ensure_agent_opinion_exists(
+            agent_id, topic_id, topic_name, article_content=article_content
+        )
     
     def _update_agent_interest_counter(
         self, agent_id: str, topic: str, increment: int
     ) -> None:
         """
-        Update agent's interest counter (delegates to services).
+        Update agent's interest counter (delegates to server).
         
         Args:
             agent_id: Agent identifier
             topic: Topic name
             increment: Amount to increment
         """
-        if hasattr(self.services, '_update_agent_interest_counter'):
-            self.services._update_agent_interest_counter(agent_id, topic, increment)
+        # Services object is the server instance, which always has this method
+        # Remove conditional check to prevent silent failures
+        self.services._update_agent_interest_counter(agent_id, topic, increment)
     
     def _process_annotations(
         self,
@@ -239,7 +238,7 @@ class PostProcessor(BaseActionProcessor):
         is_comment: bool
     ) -> None:
         """
-        Process text annotations (delegates to services).
+        Process text annotations (delegates to server).
         
         Args:
             post_id: Post identifier
@@ -248,7 +247,8 @@ class PostProcessor(BaseActionProcessor):
             is_post: Whether this is a post
             is_comment: Whether this is a comment
         """
-        if hasattr(self.services, '_process_annotations'):
-            self.services._process_annotations(
-                post_id, agent_id, annotations, is_post, is_comment
-            )
+        # Services object is the server instance, which always has this method
+        # Remove conditional check to prevent silent failures
+        self.services._process_annotations(
+            post_id, agent_id, annotations, is_post, is_comment
+        )
