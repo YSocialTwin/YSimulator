@@ -115,7 +115,7 @@ class BatchProcessor:
                         self.logger.info(
                             f"LLM post for agent {a_id}: article_id={topic_or_article}, content_len={len(res_txt)}"
                         )
-                    except (ValueError, AttributeError):
+                    except ValueError:
                         # Not a valid UUID, treat as topic string
                         action.topic = topic_or_article
                         self.logger.info(

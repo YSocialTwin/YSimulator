@@ -235,7 +235,9 @@ class LifecycleManager:
                             break
                     else:
                         # Fallback with UUID if can't find unique name
-                        username = f"{name.replace(' ', '_')}_{str(uuid.uuid4())[:8]}"
+                        # Truncate name to ensure reasonable username length
+                        name_part = name.replace(" ", "_")[:20]
+                        username = f"{name_part}_{str(uuid.uuid4())[:8]}"
 
                     # Create new agent from template
                     new_agent = AgentProfile(

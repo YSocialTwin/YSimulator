@@ -66,7 +66,9 @@ class AgentScheduler:
         self._churned_agents_cache = set()
         self._churned_agents_cache_valid = False
 
-    def select_active_agents(self, slot: int) -> Tuple[List[AgentProfile], List[AgentProfile]]:
+    def select_active_agents(
+        self, slot: int
+    ) -> Tuple[List[AgentProfile], List[AgentProfile]]:
         """
         Select active agents for a given time slot.
 
