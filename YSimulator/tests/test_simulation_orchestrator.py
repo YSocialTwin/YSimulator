@@ -214,7 +214,6 @@ class TestRoundExecutor:
             actions_likelihood={},
             select_action_fn=MagicMock(),
             determine_agent_type_fn=MagicMock(),
-            handle_reply_to_mention_fn=MagicMock(),
             dispatch_action_with_generator_fn=MagicMock(return_value=([], [], {})),
             process_secondary_follows_fn=MagicMock(),
         )
