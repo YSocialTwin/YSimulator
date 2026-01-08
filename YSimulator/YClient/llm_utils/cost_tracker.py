@@ -5,8 +5,12 @@ This module provides optional cost tracking functionality for LLM calls,
 helping monitor token usage and API costs.
 """
 
+import json
 import logging
 from collections import defaultdict
+from datetime import datetime
+from logging.handlers import RotatingFileHandler
+from pathlib import Path
 from typing import Dict, Optional
 
 
@@ -24,6 +28,8 @@ class CostTracker:
         self,
         token_costs: Optional[Dict[str, float]] = None,
         logger: Optional[logging.Logger] = None,
+        log_file_path: Optional[Path] = None,
+        enable_file_logging: bool = True,
     ):
         """
         Initialize the CostTracker.
@@ -31,11 +37,51 @@ class CostTracker:
         Args:
             token_costs: Optional dict mapping LLM methods to cost per 1K tokens
             logger: Logger instance for debugging
+            log_file_path: Optional path to dedicated LLM usage log file
+            enable_file_logging: Whether to enable file logging (default: True)
         """
         self.call_counts = defaultdict(int)
         self.token_counts = defaultdict(int)
         self.token_costs = token_costs or {}
         self.logger = logger or logging.getLogger(__name__)
+        
+        # Set up dedicated file logging for LLM usage if enabled
+        self.usage_logger = None
+        if enable_file_logging and log_file_path:
+            self._setup_usage_logger(log_file_path)
+    
+    def _setup_usage_logger(self, log_file_path: Path) -> None:
+        """
+        Set up dedicated file logger for LLM usage statistics.
+        
+        Args:
+            log_file_path: Path to the LLM usage log file
+        """
+        # Ensure log directory exists
+        log_file_path.parent.mkdir(parents=True, exist_ok=True)
+        
+        # Create dedicated logger for LLM usage
+        self.usage_logger = logging.getLogger(f"YSimulator.LLMUsage.{id(self)}")
+        self.usage_logger.setLevel(logging.INFO)
+        self.usage_logger.propagate = False  # Don't propagate to parent
+        
+        # Remove any existing handlers
+        self.usage_logger.handlers = []
+        
+        # Create rotating file handler (10MB per file, keep 5 backups)
+        handler = RotatingFileHandler(
+            log_file_path,
+            maxBytes=10 * 1024 * 1024,
+            backupCount=5
+        )
+        
+        # Use JSON format for structured logging
+        class UsageFormatter(logging.Formatter):
+            def format(self, record: logging.LogRecord) -> str:
+                return record.getMessage()
+        
+        handler.setFormatter(UsageFormatter())
+        self.usage_logger.addHandler(handler)
     
     def record_call(
         self, method: str, input_tokens: int = 0, output_tokens: int = 0
@@ -49,12 +95,33 @@ class CostTracker:
             output_tokens: Number of output tokens
         """
         self.call_counts[method] += 1
-        self.token_counts[method] += input_tokens + output_tokens
+        total_tokens = input_tokens + output_tokens
+        self.token_counts[method] += total_tokens
         
         self.logger.debug(
             f"LLM call recorded: {method} "
-            f"(in={input_tokens}, out={output_tokens}, total={input_tokens + output_tokens})"
+            f"(in={input_tokens}, out={output_tokens}, total={total_tokens})"
         )
+        
+        # Log to dedicated usage file if enabled
+        if self.usage_logger:
+            log_entry = {
+                "timestamp": datetime.utcnow().isoformat(),
+                "method": method,
+                "input_tokens": input_tokens,
+                "output_tokens": output_tokens,
+                "total_tokens": total_tokens,
+                "cumulative_calls": self.call_counts[method],
+                "cumulative_tokens": self.token_counts[method],
+            }
+            
+            # Add cost if configured
+            if method in self.token_costs:
+                cost_per_1k = self.token_costs[method]
+                log_entry["cost"] = (total_tokens / 1000.0) * cost_per_1k
+                log_entry["cumulative_cost"] = self.get_estimated_cost(method)
+            
+            self.usage_logger.info(json.dumps(log_entry))
     
     def get_call_count(self, method: Optional[str] = None) -> int:
         """

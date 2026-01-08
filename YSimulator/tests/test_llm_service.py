@@ -14,7 +14,7 @@ from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 
-from YSimulator.YClient.llm_service import (
+from YSimulator.YClient.llm_utils import (
     LLMManager,
     BatchHandler,
     RetryHandler,

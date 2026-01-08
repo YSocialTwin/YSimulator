@@ -1,5 +1,5 @@
 """
-LLM Service Module for YClient.
+LLM Utilities Module for YClient.
 
 This module provides centralized LLM interaction management, including:
 - LLM request coordination
@@ -15,11 +15,11 @@ Extracted as part of Phase 3 refactoring to improve:
 - Monitoring (cost and usage tracking)
 """
 
-from YSimulator.YClient.llm_service.llm_manager import LLMManager
-from YSimulator.YClient.llm_service.batch_handler import BatchHandler
-from YSimulator.YClient.llm_service.retry_handler import RetryHandler
-from YSimulator.YClient.llm_service.response_parser import ResponseParser
-from YSimulator.YClient.llm_service.cost_tracker import CostTracker
+from YSimulator.YClient.llm_utils.llm_manager import LLMManager
+from YSimulator.YClient.llm_utils.batch_handler import BatchHandler
+from YSimulator.YClient.llm_utils.retry_handler import RetryHandler
+from YSimulator.YClient.llm_utils.response_parser import ResponseParser
+from YSimulator.YClient.llm_utils.cost_tracker import CostTracker
 
 __all__ = [
     "LLMManager",

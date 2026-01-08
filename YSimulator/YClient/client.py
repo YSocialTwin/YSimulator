@@ -365,6 +365,7 @@ class SimulationClient(ActionExecutorMixin):
             enable_emotions=self.enable_emotions,
             perspective_api_key=self.perspective_api_key,
             logger=self.logger,
+            cost_tracker=self.cost_tracker,  # Phase 3: Pass cost tracker
         )
 
         # Initialize LifecycleManager
@@ -497,6 +498,33 @@ class SimulationClient(ActionExecutorMixin):
         # Initialize tracking variables for hourly and daily summaries
         self.hourly_actions = []  # Track actions for current hour
         self.daily_actions = []  # Track actions for current day
+        
+        # Initialize cost tracker for LLM usage monitoring (Phase 3)
+        self._setup_cost_tracker()
+
+    def _setup_cost_tracker(self):
+        """Set up optional cost tracker for LLM usage monitoring."""
+        from YSimulator.YClient.llm_utils import CostTracker
+        
+        # Get logging configuration
+        logging_config = self.simulation_config.get("logging", {})
+        enable_llm_usage_log = logging_config.get("enable_llm_usage_log", True)
+        
+        # Initialize cost tracker if enabled
+        if enable_llm_usage_log:
+            log_dir = self.config_path / "logs"
+            llm_usage_log_file = log_dir / f"{self.client_id}_llm_usage.log"
+            
+            self.cost_tracker = CostTracker(
+                token_costs=None,  # No cost estimates by default
+                logger=self.logger,
+                log_file_path=llm_usage_log_file,
+                enable_file_logging=True,
+            )
+            self.logger.info(f"LLM usage logging enabled: {llm_usage_log_file}")
+        else:
+            self.cost_tracker = None
+            self.logger.info("LLM usage logging disabled")
 
     def _parse_activity_profiles(self, activity_profiles_config):
         """

@@ -20,7 +20,7 @@ import ray
 
 from YSimulator.YClient.classes.ray_models import ActionDTO
 from YSimulator.YClient.text_support.text_annotator import annotate_text
-from YSimulator.YClient.llm_service import BatchHandler, ResponseParser
+from YSimulator.YClient.llm_utils import BatchHandler, ResponseParser, CostTracker
 
 # Constants
 REACTION_TYPES = ["LIKE", "LOVE", "LAUGH", "ANGRY", "SAD", "IGNORE"]
@@ -48,6 +48,7 @@ class BatchProcessor:
         enable_emotions: bool,
         perspective_api_key: Optional[str],
         logger: logging.Logger,
+        cost_tracker: Optional[CostTracker] = None,
     ):
         """
         Initialize the BatchProcessor.
@@ -61,6 +62,7 @@ class BatchProcessor:
             enable_emotions: Whether emotion detection is enabled
             perspective_api_key: API key for Perspective API
             logger: Logger instance
+            cost_tracker: Optional CostTracker for monitoring LLM usage
         """
         self.server = server
         self.client_id = client_id
@@ -74,6 +76,7 @@ class BatchProcessor:
         # Phase 3: Initialize LLM service components
         self.batch_handler = BatchHandler(logger=logger)
         self.response_parser = ResponseParser(logger=logger)
+        self.cost_tracker = cost_tracker  # Optional cost tracking
 
     def gather_pending_llm_posts(
         self, pending_llm_posts: List[Tuple], actions: List[ActionDTO]
