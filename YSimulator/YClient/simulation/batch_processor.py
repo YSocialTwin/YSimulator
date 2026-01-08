@@ -25,6 +25,14 @@ from YSimulator.YClient.llm_utils import BatchHandler, ResponseParser, CostTrack
 # Constants
 REACTION_TYPES = ["LIKE", "LOVE", "LAUGH", "ANGRY", "SAD", "IGNORE"]
 
+# Token estimation constants (Phase 3: LLM usage tracking)
+# Rough estimates for tracking purposes - actual tokens may vary
+CHARS_PER_TOKEN = 4  # Approximate: English text averages ~4 chars per token
+PROMPT_TOKENS_POST = 100  # Estimated prompt tokens for post generation
+PROMPT_TOKENS_COMMENT = 120  # Estimated prompt tokens for comment/reaction generation
+PROMPT_TOKENS_FOLLOW = 60  # Estimated prompt tokens for follow decision
+REACTION_OUTPUT_TOKENS = 5  # Simple reaction outputs (LIKE, LOVE, etc.)
+
 
 class BatchProcessor:
     """
@@ -110,10 +118,8 @@ class BatchProcessor:
             
             # Phase 3: Track LLM usage (estimate tokens from content length)
             if self.cost_tracker:
-                # Rough estimate: ~4 characters per token
-                output_tokens = len(res_txt) // 4
-                input_tokens = 100  # Rough estimate for prompt
-                self.cost_tracker.record_call("generate_post", input_tokens, output_tokens)
+                output_tokens = len(res_txt) // CHARS_PER_TOKEN
+                self.cost_tracker.record_call("generate_post", PROMPT_TOKENS_POST, output_tokens)
 
             # Check if this is an image post (has 6 elements)
             if len(pending_item) == 6:
@@ -207,16 +213,14 @@ class BatchProcessor:
         for i, res_act in enumerate(results):
             # Phase 3: Track LLM usage
             if self.cost_tracker and res_act:
-                # Estimate tokens (rough: ~4 chars per token)
-                if res_act.upper() in REACTION_TYPES + ["IGNORE", "SHARE"]:
+                # Estimate tokens based on response type
+                if res_act.upper() in REACTION_TYPES or res_act.upper() == "SHARE":
                     # Simple reaction - minimal tokens
-                    output_tokens = 5
-                    input_tokens = 80
+                    output_tokens = REACTION_OUTPUT_TOKENS
                 else:
                     # Comment/share commentary - count actual content
-                    output_tokens = len(res_act) // 4
-                    input_tokens = 120
-                self.cost_tracker.record_call("generate_comment", input_tokens, output_tokens)
+                    output_tokens = len(res_act) // CHARS_PER_TOKEN
+                self.cost_tracker.record_call("generate_comment", PROMPT_TOKENS_COMMENT, output_tokens)
             # Handle tuples of varying lengths:
             # 4-element: (agent_id, cluster_id, target_post_id, future) - regular comment/reaction
             # 5-element: (agent_id, cluster_id, target_post_id, future, mention_id_or_action_type)
@@ -385,8 +389,7 @@ class BatchProcessor:
             if self.cost_tracker:
                 # Follow decision - minimal output (user_id or None)
                 output_tokens = 10
-                input_tokens = 60
-                self.cost_tracker.record_call("decide_follow", input_tokens, output_tokens)
+                self.cost_tracker.record_call("decide_follow", PROMPT_TOKENS_FOLLOW, output_tokens)
             
             # LLM returns user_id to follow or None to skip
             # Phase 3: validate response (target_user should be a user_id string or None)
