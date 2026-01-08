@@ -1322,8 +1322,8 @@ class SimulationClient(ActionExecutorMixin):
 
         # --- SCATTER PHASE: Select and dispatch actions ---
         for agent in active_agents:
-            # Determine agent type (llm or rule_based)
-            agent_type = "llm" if agent.llm else "rule_based"
+            # Determine agent type (llm or rule_based) with agent_downcast logic
+            agent_type = self._determine_agent_type(agent)
 
             # REPLY PIPELINE: Check for unreplied mentions and reply to one if present
             # This happens BEFORE the agent's normal actions
