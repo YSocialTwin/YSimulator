@@ -231,13 +231,26 @@ class SimulationClient:
         self._churned_agents_cache = set()
         self._churned_agents_cache_valid = False
 
+        # Connect to the Named Server Actor
+        self.server = ray.get_actor("Orchestrator")
+
+        # Initialize agent manager (Phase 6 refactoring - NEW)
+        # Centralized agent lifecycle management
+        from YSimulator.YClient.agent_management import AgentManager
+        self.agent_manager = AgentManager(
+            config_path=self.config_path,
+            server=self.server,
+            client_id=self.client_id,
+            archetype_distribution=self.archetype_distribution,
+            agent_downcast=self.agent_downcast,
+            actions_likelihood=self.actions_likelihood,
+            logger=self.logger,
+        )
+
         # Create agents from configuration
         self.agent_profiles = []
         if agent_config:
-            self.agent_profiles = self._create_agents_from_config(agent_config)
-
-        # Connect to the Named Server Actor
-        self.server = ray.get_actor("Orchestrator")
+            self.agent_profiles = self.agent_manager.create_agents_from_config(agent_config)
 
         # Register page agent feeds with news service
         if self.news_service:
@@ -570,30 +583,21 @@ class SimulationClient:
     def _sample_agents_by_archetype(self, available_agents, num_active):
         """
         Sample agents according to archetype distribution.
-        Delegates to activity_selector module.
+        Delegates to agent_manager (Phase 6).
         """
-        from YSimulator.YClient.activity_selector import sample_agents_by_archetype
-
-        return sample_agents_by_archetype(
-            available_agents, num_active, self.archetype_distribution, self.logger
-        )
+        return self.agent_manager.sample_agents_by_archetype(available_agents, num_active)
 
     def _create_agents_from_config(self, agent_config):
         """
         Create agent profiles from configuration.
-        Delegates to agent_manager module.
+        Delegates to agent_manager (Phase 6).
         """
-        from YSimulator.YClient.agent_manager import create_agents_from_config
-
-        return create_agents_from_config(agent_config, self.logger)
+        return self.agent_manager.create_agents_from_config(agent_config)
 
     def _parse_network_edges(self, network_csv_path: Path) -> list:
         """
         Parse network.csv to extract edge tuples (follower_id, user_id).
-
-        This is a lightweight parser used to check if the network has been loaded.
-        It only extracts valid edges without creating database records or logging details.
-        For the full loading process with detailed logging, see _load_and_create_social_network().
+        Delegates to agent_manager (Phase 6).
 
         Args:
             network_csv_path: Path to the network.csv file
@@ -601,53 +605,12 @@ class SimulationClient:
         Returns:
             list: List of tuples (follower_id, user_id) representing edges
         """
-        import csv
-
-        if not network_csv_path.exists():
-            return []
-
-        # Create a mapping from username to agent ID for quick lookup
-        username_to_id = {agent.username: str(agent.id) for agent in self.agent_profiles}
-
-        edges = []
-
-        try:
-            with open(network_csv_path, "r", encoding="utf-8") as csvfile:
-                reader = csv.reader(csvfile)
-                for row_num, row in enumerate(reader, start=1):
-                    # Skip empty rows
-                    if not row or len(row) < 2:
-                        continue
-
-                    # Parse the edge: follower follows user
-                    follower_name = row[0].strip()
-                    user_name = row[1].strip()
-
-                    # Skip if either username is not in our agent population
-                    if follower_name not in username_to_id or user_name not in username_to_id:
-                        continue
-
-                    # Get agent IDs
-                    follower_id = username_to_id[follower_name]
-                    user_id = username_to_id[user_name]
-
-                    edges.append((follower_id, user_id))
-
-            return edges
-
-        except Exception as e:
-            self.logger.error(
-                f"Error parsing network CSV: {e}", extra={"extra_data": {"error": str(e)}}
-            )
-            return []
+        return self.agent_manager.parse_network_edges(network_csv_path, self.agent_profiles)
 
     def _load_and_create_social_network(self, network_csv_path: Path) -> int:
         """
         Load social network topology from CSV file and create Follow records.
-
-        This method reads a network.csv file where each row represents an edge
-        in the social network as "agent1_name,agent2_name" and creates Follow
-        records in the database using batch insertion for optimal performance.
+        Delegates to agent_manager (Phase 6).
 
         Args:
             network_csv_path: Path to the network.csv file
@@ -655,8 +618,6 @@ class SimulationClient:
         Returns:
             int: Number of follow relationships created
         """
-        import csv
-
         if not network_csv_path.exists():
             self.logger.info(
                 f"No network.csv found at {network_csv_path}, skipping social network creation"
@@ -664,120 +625,9 @@ class SimulationClient:
             return 0
 
         self.logger.info(f"Loading social network from {network_csv_path}")
-
-        # Create a mapping from username to agent ID for quick lookup
-        username_to_id = {agent.username: str(agent.id) for agent in self.agent_profiles}
-
-        # Get first round UUID from server (for initial network setup)
-        # This is critical - we cannot proceed without a valid round ID
-        def _log_round_id_error(error_msg: str = None):
-            """Helper to log and print round ID error."""
-            if error_msg:
-                self.logger.error(error_msg, extra={"extra_data": {"error": error_msg}})
-            self.logger.error(f" Cannot load network without valid round ID")
-            return 0
-
-        try:
-            first_round_id = ray.get(self.server.get_first_round_id.remote())
-            if not first_round_id:
-                return _log_round_id_error(
-                    "Failed to get first round ID from server (empty response)"
-                )
-        except Exception as e:
-            return _log_round_id_error(f"Failed to get first round ID from server: {e}")
-
-        follows_to_create = []
-        skipped_count = 0
-
-        try:
-            with open(network_csv_path, "r", encoding="utf-8") as csvfile:
-                reader = csv.reader(csvfile)
-                for row_num, row in enumerate(reader, start=1):
-                    # Skip empty rows
-                    if not row or len(row) < 2:
-                        continue
-
-                    # Parse the edge: follower follows user
-                    follower_name = row[0].strip()
-                    user_name = row[1].strip()
-
-                    # Skip if either username is not in our agent population
-                    if follower_name not in username_to_id:
-                        self.logger.warning(
-                            f"Skipping row {row_num}: follower '{follower_name}' not found in agent population"
-                        )
-                        skipped_count += 1
-                        continue
-
-                    if user_name not in username_to_id:
-                        self.logger.warning(
-                            f"Skipping row {row_num}: user '{user_name}' not found in agent population"
-                        )
-                        skipped_count += 1
-                        continue
-
-                    # Get agent IDs
-                    follower_id = username_to_id[follower_name]
-                    user_id = username_to_id[user_name]
-
-                    # Prepare follow relationship data
-                    follow_data = {
-                        "follower_id": follower_id,
-                        "user_id": user_id,
-                        "action": "follow",
-                        "round": first_round_id,  # First round UUID for initial network setup
-                    }
-                    follows_to_create.append(follow_data)
-
-            # Batch insert all follow relationships if any were collected
-            follow_count = 0
-            if follows_to_create:
-                expected_count = len(follows_to_create)
-                self.logger.info(
-                    f"Batch inserting {expected_count} follow relationships",
-                    extra={"extra_data": {"batch_size": expected_count}},
-                )
-                try:
-                    follow_count = ray.get(
-                        self.server.add_follow_relationships_batch.remote(
-                            follows_to_create, client_id=self.client_id
-                        )
-                    )
-                    if follow_count != expected_count:
-                        self.logger.warning(
-                            f"Batch insert returned {follow_count} but expected {expected_count}",
-                            extra={
-                                "extra_data": {
-                                    "expected": expected_count,
-                                    "actual": follow_count,
-                                }
-                            },
-                        )
-                except Exception as e:
-                    self.logger.error(
-                        f"Error creating follow relationships in batch (attempted {expected_count} relationships): {e}",
-                        extra={"extra_data": {"error": str(e), "batch_size": expected_count}},
-                    )
-                    return 0
-
-            self.logger.info(
-                f"Social network loaded: {follow_count} relationships created, {skipped_count} skipped",
-                extra={
-                    "extra_data": {"follow_count": follow_count, "skipped_count": skipped_count}
-                },
-            )
-            self.logger.info(
-                f"[{self.client_id}] Social network loaded: {follow_count} follow relationships created"
-            )
-
-            return follow_count
-
-        except Exception as e:
-            self.logger.error(
-                f"Error loading social network from {network_csv_path}: {e}",
-                extra={"extra_data": {"error": str(e)}},
-            )
-            return 0
+        
+        # Delegate to agent_manager
+        return self.agent_manager.load_and_create_social_network(network_csv_path, self.agent_profiles)
 
     def run(self) -> None:
         """
@@ -802,6 +652,7 @@ class SimulationClient:
     def _determine_agent_type(self, agent_profile: AgentProfile) -> str:
         """
         Determine the agent type (llm or rule_based) based on agent profile and downcast settings.
+        Delegates to agent_manager (Phase 6).
 
         Args:
             agent_profile: Agent profile containing behavior settings
@@ -809,39 +660,21 @@ class SimulationClient:
         Returns:
             str: "llm" or "rule_based"
         """
-        # Start with the agent's configured type
-        agent_type = "llm" if agent_profile.llm else "rule_based"
-
-        # Apply agent_downcast logic: if enabled, treat validator and explorer as rule-based
-        if self.agent_downcast and agent_profile.archetype:
-            archetype_lower = agent_profile.archetype.lower()
-            if archetype_lower in ["validator", "explorer"]:
-                agent_type = "rule_based"
-
-        return agent_type
+        return self.agent_manager.determine_agent_type(agent_profile)
 
     def __select_action(self, agent_profile: AgentProfile, recent_posts: list) -> tuple:
         """
         Determine which action an agent should perform.
-        Delegates to activity_selector module.
+        Delegates to agent_manager (Phase 6).
         """
-        from YSimulator.YClient.activity_selector import select_action
-
-        return select_action(
-            agent_profile,
-            recent_posts,
-            self.actions_likelihood,
-            self.logger,
-        )
+        return self.agent_manager.select_action(agent_profile, recent_posts)
 
     def _extract_agent_attrs(self, agent) -> dict:
         """
         Extract agent attributes for dynamic persona building.
-        Delegates to agent_manager module.
+        Delegates to agent_manager (Phase 6).
         """
-        from YSimulator.YClient.agent_manager import extract_agent_attrs
-
-        return extract_agent_attrs(
+        return self.agent_manager.extract_agent_attrs(
             agent,
             self._validate_and_extract_interests,
             self._is_opinion_dynamics_enabled,
@@ -851,25 +684,16 @@ class SimulationClient:
     def _save_updated_agent_population(self, updated_interests: dict):
         """
         Save updated agent interests to agent_population.json at end of day.
-        Delegates to agent_manager module.
+        Delegates to agent_manager (Phase 6).
         """
-        from YSimulator.YClient.agent_manager import save_updated_agent_population
-
-        save_updated_agent_population(
-            updated_interests,
-            self.config_path,
-            self.client_id,
-            self.logger,
-        )
+        self.agent_manager.save_updated_agent_population(updated_interests)
 
     def _validate_and_extract_interests(self, interests):
         """
         Validate interests structure and extract topics and counts.
-        Delegates to agent_manager module.
+        Delegates to agent_manager (Phase 6).
         """
-        from YSimulator.YClient.agent_manager import validate_and_extract_interests
-
-        return validate_and_extract_interests(interests)
+        return self.agent_manager.validate_and_extract_interests(interests)
 
     def _log_action(
         self,
