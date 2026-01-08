@@ -33,6 +33,7 @@ Welcome to the YSimulator documentation! This comprehensive guide will help you 
 |----------|-------------|------------|
 | **[Recommendation Systems](../features/RECOMMENDATION_SYSTEMS.md)** | Content & follow recommendations (1,200+ lines) | 10 content modes, 5 follow strategies, algorithms, performance |
 | **[Opinion Dynamics](../features/OPINION_DYNAMICS.md)** | Opinion modeling and evolution (1,200+ lines) | Bounded confidence, LLM evaluation, polarization |
+| **[Opinion Dynamics Architecture](../features/OPINION_DYNAMICS_ARCHITECTURE.md)** | Adding new opinion models (guide) | Two-layer architecture, model development, complete examples |
 | **[Interests & Topics](../features/INTERESTS.md)** | Interest management system (320+ lines) | Attention windows, sliding windows, topic extraction |
 | **[Annotations](../features/ANNOTATION_IMPLEMENTATION.md)** | Emotion annotation system (200+ lines) | GoEmotions taxonomy, 28 emotions, sentiment analysis |
 
@@ -52,7 +53,7 @@ Welcome to the YSimulator documentation! This comprehensive guide will help you 
 | **[Repository Pattern](../architecture/REPOSITORY_PATTERN.md)** | Data access abstraction | Repository pattern, service layer, clean architecture |
 | **[Action Processor Framework](../architecture/ACTION_PROCESSOR_FRAMEWORK.md)** | Modular action processing | Strategy pattern, action routing, extensibility |
 | **[Recommendation Engine](../architecture/RECOMMENDATION_ENGINE.md)** | Content & follow recommendation architecture | Pluggable strategies, dual backend support |
-| **[Opinion Dynamics Handler](../architecture/OPINION_DYNAMICS_HANDLER.md)** | Opinion management system | Profile-based initialization, LLM integration |
+| **[Opinion Dynamics Handler](../architecture/OPINION_DYNAMICS_HANDLER.md)** | Server-side opinion management | Profile-based initialization, database operations, Phase 3 |
 | **[Coordination Layer](../architecture/COORDINATION_LAYER.md)** | Simulation orchestration | Client lifecycle, barrier synchronization, time advancement |
 | **[Service Integration](../architecture/SERVICE_INTEGRATION.md)** | Complete service adoption | Direct service access, zero database coupling |
 
@@ -471,7 +472,7 @@ docs/
 │   ├── REPOSITORY_PATTERN.md           # Data access patterns
 │   ├── ACTION_PROCESSOR_FRAMEWORK.md   # Phase 1 refactoring
 │   ├── RECOMMENDATION_ENGINE.md        # Phase 2 refactoring
-│   ├── OPINION_DYNAMICS_HANDLER.md     # Phase 3 refactoring
+│   ├── OPINION_DYNAMICS_HANDLER.md     # Phase 3 refactoring (server)
 │   ├── COORDINATION_LAYER.md           # Phase 4 refactoring
 │   └── SERVICE_INTEGRATION.md          # Phase 5 refactoring
 ├── agents/             # Agent behavior documentation
@@ -480,7 +481,8 @@ docs/
 │   └── AGENT_TEMPORAL_ACTIVITIES.md # Temporal patterns
 ├── features/           # Core feature documentation
 │   ├── RECOMMENDATION_SYSTEMS.md  # Content & follow recommendations
-│   ├── OPINION_DYNAMICS.md        # Opinion modeling
+│   ├── OPINION_DYNAMICS.md        # Opinion modeling and evolution
+│   ├── OPINION_DYNAMICS_ARCHITECTURE.md # Adding new opinion models (guide)
 │   ├── INTERESTS.md               # Interest management
 │   └── ANNOTATION_IMPLEMENTATION.md # Emotion annotations
 ├── data-storage/       # Database and storage

@@ -822,27 +822,128 @@ React accordingly. Choose: LIKE, LOVE, ANGRY, SAD, or IGNORE
 
 ## Implementation Architecture
 
+**Note**: As of Phase 4 (January 2026), the opinion dynamics system has been refactored into a modular architecture. For details on adding new opinion models, see [OPINION_DYNAMICS_ARCHITECTURE.md](OPINION_DYNAMICS_ARCHITECTURE.md).
+
+### Architecture Overview (Phase 4)
+
+The opinion dynamics system consists of two complementary layers:
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    SimulationClient                          │
+│                      (client.py)                             │
+└──────────────────────────────┬──────────────────────────────┘
+                               │ delegates to
+                               ▼
+┌─────────────────────────────────────────────────────────────┐
+│            Opinion Management Layer (NEW Phase 4)            │
+│                 YClient/opinion/ package                     │
+├─────────────────────────────────────────────────────────────┤
+│  OpinionManager - Main interface                            │
+│    ├── OpinionCalculator - Update calculations              │
+│    ├── OpinionInferencer - Page agent inference             │
+│    └── OpinionCache - Performance caching                   │
+└──────────────────────────────┬──────────────────────────────┘
+                               │ uses
+                               ▼
+┌─────────────────────────────────────────────────────────────┐
+│          Opinion Dynamics Models (Algorithm Layer)           │
+│              YClient/opinion_dynamics/ package               │
+├─────────────────────────────────────────────────────────────┤
+│  • bounded_confidence() - Bounded confidence algorithm       │
+│  • llm_evaluation() - LLM-based evaluation algorithm        │
+│  • get_opinion_group() - Opinion classification             │
+└─────────────────────────────────────────────────────────────┘
+```
+
 ### Client-Side Components
+
+#### Opinion Management Layer (Phase 4)
+
+**Location:** `YSimulator/YClient/opinion/`
+
+**OpinionManager** - Main interface for all opinion operations:
+```python
+from YSimulator.YClient.opinion import OpinionManager
+
+opinion_manager = OpinionManager(
+    simulation_config=config,
+    server=server_handle,
+    llm_manager=llm_manager,
+    agent_profiles=profiles,
+    client_id="client_1",
+    logger=logger,
+)
+
+# Check if enabled
+if opinion_manager.is_enabled():
+    # Calculate updates
+    updates = opinion_manager.calculate_opinion_updates(
+        agent_id="agent_123",
+        parent_post_id="post_456",
+        parent_post_data=post_data,
+    )
+```
+
+**Key Components:**
+- `OpinionManager` (239 lines) - Unified interface, coordinates all operations
+- `OpinionCalculator` (268 lines) - Orchestrates opinion update calculations
+- `OpinionInferencer` (143 lines) - Handles page agent opinion inference
+- `OpinionCache` (148 lines) - Caching layer for performance optimization
+
+#### Opinion Dynamics Models (Algorithm Layer)
+
+**Location:** `YSimulator/YClient/opinion_dynamics/`
+
+**Files:**
+- `confidence_bound.py` - Bounded confidence model implementation
+- `llm_evaluation.py` - LLM-based opinion evaluation implementation
+- `utils.py` - Utility functions (e.g., `get_opinion_group()`)
+
+**Example Usage:**
+```python
+from YSimulator.YClient.opinion_dynamics import bounded_confidence
+
+new_opinion = bounded_confidence(
+    x=0.5,  # agent's current opinion
+    y=0.7,  # author's opinion
+    epsilon=0.25,
+    mu=0.5,
+    theta=0.0,
+    cold_start="neutral"
+)
+```
+
+#### Client Integration (Simplified)
 
 **Location:** `YSimulator/YClient/client.py`
 
-**Key Methods:**
+The client now delegates to OpinionManager:
 
 ```python
 def _is_opinion_dynamics_enabled(self) -> bool:
-    """Check if opinion dynamics is enabled in config."""
+    """Delegate to OpinionManager."""
+    return self.opinion_manager.is_enabled()
 
-def _calculate_opinion_updates(self, agent_id, post_id, author_id) -> Dict:
-    """Calculate opinion updates for interaction."""
+def _calculate_opinion_updates(self, agent_id, post_id, post_data) -> Dict:
+    """Delegate to OpinionManager."""
+    return self.opinion_manager.calculate_opinion_updates(
+        agent_id, post_id, post_data
+    )
 
 def _get_opinions_for_post(self, agent_id, post_id) -> Dict:
-    """Get agent's opinions on all topics in post."""
+    """Delegate to OpinionManager."""
+    return self.opinion_manager.get_opinions_for_post(agent_id, post_id)
 
 def _map_opinion_to_group(self, opinion_value: float) -> str:
-    """Map numeric opinion to discrete label."""
+    """Delegate to OpinionManager."""
+    return self.opinion_manager.map_opinion_to_group(opinion_value)
 
 def _infer_page_agent_opinion(self, agent_id, article, topic) -> float:
-    """Infer page agent opinion (random or LLM)."""
+    """Delegate to OpinionManager."""
+    return self.opinion_manager.infer_page_agent_opinion(
+        agent_id, article, topic
+    )
 ```
 
 ### Server-Side Components
@@ -907,14 +1008,17 @@ def generate_post(self, agent_attrs, topic):
     """
 ```
 
-### Opinion Dynamics Module
+### Adding New Opinion Models
 
-**Location:** `YSimulator/YClient/opinion_dynamics/`
+To add a new opinion dynamics model, see the comprehensive guide:
+**[OPINION_DYNAMICS_ARCHITECTURE.md](OPINION_DYNAMICS_ARCHITECTURE.md)**
 
-**Files:**
-- `confidence_bound.py`: Bounded confidence model implementation
-- `llm_evaluation.py`: LLM-based opinion evaluation
-- `utils.py`: Helper functions
+This guide includes:
+- Explanation of the two-layer architecture
+- Step-by-step instructions for adding new models
+- Complete example with code
+- Testing strategies
+- Best practices
 
 ---
 

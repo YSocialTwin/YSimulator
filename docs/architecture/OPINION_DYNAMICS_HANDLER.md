@@ -1,53 +1,75 @@
 # Opinion Dynamics Handler
 
 **Status**: ✅ Implemented (Phase 3 of Server Refactoring)  
-**Version**: 1.0  
-**Date**: January 5, 2026
+**Client Integration**: ✅ Phase 4 Complete (January 8, 2026)  
+**Version**: 2.0  
+**Date**: January 8, 2026
 
 ## Overview
 
-The Opinion Dynamics Handler is a modular system for managing agent opinions in YSimulator. It extracts opinion management logic from server.py into a dedicated, testable class that handles opinion initialization, updates, and neighbor opinion queries.
+The Opinion Dynamics system in YSimulator consists of two complementary components:
+
+1. **Server-Side**: OpinionHandler (Phase 3) - manages opinion storage, retrieval, and initialization
+2. **Client-Side**: OpinionManager (Phase 4) - manages opinion calculations, inference, and orchestration
+
+This document describes the **server-side OpinionHandler**. For client-side opinion management, see [OPINION_DYNAMICS_ARCHITECTURE.md](../features/OPINION_DYNAMICS_ARCHITECTURE.md).
 
 ## Architecture
 
+### Complete Opinion Dynamics System
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    SimulationClient                          │
+│                      (client.py)                             │
+└──────────────────────────────┬──────────────────────────────┘
+                               │ uses
+                               ▼
+┌─────────────────────────────────────────────────────────────┐
+│              Opinion Management (Phase 4 - Client)           │
+│                  YClient/opinion/ package                    │
+├─────────────────────────────────────────────────────────────┤
+│  OpinionManager - Unified client interface                  │
+│    ├── OpinionCalculator - Update calculations              │
+│    ├── OpinionInferencer - Page agent inference             │
+│    └── OpinionCache - Performance caching                   │
+└──────────────────────────────┬──────────────────────────────┘
+                               │
+                               │ calls
+                               ▼
+┌─────────────────────────────────────────────────────────────┐
+│              OrchestratorServer Methods                      │
+│   _ensure_agent_opinion_exists() - 18 lines                 │
+│   get_latest_agent_opinion() - 17 lines                     │
+│   add_agent_opinion() - 28 lines                            │
+│   get_neighbors_opinions() - 21 lines                       │
+└──────────────────────────────┬──────────────────────────────┘
+                               │ delegates to
+                               ▼
+┌─────────────────────────────────────────────────────────────┐
+│         OpinionHandler (Phase 3 - Server)                    │
+├─────────────────────────────────────────────────────────────┤
+│  • ensure_agent_opinion_exists()                             │
+│    - Profile-based opinion initialization                    │
+│    - Page vs regular agent handling                          │
+│    - Neutral fallbacks                                       │
+│                                                              │
+│  • get_latest_opinion()                                      │
+│    - Retrieve current opinion value                          │
+│                                                              │
+│  • add_opinion()                                             │
+│    - Store opinion updates                                   │
+│    - Track interactions                                      │
+│                                                              │
+│  • get_neighbors_opinions()                                  │
+│    - Query followee opinions                                 │
+│    - SQL and Redis support                                   │
+└─────────────────────────────────────────────────────────────┘
+```
+
 ### Design Pattern: Service Layer
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│              OrchestratorServer Methods                     │
-│   _ensure_agent_opinion_exists() - 18 lines                │
-│   get_latest_agent_opinion() - 17 lines                    │
-│   add_agent_opinion() - 28 lines                           │
-│   get_neighbors_opinions() - 21 lines                      │
-└─────────────────────────────────────────────────────────────┘
-                            │
-                            ▼ Delegates to
-┌─────────────────────────────────────────────────────────────┐
-│                    OpinionHandler                           │
-├─────────────────────────────────────────────────────────────┤
-│  • ensure_agent_opinion_exists()                            │
-│    - Profile-based opinion initialization                   │
-│    - Page vs regular agent handling                         │
-│    - Neutral fallbacks                                      │
-│                                                             │
-│  • get_latest_opinion()                                     │
-│    - Retrieve current opinion value                         │
-│                                                             │
-│  • add_opinion()                                            │
-│    - Store opinion updates                                  │
-│    - Track interactions                                     │
-│                                                             │
-│  • get_neighbors_opinions()                                 │
-│    - Query followee opinions                                │
-│    - SQL and Redis support                                  │
-└─────────────────────────────────────────────────────────────┘
-```
-
-## Components
-
-### OpinionHandler
-
-Manages all opinion-related operations with configuration-based behavior.
+The OpinionHandler follows the service layer pattern, encapsulating all server-side opinion database operations.
 
 ```python
 from YSimulator.YServer.opinion_dynamics import OpinionHandler
