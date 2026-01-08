@@ -933,14 +933,19 @@ class SQLPostRepository(PostRepository):
     def add_mention(self, post_id: str, mentioned_user_id: str) -> bool:
         """Add a mention to a post."""
         try:
-            from YSimulator.YServer.classes.models import Mention
+            from YSimulator.YServer.classes.models import Mention, Post
             import uuid
             session = Session(self.engine)
             try:
+                # Get the post to retrieve the round
+                post = session.query(Post).filter_by(id=post_id).first()
+                round_id = post.round if post else None
+                
                 mention = Mention(
                     id=str(uuid.uuid4()),
                     post_id=post_id,
                     user_id=mentioned_user_id,  # Model uses user_id, not mentioned_user_id
+                    round=round_id,
                     answered=0
                 )
                 session.add(mention)
@@ -1852,6 +1857,7 @@ class SQLImageRepository(ImageRepository):
                     id=image_id,
                     url=image_data.get("url"),
                     description=image_data.get("description"),
+                    article_id=image_data.get("article_id"),
                 )
                 session.add(image)
                 session.commit()
