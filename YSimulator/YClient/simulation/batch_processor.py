@@ -20,7 +20,7 @@ import ray
 
 from YSimulator.YClient.classes.ray_models import ActionDTO
 from YSimulator.YClient.text_support.text_annotator import annotate_text
-from YSimulator.YClient.llm_utils import BatchHandler, ResponseParser, CostTracker
+from YSimulator.YClient.llm_utils import BatchHandler, ResponseParser, CostTracker, LLMManager, RetryHandler
 
 # Constants
 REACTION_TYPES = ["LIKE", "LOVE", "LAUGH", "ANGRY", "SAD", "IGNORE"]
@@ -74,15 +74,17 @@ class BatchProcessor:
         """
         self.server = server
         self.client_id = client_id
-        self.llm = llm
+        self.llm = llm  # Keep raw LLM handle for text_annotator compatibility
         self.enable_sentiment = enable_sentiment
         self.enable_toxicity = enable_toxicity
         self.enable_emotions = enable_emotions
         self.perspective_api_key = perspective_api_key
         self.logger = logger
         
-        # Phase 3: Initialize LLM service components
+        # Phase 3: Initialize all LLM utilities modules
+        self.llm_manager = LLMManager(llm, logger=logger)  # Wrap LLM for consistent interface
         self.batch_handler = BatchHandler(logger=logger)
+        self.retry_handler = RetryHandler(max_retries=3, initial_delay=1.0, logger=logger)  # Add retry logic
         self.response_parser = ResponseParser(logger=logger)
         self.cost_tracker = cost_tracker  # Optional cost tracking
 
@@ -101,9 +103,13 @@ class BatchProcessor:
         if not pending_llm_posts:
             return
 
-        # Phase 3: Use batch_handler for consistent error handling
+        # Phase 3: Use batch_handler with retry logic for robustness
         futures = [p[2] for p in pending_llm_posts]
-        results = self.batch_handler.gather_futures(futures)  # Blocks once for ALL posts
+        results = self.retry_handler.retry_with_backoff(
+            self.batch_handler.gather_futures,
+            futures,
+            error_message="Gathering LLM post futures"
+        )  # Blocks once for ALL posts with automatic retries
 
         for i, res_txt in enumerate(results):
             pending_item = pending_llm_posts[i]
@@ -206,9 +212,13 @@ class BatchProcessor:
         if mention_replies > 0:
             self.logger.info(f"[REPLY] {mention_replies} of these are mention replies")
 
-        # Phase 3: Use batch_handler for consistent error handling
+        # Phase 3: Use batch_handler with retry logic for robustness
         futures = [r[3] for r in pending_llm_reactions]
-        results = self.batch_handler.gather_futures(futures)  # Blocks once for ALL reactions/comments
+        results = self.retry_handler.retry_with_backoff(
+            self.batch_handler.gather_futures,
+            futures,
+            error_message="Gathering LLM reaction futures"
+        )  # Blocks once for ALL reactions/comments with automatic retries
 
         for i, res_act in enumerate(results):
             # Phase 3: Track LLM usage
@@ -378,9 +388,13 @@ class BatchProcessor:
         if not pending_llm_follows:
             return
 
-        # Phase 3: Use batch_handler for consistent error handling
+        # Phase 3: Use batch_handler with retry logic for robustness
         futures = [f[2] for f in pending_llm_follows]
-        results = self.batch_handler.gather_futures(futures)  # Blocks once for ALL follow decisions
+        results = self.retry_handler.retry_with_backoff(
+            self.batch_handler.gather_futures,
+            futures,
+            error_message="Gathering LLM follow decision futures"
+        )  # Blocks once for ALL follow decisions with automatic retries
 
         for i, target_user in enumerate(results):
             a_id, cid, _ = pending_llm_follows[i]
