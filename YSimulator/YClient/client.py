@@ -415,7 +415,16 @@ class SimulationClient:
             select_action_fn=self.__select_action,
             determine_agent_type_fn=self._determine_agent_type,
             dispatch_action_with_generator_fn=self._dispatch_action_with_generator,
-            process_secondary_follows_fn=self._process_secondary_follows,
+        )
+
+        # Initialize SecondaryFollowProcessor (Phase 1 alignment)
+        from YSimulator.YClient.simulation.secondary_follow_processor import SecondaryFollowProcessor
+        self._secondary_follow_processor = SecondaryFollowProcessor(
+            server=self.server,
+            client_id=self.client_id,
+            logger=self.logger,
+            llm_manager=self.llm_manager,
+            probability_of_secondary_follow=self.probability_of_secondary_follow,
         )
 
         # Initialize Simulator
@@ -431,6 +440,7 @@ class SimulationClient:
             batch_processor=self._batch_processor,
             lifecycle_manager=self._lifecycle_manager,
             round_executor=self._round_executor,
+            secondary_follow_processor=self._secondary_follow_processor,
             logger=self.logger,
             parse_network_edges_fn=self._parse_network_edges,
             load_and_create_social_network_fn=self._load_and_create_social_network,
@@ -1154,101 +1164,6 @@ class SimulationClient:
             }
         """
         return self.opinion_manager.get_opinions_for_post(agent_id, post_id)
-
-    def _process_secondary_follows(
-        self, secondary_follow_candidates: list, rule_based_interactions: list, actions: list
-    ) -> None:
-        """
-        Process secondary follow/unfollow decisions for agents who interacted with content.
-
-        This method handles the secondary follow pipeline where agents may decide to follow
-        or unfollow content authors after reading or commenting on their posts.
-        
-        NOTE: This method follows the pre-Phase 1 pattern (passed as function reference).
-        Future refactoring should integrate this into the action generator framework as a
-        SecondaryFollowGenerator or extend the FollowGenerator to handle post-interaction follows.
-
-        Args:
-            secondary_follow_candidates: List of LLM agent interactions [(agent_id, cluster_id, author_id, post_content, is_llm)]
-            rule_based_interactions: List of rule-based agent interactions (same format)
-            actions: List to append follow/unfollow actions to
-        """
-        # Merge rule-based interactions into secondary follow candidates
-        secondary_follow_candidates.extend(rule_based_interactions)
-
-        if self.probability_of_secondary_follow <= 0 or not secondary_follow_candidates:
-            return
-
-        self.logger.info(
-            f"Secondary follow phase: {len(secondary_follow_candidates)} candidates, probability={self.probability_of_secondary_follow}"
-        )
-
-        # Process each candidate for secondary follow
-        pending_secondary_follow_llm = (
-            []
-        )  # List of (agent_id, cluster_id, author_id, is_following, future)
-
-        for (
-            agent_id,
-            cluster_id,
-            author_id,
-            post_content,
-            is_llm_agent,
-        ) in secondary_follow_candidates:
-            # Skip if author is self
-            if agent_id == author_id:
-                continue
-
-            # Decide whether to evaluate secondary follow based on probability
-            if random.random() >= self.probability_of_secondary_follow:
-                continue
-
-            # Get current follow relationship status
-            is_following = ray.get(
-                self.server.check_follow_relationship.remote(agent_id, author_id)
-            )
-
-            if is_llm_agent:
-                # LLM-based: Ask LLM whether to follow/unfollow based on post content
-                future = self.llm_manager.generate_secondary_follow_decision(
-                    cluster_id, post_content, is_following
-                )
-                pending_secondary_follow_llm.append(
-                    (agent_id, cluster_id, author_id, is_following, future)
-                )
-            else:
-                # Rule-based: Randomly decide to follow/unfollow
-                decision = random.choice(["follow", "unfollow", "no_change"])
-
-                if decision == "follow" and not is_following:
-                    # Follow the author
-                    actions.append(
-                        ActionDTO(agent_id, cluster_id, "FOLLOW", target_user_id=author_id)
-                    )
-                elif decision == "unfollow" and is_following:
-                    # Unfollow the author
-                    actions.append(
-                        ActionDTO(agent_id, cluster_id, "UNFOLLOW", target_user_id=author_id)
-                    )
-
-        # Resolve LLM-based secondary follow decisions
-        if pending_secondary_follow_llm:
-            futures = [f[4] for f in pending_secondary_follow_llm]
-            results = ray.get(futures)  # Blocks for all secondary follow decisions
-
-            for i, decision in enumerate(results):
-                agent_id, cluster_id, author_id, is_following, _ = pending_secondary_follow_llm[i]
-
-                if decision == "follow" and not is_following:
-                    # Follow the author
-                    actions.append(
-                        ActionDTO(agent_id, cluster_id, "FOLLOW", target_user_id=author_id)
-                    )
-                elif decision == "unfollow" and is_following:
-                    # Unfollow the author
-                    actions.append(
-                        ActionDTO(agent_id, cluster_id, "UNFOLLOW", target_user_id=author_id)
-                    )
 
     def shutdown(self) -> None:
         ray.get(self.server.deregister_client.remote(self.client_id))

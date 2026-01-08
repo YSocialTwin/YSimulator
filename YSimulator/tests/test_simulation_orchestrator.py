@@ -215,7 +215,6 @@ class TestRoundExecutor:
             select_action_fn=MagicMock(),
             determine_agent_type_fn=MagicMock(),
             dispatch_action_with_generator_fn=MagicMock(return_value=([], [], {})),
-            process_secondary_follows_fn=MagicMock(),
         )
 
         assert executor.client_id == "test_client"
@@ -227,6 +226,8 @@ class TestSimulator:
 
     def test_initialization(self, sample_agents, mock_logger):
         """Test Simulator initialization."""
+        from YSimulator.YClient.simulation.secondary_follow_processor import SecondaryFollowProcessor
+        
         simulator = Simulator(
             server=MagicMock(),
             client_id="test_client",
@@ -239,6 +240,7 @@ class TestSimulator:
             batch_processor=MagicMock(spec=BatchProcessor),
             lifecycle_manager=MagicMock(spec=LifecycleManager),
             round_executor=MagicMock(spec=RoundExecutor),
+            secondary_follow_processor=MagicMock(spec=SecondaryFollowProcessor),
             logger=mock_logger,
             parse_network_edges_fn=MagicMock(),
             load_and_create_social_network_fn=MagicMock(),

@@ -43,7 +43,6 @@ class RoundExecutor:
         select_action_fn,
         determine_agent_type_fn,
         dispatch_action_with_generator_fn,
-        process_secondary_follows_fn,
     ):
         """
         Initialize the RoundExecutor.
@@ -58,7 +57,6 @@ class RoundExecutor:
             select_action_fn: Function to select agent actions
             determine_agent_type_fn: Function to determine agent type
             dispatch_action_with_generator_fn: Function to dispatch actions with generators
-            process_secondary_follows_fn: Function to process secondary follows
         """
         self.agent_profiles = agent_profiles
         self.server = server
@@ -69,7 +67,6 @@ class RoundExecutor:
         self.select_action_fn = select_action_fn
         self.determine_agent_type_fn = determine_agent_type_fn
         self.dispatch_action_with_generator_fn = dispatch_action_with_generator_fn
-        self.process_secondary_follows_fn = process_secondary_follows_fn
 
     def execute_round(
         self,
@@ -212,17 +209,3 @@ class RoundExecutor:
             rule_based_interactions,
         )
 
-    def process_secondary_follows_wrapper(
-        self, secondary_follow_candidates: List[Tuple], rule_based_interactions: List[Tuple], actions: List[ActionDTO]
-    ) -> None:
-        """
-        Wrapper for processing secondary follows.
-
-        Args:
-            secondary_follow_candidates: List of LLM interaction candidates
-            rule_based_interactions: List of rule-based interaction candidates
-            actions: List to append follow actions to
-        """
-        self.process_secondary_follows_fn(
-            secondary_follow_candidates, rule_based_interactions, actions
-        )

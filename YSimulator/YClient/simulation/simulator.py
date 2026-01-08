@@ -23,6 +23,7 @@ from YSimulator.YClient.simulation.agent_scheduler import AgentScheduler
 from YSimulator.YClient.simulation.batch_processor import BatchProcessor
 from YSimulator.YClient.simulation.lifecycle_manager import LifecycleManager
 from YSimulator.YClient.simulation.round_executor import RoundExecutor
+from YSimulator.YClient.simulation.secondary_follow_processor import SecondaryFollowProcessor
 
 
 class Simulator:
@@ -49,6 +50,7 @@ class Simulator:
         batch_processor: BatchProcessor,
         lifecycle_manager: LifecycleManager,
         round_executor: RoundExecutor,
+        secondary_follow_processor: SecondaryFollowProcessor,
         logger: logging.Logger,
         # Additional functions needed from client
         parse_network_edges_fn,
@@ -73,6 +75,7 @@ class Simulator:
             batch_processor: BatchProcessor instance
             lifecycle_manager: LifecycleManager instance
             round_executor: RoundExecutor instance
+            secondary_follow_processor: SecondaryFollowProcessor instance
             logger: Logger instance
             parse_network_edges_fn: Function to parse network edges
             load_and_create_social_network_fn: Function to load network
@@ -92,6 +95,7 @@ class Simulator:
         self.batch_processor = batch_processor
         self.lifecycle_manager = lifecycle_manager
         self.round_executor = round_executor
+        self.secondary_follow_processor = secondary_follow_processor
         self.logger = logger
         self.parse_network_edges_fn = parse_network_edges_fn
         self.load_and_create_social_network_fn = load_and_create_social_network_fn
@@ -365,8 +369,8 @@ class Simulator:
         # Gather LLM follows
         self.batch_processor.gather_pending_llm_follows(pending_llm_follows, actions)
 
-        # Process secondary follows
-        self.round_executor.process_secondary_follows_wrapper(
+        # Process secondary follows using SecondaryFollowProcessor (Phase 1 alignment)
+        self.secondary_follow_processor.process_secondary_follows(
             secondary_follow_candidates, rule_based_interactions, actions
         )
 
