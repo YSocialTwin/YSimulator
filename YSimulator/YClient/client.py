@@ -147,6 +147,14 @@ class SimulationClient(ActionExecutorMixin):
         self.llm = llm_handle
         self.news_service = news_service_handle
         self.config_path = Path(config_path)
+        
+        # Phase 3: Initialize LLM Manager for consistent LLM interface
+        # Import here to avoid circular dependencies during initial setup
+        from YSimulator.YClient.llm_utils import LLMManager
+        # Use a temporary logger until _setup_logging() is called
+        import logging
+        temp_logger = logging.getLogger(f"client_{client_id}")
+        self.llm_manager = LLMManager(llm_handle, logger=temp_logger) if llm_handle else None
 
         # Store simulation config for logging configuration
         self.simulation_config = simulation_config if simulation_config else {}
@@ -501,6 +509,10 @@ class SimulationClient(ActionExecutorMixin):
         
         # Initialize cost tracker for LLM usage monitoring (Phase 3)
         self._setup_cost_tracker()
+        
+        # Phase 3: Update LLM Manager logger now that main logger is set up
+        if self.llm_manager:
+            self.llm_manager.logger = self.logger
 
     def _setup_cost_tracker(self):
         """Set up optional cost tracker for LLM usage monitoring."""
@@ -1814,7 +1826,7 @@ class SimulationClient(ActionExecutorMixin):
 
                 # Call LLM service to infer opinion
                 opinion_value = ray.get(
-                    self.llm.infer_article_opinion.remote(
+                    self.llm_manager.infer_article_opinion(
                         article_content, topic_name, opinion_groups
                     )
                 )
@@ -1951,7 +1963,7 @@ class SimulationClient(ActionExecutorMixin):
 
             if is_llm_agent:
                 # LLM-based: Ask LLM whether to follow/unfollow based on post content
-                future = self.llm.generate_secondary_follow_decision.remote(
+                future = self.llm_manager.generate_secondary_follow_decision(
                     cluster_id, post_content, is_following
                 )
                 pending_secondary_follow_llm.append(

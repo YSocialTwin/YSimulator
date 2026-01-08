@@ -196,3 +196,45 @@ class LLMManager:
             True if LLM handle is not None, False otherwise
         """
         return self.llm is not None
+    
+    def infer_article_opinion(
+        self, article_content: str, topic_name: str, opinion_groups: dict
+    ) -> Any:
+        """
+        Infer agent's opinion on an article topic using the LLM.
+        
+        Args:
+            article_content: Article text to analyze
+            topic_name: Topic to infer opinion about
+            opinion_groups: Opinion group configuration
+            
+        Returns:
+            Ray ObjectRef (future) for the LLM call
+        """
+        self.logger.debug(
+            f"LLM infer_article_opinion: topic={topic_name}, content_len={len(article_content)}"
+        )
+        return self.llm.infer_article_opinion.remote(
+            article_content, topic_name, opinion_groups
+        )
+    
+    def generate_secondary_follow_decision(
+        self, cluster_id: int, post_content: str, is_currently_following: bool
+    ) -> Any:
+        """
+        Decide whether to follow/unfollow post author as secondary follow using the LLM.
+        
+        Args:
+            cluster_id: Agent's cluster ID
+            post_content: Content of the post
+            is_currently_following: Whether agent currently follows the author
+            
+        Returns:
+            Ray ObjectRef (future) for the LLM call
+        """
+        self.logger.debug(
+            f"LLM generate_secondary_follow_decision: cluster={cluster_id}, following={is_currently_following}"
+        )
+        return self.llm.generate_secondary_follow_decision.remote(
+            cluster_id, post_content, is_currently_following
+        )
