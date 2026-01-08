@@ -1712,7 +1712,7 @@ class SimulationClient(ActionExecutorMixin):
                         cold_start=params.get("cold_start", "neutral"),
                         group_classes=opinion_config.get("opinion_groups", {}),
                         peers_opinions=peers_opinions,
-                        llm_service=self.llm,
+                        llm_manager=self.llm_manager,
                     )
                 else:
                     # Use bounded confidence model (default)

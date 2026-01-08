@@ -75,7 +75,7 @@ def llm_evaluation(
     cold_start: str = "neutral",
     group_classes: dict = None,
     peers_opinions: list = None,
-    llm_service=None,
+    llm_manager=None,
 ) -> float:
     """
     LLM-based evaluation of opinion dynamics between two users.
@@ -96,7 +96,7 @@ def llm_evaluation(
         cold_start: "neutral" (start at 0.5) or "inherited" (start at y)
         group_classes: Dict mapping opinion labels to [min, max] ranges
         peers_opinions: List of (opinion_label, count) tuples for neighbors
-        llm_service: Ray actor reference to LLMService
+        llm_manager: LLMManager instance (wraps Ray actor for LLM service)
 
     Returns:
         float: Updated opinion value in [0, 1] range
@@ -113,19 +113,17 @@ def llm_evaluation(
     x_op = get_opinion_group(x, group_classes)
     y_op = get_opinion_group(y, group_classes)
 
-    # Call LLM service to evaluate opinion
-    # Note: llm_service is a Ray actor, so we need to call it with .remote()
+    # Call LLM manager to evaluate opinion (returns Ray future)
     import ray
 
-    response = ray.get(
-        llm_service.evaluate_opinion.remote(
-            agent_opinion=x_op,
-            author_opinion=y_op,
-            post_text=text,
-            topic=topic,
-            peers_opinions=peers_opinions if evaluation_scope != "interlocutor_only" else None,
-        )
+    future = llm_manager.evaluate_opinion(
+        agent_opinion=x_op,
+        author_opinion=y_op,
+        post_text=text,
+        topic=topic,
+        peers_opinions=peers_opinions if evaluation_scope != "interlocutor_only" else None,
     )
+    response = ray.get(future)
 
     # Shift opinion class based on LLM response
     if "AGREE" in response.upper():

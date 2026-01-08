@@ -238,3 +238,34 @@ class LLMManager:
         return self.llm.generate_secondary_follow_decision.remote(
             cluster_id, post_content, is_currently_following
         )
+    
+    def evaluate_opinion(
+        self,
+        agent_opinion: str,
+        author_opinion: str,
+        post_text: str,
+        topic: str,
+        peers_opinions: list = None,
+    ) -> Any:
+        """
+        Evaluate how an agent's opinion should change after reading a post.
+        
+        Uses LLM to determine if the agent agrees, disagrees, or remains neutral
+        about the expressed opinion in the post.
+        
+        Args:
+            agent_opinion: Agent's current opinion label (e.g., "Neutral", "In favor")
+            author_opinion: Post author's opinion label
+            post_text: Content of the post being evaluated
+            topic: Topic name being discussed
+            peers_opinions: Optional list of (opinion_label, count) tuples for neighbors
+            
+        Returns:
+            Ray ObjectRef (future) for the LLM call
+        """
+        self.logger.debug(
+            f"LLM evaluate_opinion: agent={agent_opinion}, author={author_opinion}, topic={topic}"
+        )
+        return self.llm.evaluate_opinion.remote(
+            agent_opinion, author_opinion, post_text, topic, peers_opinions
+        )
