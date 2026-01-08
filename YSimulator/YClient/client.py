@@ -19,7 +19,7 @@ from typing import Optional
 
 import ray
 
-from YSimulator.YClient.action_executor import ActionExecutorMixin
+# Phase 5: Removed ActionExecutorMixin - dead code replaced by action generators in Phase 1
 from YSimulator.YClient.action_generators import ActionContext, ActionGeneratorFactory
 from YSimulator.YClient.actions import (
     generate_image_post_async,
@@ -110,7 +110,7 @@ def compress_rotated_log(source: str, dest: str) -> None:
 
 
 @ray.remote
-class SimulationClient(ActionExecutorMixin):
+class SimulationClient:
     """
     Simulation client actor that manages agent behaviors and actions.
 
@@ -119,6 +119,9 @@ class SimulationClient(ActionExecutorMixin):
     - Simulation loop execution
     - Action generation (posts and reactions)
     - Coordination with LLM service for intelligent behaviors
+    
+    Phase 5: Removed ActionExecutorMixin inheritance - action execution
+    now handled by action generators (Phase 1).
     """
 
     def __init__(
