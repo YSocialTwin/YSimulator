@@ -68,6 +68,21 @@ Welcome to the YSimulator documentation! This comprehensive guide will help you 
 | **[Code Formatting](../development/FORMATTING.md)** | Development standards | Black, isort, pre-commit hooks |
 | **[Codebase Analysis](../development/CODEBASE_ANALYSIS.md)** | Code organization (1,660+ lines) | Architecture, patterns, testing infrastructure |
 
+### 📖 Implementation Guides
+
+Step-by-step guides for extending YSimulator with new features:
+
+| Guide | Description | Est. Time | Key Topics |
+|-------|-------------|-----------|------------|
+| **[Adding New Actions](../development/ADDING_ACTIONS_GUIDE.md)** ✨ | Complete guide for new action types (Phase 1) | 1-2 hours | ActionGenerator pattern, LLM integration, OpinionManager, testing strategies |
+| **[Opinion Dynamics Models](../features/OPINION_DYNAMICS_ARCHITECTURE.md#step-by-step-guide)** | Add new opinion algorithms (Phase 4) | 2-4 hours | Two-layer architecture, model development, bounded confidence examples |
+| **[Recommendation Systems](../development/ADDING_RECSYS_GUIDE.md)** ✨ | Extend content/follow recommendations | 2-3 hours | Service layer, Redis caching, interest graph example, performance optimization |
+
+**Quick Reference**:
+- Want to add a new agent action (like "Quote" or "Poll")? → [Adding New Actions Guide](../development/ADDING_ACTIONS_GUIDE.md)
+- Want to implement a custom opinion dynamics model? → [Opinion Dynamics Architecture](../features/OPINION_DYNAMICS_ARCHITECTURE.md#step-by-step-guide)
+- Want to create a new recommendation algorithm? → [Recommendation Systems Guide](../development/ADDING_RECSYS_GUIDE.md)
+
 ### 📊 Logging & Monitoring
 
 | Document | Description | Coverage |
