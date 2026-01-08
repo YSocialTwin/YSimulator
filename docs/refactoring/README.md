@@ -24,7 +24,9 @@ This directory contains reports and analysis of major refactoring efforts in YSi
 
 ### Client Refactoring
 
-- **[CLIENT_REFACTORING_REPORT.md](CLIENT_REFACTORING_REPORT.md)** - Client architecture improvements (660+ lines)
+- **[CLIENT_REFACTORING_REPORT.md](CLIENT_REFACTORING_REPORT.md)** - Client architecture improvements (1,100+ lines)
+  - Phase 1: Action Generator Framework (✅ COMPLETED)
+  - Phase 2: Simulation Orchestrator (✅ COMPLETED)
   - Modularity enhancements
   - Testing infrastructure
   - Code organization improvements
@@ -43,6 +45,19 @@ This directory contains reports and analysis of major refactoring efforts in YSi
 | **Modules created** | 0 | 4 | +4 frameworks |
 | **Unit tests** | ~27 | ~77 | +50 tests |
 | **Test pass rate** | N/A | 100% | 77/77 passing |
+
+### Client Refactoring Results
+
+| Metric | Before | After | Change |
+|--------|--------|-------|--------|
+| **client.py lines** | 2,924 | 2,161 | -763 (-26%) |
+| **action_executor.py** | 952 | 0 (deleted) | -952 (-100%) |
+| **Modules created** | 0 | 2 packages | +15 new modules |
+| **Action generators** | 0 | 10 | +10 generators |
+| **Simulation modules** | 0 | 5 | +5 orchestrators |
+| **Unit tests** | 2 | 21 | +19 tests |
+| **Test pass rate** | N/A | 100% | 41/41 passing |
+| **run() method** | 297 lines | 18 lines | -279 (-94%) |
 
 ### Architecture Documentation
 

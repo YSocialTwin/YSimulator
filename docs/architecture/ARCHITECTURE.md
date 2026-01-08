@@ -46,9 +46,9 @@ The server has undergone a comprehensive 5-phase modernization:
 
 **Server Impact**: server.py reduced 37% (3,114 → 1,966 lines), +50 tests, zero regressions.
 
-### Client Refactoring (Phase 1 Completed - January 2026)
+### Client Refactoring (Phases 1-2 Completed - January 2026)
 
-The client has completed Phase 1 of modernization:
+The client has completed Phases 1 and 2 of modernization:
 
 1. **Action Generator Framework** (Phase 1 - ✅ COMPLETED)
    - Extracted 9 action handler methods into dedicated generator classes
@@ -60,7 +60,19 @@ The client has completed Phase 1 of modernization:
    - +10 tests, 100% conformance, zero regressions
    - Legacy code removed, single-path implementation
 
-**Client Impact**: client.py reduced 32% (2,924 → 1,996 lines), action_executor.py deleted (952 lines), +10 tests, zero regressions.
+2. **Simulation Orchestrator** (Phase 2 - ✅ COMPLETED)
+   - Extracted simulation orchestration into 5 dedicated modules
+   - Created Simulator, RoundExecutor, AgentScheduler, BatchProcessor, LifecycleManager
+   - Separated simulation flow from agent logic
+   - 7% additional reduction (1,996 → 2,161 lines after module extraction)
+   - +9 tests, 100% conformance, zero regressions
+   - Improved testability and maintainability
+
+**Client Impact**: 
+- Phase 1: client.py reduced 32% (2,924 → 1,996 lines), action_executor.py deleted (952 lines)
+- Phase 2: client.py refined to 2,161 lines with extracted orchestration (1,620 lines in simulation/)
+- Combined: +19 tests (10 action_generators + 9 simulation_orchestrator)
+- Total: 41/41 tests passing, zero regressions
 
 **Total Modernization**: Both server and client now follow clean architecture principles with modular, testable components.
 
