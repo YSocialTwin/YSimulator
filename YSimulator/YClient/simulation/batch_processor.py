@@ -107,6 +107,13 @@ class BatchProcessor:
             if not res_txt:
                 self.logger.warning(f"Empty LLM post response for agent {a_id}, skipping")
                 continue
+            
+            # Phase 3: Track LLM usage (estimate tokens from content length)
+            if self.cost_tracker:
+                # Rough estimate: ~4 characters per token
+                output_tokens = len(res_txt) // 4
+                input_tokens = 100  # Rough estimate for prompt
+                self.cost_tracker.record_call("generate_post", input_tokens, output_tokens)
 
             # Check if this is an image post (has 6 elements)
             if len(pending_item) == 6:
@@ -198,6 +205,18 @@ class BatchProcessor:
         results = self.batch_handler.gather_futures(futures)  # Blocks once for ALL reactions/comments
 
         for i, res_act in enumerate(results):
+            # Phase 3: Track LLM usage
+            if self.cost_tracker and res_act:
+                # Estimate tokens (rough: ~4 chars per token)
+                if res_act.upper() in REACTION_TYPES + ["IGNORE", "SHARE"]:
+                    # Simple reaction - minimal tokens
+                    output_tokens = 5
+                    input_tokens = 80
+                else:
+                    # Comment/share commentary - count actual content
+                    output_tokens = len(res_act) // 4
+                    input_tokens = 120
+                self.cost_tracker.record_call("generate_comment", input_tokens, output_tokens)
             # Handle tuples of varying lengths:
             # 4-element: (agent_id, cluster_id, target_post_id, future) - regular comment/reaction
             # 5-element: (agent_id, cluster_id, target_post_id, future, mention_id_or_action_type)
@@ -361,6 +380,14 @@ class BatchProcessor:
 
         for i, target_user in enumerate(results):
             a_id, cid, _ = pending_llm_follows[i]
+            
+            # Phase 3: Track LLM usage
+            if self.cost_tracker:
+                # Follow decision - minimal output (user_id or None)
+                output_tokens = 10
+                input_tokens = 60
+                self.cost_tracker.record_call("decide_follow", input_tokens, output_tokens)
+            
             # LLM returns user_id to follow or None to skip
             # Phase 3: validate response (target_user should be a user_id string or None)
             if target_user and isinstance(target_user, str):

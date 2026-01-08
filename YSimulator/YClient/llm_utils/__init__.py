@@ -13,13 +13,25 @@ Extracted as part of Phase 3 refactoring to improve:
 - Error handling (centralized retry logic)
 - Maintainability (single place for LLM interactions)
 - Monitoring (cost and usage tracking)
+
+Renamed from llm_service to llm_utils to avoid confusion with
+LLM_interactions/llm_service.py (the actual LLM implementation).
 """
 
-from YSimulator.YClient.llm_utils.llm_manager import LLMManager
-from YSimulator.YClient.llm_utils.batch_handler import BatchHandler
-from YSimulator.YClient.llm_utils.retry_handler import RetryHandler
-from YSimulator.YClient.llm_utils.response_parser import ResponseParser
+# Import components that don't require Ray
 from YSimulator.YClient.llm_utils.cost_tracker import CostTracker
+from YSimulator.YClient.llm_utils.response_parser import ResponseParser
+
+# Import Ray-dependent components (may fail if Ray not installed)
+try:
+    from YSimulator.YClient.llm_utils.batch_handler import BatchHandler
+    from YSimulator.YClient.llm_utils.llm_manager import LLMManager
+    from YSimulator.YClient.llm_utils.retry_handler import RetryHandler
+except ImportError:
+    # Ray not available - these components won't work but others will
+    BatchHandler = None
+    LLMManager = None
+    RetryHandler = None
 
 __all__ = [
     "LLMManager",
