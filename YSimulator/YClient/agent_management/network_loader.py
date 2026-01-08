@@ -41,6 +41,10 @@ class NetworkLoader:
         """
         Parse network edges from CSV file.
         
+        The CSV file format is simple two-column format without headers:
+        - Each row: follower_username,followed_username
+        - Example: NewsPage,agent_001
+        
         Args:
             network_csv_path: Path to network edges CSV file
             agent_profiles: List of agent profiles for username-to-ID mapping
@@ -59,28 +63,30 @@ class NetworkLoader:
         
         try:
             with open(network_csv_path, "r", newline="", encoding="utf-8") as csvfile:
-                reader = csv.DictReader(csvfile)
+                reader = csv.reader(csvfile)
                 
-                # Validate required columns
-                if not reader.fieldnames or "source" not in reader.fieldnames or "target" not in reader.fieldnames:
-                    self.logger.error(
-                        f"Network CSV must contain 'source' and 'target' columns. Found: {reader.fieldnames}"
-                    )
-                    return edges
-                
-                for row in reader:
-                    source = row["source"].strip()
-                    target = row["target"].strip()
-                    
-                    if not source or not target:
-                        self.logger.warning(f"Skipping invalid edge: source='{source}', target='{target}'")
+                for row_num, row in enumerate(reader, start=1):
+                    # Skip empty rows
+                    if not row or len(row) < 2:
                         continue
                     
-                    # Convert usernames to IDs if needed
-                    source_id = username_to_id.get(source, source)
-                    target_id = username_to_id.get(target, target)
+                    # Parse the edge: follower follows user
+                    follower_name = row[0].strip()
+                    user_name = row[1].strip()
                     
-                    edges.append((source_id, target_id))
+                    if not follower_name or not user_name:
+                        self.logger.warning(f"Skipping invalid edge at row {row_num}: '{follower_name}' -> '{user_name}'")
+                        continue
+                    
+                    # Skip if either username is not in our agent population
+                    if follower_name not in username_to_id or user_name not in username_to_id:
+                        continue
+                    
+                    # Get agent IDs
+                    follower_id = username_to_id[follower_name]
+                    user_id = username_to_id[user_name]
+                    
+                    edges.append((follower_id, user_id))
             
             self.logger.info(f"Parsed {len(edges)} network edges from {network_csv_path}")
         
