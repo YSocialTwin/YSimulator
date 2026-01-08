@@ -263,6 +263,18 @@ class SimulationClient(ActionExecutorMixin):
         self._lifecycle_manager = None
         self._round_executor = None
 
+        # Initialize opinion manager (Phase 4 refactoring - NEW)
+        # Centralized opinion dynamics management
+        from YSimulator.YClient.opinion import OpinionManager
+        self.opinion_manager = OpinionManager(
+            simulation_config=self.simulation_config,
+            server=self.server,
+            llm_manager=self.llm_manager,
+            agent_profiles=self.agent_profiles,
+            client_id=self.client_id,
+            logger=self.logger,
+        )
+
         self.logger.info(
             "Simulation client initialized",
             extra={
@@ -294,6 +306,7 @@ class SimulationClient(ActionExecutorMixin):
         round_id = ray.get(self.server.get_current_round_id.remote())
 
         # Build action context with all dependencies
+        # Phase 4: Use OpinionManager for opinion dynamics operations
         context = ActionContext(
             day=day,
             slot=slot,
@@ -316,17 +329,12 @@ class SimulationClient(ActionExecutorMixin):
             ),
             extract_agent_attrs_fn=self._extract_agent_attrs,
             annotate_action_fn=self._annotate_action_content,
-            is_opinion_dynamics_enabled_fn=self._is_opinion_dynamics_enabled,
-            map_opinion_to_group_fn=(
-                self._map_opinion_to_group if hasattr(self, "_map_opinion_to_group") else None
-            ),
-            infer_page_agent_opinion_fn=(
-                self._infer_page_agent_opinion
-                if hasattr(self, "_infer_page_agent_opinion")
-                else None
-            ),
-            get_opinions_for_post_fn=self._get_opinions_for_post,
-            calculate_opinion_updates_fn=self._calculate_opinion_updates,
+            # Phase 4: Delegate opinion operations to OpinionManager
+            is_opinion_dynamics_enabled_fn=self.opinion_manager.is_enabled,
+            map_opinion_to_group_fn=self.opinion_manager.map_opinion_to_group,
+            infer_page_agent_opinion_fn=self.opinion_manager.infer_page_agent_opinion,
+            get_opinions_for_post_fn=self.opinion_manager.get_opinions_for_post,
+            calculate_opinion_updates_fn=self.opinion_manager.calculate_opinion_updates,
         )
 
         return ActionGeneratorFactory(context)
@@ -1582,10 +1590,8 @@ class SimulationClient(ActionExecutorMixin):
     ) -> Optional[dict]:
         """
         Calculate opinion updates when an agent comments on a post.
-
-        Supports two opinion dynamics models based on simulation_config:
-        - "bounded_confidence": Classic bounded confidence model (all agents)
-        - "llm_evaluation": LLM-based evaluation (LLM agents only)
+        
+        Phase 4: Delegated to OpinionManager.
 
         Args:
             agent_id: UUID of the agent making the comment
@@ -1595,159 +1601,15 @@ class SimulationClient(ActionExecutorMixin):
         Returns:
             dict: Mapping of topic_id to new opinion value, or None if no updates
         """
-        try:
-            # Check if opinion dynamics is enabled
-            if not self._is_opinion_dynamics_enabled():
-                return None
-
-            # Get opinion dynamics config
-            opinion_config = self.simulation_config.get("opinion_dynamics", {})
-            if not opinion_config:
-                return None
-
-            # Get model name and parameters
-            model_name = opinion_config.get("model_name", "bounded_confidence")
-            params = opinion_config.get("parameters", {})
-
-            # Validate model selection
-            if model_name == "llm_evaluation":
-                # Check if this is an LLM agent
-                agent_profile = next((a for a in self.agent_profiles if a.id == agent_id), None)
-                if not agent_profile or not agent_profile.llm:
-                    self.logger.error(
-                        f"llm_evaluation model can only be used with LLM agents. "
-                        f"Agent {agent_id} is not an LLM agent. Skipping opinion update."
-                    )
-                    return None
-
-            # Get the parent post author
-            parent_author_id = parent_post_data.get("user_id")
-            if not parent_author_id:
-                return None
-
-            # Get the post topics from server
-            topic_ids = ray.get(
-                self.server.get_post_topics.remote(parent_post_id, client_id=self.client_id)
-            )
-            if not topic_ids:
-                return None
-
-            # Get post content (needed for LLM evaluation)
-            post_content = parent_post_data.get("tweet", "")
-
-            # Calculate updated opinions for each topic
-            updated_opinions = {}
-            for topic_id in topic_ids:
-                # Get topic name
-                topic_name = ray.get(
-                    self.server.get_topic_name_from_id.remote(topic_id, client_id=self.client_id)
-                )
-                if not topic_name:
-                    continue
-
-                # Get agent's LATEST opinion from database (not cached profile)
-                # This ensures we use the most recent opinion after interactions
-                agent_opinion = ray.get(
-                    self.server.get_latest_agent_opinion.remote(
-                        agent_id, topic_id, client_id=self.client_id
-                    )
-                )
-
-                # Get author's latest opinion from server
-                author_opinion = ray.get(
-                    self.server.get_latest_agent_opinion.remote(
-                        parent_author_id, topic_id, client_id=self.client_id
-                    )
-                )
-
-                # Check if author has opinion on topic
-                # If not, this is expected - opinion will be created during interaction
-                # The opinion dynamics model will handle cold_start properly
-                if author_opinion is None:
-                    self.logger.debug(
-                        f"Author {parent_author_id} has no opinion yet on topic '{topic_name}' "
-                        f"(topic_id: {topic_id}) in their post {parent_post_id}. "
-                        f"Opinion will be created during this interaction with cold_start strategy. "
-                        f"Skipping opinion update calculation for now."
-                    )
-                    continue
-
-                # Calculate new opinion based on selected model
-                if model_name == "llm_evaluation":
-                    # Use LLM-based evaluation
-                    from YSimulator.YClient.opinion_dynamics.llm_evaluation import llm_evaluation
-
-                    # Get evaluation scope and prepare neighbors' opinions if needed
-                    evaluation_scope = params.get("evaluation_scope", "interlocutor_only")
-                    peers_opinions = None
-
-                    if evaluation_scope == "neighbors":
-                        # Get neighbors' opinions from server
-                        neighbor_opinion_values = ray.get(
-                            self.server.get_neighbors_opinions.remote(
-                                agent_id, topic_id, client_id=self.client_id
-                            )
-                        )
-
-                        if neighbor_opinion_values:
-                            # Convert to opinion labels and count occurrences
-                            from collections import Counter
-
-                            from YSimulator.YClient.opinion_dynamics.utils import get_opinion_group
-
-                            opinion_groups = opinion_config.get("opinion_groups", {})
-                            neighbor_labels = [
-                                get_opinion_group(val, opinion_groups)
-                                for val in neighbor_opinion_values
-                            ]
-                            peers_opinions = list(Counter(neighbor_labels).items())
-
-                    # Calculate new opinion using LLM evaluation
-                    new_opinion = llm_evaluation(
-                        x=agent_opinion,
-                        y=author_opinion,
-                        text=post_content,
-                        topic=topic_name,
-                        evaluation_scope=evaluation_scope,
-                        cold_start=params.get("cold_start", "neutral"),
-                        group_classes=opinion_config.get("opinion_groups", {}),
-                        peers_opinions=peers_opinions,
-                        llm_manager=self.llm_manager,
-                    )
-                else:
-                    # Use bounded confidence model (default)
-                    from YSimulator.YClient.opinion_dynamics.confidence_bound import (
-                        bounded_confidence,
-                    )
-
-                    new_opinion = bounded_confidence(
-                        x=agent_opinion,
-                        y=author_opinion,
-                        epsilon=params.get("epsilon", 0.25),
-                        mu=params.get("mu", 0.5),
-                        theta=params.get("theta", 0.0),
-                        cold_start=params.get("cold_start", "neutral"),
-                    )
-
-                updated_opinions[topic_id] = new_opinion
-
-                self.logger.info(
-                    f"Opinion update calculated (model={model_name}): agent={agent_id}, "
-                    f"topic={topic_name}, old={agent_opinion}, author={author_opinion}, new={new_opinion}"
-                )
-
-            return updated_opinions if updated_opinions else None
-
-        except Exception as e:
-            self.logger.error(
-                f"Error calculating opinion updates for agent {agent_id}: {e}",
-                extra={"extra_data": {"error": str(e), "agent_id": agent_id}},
-            )
-            return None
+        return self.opinion_manager.calculate_opinion_updates(
+            agent_id, parent_post_id, parent_post_data
+        )
 
     def _map_opinion_to_group(self, opinion_value: float) -> str:
         """
         Map a numeric opinion value to a discrete opinion group label.
+        
+        Phase 4: Delegated to OpinionManager.
 
         Args:
             opinion_value: Numeric opinion in [0, 1]
@@ -1755,49 +1617,26 @@ class SimulationClient(ActionExecutorMixin):
         Returns:
             str: Opinion group label from simulation_config opinion_groups
         """
-        opinion_config = self.simulation_config.get("opinion_dynamics", {})
-        opinion_groups = opinion_config.get("opinion_groups", {})
-
-        if not opinion_groups:
-            # Default mapping if not configured
-            if opinion_value < 0.2:
-                return "Strongly against"
-            elif opinion_value < 0.4:
-                return "Against"
-            elif opinion_value < 0.6:
-                return "Neutral"
-            elif opinion_value < 0.8:
-                return "In favor"
-            else:
-                return "Strongly in favor"
-
-        # Find which group the opinion falls into
-        for group_name, (lower, upper) in opinion_groups.items():
-            if lower <= opinion_value <= upper:
-                return group_name
-
-        # Fallback
-        return "Neutral"
+        return self.opinion_manager.map_opinion_to_group(opinion_value)
 
     def _is_opinion_dynamics_enabled(self) -> bool:
         """
         Check if opinion dynamics is enabled in the simulation configuration.
-
+        
+        Phase 4: Delegated to OpinionManager.
+        
         Returns:
             bool: True if opinion dynamics is enabled, False otherwise
         """
-        opinion_config = self.simulation_config.get("opinion_dynamics", {})
-        return opinion_config.get("enabled", False)
+        return self.opinion_manager.is_enabled()
 
     def _infer_page_agent_opinion(
         self, agent_id: str, article_content: str, topic_name: str
     ) -> float:
         """
         Infer opinion for a page agent on a topic from article content.
-
-        This method is called CLIENT-SIDE before submitting article posts.
-        - LLM page agents: Use LLM service to infer opinion from article
-        - Rule-based page agents: Generate random opinion
+        
+        Phase 4: Delegated to OpinionManager.
 
         Args:
             agent_id: Agent UUID
@@ -1807,52 +1646,15 @@ class SimulationClient(ActionExecutorMixin):
         Returns:
             float: Opinion value in [0, 1] range
         """
-        try:
-            # Get agent profile to determine if LLM or rule-based
-            agent_profile = next((a for a in self.agent_profiles if a.id == agent_id), None)
-            if not agent_profile:
-                self.logger.warning(f"Agent profile not found for {agent_id}, using random opinion")
-                return random.random()
-
-            # Check if this is an LLM agent
-            if agent_profile.llm:
-                # LLM page agent: infer opinion from article content using LLM service
-                opinion_config = self.simulation_config.get("opinion_dynamics", {})
-                opinion_groups = opinion_config.get("opinion_groups", {})
-
-                if not opinion_groups:
-                    self.logger.warning("No opinion_groups configured, using random opinion")
-                    return random.random()
-
-                # Call LLM service to infer opinion
-                opinion_value = ray.get(
-                    self.llm_manager.infer_article_opinion(
-                        article_content, topic_name, opinion_groups
-                    )
-                )
-                self.logger.info(
-                    f"LLM page agent {agent_id}: inferred opinion {opinion_value} "
-                    f"on topic '{topic_name}' from article content"
-                )
-                return opinion_value
-            else:
-                # Rule-based page agent: random opinion
-                opinion_value = random.random()
-                self.logger.info(
-                    f"Rule-based page agent {agent_id}: assigned random opinion {opinion_value} "
-                    f"on topic '{topic_name}'"
-                )
-                return opinion_value
-
-        except Exception as e:
-            self.logger.error(
-                f"Error inferring opinion for page agent {agent_id}: {e}. Using random value."
-            )
-            return random.random()
+        return self.opinion_manager.infer_page_agent_opinion(
+            agent_id, article_content, topic_name
+        )
 
     def _get_opinions_for_post(self, agent_id: str, post_id: str) -> dict:
         """
         Get agent's opinions on the topics discussed in a post.
+        
+        Phase 4: Delegated to OpinionManager.
 
         Args:
             agent_id: UUID of the agent
@@ -1865,52 +1667,7 @@ class SimulationClient(ActionExecutorMixin):
                 "opinion_values": Dict mapping topic names to numeric values
             }
         """
-        try:
-            # Check if opinion dynamics is enabled
-            if not self._is_opinion_dynamics_enabled():
-                return {"topics": [], "opinions": {}, "opinion_values": {}}
-
-            # Get agent profile
-            agent_profile = next((a for a in self.agent_profiles if a.id == agent_id), None)
-            if not agent_profile or not agent_profile.opinions:
-                return {"topics": [], "opinions": {}, "opinion_values": {}}
-
-            # Get post topics
-            topic_ids = ray.get(
-                self.server.get_post_topics.remote(post_id, client_id=self.client_id)
-            )
-            if not topic_ids:
-                return {"topics": [], "opinions": {}, "opinion_values": {}}
-
-            # For each topic, get the agent's opinion
-            topics = []
-            opinions = {}
-            opinion_values = {}
-
-            for topic_id in topic_ids:
-                # Get topic name
-                topic_name = ray.get(
-                    self.server.get_topic_name_from_id.remote(topic_id, client_id=self.client_id)
-                )
-                if not topic_name:
-                    continue
-
-                # Get agent's opinion on this topic
-                if topic_name in agent_profile.opinions:
-                    opinion_value = agent_profile.opinions[topic_name]
-                    opinion_label = self._map_opinion_to_group(opinion_value)
-
-                    topics.append(topic_name)
-                    opinions[topic_name] = opinion_label
-                    opinion_values[topic_name] = opinion_value
-
-            return {"topics": topics, "opinions": opinions, "opinion_values": opinion_values}
-        except Exception as e:
-            self.logger.error(
-                f"Error getting opinions for post {post_id}: {e}",
-                extra={"extra_data": {"error": str(e), "agent_id": agent_id, "post_id": post_id}},
-            )
-            return {"topics": [], "opinions": {}, "opinion_values": {}}
+        return self.opinion_manager.get_opinions_for_post(agent_id, post_id)
 
     def _process_secondary_follows(
         self, secondary_follow_candidates: list, rule_based_interactions: list, actions: list
