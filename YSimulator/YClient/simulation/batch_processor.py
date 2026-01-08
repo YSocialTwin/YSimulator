@@ -9,6 +9,7 @@ The scatter/gather pattern:
 - Gather: Wait once for all LLM results simultaneously
 
 Extracted from client.py as part of Phase 2 refactoring.
+Updated in Phase 3 to use LLM service layer.
 """
 
 import logging
@@ -19,6 +20,7 @@ import ray
 
 from YSimulator.YClient.classes.ray_models import ActionDTO
 from YSimulator.YClient.text_support.text_annotator import annotate_text
+from YSimulator.YClient.llm_service import BatchHandler, ResponseParser
 
 # Constants
 REACTION_TYPES = ["LIKE", "LOVE", "LAUGH", "ANGRY", "SAD", "IGNORE"]
@@ -32,6 +34,8 @@ class BatchProcessor:
     - Posts (content generation)
     - Reactions (comments, reactions, shares)
     - Follows (follow decisions)
+    
+    Now uses LLM service layer (Phase 3) for improved error handling and validation.
     """
 
     def __init__(
@@ -66,6 +70,10 @@ class BatchProcessor:
         self.enable_emotions = enable_emotions
         self.perspective_api_key = perspective_api_key
         self.logger = logger
+        
+        # Phase 3: Initialize LLM service components
+        self.batch_handler = BatchHandler(logger=logger)
+        self.response_parser = ResponseParser(logger=logger)
 
     def gather_pending_llm_posts(
         self, pending_llm_posts: List[Tuple], actions: List[ActionDTO]
@@ -82,14 +90,20 @@ class BatchProcessor:
         if not pending_llm_posts:
             return
 
-        # Extract futures and wait for all posts in parallel
+        # Phase 3: Use batch_handler for consistent error handling
         futures = [p[2] for p in pending_llm_posts]
-        results = ray.get(futures)  # Blocks once for ALL posts
+        results = self.batch_handler.gather_futures(futures)  # Blocks once for ALL posts
 
         for i, res_txt in enumerate(results):
             pending_item = pending_llm_posts[i]
             a_id = pending_item[0]
             cid = pending_item[1]
+            
+            # Phase 3: Validate response
+            res_txt = self.response_parser.parse_text_response(res_txt, default="")
+            if not res_txt:
+                self.logger.warning(f"Empty LLM post response for agent {a_id}, skipping")
+                continue
 
             # Check if this is an image post (has 6 elements)
             if len(pending_item) == 6:
@@ -176,9 +190,9 @@ class BatchProcessor:
         if mention_replies > 0:
             self.logger.info(f"[REPLY] {mention_replies} of these are mention replies")
 
-        # Extract futures and wait for all reactions in parallel
+        # Phase 3: Use batch_handler for consistent error handling
         futures = [r[3] for r in pending_llm_reactions]
-        results = ray.get(futures)  # Blocks once for ALL reactions/comments
+        results = self.batch_handler.gather_futures(futures)  # Blocks once for ALL reactions/comments
 
         for i, res_act in enumerate(results):
             # Handle tuples of varying lengths:
@@ -338,12 +352,13 @@ class BatchProcessor:
         if not pending_llm_follows:
             return
 
-        # Extract futures and wait for all follow decisions in parallel
+        # Phase 3: Use batch_handler for consistent error handling
         futures = [f[2] for f in pending_llm_follows]
-        results = ray.get(futures)  # Blocks once for ALL follow decisions
+        results = self.batch_handler.gather_futures(futures)  # Blocks once for ALL follow decisions
 
         for i, target_user in enumerate(results):
             a_id, cid, _ = pending_llm_follows[i]
             # LLM returns user_id to follow or None to skip
-            if target_user:
+            # Phase 3: validate response (target_user should be a user_id string or None)
+            if target_user and isinstance(target_user, str):
                 actions.append(ActionDTO(a_id, cid, "FOLLOW", target_user_id=target_user))
