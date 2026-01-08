@@ -1071,6 +1071,90 @@ class SimulationClient:
 
         return result.actions, result.pending_llm_calls, result.metadata
 
+    def _calculate_opinion_updates(
+        self, agent_id: str, parent_post_id: str, parent_post_data: dict
+    ) -> Optional[dict]:
+        """
+        Calculate opinion updates when an agent comments on a post.
+        
+        Phase 4: Delegated to OpinionManager.
+
+        Args:
+            agent_id: UUID of the agent making the comment
+            parent_post_id: UUID of the post being commented on
+            parent_post_data: Dictionary containing post data including user_id
+
+        Returns:
+            dict: Mapping of topic_id to new opinion value, or None if no updates
+        """
+        return self.opinion_manager.calculate_opinion_updates(
+            agent_id, parent_post_id, parent_post_data
+        )
+
+    def _map_opinion_to_group(self, opinion_value: float) -> str:
+        """
+        Map a numeric opinion value to a discrete opinion group label.
+        
+        Phase 4: Delegated to OpinionManager.
+
+        Args:
+            opinion_value: Numeric opinion in [0, 1]
+
+        Returns:
+            str: Opinion group label from simulation_config opinion_groups
+        """
+        return self.opinion_manager.map_opinion_to_group(opinion_value)
+
+    def _is_opinion_dynamics_enabled(self) -> bool:
+        """
+        Check if opinion dynamics is enabled in the simulation configuration.
+        
+        Phase 4: Delegated to OpinionManager.
+        
+        Returns:
+            bool: True if opinion dynamics is enabled, False otherwise
+        """
+        return self.opinion_manager.is_enabled()
+
+    def _infer_page_agent_opinion(
+        self, agent_id: str, article_content: str, topic_name: str
+    ) -> float:
+        """
+        Infer opinion for a page agent on a topic from article content.
+        
+        Phase 4: Delegated to OpinionManager.
+
+        Args:
+            agent_id: Agent UUID
+            article_content: Article text to analyze
+            topic_name: Topic to infer opinion about
+
+        Returns:
+            float: Opinion value in [0, 1] range
+        """
+        return self.opinion_manager.infer_page_agent_opinion(
+            agent_id, article_content, topic_name
+        )
+
+    def _get_opinions_for_post(self, agent_id: str, post_id: str) -> dict:
+        """
+        Get agent's opinions on the topics discussed in a post.
+        
+        Phase 4: Delegated to OpinionManager.
+
+        Args:
+            agent_id: UUID of the agent
+            post_id: UUID of the post
+
+        Returns:
+            dict: {
+                "topics": List of topic names,
+                "opinions": Dict mapping topic names to opinion labels,
+                "opinion_values": Dict mapping topic names to numeric values
+            }
+        """
+        return self.opinion_manager.get_opinions_for_post(agent_id, post_id)
+
     def _process_secondary_follows(
         self, secondary_follow_candidates: list, rule_based_interactions: list, actions: list
     ) -> None:
