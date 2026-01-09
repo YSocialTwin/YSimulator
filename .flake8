@@ -4,7 +4,8 @@
 max-line-length = 120
 # Ignore E203 (whitespace before ':') which conflicts with Black
 # Ignore E127 (continuation line over-indented) which is often a false positive
-extend-ignore = E203, E127, W503
+# Ignore E402 (module import not at top) for test files with sys.path/module mocking
+extend-ignore = E203, E127, E402, W503
 per-file-ignores =
     # Long strings in template configurations
     YSimulator/YClient/LLM_interactions/llm_service.py:E501
