@@ -537,6 +537,48 @@ The `agents` section controls detailed behavior parameters:
 - `probability_of_daily_follow` (0.0-1.0): Chance of evaluating new follows at end of each day
 - `probability_of_secondary_follow` (0.0-1.0): Chance of follow/unfollow after content interactions
 
+#### Follow Action Decay Configuration
+
+Control time-based decay of follow action probability. This models the realistic behavior where users are most likely to follow others during their initial period of activity, with decreasing likelihood over time.
+
+```json
+{
+  "agents": {
+    "follow_action_decay": {
+      "enabled": false,
+      "decay_function": "exponential",
+      "half_life_rounds": 168,
+      "decay_rate": 0.01,
+      "min_probability_ratio": 0.1
+    }
+  }
+}
+```
+
+**Parameters:**
+- `enabled` (boolean): Enable time-based follow action decay (default: false)
+- `decay_function` (string): Type of decay function - "exponential" or "linear"
+- `half_life_rounds` (number): For exponential decay, number of rounds until probability reaches 50% (e.g., 168 = 7 days with 24 slots/day)
+- `decay_rate` (float): For linear decay, reduction rate per round (0.0-1.0)
+- `min_probability_ratio` (float): Minimum decay multiplier (0.0-1.0), prevents probability from going to zero (default: 0.1 = 10% of original)
+
+**Decay Functions:**
+
+*Exponential Decay:* `multiplier = 0.5 ^ (rounds_since_join / half_life_rounds)`
+- Suitable for modeling natural decline in follow behavior
+- Example: With half_life_rounds=168 (7 days), after 7 days the follow probability is 50% of original, after 14 days it's 25%, etc.
+
+*Linear Decay:* `multiplier = 1.0 - (decay_rate × rounds_since_join)`
+- Provides constant reduction per round
+- Example: With decay_rate=0.01, probability reduces by 1% per round
+- Reaches min_probability_ratio when: rounds = (1.0 - min_probability_ratio) / decay_rate
+
+**Notes:**
+- Decay only applies to agents with a `joined_on` round recorded (new agents joining during simulation)
+- Initial agents from `agent_population.json` (without `joined_on`) are not affected by decay
+- Decay multiplier is applied to the `follow` action weight from `actions_likelihood`
+- The final follow probability never goes below `min_probability_ratio` times the original weight
+
 #### Logging Configuration
 
 Control which log files are generated. See [LOGGING_CONFIG.md](../logging/LOGGING_CONFIG.md) for details.
