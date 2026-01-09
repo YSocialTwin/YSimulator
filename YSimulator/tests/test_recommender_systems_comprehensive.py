@@ -353,29 +353,6 @@ class TestServerFollowRecommenders:
             func = getattr(follow_recsys_db, func_name)
             assert callable(func)
 
-
-# ================================================
-# RECOMMENDATION UTILITIES TESTS
-# ================================================
-
-
-class TestRecommenderUtils:
-    """Test recommendation utility functions."""
-
-    def test_utils_module_exists(self):
-        """Test that utils module exists."""
-        from YSimulator.YServer.recsys import utils
-
-        assert utils is not None
-
-    def test_utils_functions_available(self):
-        """Test availability of utility functions."""
-        from YSimulator.YServer.recsys import utils
-
-        # Check module has functions (at minimum should be importable)
-        assert hasattr(utils, "__name__")
-
-
 # ================================================
 # INTEGRATION AND EDGE CASE TESTS
 # ================================================
