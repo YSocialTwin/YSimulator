@@ -351,6 +351,7 @@ def select_action(
         ],  # Broadcasters post, comment and share contents and images: they are content producers
         "explorer": [
             "follow",
+            "search",
         ],  # Explorers follow and search to grow network: they are lurkers
     }
 
