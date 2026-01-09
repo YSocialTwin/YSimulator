@@ -1,11 +1,13 @@
 # YSimulator Documentation Index
 
-**Version:** 2.2  
-**Last Updated:** January 5, 2026
+**Version:** 3.0  
+**Last Updated:** January 8, 2026
 
 Welcome to the YSimulator documentation! This comprehensive guide will help you understand, configure, extend, and optimize your social media simulations.
 
 > **📁 New Structure**: Documentation has been reorganized into thematic subdirectories for better navigation. See the [directory structure](#-documentation-directory-structure) below.
+> 
+> **✨ New in v3.0**: Added comprehensive YClient audit after Phase 1-6 refactoring (74% code reduction)
 
 ---
 
@@ -33,6 +35,7 @@ Welcome to the YSimulator documentation! This comprehensive guide will help you 
 |----------|-------------|------------|
 | **[Recommendation Systems](../features/RECOMMENDATION_SYSTEMS.md)** | Content & follow recommendations (1,200+ lines) | 10 content modes, 5 follow strategies, algorithms, performance |
 | **[Opinion Dynamics](../features/OPINION_DYNAMICS.md)** | Opinion modeling and evolution (1,200+ lines) | Bounded confidence, LLM evaluation, polarization |
+| **[Opinion Dynamics Architecture](../features/OPINION_DYNAMICS_ARCHITECTURE.md)** | Adding new opinion models (guide) | Two-layer architecture, model development, complete examples |
 | **[Interests & Topics](../features/INTERESTS.md)** | Interest management system (320+ lines) | Attention windows, sliding windows, topic extraction |
 | **[Annotations](../features/ANNOTATION_IMPLEMENTATION.md)** | Emotion annotation system (200+ lines) | GoEmotions taxonomy, 28 emotions, sentiment analysis |
 
@@ -48,11 +51,12 @@ Welcome to the YSimulator documentation! This comprehensive guide will help you 
 | Document | Description | Contents |
 |----------|-------------|----------|
 | **[Architecture Overview](../architecture/ARCHITECTURE.md)** | System design and components | Coordinator-worker pattern, layered architecture |
+| **[YClient Audit](../architecture/YCLIENT_AUDIT.md)** ✨ | Comprehensive YClient architecture (950+ lines) | Post-Phase 6 audit, all modules, integration patterns, usage examples |
 | **[System Diagrams](../architecture/DIAGRAMS.md)** | Visual architecture (800+ lines) | Component diagrams, sequence diagrams, data flow |
 | **[Repository Pattern](../architecture/REPOSITORY_PATTERN.md)** | Data access abstraction | Repository pattern, service layer, clean architecture |
 | **[Action Processor Framework](../architecture/ACTION_PROCESSOR_FRAMEWORK.md)** | Modular action processing | Strategy pattern, action routing, extensibility |
 | **[Recommendation Engine](../architecture/RECOMMENDATION_ENGINE.md)** | Content & follow recommendation architecture | Pluggable strategies, dual backend support |
-| **[Opinion Dynamics Handler](../architecture/OPINION_DYNAMICS_HANDLER.md)** | Opinion management system | Profile-based initialization, LLM integration |
+| **[Opinion Dynamics Handler](../architecture/OPINION_DYNAMICS_HANDLER.md)** | Server-side opinion management | Profile-based initialization, database operations, Phase 3 |
 | **[Coordination Layer](../architecture/COORDINATION_LAYER.md)** | Simulation orchestration | Client lifecycle, barrier synchronization, time advancement |
 | **[Service Integration](../architecture/SERVICE_INTEGRATION.md)** | Complete service adoption | Direct service access, zero database coupling |
 
@@ -63,6 +67,21 @@ Welcome to the YSimulator documentation! This comprehensive guide will help you 
 | **[Extending YSimulator](../development/EXTENDING.md)** | Developer guide (950+ lines) | Adding actions, extending behaviors, code examples |
 | **[Code Formatting](../development/FORMATTING.md)** | Development standards | Black, isort, pre-commit hooks |
 | **[Codebase Analysis](../development/CODEBASE_ANALYSIS.md)** | Code organization (1,660+ lines) | Architecture, patterns, testing infrastructure |
+
+### 📖 Implementation Guides
+
+Step-by-step guides for extending YSimulator with new features:
+
+| Guide | Description | Est. Time | Key Topics |
+|-------|-------------|-----------|------------|
+| **[Adding New Actions](../development/ADDING_ACTIONS_GUIDE.md)** ✨ | Complete guide for new action types (Phase 1) | 1-2 hours | ActionGenerator pattern, LLM integration, OpinionManager, testing strategies |
+| **[Opinion Dynamics Models](../features/OPINION_DYNAMICS_ARCHITECTURE.md#step-by-step-guide)** | Add new opinion algorithms (Phase 4) | 2-4 hours | Two-layer architecture, model development, bounded confidence examples |
+| **[Recommendation Systems](../development/ADDING_RECSYS_GUIDE.md)** ✨ | Extend content/follow recommendations | 2-3 hours | Service layer, Redis caching, interest graph example, performance optimization |
+
+**Quick Reference**:
+- Want to add a new agent action (like "Quote" or "Poll")? → [Adding New Actions Guide](../development/ADDING_ACTIONS_GUIDE.md)
+- Want to implement a custom opinion dynamics model? → [Opinion Dynamics Architecture](../features/OPINION_DYNAMICS_ARCHITECTURE.md#step-by-step-guide)
+- Want to create a new recommendation algorithm? → [Recommendation Systems Guide](../development/ADDING_RECSYS_GUIDE.md)
 
 ### 📊 Logging & Monitoring
 
@@ -76,8 +95,8 @@ Welcome to the YSimulator documentation! This comprehensive guide will help you 
 
 | Document | Description | Contents |
 |----------|-------------|----------|
-| **[Critical Code Paths](../analysis/CRITICAL_CODE_PATHS.md)** | Performance-critical code (530+ lines) | Hot paths, optimization opportunities |
-| **[Test Coverage Report](../analysis/TEST_COVERAGE_REPORT.md)** | Testing status and progress | Coverage metrics, test phases, testing infrastructure |
+| **[Critical Code Paths](../architecture/CRITICAL_CODE_PATHS.md)** | Performance-critical code (530+ lines) | Hot paths, optimization opportunities |
+| **[Test Coverage Report](../testing/TEST_COVERAGE_REPORT.md)** | Testing status and progress (v3.1 with Phase 6) | Coverage metrics, all phases tested, recommendations |
 
 ### 🔧 Refactoring & Evolution
 
@@ -85,7 +104,7 @@ Welcome to the YSimulator documentation! This comprehensive guide will help you 
 |----------|-------------|----------|
 | **[Server Refactoring Report](../refactoring/SERVER_REFACTORING_REPORT.md)** | Complete server modernization | 5-phase transformation, metrics, patterns |
 | **[Refactoring Audit Report](../refactoring/REFACTORING_AUDIT_REPORT.md)** | Comprehensive audit results | Test coverage, regression analysis, validation |
-| **[Client Refactoring Report](../refactoring/CLIENT_REFACTORING_REPORT.md)** | Client architecture improvements | Modularity, testing, maintainability |
+| **[Client Refactoring Report](../refactoring/CLIENT_REFACTORING_REPORT.md)** | Client architecture improvements (Phases 1-6) | Modularity, testing, maintainability, 74% code reduction |
 
 ---
 
@@ -471,7 +490,7 @@ docs/
 │   ├── REPOSITORY_PATTERN.md           # Data access patterns
 │   ├── ACTION_PROCESSOR_FRAMEWORK.md   # Phase 1 refactoring
 │   ├── RECOMMENDATION_ENGINE.md        # Phase 2 refactoring
-│   ├── OPINION_DYNAMICS_HANDLER.md     # Phase 3 refactoring
+│   ├── OPINION_DYNAMICS_HANDLER.md     # Phase 3 refactoring (server)
 │   ├── COORDINATION_LAYER.md           # Phase 4 refactoring
 │   └── SERVICE_INTEGRATION.md          # Phase 5 refactoring
 ├── agents/             # Agent behavior documentation
@@ -480,7 +499,8 @@ docs/
 │   └── AGENT_TEMPORAL_ACTIVITIES.md # Temporal patterns
 ├── features/           # Core feature documentation
 │   ├── RECOMMENDATION_SYSTEMS.md  # Content & follow recommendations
-│   ├── OPINION_DYNAMICS.md        # Opinion modeling
+│   ├── OPINION_DYNAMICS.md        # Opinion modeling and evolution
+│   ├── OPINION_DYNAMICS_ARCHITECTURE.md # Adding new opinion models (guide)
 │   ├── INTERESTS.md               # Interest management
 │   └── ANNOTATION_IMPLEMENTATION.md # Emotion annotations
 ├── data-storage/       # Database and storage

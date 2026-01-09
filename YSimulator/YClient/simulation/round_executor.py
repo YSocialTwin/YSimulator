@@ -42,9 +42,7 @@ class RoundExecutor:
         actions_likelihood: dict,
         select_action_fn,
         determine_agent_type_fn,
-        handle_reply_to_mention_fn,
         dispatch_action_with_generator_fn,
-        process_secondary_follows_fn,
     ):
         """
         Initialize the RoundExecutor.
@@ -58,9 +56,7 @@ class RoundExecutor:
             actions_likelihood: Action probability configuration
             select_action_fn: Function to select agent actions
             determine_agent_type_fn: Function to determine agent type
-            handle_reply_to_mention_fn: Function to handle reply to mentions
             dispatch_action_with_generator_fn: Function to dispatch actions with generators
-            process_secondary_follows_fn: Function to process secondary follows
         """
         self.agent_profiles = agent_profiles
         self.server = server
@@ -70,9 +66,7 @@ class RoundExecutor:
         self.actions_likelihood = actions_likelihood
         self.select_action_fn = select_action_fn
         self.determine_agent_type_fn = determine_agent_type_fn
-        self.handle_reply_to_mention_fn = handle_reply_to_mention_fn
         self.dispatch_action_with_generator_fn = dispatch_action_with_generator_fn
-        self.process_secondary_follows_fn = process_secondary_follows_fn
 
     def execute_round(
         self,
@@ -120,11 +114,21 @@ class RoundExecutor:
 
             # REPLY PIPELINE: Check for unreplied mentions and reply to one if present
             # This happens BEFORE the agent's normal actions
-            # Page agents are excluded from reply pipeline
+            # Page agents are excluded from reply pipeline (handled in ReplyGenerator)
             self.logger.debug(
                 f"[REPLY] Processing agent {agent.username} (type: {agent_type}, is_page: {agent.is_page})"
             )
-            self.handle_reply_to_mention_fn(agent, agent_type, pending_llm_reactions, actions)
+            
+            # Use action generator framework for reply (Phase 1 consistency)
+            immediate_actions, pending_calls, metadata = self.dispatch_action_with_generator_fn(
+                "reply", agent, agent_type, None
+            )
+            
+            # Add immediate actions (rule-based)
+            actions.extend(immediate_actions)
+            
+            # Add pending LLM calls to the pending_llm_reactions list
+            pending_llm_reactions.extend(pending_calls)
 
             # Sample number of actions for this agent based on daily_activity_level
             # Page agents can perform at most 1 action (0 or 1)
@@ -205,17 +209,3 @@ class RoundExecutor:
             rule_based_interactions,
         )
 
-    def process_secondary_follows_wrapper(
-        self, secondary_follow_candidates: List[Tuple], rule_based_interactions: List[Tuple], actions: List[ActionDTO]
-    ) -> None:
-        """
-        Wrapper for processing secondary follows.
-
-        Args:
-            secondary_follow_candidates: List of LLM interaction candidates
-            rule_based_interactions: List of rule-based interaction candidates
-            actions: List to append follow actions to
-        """
-        self.process_secondary_follows_fn(
-            secondary_follow_candidates, rule_based_interactions, actions
-        )

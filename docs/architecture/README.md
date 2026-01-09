@@ -13,6 +13,11 @@ This directory contains system architecture and design pattern documentation.
   - Coordination mechanisms
   - Technology stack
 
+- **[CRITICAL_CODE_PATHS.md](CRITICAL_CODE_PATHS.md)** - Performance-critical code (530+ lines)
+  - Hot paths and optimization opportunities
+  - Critical code sections
+  - Performance considerations
+
 - **[DIAGRAMS.md](DIAGRAMS.md)** - Visual architecture diagrams (800+ lines)
   - Component diagrams
   - Sequence diagrams
