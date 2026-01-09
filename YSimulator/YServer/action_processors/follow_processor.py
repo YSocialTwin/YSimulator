@@ -16,27 +16,27 @@ from YSimulator.YServer.action_processors.base_processor import (
 
 class FollowProcessor(BaseActionProcessor):
     """Processor for FOLLOW actions."""
-    
+
     def __init__(self, services: Any, logger: Optional[logging.Logger] = None):
         """
         Initialize follow processor.
-        
+
         Args:
             services: Database adapter or service container
             logger: Logger instance
         """
         super().__init__(services, logger)
-    
+
     def process(self, action: Any, context: ActionContext) -> ActionResult:
         """
         Process a FOLLOW action.
-        
+
         Creates a follow relationship record between follower and target user.
-        
+
         Args:
             action: ActionDTO with action_type="FOLLOW"
             context: ActionContext with current round info
-            
+
         Returns:
             ActionResult indicating success/failure
         """
@@ -56,17 +56,17 @@ class FollowProcessor(BaseActionProcessor):
                     success=False,
                     action_type="FOLLOW",
                     agent_id=action.agent_id,
-                    error="Missing required field: target_user_id"
+                    error="Missing required field: target_user_id",
                 )
-            
+
             # Create the follow relationship
             # FollowService.add_follow expects: follower_id, followee_id, round_id
             success = self.services.follow_service.add_follow(
                 follower_id=str(action.agent_id),
                 followee_id=str(action.target_user_id),
-                round_id=context.current_round_id
+                round_id=context.current_round_id,
             )
-            
+
             if not success:
                 self.logger.warning(
                     f"Failed to add follow for agent {action.agent_id}",
@@ -81,21 +81,18 @@ class FollowProcessor(BaseActionProcessor):
                     success=False,
                     action_type="FOLLOW",
                     agent_id=action.agent_id,
-                    error="Failed to create follow relationship"
+                    error="Failed to create follow relationship",
                 )
-            
+
             return ActionResult(
                 success=True,
                 action_type="FOLLOW",
                 agent_id=action.agent_id,
-                metadata={"target_user_id": action.target_user_id}
+                metadata={"target_user_id": action.target_user_id},
             )
-            
+
         except Exception as e:
             self.logger.error(f"Error processing FOLLOW action: {e}")
             return ActionResult(
-                success=False,
-                action_type="FOLLOW",
-                agent_id=action.agent_id,
-                error=str(e)
+                success=False, action_type="FOLLOW", agent_id=action.agent_id, error=str(e)
             )

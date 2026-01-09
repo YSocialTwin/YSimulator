@@ -66,9 +66,7 @@ class AgentScheduler:
         self._churned_agents_cache = set()
         self._churned_agents_cache_valid = False
 
-    def select_active_agents(
-        self, slot: int
-    ) -> Tuple[List[AgentProfile], List[AgentProfile]]:
+    def select_active_agents(self, slot: int) -> Tuple[List[AgentProfile], List[AgentProfile]]:
         """
         Select active agents for a given time slot.
 
@@ -213,7 +211,9 @@ class AgentScheduler:
 
             # Calculate number to sample from this archetype based on weight
             num_from_archetype = max(1, int(num_to_sample * weight))
-            num_from_archetype = min(num_from_archetype, len(agents_in_archetype), remaining_to_sample)
+            num_from_archetype = min(
+                num_from_archetype, len(agents_in_archetype), remaining_to_sample
+            )
 
             # Sample from this archetype
             sampled_from_archetype = random.sample(agents_in_archetype, k=num_from_archetype)
@@ -226,8 +226,7 @@ class AgentScheduler:
             remaining_agents = [a for a in agents if a not in sampled_agents]
             if remaining_agents:
                 additional = random.sample(
-                    remaining_agents,
-                    k=min(remaining_to_sample, len(remaining_agents))
+                    remaining_agents, k=min(remaining_to_sample, len(remaining_agents))
                 )
                 sampled_agents.extend(additional)
 

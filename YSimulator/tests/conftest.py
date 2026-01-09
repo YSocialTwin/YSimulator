@@ -43,17 +43,17 @@ def test_data_dir() -> Path:
 def isolated_db() -> Generator[str, None, None]:
     """
     Provide an isolated SQLite database for each test.
-    
+
     This fixture creates a new temporary database for each test function,
     ensuring complete isolation between tests.
     """
     with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as tmpfile:
         db_path = tmpfile.name
-    
+
     db_url = f"sqlite:///{db_path}"
-    
+
     yield db_url
-    
+
     # Cleanup
     try:
         if os.path.exists(db_path):
@@ -61,6 +61,7 @@ def isolated_db() -> Generator[str, None, None]:
     except (OSError, PermissionError) as e:
         # Best effort cleanup - log but don't fail test
         import logging
+
         logging.getLogger(__name__).debug(f"Cleanup failed for {db_path}: {e}")
 
 
@@ -68,24 +69,25 @@ def isolated_db() -> Generator[str, None, None]:
 def db_session(isolated_db: str) -> Generator[Session, None, None]:
     """
     Provide a SQLAlchemy session with an isolated database.
-    
+
     This fixture creates a new session for each test, with automatic
     rollback and cleanup after the test completes.
     """
     engine = create_engine(isolated_db)
     SessionLocal = sessionmaker(bind=engine)
-    
+
     # Import models to ensure tables are created
     try:
         from YSimulator.YServer.classes.models import Base
+
         Base.metadata.create_all(engine)
     except ImportError:
         pass  # Models not available in all test contexts
-    
+
     session = SessionLocal()
-    
+
     yield session
-    
+
     session.close()
     engine.dispose()
 
@@ -124,7 +126,7 @@ def sample_post_data() -> dict:
 def reset_singletons():
     """
     Reset singleton instances between tests.
-    
+
     This ensures that singleton objects don't carry state between tests.
     """
     yield

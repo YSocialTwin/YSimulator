@@ -9,18 +9,19 @@ import uuid
 from pathlib import Path
 
 # Namespace UUID for generating deterministic agent UUIDs
-AGENT_UUID_NAMESPACE = uuid.UUID('12345678-1234-5678-1234-567812345678')
+AGENT_UUID_NAMESPACE = uuid.UUID("12345678-1234-5678-1234-567812345678")
+
 
 def convert_agent_ids_to_uuid(json_file_path):
     """Convert all agent IDs in the JSON file from integers to UUIDs."""
-    
+
     # Read the JSON file
-    with open(json_file_path, 'r') as f:
+    with open(json_file_path, "r") as f:
         data = json.load(f)
-    
+
     # Create a mapping of old IDs to new UUIDs
     id_mapping = {}
-    
+
     # Convert agent IDs
     if "agents" in data:
         for agent in data["agents"]:
@@ -31,15 +32,18 @@ def convert_agent_ids_to_uuid(json_file_path):
                 new_uuid = str(uuid.uuid5(AGENT_UUID_NAMESPACE, f"agent_{old_id}"))
                 id_mapping[old_id] = new_uuid
                 agent["id"] = new_uuid
-                print(f"Converted agent {old_id} -> {new_uuid} ({agent.get('username', 'unknown')})")
-    
+                print(
+                    f"Converted agent {old_id} -> {new_uuid} ({agent.get('username', 'unknown')})"
+                )
+
     # Write back to the file
-    with open(json_file_path, 'w') as f:
+    with open(json_file_path, "w") as f:
         json.dump(data, f, indent=2)
-    
+
     print(f"\nConversion complete for {json_file_path}")
     print(f"Converted {len(id_mapping)} agents")
     return id_mapping
+
 
 if __name__ == "__main__":
     # Convert the main agent population file
@@ -47,7 +51,7 @@ if __name__ == "__main__":
     if main_file.exists():
         print(f"Converting {main_file}...")
         convert_agent_ids_to_uuid(main_file)
-    
+
     # Convert the small agent population file
     small_file = Path("example/agent_population_small.json")
     if small_file.exists():

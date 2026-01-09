@@ -12,7 +12,7 @@ from YSimulator.YServer.repositories.base_repository import PostRepository
 
 class MentionService:
     """Service for mention and reply business logic."""
-    
+
     def __init__(
         self,
         post_repository: PostRepository,
@@ -20,22 +20,22 @@ class MentionService:
     ):
         """
         Initialize mention service.
-        
+
         Args:
             post_repository: Repository for mention operations
             logger: Logger instance
         """
         self.post_repo = post_repository
         self.logger = logger or logging.getLogger(__name__)
-    
+
     def add_mention(self, post_id: str, mentioned_user_id: str) -> bool:
         """
         Add a mention to a post.
-        
+
         Args:
             post_id: Post ID
             mentioned_user_id: ID of mentioned user
-            
+
         Returns:
             True if successful, False otherwise
         """
@@ -44,14 +44,14 @@ class MentionService:
         except Exception as e:
             self.logger.error(f"Error adding mention: {e}")
             return False
-    
+
     def get_unreplied_mentions(self, user_id: str) -> List[Dict[str, Any]]:
         """
         Get unreplied mentions for a user.
-        
+
         Args:
             user_id: User ID
-            
+
         Returns:
             List of unreplied mention dicts
         """
@@ -60,15 +60,15 @@ class MentionService:
         except Exception as e:
             self.logger.error(f"Error getting unreplied mentions: {e}")
             return []
-    
+
     def mark_mention_replied(self, post_id: str, mentioned_user_id: str) -> bool:
         """
         Mark a mention as replied.
-        
+
         Args:
             post_id: Post ID
             mentioned_user_id: ID of mentioned user
-            
+
         Returns:
             True if successful, False otherwise
         """

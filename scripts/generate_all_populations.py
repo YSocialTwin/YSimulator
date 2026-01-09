@@ -11,7 +11,7 @@ import json
 import subprocess
 
 # Add parent directory to path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 # Configuration for all populations to generate
 POPULATIONS = [
@@ -19,12 +19,10 @@ POPULATIONS = [
     {"name": "llm_population_100", "total": 100, "llm_ratio": 1.0, "type": "llm"},
     {"name": "llm_population_5000", "total": 5000, "llm_ratio": 1.0, "type": "llm"},
     {"name": "llm_population_10000", "total": 10000, "llm_ratio": 1.0, "type": "llm"},
-    
     # Mixed populations (50% LLM, 50% rule-based)
     {"name": "mixed_population_1000", "total": 1000, "llm_ratio": 0.5, "type": "mixed"},
     {"name": "mixed_population_5000", "total": 5000, "llm_ratio": 0.5, "type": "mixed"},
     {"name": "mixed_population_10000", "total": 10000, "llm_ratio": 0.5, "type": "mixed"},
-    
     # Rule-based populations (all agents are rule-based)
     {"name": "rule_population_100", "total": 100, "llm_ratio": 0.0, "type": "rule"},
     {"name": "rule_population_1000", "total": 1000, "llm_ratio": 0.0, "type": "rule"},
@@ -46,14 +44,14 @@ def get_blueprint_dir(pop_type):
 def create_population_directory(example_dir, pop_config):
     """Create directory structure for a population example."""
     pop_dir = os.path.join(example_dir, pop_config["name"])
-    
+
     # Create directory if it doesn't exist
     os.makedirs(pop_dir, exist_ok=True)
-    
+
     print(f"\nCreating {pop_config['name']}...")
     print(f"  Total agents: {pop_config['total']}")
     print(f"  LLM ratio: {pop_config['llm_ratio']}")
-    
+
     return pop_dir
 
 
@@ -61,11 +59,11 @@ def copy_static_files(source_dir, dest_dir, pop_config):
     """Copy static configuration files from blueprint."""
     # Files that don't need modification
     static_files = ["llm_prompts.json", "prompts.json"]
-    
+
     # Only copy LLM prompts if population has LLM agents
     if pop_config["llm_ratio"] == 0.0:
         static_files = ["prompts.json"]
-    
+
     for filename in static_files:
         src = os.path.join(source_dir, filename)
         dst = os.path.join(dest_dir, filename)
@@ -80,7 +78,7 @@ def create_generate_script(dest_dir, pop_config):
     llm_ratio = pop_config["llm_ratio"]
     llm_count = int(total * llm_ratio)
     rule_count = total - llm_count
-    
+
     script_content = f'''#!/usr/bin/env python3
 """
 Generate a population of {total} agents ({llm_count} LLM, {rule_count} rule-based) and 1 page agent
@@ -434,9 +432,9 @@ def main():
 if __name__ == "__main__":
     main()
 '''
-    
+
     script_path = os.path.join(dest_dir, "generate_population.py")
-    with open(script_path, 'w') as f:
+    with open(script_path, "w") as f:
         f.write(script_content)
     os.chmod(script_path, 0o755)
     print(f"  ✓ Created generate_population.py")
@@ -448,15 +446,15 @@ def create_readme(dest_dir, pop_config):
     llm_count = int(total * pop_config["llm_ratio"])
     rule_count = total - llm_count
     pop_type = pop_config["type"].capitalize()
-    
+
     if pop_config["llm_ratio"] == 1.0:
         agent_desc = f"**{total} LLM-enabled agents**"
     elif pop_config["llm_ratio"] == 0.0:
         agent_desc = f"**{total} rule-based agents**"
     else:
         agent_desc = f"**{llm_count} LLM-enabled agents** and **{rule_count} rule-based agents**"
-    
-    readme_content = f'''# {pop_config["name"].replace("_", " ").title()}
+
+    readme_content = f"""# {pop_config["name"].replace("_", " ").title()}
 
 This example demonstrates a YSimulator configuration with:
 - **{total + 1} agents total**: {agent_desc} and **1 news page**
@@ -570,10 +568,10 @@ Edit `simulation_config.json` to adjust:
 - [llm_population_1000](../llm_population_1000/) - 1000 LLM agents example
 - [mixed_population_100](../mixed_population_100/) - 50/50 mixed agents example
 - [YSimulator Documentation](../../docs/) - Full documentation
-'''
-    
+"""
+
     readme_path = os.path.join(dest_dir, "README.md")
-    with open(readme_path, 'w') as f:
+    with open(readme_path, "w") as f:
         f.write(readme_content)
     print(f"  ✓ Created README.md")
 
@@ -582,27 +580,27 @@ def generate_population(pop_dir):
     """Run the generate_population.py script to create configuration files."""
     script_path = os.path.join(pop_dir, "generate_population.py")
     print(f"  Running generate_population.py...")
-    
+
     try:
         result = subprocess.run(
             ["python3", script_path],
             cwd=pop_dir,
             capture_output=True,
             text=True,
-            timeout=300  # 5 minute timeout
+            timeout=300,  # 5 minute timeout
         )
-        
+
         if result.returncode == 0:
             print(f"  ✓ Generated configuration files successfully")
             # Print some stats from stdout
-            for line in result.stdout.split('\n'):
-                if 'Created' in line or 'agents' in line:
+            for line in result.stdout.split("\n"):
+                if "Created" in line or "agents" in line:
                     print(f"    {line}")
         else:
             print(f"  ✗ Error generating files:")
             print(result.stderr)
             return False
-        
+
         return True
     except subprocess.TimeoutExpired:
         print(f"  ✗ Timeout generating population (>5 minutes)")
@@ -618,60 +616,60 @@ def main():
     script_dir = os.path.dirname(os.path.abspath(__file__))
     repo_root = os.path.dirname(script_dir)
     example_dir = os.path.join(repo_root, "example")
-    
-    print("="*70)
+
+    print("=" * 70)
     print("YSimulator Population Generator")
-    print("="*70)
+    print("=" * 70)
     print(f"\nGenerating {len(POPULATIONS)} population examples...")
-    
+
     successful = []
     failed = []
-    
+
     for pop_config in POPULATIONS:
         try:
             # Create directory
             pop_dir = create_population_directory(example_dir, pop_config)
-            
+
             # Get blueprint directory
             blueprint_name = get_blueprint_dir(pop_config["type"])
             blueprint_dir = os.path.join(example_dir, blueprint_name)
-            
+
             # Copy static files
             copy_static_files(blueprint_dir, pop_dir, pop_config)
-            
+
             # Create generate script
             create_generate_script(pop_dir, pop_config)
-            
+
             # Create README
             create_readme(pop_dir, pop_config)
-            
+
             # Generate population
             if generate_population(pop_dir):
                 successful.append(pop_config["name"])
             else:
                 failed.append(pop_config["name"])
-                
+
         except Exception as e:
             print(f"  ✗ Error: {e}")
             failed.append(pop_config["name"])
-    
+
     # Summary
-    print("\n" + "="*70)
+    print("\n" + "=" * 70)
     print("Generation Summary")
-    print("="*70)
+    print("=" * 70)
     print(f"\n✓ Successful: {len(successful)}/{len(POPULATIONS)}")
     for name in successful:
         print(f"  - {name}")
-    
+
     if failed:
         print(f"\n✗ Failed: {len(failed)}/{len(POPULATIONS)}")
         for name in failed:
             print(f"  - {name}")
-    
-    print("\n" + "="*70)
+
+    print("\n" + "=" * 70)
     print("All population examples are in the examples/ directory")
-    print("="*70)
-    
+    print("=" * 70)
+
     return 0 if len(failed) == 0 else 1
 
 

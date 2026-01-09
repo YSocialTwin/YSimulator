@@ -84,7 +84,9 @@ def evaluate_churn(
     num_candidates = max(1, int(len(inactive_agents) * churn_percentage))
     churn_candidates = random.sample(inactive_agents, min(num_candidates, len(inactive_agents)))
 
-    logger.info(f"Selected {len(churn_candidates)} churn candidates (percentage={churn_percentage})")
+    logger.info(
+        f"Selected {len(churn_candidates)} churn candidates (percentage={churn_percentage})"
+    )
 
     # Churn agents based on probability
     churned_count = 0

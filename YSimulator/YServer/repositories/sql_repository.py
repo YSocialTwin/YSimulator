@@ -66,12 +66,12 @@ from .base_repository import (
 
 class SQLUserRepository(UserRepository):
     """SQLAlchemy implementation of UserRepository."""
-    
+
     def __init__(self, engine: Engine, logger: Optional[logging.Logger] = None):
         """Initialize SQL user repository."""
         self.engine = engine
         self.logger = logger or logging.getLogger(__name__)
-    
+
     def health_check(self) -> bool:
         """Check if database connection is healthy."""
         try:
@@ -83,7 +83,7 @@ class SQLUserRepository(UserRepository):
                 session.close()
         except Exception:
             return False
-    
+
     def register_user(self, user_data: Dict[str, Any]) -> bool:
         """Register a single user."""
         session = Session(self.engine)
@@ -91,7 +91,7 @@ class SQLUserRepository(UserRepository):
             existing = session.query(User_mgmt).filter_by(id=user_data["id"]).first()
             if existing:
                 return False
-            
+
             user = User_mgmt(**user_data)
             session.add(user)
             session.commit()
@@ -104,12 +104,12 @@ class SQLUserRepository(UserRepository):
             return False
         finally:
             session.close()
-    
+
     def register_users_batch(self, users_data: List[Dict[str, Any]]) -> Tuple[int, Set[str]]:
         """Register multiple users in a batch."""
         if not users_data:
             return (0, set())
-        
+
         try:
             session = Session(self.engine)
             try:
@@ -120,17 +120,17 @@ class SQLUserRepository(UserRepository):
                     .filter(User_mgmt.id.in_([u["id"] for u in users_data]))
                     .all()
                 }
-                
+
                 # Filter out users that already exist
                 new_users = [u for u in users_data if u["id"] not in existing_ids]
-                
+
                 if not new_users:
                     return (0, set())
-                
+
                 # Bulk insert new users
                 session.bulk_insert_mappings(User_mgmt, new_users)
                 session.commit()
-                
+
                 # Return count and set of newly registered IDs
                 newly_registered_ids = {u["id"] for u in new_users}
                 return (len(new_users), newly_registered_ids)
@@ -149,7 +149,7 @@ class SQLUserRepository(UserRepository):
                 extra={"extra_data": {"error": str(e), "batch_size": len(users_data)}},
             )
             return (0, set())
-    
+
     def get_user(self, user_id: str) -> Optional[Dict[str, Any]]:
         """Get user by ID."""
         try:
@@ -158,7 +158,7 @@ class SQLUserRepository(UserRepository):
                 user = session.query(User_mgmt).filter_by(id=user_id).first()
                 if not user:
                     return None
-                
+
                 # Convert SQLAlchemy model to dict - use getattr for optional fields
                 return {
                     "id": user.id,
@@ -171,11 +171,9 @@ class SQLUserRepository(UserRepository):
             finally:
                 session.close()
         except Exception as e:
-            self.logger.error(
-                f"Error getting user: {e}", extra={"extra_data": {"error": str(e)}}
-            )
+            self.logger.error(f"Error getting user: {e}", extra={"extra_data": {"error": str(e)}})
             return None
-    
+
     def get_all_users(self) -> List[Dict[str, Any]]:
         """Get all users."""
         try:
@@ -200,7 +198,7 @@ class SQLUserRepository(UserRepository):
                 f"Error getting all users: {e}", extra={"extra_data": {"error": str(e)}}
             )
             return []
-    
+
     def update_user_archetype(self, user_id: str, new_archetype: str) -> bool:
         """Update user's archetype."""
         session = Session(self.engine)
@@ -208,7 +206,7 @@ class SQLUserRepository(UserRepository):
             user = session.query(User_mgmt).filter_by(id=user_id).first()
             if not user:
                 return False
-            
+
             user.archetype = new_archetype
             session.commit()
             return True
@@ -220,7 +218,7 @@ class SQLUserRepository(UserRepository):
             return False
         finally:
             session.close()
-    
+
     def get_user_by_username(self, username: str) -> Optional[Dict[str, Any]]:
         """Get user by username."""
         try:
@@ -229,7 +227,7 @@ class SQLUserRepository(UserRepository):
                 user = session.query(User_mgmt).filter_by(username=username).first()
                 if not user:
                     return None
-                
+
                 return {
                     "id": user.id,
                     "username": user.username,
@@ -245,7 +243,7 @@ class SQLUserRepository(UserRepository):
                 f"Error getting user by username: {e}", extra={"extra_data": {"error": str(e)}}
             )
             return None
-    
+
     def update_agent_last_active_day(self, agent_id: str, day: int) -> bool:
         """Update agent's last active day."""
         try:
@@ -254,7 +252,7 @@ class SQLUserRepository(UserRepository):
                 user = session.query(User_mgmt).filter_by(id=agent_id).first()
                 if not user:
                     return False
-                
+
                 user.last_active_day = day
                 session.commit()
                 return True
@@ -262,15 +260,16 @@ class SQLUserRepository(UserRepository):
                 session.close()
         except Exception as e:
             self.logger.error(
-                f"Error updating agent last active day: {e}", extra={"extra_data": {"error": str(e)}}
+                f"Error updating agent last active day: {e}",
+                extra={"extra_data": {"error": str(e)}},
             )
             return False
-    
+
     def get_churned_agents(self) -> List[str]:
         """
         Get all churned agents (agents with left_on set).
         Matches old middleware signature.
-        
+
         Returns:
             List of agent IDs (UUID strings) that are churned
         """
@@ -287,16 +286,16 @@ class SQLUserRepository(UserRepository):
                 f"Error getting churned agents: {e}", extra={"extra_data": {"error": str(e)}}
             )
             return []
-    
+
     def set_agent_churned(self, agent_id: str, round_id: str) -> bool:
         """
         Mark an agent as churned by setting the left_on field to the current round.
         Matches old middleware signature.
-        
+
         Args:
             agent_id: Agent ID (UUID string)
             round_id: Round ID when agent churned (UUID string)
-            
+
         Returns:
             bool: True if successful, False otherwise
         """
@@ -304,7 +303,9 @@ class SQLUserRepository(UserRepository):
             session = Session(self.engine)
             try:
                 # Set left_on field to round_id to mark as churned
-                result = session.query(User_mgmt).filter_by(id=agent_id).update({"left_on": round_id})
+                result = (
+                    session.query(User_mgmt).filter_by(id=agent_id).update({"left_on": round_id})
+                )
                 session.commit()
                 return result > 0
             except Exception as e:
@@ -321,17 +322,17 @@ class SQLUserRepository(UserRepository):
                 f"Error setting agent churned: {e}", extra={"extra_data": {"error": str(e)}}
             )
             return False
-    
+
     def get_inactive_agents(self, current_day: int, inactivity_threshold: int) -> List[str]:
         """Get inactive agents."""
         try:
             session = Session(self.engine)
             try:
                 cutoff_day = current_day - inactivity_threshold
-                
-                users = session.query(User_mgmt).filter(
-                    User_mgmt.last_active_day < cutoff_day
-                ).all()
+
+                users = (
+                    session.query(User_mgmt).filter(User_mgmt.last_active_day < cutoff_day).all()
+                )
                 return [user.id for user in users]
             finally:
                 session.close()
@@ -344,12 +345,12 @@ class SQLUserRepository(UserRepository):
 
 class SQLPostRepository(PostRepository):
     """SQLAlchemy implementation of PostRepository."""
-    
+
     def __init__(self, engine: Engine, logger: Optional[logging.Logger] = None):
         """Initialize SQL post repository."""
         self.engine = engine
         self.logger = logger or logging.getLogger(__name__)
-    
+
     def health_check(self) -> bool:
         """Check if database connection is healthy."""
         try:
@@ -361,10 +362,11 @@ class SQLPostRepository(PostRepository):
                 session.close()
         except Exception:
             return False
-    
+
     def add_post(self, post_data: Dict[str, Any]) -> Optional[str]:
         """Add a new post."""
         import uuid
+
         session = Session(self.engine)
         try:
             # Map common field names to actual model field names
@@ -375,24 +377,23 @@ class SQLPostRepository(PostRepository):
                 "round": post_data.get("round"),
                 "comment_to": post_data.get("parent_post") or post_data.get("comment_to", -1),
                 "thread_id": post_data.get("root_post") or post_data.get("thread_id"),
-                "reaction_count": post_data.get("num_reactions") or post_data.get("reaction_count", 0),
+                "reaction_count": post_data.get("num_reactions")
+                or post_data.get("reaction_count", 0),
             }
             # Filter out None values
             mapped_data = {k: v for k, v in mapped_data.items() if v is not None}
-            
+
             post = Post(**mapped_data)
             session.add(post)
             session.commit()
             return post.id
         except Exception as e:
             session.rollback()
-            self.logger.error(
-                f"Error adding post: {e}", extra={"extra_data": {"error": str(e)}}
-            )
+            self.logger.error(f"Error adding post: {e}", extra={"extra_data": {"error": str(e)}})
             return None
         finally:
             session.close()
-    
+
     def get_post(self, post_id: str) -> Optional[Dict[str, Any]]:
         """Get post by ID - returns API field names with proper mapping."""
         try:
@@ -401,7 +402,7 @@ class SQLPostRepository(PostRepository):
                 post = session.query(Post).filter_by(id=post_id).first()
                 if not post:
                     return None
-                
+
                 # Map model field names to API field names
                 return {
                     "id": post.id,
@@ -418,22 +419,15 @@ class SQLPostRepository(PostRepository):
             finally:
                 session.close()
         except Exception as e:
-            self.logger.error(
-                f"Error getting post: {e}", extra={"extra_data": {"error": str(e)}}
-            )
+            self.logger.error(f"Error getting post: {e}", extra={"extra_data": {"error": str(e)}})
             return None
-    
+
     def get_recent_posts(self, limit: int = 50) -> List[str]:
         """Get recent post IDs."""
         try:
             session = Session(self.engine)
             try:
-                posts = (
-                    session.query(Post.id)
-                    .order_by(Post.round.desc())
-                    .limit(limit)
-                    .all()
-                )
+                posts = session.query(Post.id).order_by(Post.round.desc()).limit(limit).all()
                 return [post[0] for post in posts]
             finally:
                 session.close()
@@ -442,36 +436,38 @@ class SQLPostRepository(PostRepository):
                 f"Error getting recent posts: {e}", extra={"extra_data": {"error": str(e)}}
             )
             return []
-    
+
     def get_thread_context(self, post_id: str, max_length: int = 5) -> List[Dict[str, Any]]:
         """Get thread context for a post."""
         # Constant for "no parent" value used in the database
         NO_PARENT_MARKERS = (-1, "-1", None)
-        
+
         try:
             session = Session(self.engine)
             try:
                 thread = []
                 current_id = post_id
-                
+
                 for _ in range(max_length):
                     post = session.query(Post).filter_by(id=current_id).first()
                     if not post:
                         break
-                    
-                    thread.append({
-                        "id": post.id,
-                        "author": post.user_id,  # Map user_id to author
-                        "text": post.tweet,  # Map tweet to text
-                        "parent_post": post.comment_to,  # Map comment_to to parent_post
-                    })
-                    
+
+                    thread.append(
+                        {
+                            "id": post.id,
+                            "author": post.user_id,  # Map user_id to author
+                            "text": post.tweet,  # Map tweet to text
+                            "parent_post": post.comment_to,  # Map comment_to to parent_post
+                        }
+                    )
+
                     # Check if this is a root post (no parent)
                     if post.comment_to in NO_PARENT_MARKERS:
                         break
-                    
+
                     current_id = post.comment_to
-                
+
                 return list(reversed(thread))
             finally:
                 session.close()
@@ -480,17 +476,18 @@ class SQLPostRepository(PostRepository):
                 f"Error getting thread context: {e}", extra={"extra_data": {"error": str(e)}}
             )
             return []
-    
+
     def add_interaction(self, interaction_data: Dict[str, Any]) -> bool:
         """Add a reaction/interaction to a post."""
         try:
             import uuid
+
             session = Session(self.engine)
             try:
                 # Generate UUID if not provided
                 if "id" not in interaction_data:
                     interaction_data["id"] = str(uuid.uuid4())
-                
+
                 reaction = Reaction(**interaction_data)
                 session.add(reaction)
                 session.commit()
@@ -505,7 +502,7 @@ class SQLPostRepository(PostRepository):
                 f"Error adding interaction: {e}", extra={"extra_data": {"error": str(e)}}
             )
             return False
-    
+
     def increment_post_reaction_count(self, post_id: str) -> bool:
         """Increment the reaction count for a post."""
         try:
@@ -514,12 +511,12 @@ class SQLPostRepository(PostRepository):
                 post = session.query(Post).filter_by(id=post_id).first()
                 if not post:
                     return False
-                
+
                 if post.reaction_count is None:  # Model uses reaction_count
                     post.reaction_count = 1
                 else:
                     post.reaction_count += 1
-                
+
                 session.commit()
                 return True
             finally:
@@ -530,18 +527,15 @@ class SQLPostRepository(PostRepository):
                 extra={"extra_data": {"error": str(e)}},
             )
             return False
-    
+
     def add_post_topic(self, post_id: str, topic_id: str) -> bool:
         """Associate a topic with a post."""
         try:
             session = Session(self.engine)
             try:
                 import uuid
-                post_topic = PostTopic(
-                    id=str(uuid.uuid4()),
-                    post_id=post_id,
-                    topic_id=topic_id
-                )
+
+                post_topic = PostTopic(id=str(uuid.uuid4()), post_id=post_id, topic_id=topic_id)
                 session.add(post_topic)
                 session.commit()
                 return True
@@ -555,17 +549,13 @@ class SQLPostRepository(PostRepository):
                 f"Error adding post topic: {e}", extra={"extra_data": {"error": str(e)}}
             )
             return False
-    
+
     def get_post_topics(self, post_id: str) -> List[str]:
         """Get all topics associated with a post."""
         try:
             session = Session(self.engine)
             try:
-                topics = (
-                    session.query(PostTopic.topic_id)
-                    .filter_by(post_id=post_id)
-                    .all()
-                )
+                topics = session.query(PostTopic.topic_id).filter_by(post_id=post_id).all()
                 return [topic[0] for topic in topics]
             finally:
                 session.close()
@@ -574,7 +564,7 @@ class SQLPostRepository(PostRepository):
                 f"Error getting post topics: {e}", extra={"extra_data": {"error": str(e)}}
             )
             return []
-    
+
     def search_posts_by_topic(self, topic_id: str, agent_id: str, limit: int = 10) -> List[str]:
         """Search posts by topic."""
         try:
@@ -597,7 +587,7 @@ class SQLPostRepository(PostRepository):
                 f"Error searching posts by topic: {e}", extra={"extra_data": {"error": str(e)}}
             )
             return []
-    
+
     # Metadata methods
     def add_post_emotion(self, post_id: str, emotion_id: str) -> bool:
         """Add emotion to a post."""
@@ -605,10 +595,9 @@ class SQLPostRepository(PostRepository):
             session = Session(self.engine)
             try:
                 import uuid
+
                 post_emotion = PostEmotion(
-                    id=str(uuid.uuid4()),
-                    post_id=post_id,
-                    emotion_id=emotion_id
+                    id=str(uuid.uuid4()), post_id=post_id, emotion_id=emotion_id
                 )
                 session.add(post_emotion)
                 session.commit()
@@ -620,7 +609,7 @@ class SQLPostRepository(PostRepository):
                 f"Error adding post emotion: {e}", extra={"extra_data": {"error": str(e)}}
             )
             return False
-    
+
     def get_emotion_by_name(self, emotion_name: str) -> Optional[str]:
         """Get emotion ID by name."""
         try:
@@ -635,7 +624,7 @@ class SQLPostRepository(PostRepository):
                 f"Error getting emotion by name: {e}", extra={"extra_data": {"error": str(e)}}
             )
             return None
-    
+
     def get_emotion_by_name_full(self, emotion_name: str) -> Optional[Dict[str, str]]:
         """Get full emotion data by name (old middleware signature)."""
         try:
@@ -644,20 +633,17 @@ class SQLPostRepository(PostRepository):
                 emotion = session.query(Emotion).filter_by(emotion=emotion_name).first()
                 if not emotion:
                     return None
-                
-                return {
-                    "id": emotion.id,
-                    "emotion": emotion.emotion,
-                    "icon": emotion.icon
-                }
+
+                return {"id": emotion.id, "emotion": emotion.emotion, "icon": emotion.icon}
             finally:
                 session.close()
         except Exception as e:
             self.logger.error(
-                f"Error getting emotion by name (full): {e}", extra={"extra_data": {"error": str(e)}}
+                f"Error getting emotion by name (full): {e}",
+                extra={"extra_data": {"error": str(e)}},
             )
             return None
-    
+
     def initialize_emotions_table(self):
         """Initialize emotions table with GoEmotions taxonomy (28 emotions)."""
         try:
@@ -665,6 +651,7 @@ class SQLPostRepository(PostRepository):
             try:
                 # GoEmotions taxonomy with Material Design icon mappings
                 import uuid
+
                 emotions_data = [
                     ("amusement", "mdi-emoticon-happy"),
                     ("admiration", "mdi-weather-sunny"),
@@ -695,19 +682,21 @@ class SQLPostRepository(PostRepository):
                     ("surprise", "mdi-wallet-giftcard"),
                     ("trust", "mdi-brightness-5"),
                 ]
-                
+
                 created_count = 0
                 for emotion_name, icon in emotions_data:
                     # Check if emotion already exists
-                    existing = session.query(Emotion).filter(Emotion.emotion == emotion_name).first()
-                    
+                    existing = (
+                        session.query(Emotion).filter(Emotion.emotion == emotion_name).first()
+                    )
+
                     if not existing:
                         # Create new emotion
                         emotion_id = str(uuid.uuid4())
                         emotion = Emotion(id=emotion_id, emotion=emotion_name, icon=icon)
                         session.add(emotion)
                         created_count += 1
-                
+
                 session.commit()
                 self.logger.info(
                     f"Initialized emotions table: {created_count} new emotions added, {len(emotions_data) - created_count} already existed"
@@ -720,18 +709,19 @@ class SQLPostRepository(PostRepository):
                 f"Error initializing emotions table: {e}", extra={"extra_data": {"error": str(e)}}
             )
             return False
-    
+
     def add_post_sentiment(self, post_id: str, sentiment_score: float) -> bool:
         """Add sentiment score to a post."""
         try:
             session = Session(self.engine)
             try:
                 import uuid
+
                 # Get post to extract required fields
                 post = session.query(Post).filter_by(id=post_id).first()
                 if not post:
                     return False
-                
+
                 post_sentiment = PostSentiment(
                     id=str(uuid.uuid4()),
                     post_id=post_id,
@@ -741,7 +731,7 @@ class SQLPostRepository(PostRepository):
                     topic_id="0",  # Default topic
                     is_post=1,
                     is_comment=0 if post.comment_to in (-1, "-1", None) else 1,
-                    is_reaction=0
+                    is_reaction=0,
                 )
                 session.add(post_sentiment)
                 session.commit()
@@ -756,18 +746,19 @@ class SQLPostRepository(PostRepository):
                 f"Error adding post sentiment: {e}", extra={"extra_data": {"error": str(e)}}
             )
             return False
-    
+
     def add_post_sentiment_full(self, sentiment_data: Dict[str, Any]) -> bool:
         """Add sentiment data using full dict (old middleware signature)."""
         try:
             session = Session(self.engine)
             try:
                 import uuid
+
                 # Prepare sentiment data with id if not present
                 if "id" not in sentiment_data:
                     sentiment_data = dict(sentiment_data)  # Make a copy
                     sentiment_data["id"] = str(uuid.uuid4())
-                
+
                 post_sentiment = PostSentiment(**sentiment_data)
                 session.add(post_sentiment)
                 session.commit()
@@ -782,7 +773,7 @@ class SQLPostRepository(PostRepository):
                 f"Error adding post sentiment (full): {e}", extra={"extra_data": {"error": str(e)}}
             )
             return False
-    
+
     def get_post_sentiment(self, post_id: str) -> Optional[float]:
         """Get sentiment score for a post."""
         try:
@@ -797,7 +788,7 @@ class SQLPostRepository(PostRepository):
                 f"Error getting post sentiment: {e}", extra={"extra_data": {"error": str(e)}}
             )
             return None
-    
+
     def get_post_sentiment_full(self, post_id: str) -> Optional[Dict[str, Any]]:
         """Get full sentiment data for a post (old middleware signature)."""
         try:
@@ -806,7 +797,7 @@ class SQLPostRepository(PostRepository):
                 sentiment = session.query(PostSentiment).filter_by(post_id=post_id).first()
                 if not sentiment:
                     return None
-                
+
                 return {
                     "id": sentiment.id,
                     "post_id": sentiment.post_id,
@@ -829,17 +820,16 @@ class SQLPostRepository(PostRepository):
                 f"Error getting post sentiment (full): {e}", extra={"extra_data": {"error": str(e)}}
             )
             return None
-    
+
     def add_post_toxicity(self, post_id: str, toxicity_score: float) -> bool:
         """Add toxicity score to a post."""
         try:
             session = Session(self.engine)
             try:
                 import uuid
+
                 post_toxicity = PostToxicity(
-                    id=str(uuid.uuid4()),
-                    post_id=post_id,
-                    toxicity=toxicity_score
+                    id=str(uuid.uuid4()), post_id=post_id, toxicity=toxicity_score
                 )
                 session.add(post_toxicity)
                 session.commit()
@@ -854,18 +844,19 @@ class SQLPostRepository(PostRepository):
                 f"Error adding post toxicity: {e}", extra={"extra_data": {"error": str(e)}}
             )
             return False
-    
+
     def add_post_toxicity_full(self, toxicity_data: Dict[str, Any]) -> bool:
         """Add toxicity data using full dict (old middleware signature)."""
         try:
             session = Session(self.engine)
             try:
                 import uuid
+
                 # Prepare toxicity data with id if not present
                 if "id" not in toxicity_data:
                     toxicity_data = dict(toxicity_data)  # Make a copy
                     toxicity_data["id"] = str(uuid.uuid4())
-                
+
                 post_toxicity = PostToxicity(**toxicity_data)
                 session.add(post_toxicity)
                 session.commit()
@@ -880,7 +871,7 @@ class SQLPostRepository(PostRepository):
                 f"Error adding post toxicity (full): {e}", extra={"extra_data": {"error": str(e)}}
             )
             return False
-    
+
     def add_or_get_hashtag(self, hashtag: str) -> Optional[str]:
         """Add or get hashtag ID."""
         try:
@@ -890,9 +881,10 @@ class SQLPostRepository(PostRepository):
                 existing = session.query(Hashtag).filter_by(hashtag=hashtag).first()
                 if existing:
                     return existing.id
-                
+
                 # Create new hashtag
                 import uuid
+
                 hashtag_id = str(uuid.uuid4())
                 new_hashtag = Hashtag(id=hashtag_id, hashtag=hashtag)
                 session.add(new_hashtag)
@@ -905,17 +897,16 @@ class SQLPostRepository(PostRepository):
                 f"Error adding/getting hashtag: {e}", extra={"extra_data": {"error": str(e)}}
             )
             return None
-    
+
     def add_post_hashtag(self, post_id: str, hashtag_id: str) -> bool:
         """Add hashtag to a post."""
         try:
             session = Session(self.engine)
             try:
                 import uuid
+
                 post_hashtag = PostHashtag(
-                    id=str(uuid.uuid4()),
-                    post_id=post_id,
-                    hashtag_id=hashtag_id
+                    id=str(uuid.uuid4()), post_id=post_id, hashtag_id=hashtag_id
                 )
                 session.add(post_hashtag)
                 session.commit()
@@ -928,25 +919,25 @@ class SQLPostRepository(PostRepository):
             )
             return False
 
-
     # Mention methods
     def add_mention(self, post_id: str, mentioned_user_id: str) -> bool:
         """Add a mention to a post."""
         try:
             from YSimulator.YServer.classes.models import Mention, Post
             import uuid
+
             session = Session(self.engine)
             try:
                 # Get the post to retrieve the round
                 post = session.query(Post).filter_by(id=post_id).first()
                 round_id = post.round if post else None
-                
+
                 mention = Mention(
                     id=str(uuid.uuid4()),
                     post_id=post_id,
                     user_id=mentioned_user_id,  # Model uses user_id, not mentioned_user_id
                     round=round_id,
-                    answered=0
+                    answered=0,
                 )
                 session.add(mention)
                 session.commit()
@@ -957,23 +948,22 @@ class SQLPostRepository(PostRepository):
             finally:
                 session.close()
         except Exception as e:
-            self.logger.error(
-                f"Error adding mention: {e}", extra={"extra_data": {"error": str(e)}}
-            )
+            self.logger.error(f"Error adding mention: {e}", extra={"extra_data": {"error": str(e)}})
             return False
-    
+
     def add_mention_full(self, mention_data: Dict[str, Any]) -> bool:
         """Add a mention using full dict (old middleware signature)."""
         try:
             from YSimulator.YServer.classes.models import Mention
             import uuid
+
             session = Session(self.engine)
             try:
                 # Prepare mention data with id if not present
                 if "id" not in mention_data:
                     mention_data = dict(mention_data)  # Make a copy
                     mention_data["id"] = str(uuid.uuid4())
-                
+
                 mention = Mention(**mention_data)
                 session.add(mention)
                 session.commit()
@@ -988,25 +978,30 @@ class SQLPostRepository(PostRepository):
                 f"Error adding mention (full): {e}", extra={"extra_data": {"error": str(e)}}
             )
             return False
-    
+
     def get_unreplied_mentions(self, user_id: str) -> List[Dict[str, Any]]:
         """Get unreplied mentions for a user."""
         try:
             from YSimulator.YServer.classes.models import Mention
+
             session = Session(self.engine)
             try:
-                mentions = session.query(Mention).filter(
-                    Mention.user_id == user_id,  # Model uses user_id, not mentioned_user_id
-                    Mention.answered == 0  # Model uses answered (0=unreplied, 1=replied)
-                ).all()
-                
+                mentions = (
+                    session.query(Mention)
+                    .filter(
+                        Mention.user_id == user_id,  # Model uses user_id, not mentioned_user_id
+                        Mention.answered == 0,  # Model uses answered (0=unreplied, 1=replied)
+                    )
+                    .all()
+                )
+
                 return [
                     {
                         "id": mention.id,
                         "user_id": mention.user_id,
                         "post_id": mention.post_id,
                         "round": mention.round,
-                        "answered": mention.answered
+                        "answered": mention.answered,
                     }
                     for mention in mentions
                 ]
@@ -1017,25 +1012,26 @@ class SQLPostRepository(PostRepository):
                 f"Error getting unreplied mentions: {e}", extra={"extra_data": {"error": str(e)}}
             )
             return []
-    
+
     def get_mention_by_id(self, mention_id: str) -> Optional[Dict[str, Any]]:
         """Get mention by ID."""
         try:
             from YSimulator.YServer.classes.models import Mention
+
             session = Session(self.engine)
             try:
                 mention = session.query(Mention).filter(Mention.id == mention_id).first()
-                
+
                 if not mention:
                     return None
-                
+
                 return {
                     "id": mention.id,
                     "user_id": mention.user_id,
                     "mentioned_user_id": mention.user_id,  # Alias for compatibility
                     "post_id": mention.post_id,
                     "round": mention.round,
-                    "answered": mention.answered
+                    "answered": mention.answered,
                 }
             finally:
                 session.close()
@@ -1044,21 +1040,27 @@ class SQLPostRepository(PostRepository):
                 f"Error getting mention by ID: {e}", extra={"extra_data": {"error": str(e)}}
             )
             return None
-    
+
     def mark_mention_replied(self, post_id: str, mentioned_user_id: str) -> bool:
         """Mark a mention as replied."""
         try:
             from YSimulator.YServer.classes.models import Mention
+
             session = Session(self.engine)
             try:
-                mention = session.query(Mention).filter(
-                    Mention.post_id == post_id,
-                    Mention.user_id == mentioned_user_id  # Model uses user_id, not mentioned_user_id
-                ).first()
-                
+                mention = (
+                    session.query(Mention)
+                    .filter(
+                        Mention.post_id == post_id,
+                        Mention.user_id
+                        == mentioned_user_id,  # Model uses user_id, not mentioned_user_id
+                    )
+                    .first()
+                )
+
                 if not mention:
                     return False
-                
+
                 mention.answered = 1  # Model uses answered (0=unreplied, 1=replied)
                 session.commit()
                 return True
@@ -1072,21 +1074,20 @@ class SQLPostRepository(PostRepository):
                 f"Error marking mention replied: {e}", extra={"extra_data": {"error": str(e)}}
             )
             return False
-    
+
     def mark_mention_replied_by_id(self, mention_id: str) -> bool:
         """Mark a mention as replied by mention ID (old middleware signature)."""
         try:
             from YSimulator.YServer.classes.models import Mention
+
             session = Session(self.engine)
             try:
-                mention = session.query(Mention).filter(
-                    Mention.id == mention_id
-                ).first()
-                
+                mention = session.query(Mention).filter(Mention.id == mention_id).first()
+
                 if not mention:
                     self.logger.warning(f"Mention {mention_id} not found")
                     return False
-                
+
                 mention.answered = 1  # Model uses answered (0=unreplied, 1=replied)
                 session.commit()
                 return True
@@ -1104,12 +1105,12 @@ class SQLPostRepository(PostRepository):
 
 class SQLFollowRepository(FollowRepository):
     """SQLAlchemy implementation of FollowRepository."""
-    
+
     def __init__(self, engine: Engine, logger: Optional[logging.Logger] = None):
         """Initialize SQL follow repository."""
         self.engine = engine
         self.logger = logger or logging.getLogger(__name__)
-    
+
     def health_check(self) -> bool:
         """Check if database connection is healthy."""
         try:
@@ -1121,7 +1122,7 @@ class SQLFollowRepository(FollowRepository):
                 session.close()
         except Exception:
             return False
-    
+
     def add_follow(self, follow_data: Dict[str, Any]) -> bool:
         """Add a follow relationship."""
         try:
@@ -1130,6 +1131,7 @@ class SQLFollowRepository(FollowRepository):
                 # Map field names - Follow model uses user_id and follower_id
                 # where user_id is the one being followed (followee)
                 import uuid
+
                 mapped_data = {
                     "id": follow_data.get("id", str(uuid.uuid4())),
                     "user_id": follow_data.get("followee_id") or follow_data.get("user_id"),
@@ -1139,7 +1141,7 @@ class SQLFollowRepository(FollowRepository):
                 }
                 # Filter out None values
                 mapped_data = {k: v for k, v in mapped_data.items() if v is not None}
-                
+
                 follow = Follow(**mapped_data)
                 session.add(follow)
                 session.commit()
@@ -1150,22 +1152,21 @@ class SQLFollowRepository(FollowRepository):
             finally:
                 session.close()
         except Exception as e:
-            self.logger.error(
-                f"Error adding follow: {e}", extra={"extra_data": {"error": str(e)}}
-            )
+            self.logger.error(f"Error adding follow: {e}", extra={"extra_data": {"error": str(e)}})
             return False
-    
+
     def add_follow_full(self, follow_data: Dict[str, Any]) -> bool:
         """Add a follow relationship using full dict (alias for add_follow)."""
         return self.add_follow(follow_data)
-    
+
     def add_follows_batch(self, follows_data: List[Dict[str, Any]]) -> int:
         """Add multiple follow relationships in a batch."""
         if not follows_data:
             return 0
-        
+
         try:
             import uuid
+
             session = Session(self.engine)
             try:
                 # Map field names for each follow (same logic as add_follow)
@@ -1181,7 +1182,7 @@ class SQLFollowRepository(FollowRepository):
                     # Filter out None values
                     mapped_data = {k: v for k, v in mapped_data.items() if v is not None}
                     mapped_follows.append(mapped_data)
-                
+
                 session.bulk_insert_mappings(Follow, mapped_follows)
                 session.commit()
                 return len(mapped_follows)
@@ -1204,12 +1205,12 @@ class SQLFollowRepository(FollowRepository):
 
 class SQLInterestRepository(InterestRepository):
     """SQLAlchemy implementation of InterestRepository."""
-    
+
     def __init__(self, engine: Engine, logger: Optional[logging.Logger] = None):
         """Initialize SQL interest repository."""
         self.engine = engine
         self.logger = logger or logging.getLogger(__name__)
-    
+
     def health_check(self) -> bool:
         """Check if database connection is healthy."""
         try:
@@ -1221,7 +1222,7 @@ class SQLInterestRepository(InterestRepository):
                 session.close()
         except Exception:
             return False
-    
+
     def get_interest_by_id(self, interest_id: str) -> Optional[Dict[str, Any]]:
         """Get interest by ID."""
         try:
@@ -1230,7 +1231,7 @@ class SQLInterestRepository(InterestRepository):
                 interest = session.query(Interest).filter_by(iid=interest_id).first()
                 if not interest:
                     return None
-                
+
                 return {
                     "iid": interest.iid,
                     "interest": interest.interest,
@@ -1242,7 +1243,7 @@ class SQLInterestRepository(InterestRepository):
                 f"Error getting interest: {e}", extra={"extra_data": {"error": str(e)}}
             )
             return None
-    
+
     def add_or_get_interest(self, interest_name: str) -> Optional[str]:
         """Add a new interest or get existing one's ID."""
         try:
@@ -1252,9 +1253,10 @@ class SQLInterestRepository(InterestRepository):
                 existing = session.query(Interest).filter_by(interest=interest_name).first()
                 if existing:
                     return existing.iid
-                
+
                 # Create new interest
                 import uuid
+
                 interest_id = str(uuid.uuid4())
                 interest = Interest(iid=interest_id, interest=interest_name)
                 session.add(interest)
@@ -1267,7 +1269,7 @@ class SQLInterestRepository(InterestRepository):
                 f"Error adding or getting interest: {e}", extra={"extra_data": {"error": str(e)}}
             )
             return None
-    
+
     def get_topic_id_by_name(self, topic_name: str) -> Optional[str]:
         """Get topic ID by name."""
         try:
@@ -1284,7 +1286,7 @@ class SQLInterestRepository(InterestRepository):
                 f"Error getting topic ID: {e}", extra={"extra_data": {"error": str(e)}}
             )
             return None
-    
+
     def get_topic_name_from_id(self, topic_id: str) -> Optional[str]:
         """Get topic name from ID."""
         try:
@@ -1301,18 +1303,19 @@ class SQLInterestRepository(InterestRepository):
                 f"Error getting topic name: {e}", extra={"extra_data": {"error": str(e)}}
             )
             return None
-    
+
     def add_user_interest(self, user_id: str, interest_id: str, round_id: str) -> bool:
         """Add a user interest."""
         try:
             import uuid
+
             session = Session(self.engine)
             try:
                 user_interest = UserInterest(
                     id=str(uuid.uuid4()),  # Generate UUID for id field
                     user_id=user_id,
                     interest_id=interest_id,
-                    round_id=round_id
+                    round_id=round_id,
                 )
                 session.add(user_interest)
                 session.commit()
@@ -1327,19 +1330,20 @@ class SQLInterestRepository(InterestRepository):
                 f"Error adding user interest: {e}", extra={"extra_data": {"error": str(e)}}
             )
             return False
-    
+
     def add_agent_opinion(
-        self, 
-        agent_id: str, 
-        round_id: str, 
-        topic_id: str, 
+        self,
+        agent_id: str,
+        round_id: str,
+        topic_id: str,
         opinion: float,
         id_interacted_with: Optional[str] = None,
-        id_post: Optional[str] = None
+        id_post: Optional[str] = None,
     ) -> bool:
         """Add an agent opinion on a topic."""
         try:
             import uuid
+
             session = Session(self.engine)
             try:
                 # Agent_Opinion model uses 'tid' for round_id
@@ -1350,7 +1354,7 @@ class SQLInterestRepository(InterestRepository):
                     topic_id=topic_id,
                     opinion=opinion,
                     id_interacted_with=id_interacted_with,
-                    id_post=id_post
+                    id_post=id_post,
                 )
                 session.add(agent_opinion)
                 session.commit()
@@ -1365,7 +1369,7 @@ class SQLInterestRepository(InterestRepository):
                 f"Error adding agent opinion: {e}", extra={"extra_data": {"error": str(e)}}
             )
             return False
-    
+
     def get_latest_agent_opinion(self, agent_id: str, topic_id: str) -> Optional[float]:
         """Get latest agent opinion on a topic."""
         try:
@@ -1374,7 +1378,9 @@ class SQLInterestRepository(InterestRepository):
                 opinion = (
                     session.query(Agent_Opinion)
                     .filter_by(agent_id=agent_id, topic_id=topic_id)
-                    .order_by(Agent_Opinion.tid.desc(), Agent_Opinion.id.desc())  # Order by round then id for insertion order
+                    .order_by(
+                        Agent_Opinion.tid.desc(), Agent_Opinion.id.desc()
+                    )  # Order by round then id for insertion order
                     .first()
                 )
                 if not opinion:
@@ -1388,7 +1394,7 @@ class SQLInterestRepository(InterestRepository):
                 extra={"extra_data": {"error": str(e)}},
             )
             return None
-    
+
     def get_user_interests_in_window(
         self, user_id: str, start_round: int, end_round: int
     ) -> List[str]:
@@ -1412,21 +1418,21 @@ class SQLInterestRepository(InterestRepository):
                 extra={"extra_data": {"error": str(e)}},
             )
             return []
-    
+
     def get_user_interests_in_window_old(
         self, user_id: str, current_round_id: str, attention_window: int
     ) -> List[Dict[str, str]]:
         """
         Get user interests within attention window (old middleware signature).
-        
+
         This method matches the old db_middleware.get_user_interests_in_window signature.
         It converts round_id to day/hour and calculates the sliding window.
-        
+
         Args:
             user_id: User UUID
             current_round_id: Current round UUID
             attention_window: Number of rounds to look back
-            
+
         Returns:
             List[Dict]: List of user interest records with interest_id and round_id
         """
@@ -1462,7 +1468,7 @@ class SQLInterestRepository(InterestRepository):
                 )
 
                 return [
-                    {"interest_id": ui.interest_id, "round_id": ui.round_id} 
+                    {"interest_id": ui.interest_id, "round_id": ui.round_id}
                     for ui, _ in user_interests
                 ]
             finally:
@@ -1477,12 +1483,12 @@ class SQLInterestRepository(InterestRepository):
 
 class SQLRecommendationRepository(RecommendationRepository):
     """SQLAlchemy implementation of RecommendationRepository."""
-    
+
     def __init__(self, engine: Engine, logger: Optional[logging.Logger] = None):
         """Initialize SQL recommendation repository."""
         self.engine = engine
         self.logger = logger or logging.getLogger(__name__)
-    
+
     def health_check(self) -> bool:
         """Check if database connection is healthy."""
         try:
@@ -1494,18 +1500,18 @@ class SQLRecommendationRepository(RecommendationRepository):
                 session.close()
         except Exception:
             return False
-    
+
     def get_or_create_round(self, day: int, hour: int) -> str:
         """
         Get or create a round ID.
-        
+
         Args:
             day: Day number
             hour: Hour/slot number
-            
+
         Returns:
             Round ID (UUID string)
-            
+
         Raises:
             RuntimeError: If unable to create or retrieve round
         """
@@ -1516,9 +1522,10 @@ class SQLRecommendationRepository(RecommendationRepository):
                 existing = session.query(Round).filter_by(day=day, hour=hour).first()
                 if existing:
                     return existing.id
-                
+
                 # Create new round
                 import uuid
+
                 round_id = str(uuid.uuid4())
                 round_obj = Round(id=round_id, day=day, hour=hour)
                 session.add(round_obj)
@@ -1531,11 +1538,11 @@ class SQLRecommendationRepository(RecommendationRepository):
                 f"Error getting or creating round: {e}", extra={"extra_data": {"error": str(e)}}
             )
             raise RuntimeError(f"Failed to get or create round for day={day}, hour={hour}: {e}")
-    
+
     def cleanup_old_posts_from_redis(self, current_day: int, current_slot: int) -> Dict[str, int]:
         """Cleanup old posts (not applicable for SQL)."""
         return {"status": "not_applicable", "method": "sql"}
-    
+
     def consolidate_redis_to_sqlite(self, day: int) -> Dict[str, Any]:
         """Consolidate Redis data to SQLite (not applicable for SQL)."""
         return {"status": "not_applicable", "method": "sql"}
@@ -1543,12 +1550,12 @@ class SQLRecommendationRepository(RecommendationRepository):
 
 class SQLArticleRepository(ArticleRepository):
     """SQLAlchemy implementation of ArticleRepository."""
-    
+
     def __init__(self, engine: Engine, logger: Optional[logging.Logger] = None):
         """Initialize SQL article repository."""
         self.engine = engine
         self.logger = logger or logging.getLogger(__name__)
-    
+
     def health_check(self) -> bool:
         """Check if database connection is healthy."""
         try:
@@ -1560,11 +1567,12 @@ class SQLArticleRepository(ArticleRepository):
                 session.close()
         except Exception:
             return False
-    
+
     def add_website(self, website_data: Dict[str, Any]) -> Optional[str]:
         """Add a website."""
         try:
             import uuid
+
             session = Session(self.engine)
             try:
                 # Generate UUID if not provided
@@ -1597,79 +1605,80 @@ class SQLArticleRepository(ArticleRepository):
             finally:
                 session.close()
         except Exception as e:
-            self.logger.error(
-                f"Error adding website: {e}", extra={"extra_data": {"error": str(e)}}
-            )
+            self.logger.error(f"Error adding website: {e}", extra={"extra_data": {"error": str(e)}})
             return None
-    
+
     def add_websites_batch(self, websites_data: List[Dict[str, Any]]) -> int:
         """Add multiple websites in a batch, skipping duplicates."""
         if not websites_data:
             return 0
-        
+
         session = Session(self.engine)
         try:
             import uuid
-            
+
             # First, deduplicate within the batch itself by ID and RSS
             seen_ids = set()
             seen_rss = set()
             deduplicated = []
-            
+
             for website in websites_data:
                 website_id = website.get("id")
                 website_rss = website.get("rss")
-                
+
                 # Skip if we've seen this ID or RSS in this batch
                 if website_id and website_id in seen_ids:
                     continue
                 if website_rss and website_rss in seen_rss:
                     continue
-                
+
                 # Mark as seen
                 if website_id:
                     seen_ids.add(website_id)
                 if website_rss:
                     seen_rss.add(website_rss)
-                
+
                 deduplicated.append(website)
-            
+
             if not deduplicated:
                 return 0
-            
+
             # Now check for existing websites in database by both ID and RSS
             website_ids = [w.get("id") for w in deduplicated if w.get("id")]
             rss_urls = [w.get("rss") for w in deduplicated if w.get("rss")]
-            
+
             existing_ids = set()
             existing_rss = set()
-            
+
             if website_ids:
                 existing_ids = {
-                    row[0] for row in session.query(Website.id).filter(Website.id.in_(website_ids)).all()
+                    row[0]
+                    for row in session.query(Website.id).filter(Website.id.in_(website_ids)).all()
                 }
-            
+
             if rss_urls:
                 existing_rss = {
-                    row[0] for row in session.query(Website.rss).filter(Website.rss.in_(rss_urls)).all()
+                    row[0]
+                    for row in session.query(Website.rss).filter(Website.rss.in_(rss_urls)).all()
                 }
-            
+
             # Filter out websites that already exist in database
             new_websites = [
-                w for w in deduplicated
+                w
+                for w in deduplicated
                 if w.get("id") not in existing_ids and w.get("rss") not in existing_rss
             ]
-            
+
             if not new_websites:
                 return 0
-            
+
             # Ensure all websites have IDs
             for website in new_websites:
                 if "id" not in website or not website["id"]:
                     website["id"] = str(uuid.uuid4())
                 if "last_fetched" not in website:
                     website["last_fetched"] = str(uuid.uuid4())
-            
+
             session.bulk_insert_mappings(Website, new_websites)
             session.commit()
             return len(new_websites)
@@ -1682,22 +1691,25 @@ class SQLArticleRepository(ArticleRepository):
             return 0
         finally:
             session.close()
-    
+
     def add_article(self, article_data: Dict[str, Any]) -> Optional[str]:
         """Add an article."""
         try:
             import uuid
+
             session = Session(self.engine)
             try:
                 article_id = article_data.get("id", str(uuid.uuid4()))
-                
+
                 # Article model fields: id, title, summary, website_id, fetched_on, link
                 article = Article(
                     id=article_id,
                     title=article_data.get("title"),
                     summary=article_data.get("summary"),  # Model uses 'summary' not 'content'
                     website_id=article_data.get("website_id"),
-                    fetched_on=article_data.get("fetched_on", str(uuid.uuid4())),  # Model uses 'fetched_on' not 'round_id'
+                    fetched_on=article_data.get(
+                        "fetched_on", str(uuid.uuid4())
+                    ),  # Model uses 'fetched_on' not 'round_id'
                     link=article_data.get("link"),  # Model uses 'link' not 'url'
                 )
                 session.add(article)
@@ -1709,11 +1721,9 @@ class SQLArticleRepository(ArticleRepository):
             finally:
                 session.close()
         except Exception as e:
-            self.logger.error(
-                f"Error adding article: {e}", extra={"extra_data": {"error": str(e)}}
-            )
+            self.logger.error(f"Error adding article: {e}", extra={"extra_data": {"error": str(e)}})
             return None
-    
+
     def get_article(self, article_id: str) -> Optional[Dict[str, Any]]:
         """Get an article by ID."""
         try:
@@ -1722,7 +1732,7 @@ class SQLArticleRepository(ArticleRepository):
                 article = session.query(Article).filter_by(id=article_id).first()
                 if not article:
                     return None
-                
+
                 # Return dict with model field names
                 return {
                     "id": article.id,
@@ -1739,7 +1749,7 @@ class SQLArticleRepository(ArticleRepository):
                 f"Error getting article: {e}", extra={"extra_data": {"error": str(e)}}
             )
             return None
-    
+
     def get_website_by_rss(self, rss_url: str) -> Optional[Dict[str, Any]]:
         """Get website by RSS URL."""
         try:
@@ -1749,7 +1759,7 @@ class SQLArticleRepository(ArticleRepository):
                 website = session.query(Website).filter_by(rss=rss_url).first()
                 if not website:
                     return None
-                
+
                 # Return dict with all model fields
                 return {
                     "id": website.id,
@@ -1768,17 +1778,13 @@ class SQLArticleRepository(ArticleRepository):
                 f"Error getting website by RSS: {e}", extra={"extra_data": {"error": str(e)}}
             )
             return None
-    
+
     def get_article_topics(self, article_id: str) -> List[str]:
         """Get topics associated with an article."""
         try:
             session = Session(self.engine)
             try:
-                topics = (
-                    session.query(ArticleTopic.topic_id)
-                    .filter_by(article_id=article_id)
-                    .all()
-                )
+                topics = session.query(ArticleTopic.topic_id).filter_by(article_id=article_id).all()
                 return [topic[0] for topic in topics]
             finally:
                 session.close()
@@ -1787,28 +1793,27 @@ class SQLArticleRepository(ArticleRepository):
                 f"Error getting article topics: {e}", extra={"extra_data": {"error": str(e)}}
             )
             return []
-    
+
     def add_article_topic(self, article_id: str, topic_id: str) -> bool:
         """Add article topic association."""
         try:
             session = Session(self.engine)
             try:
                 import uuid
+
                 # Check if already exists
                 existing = (
                     session.query(ArticleTopic)
                     .filter_by(article_id=article_id, topic_id=topic_id)
                     .first()
                 )
-                
+
                 if existing:
                     return True  # Already exists
-                
+
                 # Create article topic record
                 article_topic = ArticleTopic(
-                    id=str(uuid.uuid4()),
-                    article_id=article_id,
-                    topic_id=topic_id
+                    id=str(uuid.uuid4()), article_id=article_id, topic_id=topic_id
                 )
                 session.add(article_topic)
                 session.commit()
@@ -1821,19 +1826,21 @@ class SQLArticleRepository(ArticleRepository):
         except Exception as e:
             self.logger.error(
                 f"Error adding article topic: {e}",
-                extra={"extra_data": {"error": str(e), "article_id": article_id, "topic_id": topic_id}}
+                extra={
+                    "extra_data": {"error": str(e), "article_id": article_id, "topic_id": topic_id}
+                },
             )
             return False
 
 
 class SQLImageRepository(ImageRepository):
     """SQLAlchemy implementation of ImageRepository."""
-    
+
     def __init__(self, engine: Engine, logger: Optional[logging.Logger] = None):
         """Initialize SQL image repository."""
         self.engine = engine
         self.logger = logger or logging.getLogger(__name__)
-    
+
     def health_check(self) -> bool:
         """Check if database connection is healthy."""
         try:
@@ -1845,13 +1852,14 @@ class SQLImageRepository(ImageRepository):
                 session.close()
         except Exception:
             return False
-    
+
     def add_image(self, image_data: Dict[str, Any]) -> Optional[str]:
         """Add an image."""
         try:
             session = Session(self.engine)
             try:
                 import uuid
+
                 image_id = image_data.get("id", str(uuid.uuid4()))
                 image = Image(
                     id=image_id,
@@ -1865,11 +1873,9 @@ class SQLImageRepository(ImageRepository):
             finally:
                 session.close()
         except Exception as e:
-            self.logger.error(
-                f"Error adding image: {e}", extra={"extra_data": {"error": str(e)}}
-            )
+            self.logger.error(f"Error adding image: {e}", extra={"extra_data": {"error": str(e)}})
             return None
-    
+
     def get_random_image(self) -> Optional[Dict[str, Any]]:
         """Get a random image."""
         try:
@@ -1879,7 +1885,7 @@ class SQLImageRepository(ImageRepository):
                 image = session.query(Image).order_by(func.random()).first()
                 if not image:
                     return None
-                
+
                 return {
                     "id": image.id,
                     "url": image.url,
@@ -1892,4 +1898,3 @@ class SQLImageRepository(ImageRepository):
                 f"Error getting random image: {e}", extra={"extra_data": {"error": str(e)}}
             )
             return None
-

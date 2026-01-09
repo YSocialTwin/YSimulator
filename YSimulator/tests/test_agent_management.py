@@ -13,7 +13,7 @@ import pytest
 import tempfile
 import csv
 from pathlib import Path
-from unittest.mock import Mock, MagicMock, patch, call
+from unittest.mock import Mock, patch
 from YSimulator.YClient.agent_management import (
     AgentManager,
     PopulationLoader,
@@ -48,22 +48,24 @@ def temp_config_dir():
     """Create a temporary configuration directory."""
     with tempfile.TemporaryDirectory() as tmpdir:
         config_path = Path(tmpdir)
-        
+
         # Create predefined agents file
         agents_file = config_path / "agents_predefined.csv"
         with open(agents_file, "w", newline="") as f:
             writer = csv.writer(f)
-            writer.writerow(["id", "username", "cluster", "llm", "is_page", "daily_activity_level", "archetype"])
+            writer.writerow(
+                ["id", "username", "cluster", "llm", "is_page", "daily_activity_level", "archetype"]
+            )
             writer.writerow([1, "agent_001", 1, 0, 0, 3, "default"])
             writer.writerow([2, "agent_002", 1, 1, 0, 5, "influencer"])
-        
+
         # Create network file
         network_file = config_path / "network.csv"
         with open(network_file, "w", newline="") as f:
             writer = csv.writer(f)
             writer.writerow(["agent_001", "agent_002"])
             writer.writerow(["agent_002", "agent_001"])
-        
+
         yield config_path
 
 
@@ -126,12 +128,12 @@ def sample_agents():
 # AgentManager Tests
 # ============================================================================
 
+
 class TestAgentManager:
     """Tests for AgentManager main coordinator."""
-    
+
     def test_init_creates_components(
-        self, temp_config_dir, mock_server, mock_logger, 
-        archetype_distribution, actions_likelihood
+        self, temp_config_dir, mock_server, mock_logger, archetype_distribution, actions_likelihood
     ):
         """Test AgentManager initialization creates all components."""
         manager = AgentManager(
@@ -141,18 +143,23 @@ class TestAgentManager:
             archetype_distribution=archetype_distribution,
             agent_downcast=False,
             actions_likelihood=actions_likelihood,
-            logger=mock_logger
+            logger=mock_logger,
         )
-        
+
         assert manager.population_loader is not None
         assert manager.network_loader is not None
         assert manager.agent_selector is not None
         assert manager.config_path == temp_config_dir
         assert manager.client_id == "test_client"
-    
+
     def test_sample_agents_by_archetype_delegates(
-        self, temp_config_dir, mock_server, mock_logger,
-        archetype_distribution, actions_likelihood, sample_agents
+        self,
+        temp_config_dir,
+        mock_server,
+        mock_logger,
+        archetype_distribution,
+        actions_likelihood,
+        sample_agents,
     ):
         """Test sample_agents_by_archetype delegates to AgentSelector."""
         manager = AgentManager(
@@ -162,19 +169,19 @@ class TestAgentManager:
             archetype_distribution=archetype_distribution,
             agent_downcast=False,
             actions_likelihood=actions_likelihood,
-            logger=mock_logger
+            logger=mock_logger,
         )
-        
-        with patch.object(manager.agent_selector, 'sample_agents_by_archetype') as mock_sample:
-            mock_sample.return_value = sample_agents[:2]
-            result = manager.sample_agents_by_archetype(sample_agents)
-            
-            mock_sample.assert_called_once_with(sample_agents)
-            assert len(result) == 2
-    
+
+        num_active = 2
+        with patch.object(manager.agent_selector, "sample_agents_by_archetype") as mock_sample:
+            mock_sample.return_value = sample_agents[:num_active]
+            result = manager.sample_agents_by_archetype(sample_agents, num_active=num_active)
+
+            mock_sample.assert_called_once_with(sample_agents, num_active)
+            assert len(result) == num_active
+
     def test_create_agents_from_config_delegates(
-        self, temp_config_dir, mock_server, mock_logger,
-        archetype_distribution, actions_likelihood
+        self, temp_config_dir, mock_server, mock_logger, archetype_distribution, actions_likelihood
     ):
         """Test create_agents_from_config delegates to PopulationLoader."""
         manager = AgentManager(
@@ -184,24 +191,25 @@ class TestAgentManager:
             archetype_distribution=archetype_distribution,
             agent_downcast=False,
             actions_likelihood=actions_likelihood,
-            logger=mock_logger
+            logger=mock_logger,
         )
-        
-        with patch.object(manager.population_loader, 'create_agents_from_config') as mock_create:
-            mock_create.return_value = ([], [])
-            result = manager.create_agents_from_config(
-                num_agents=10,
-                network_file=None,
-                num_predefined=2,
-                agents_predefined_file="agents_predefined.csv"
-            )
-            
-            mock_create.assert_called_once()
-            assert isinstance(result, tuple)
-    
+
+        with patch.object(manager.population_loader, "create_agents_from_config") as mock_create:
+            mock_create.return_value = []
+            agent_config = {"agents": [], "generation_config": {"num_additional_agents": 10}}
+            result = manager.create_agents_from_config(agent_config)
+
+            mock_create.assert_called_once_with(agent_config)
+            assert isinstance(result, list)
+
     def test_load_and_create_social_network_delegates(
-        self, temp_config_dir, mock_server, mock_logger,
-        archetype_distribution, actions_likelihood, sample_agents
+        self,
+        temp_config_dir,
+        mock_server,
+        mock_logger,
+        archetype_distribution,
+        actions_likelihood,
+        sample_agents,
     ):
         """Test load_and_create_social_network delegates to NetworkLoader."""
         manager = AgentManager(
@@ -211,23 +219,27 @@ class TestAgentManager:
             archetype_distribution=archetype_distribution,
             agent_downcast=False,
             actions_likelihood=actions_likelihood,
-            logger=mock_logger
+            logger=mock_logger,
         )
-        
-        agent_profiles = {agent.username: agent for agent in sample_agents}
-        
-        with patch.object(manager.network_loader, 'load_and_create_social_network') as mock_load:
-            mock_load.return_value = None
+
+        network_path = temp_config_dir / "network.csv"
+
+        with patch.object(manager.network_loader, "load_and_create_social_network") as mock_load:
+            mock_load.return_value = 0
             manager.load_and_create_social_network(
-                network_file="network.csv",
-                agent_profiles=agent_profiles
+                network_csv_path=network_path, agent_profiles=sample_agents
             )
-            
-            mock_load.assert_called_once_with("network.csv", agent_profiles)
-    
+
+            mock_load.assert_called_once_with(network_path, sample_agents)
+
     def test_determine_agent_type_delegates(
-        self, temp_config_dir, mock_server, mock_logger,
-        archetype_distribution, actions_likelihood, sample_agents
+        self,
+        temp_config_dir,
+        mock_server,
+        mock_logger,
+        archetype_distribution,
+        actions_likelihood,
+        sample_agents,
     ):
         """Test determine_agent_type delegates to AgentSelector."""
         manager = AgentManager(
@@ -237,15 +249,15 @@ class TestAgentManager:
             archetype_distribution=archetype_distribution,
             agent_downcast=False,
             actions_likelihood=actions_likelihood,
-            logger=mock_logger
+            logger=mock_logger,
         )
-        
+
         agent = sample_agents[0]
-        
-        with patch.object(manager.agent_selector, 'determine_agent_type') as mock_determine:
+
+        with patch.object(manager.agent_selector, "determine_agent_type") as mock_determine:
             mock_determine.return_value = "rule_based"
             result = manager.determine_agent_type(agent)
-            
+
             mock_determine.assert_called_once_with(agent)
             assert result == "rule_based"
 
@@ -254,230 +266,272 @@ class TestAgentManager:
 # PopulationLoader Tests
 # ============================================================================
 
+
 class TestPopulationLoader:
     """Tests for PopulationLoader."""
-    
+
     def test_init(self, temp_config_dir, mock_logger):
         """Test PopulationLoader initialization."""
         loader = PopulationLoader(temp_config_dir, "test_client", mock_logger)
-        
+
         assert loader.config_path == temp_config_dir
         assert loader.client_id == "test_client"
         assert loader.logger == mock_logger
-    
+
     def test_load_predefined_agents(self, temp_config_dir, mock_logger):
-        """Test loading predefined agents from CSV."""
+        """Test loading predefined agents from config."""
         loader = PopulationLoader(temp_config_dir, "test_client", mock_logger)
-        
-        agents = loader._load_predefined_agents("agents_predefined.csv", 2)
-        
+
+        agents_config = [
+            {
+                "id": 1,
+                "username": "agent_001",
+                "cluster": 1,
+                "llm": False,
+                "daily_activity_level": 3,
+                "activity_profile": "default",
+            },
+            {
+                "id": 2,
+                "username": "agent_002",
+                "cluster": 1,
+                "llm": True,
+                "daily_activity_level": 5,
+                "activity_profile": "influencer",
+            },
+        ]
+
+        agents = loader._load_predefined_agents(agents_config)
+
         assert len(agents) == 2
         assert agents[0].username == "agent_001"
-        assert agents[0].llm == False
+        assert agents[0].llm is False
         assert agents[1].username == "agent_002"
-        assert agents[1].llm == True
-    
-    def test_generate_random_agent(self, temp_config_dir, mock_logger):
-        """Test generating a random agent."""
+        assert agents[1].llm is True
+
+    def test_generate_agents(self, temp_config_dir, mock_logger):
+        """Test generating random agents."""
         loader = PopulationLoader(temp_config_dir, "test_client", mock_logger)
-        
-        agent = loader._generate_random_agent(
-            agent_id=100,
-            cluster=1,
-            archetype="default"
-        )
-        
-        assert agent.id == 100
-        assert agent.cluster == 1
-        assert agent.username.startswith("agent_")
-        assert agent.activity_profile == "default"
-    
-    def test_create_agents_from_config_with_predefined(
-        self, temp_config_dir, mock_logger
-    ):
+
+        gen_config = {
+            "num_additional_agents": 5,
+            "cluster_distribution": {"weights": [0.33, 0.33, 0.34]},
+            "llm_enabled_probability": 0.1,
+            "default_settings": {"password": "test_password", "leaning": "neutral"},
+            "age_range": [18, 65],
+        }
+
+        agents = loader._generate_agents(gen_config, existing_count=0)
+
+        assert len(agents) == 5
+        for agent in agents:
+            assert agent.username.startswith("agent_")
+            assert agent.cluster in [0, 1, 2]
+
+    def test_create_agents_from_config_with_predefined(self, temp_config_dir, mock_logger):
         """Test creating agents with predefined agents."""
         loader = PopulationLoader(temp_config_dir, "test_client", mock_logger)
-        
-        all_agents, agent_profiles = loader.create_agents_from_config(
-            num_agents=5,
-            network_file=None,
-            num_predefined=2,
-            agents_predefined_file="agents_predefined.csv"
-        )
-        
+
+        agent_config = {
+            "agents": [
+                {"id": 1, "username": "agent_001", "cluster": 1, "llm": False},
+                {"id": 2, "username": "agent_002", "cluster": 1, "llm": True},
+            ],
+            "generation_config": {
+                "num_additional_agents": 3,
+                "cluster_distribution": {"weights": [0.33, 0.33, 0.34]},
+                "llm_enabled_probability": 0.1,
+            },
+        }
+
+        all_agents = loader.create_agents_from_config(agent_config)
+
         # Should have 2 predefined + 3 generated = 5 total
         assert len(all_agents) == 5
-        assert len(agent_profiles) == 5
-        
+
         # First two should be predefined
         assert all_agents[0].username == "agent_001"
         assert all_agents[1].username == "agent_002"
-    
-    def test_create_agents_from_config_without_predefined(
-        self, temp_config_dir, mock_logger
-    ):
+
+    def test_create_agents_from_config_without_predefined(self, temp_config_dir, mock_logger):
         """Test creating agents without predefined agents."""
         loader = PopulationLoader(temp_config_dir, "test_client", mock_logger)
-        
-        all_agents, agent_profiles = loader.create_agents_from_config(
-            num_agents=3,
-            network_file=None,
-            num_predefined=0,
-            agents_predefined_file=None
-        )
-        
+
+        agent_config = {
+            "generation_config": {
+                "num_additional_agents": 3,
+                "cluster_distribution": {"weights": [0.33, 0.33, 0.34]},
+                "llm_enabled_probability": 0.1,
+            }
+        }
+
+        all_agents = loader.create_agents_from_config(agent_config)
+
         # Should have 3 generated agents
         assert len(all_agents) == 3
-        assert len(agent_profiles) == 3
-    
+
     def test_validate_and_extract_interests(self, temp_config_dir, mock_logger):
         """Test interest validation and extraction."""
         loader = PopulationLoader(temp_config_dir, "test_client", mock_logger)
-        
+
         # Valid interests
-        interests = loader._validate_and_extract_interests("tech,science,art")
-        assert interests == ["tech", "science", "art"]
-        
+        topics, counts = loader.validate_and_extract_interests(
+            [["tech", "science", "art"], [5, 3, 2]]
+        )
+        assert topics == ["tech", "science", "art"]
+        assert counts == [5, 3, 2]
+
         # Empty interests
-        interests = loader._validate_and_extract_interests("")
-        assert interests == []
-        
+        topics, counts = loader.validate_and_extract_interests([])
+        assert topics is None
+        assert counts is None
+
         # None interests
-        interests = loader._validate_and_extract_interests(None)
-        assert interests == []
-    
+        topics, counts = loader.validate_and_extract_interests(None)
+        assert topics is None
+        assert counts is None
+
     def test_save_updated_agent_population(self, temp_config_dir, mock_logger, sample_agents):
         """Test saving updated agent population."""
         loader = PopulationLoader(temp_config_dir, "test_client", mock_logger)
-        
-        output_file = "agents_updated.csv"
-        loader.save_updated_agent_population(sample_agents, output_file)
-        
-        # Verify file was created
-        output_path = temp_config_dir / output_file
-        assert output_path.exists()
-        
+
+        # Create initial agent config file
+        import json
+
+        agent_config_file = temp_config_dir / "agent_population.json"
+        agent_data = {
+            "agents": [{"id": str(agent.id), "username": agent.username} for agent in sample_agents]
+        }
+        with open(agent_config_file, "w") as f:
+            json.dump(agent_data, f)
+
+        # Update interests
+        updated_interests = {
+            str(sample_agents[0].id): {"topics": ["tech", "science"], "counts": [5, 3]}
+        }
+        loader.save_updated_agent_population(updated_interests)
+
+        # Verify file was updated
+        assert agent_config_file.exists()
+
         # Verify content
-        with open(output_path, "r") as f:
-            reader = csv.DictReader(f)
-            rows = list(reader)
-            assert len(rows) == 3
-            assert rows[0]["username"] == "agent_001"
+        with open(agent_config_file, "r") as f:
+            updated_data = json.load(f)
+            assert "agents" in updated_data
+            assert updated_data["agents"][0]["interests"] == [["tech", "science"], [5, 3]]
 
 
 # ============================================================================
 # NetworkLoader Tests
 # ============================================================================
 
+
 class TestNetworkLoader:
     """Tests for NetworkLoader."""
-    
+
     def test_init(self, mock_server, mock_logger):
         """Test NetworkLoader initialization."""
         loader = NetworkLoader(mock_server, "test_client", mock_logger)
-        
+
         assert loader.server == mock_server
         assert loader.client_id == "test_client"
         assert loader.logger == mock_logger
-    
+
     def test_parse_network_edges(self, temp_config_dir, mock_server, mock_logger, sample_agents):
         """Test parsing network edges from CSV."""
         loader = NetworkLoader(mock_server, "test_client", mock_logger)
-        
-        # Create agent_profiles dict
-        agent_profiles = {agent.username: agent for agent in sample_agents}
-        
+
         network_file = temp_config_dir / "network.csv"
-        edges = loader.parse_network_edges(str(network_file), agent_profiles)
-        
+        edges = loader.parse_network_edges(network_file, sample_agents)
+
         # Should have 2 edges
         assert len(edges) == 2
-        assert edges[0] == (1, 2)  # agent_001 -> agent_002
-        assert edges[1] == (2, 1)  # agent_002 -> agent_001
-    
-    def test_parse_network_edges_missing_agents(
-        self, temp_config_dir, mock_server, mock_logger
-    ):
+        # Check that both expected edges exist (order may vary)
+        expected_edges = {
+            (str(sample_agents[0].id), str(sample_agents[1].id)),  # agent_001 -> agent_002
+            (str(sample_agents[1].id), str(sample_agents[0].id)),  # agent_002 -> agent_001
+        }
+        assert set(edges) == expected_edges
+
+    def test_parse_network_edges_missing_agents(self, temp_config_dir, mock_server, mock_logger):
         """Test parsing network edges when agents are missing."""
         loader = NetworkLoader(mock_server, "test_client", mock_logger)
-        
+
         # Only one agent in profiles
-        agent_profiles = {
-            "agent_001": AgentProfile(
-                id=1, username="agent_001", cluster=1, llm=False,
-                is_page=0, daily_activity_level=3, activity_profile="default"
+        agent_profiles = [
+            AgentProfile(
+                id=1,
+                username="agent_001",
+                cluster=1,
+                llm=False,
+                is_page=0,
+                daily_activity_level=3,
+                activity_profile="default",
             )
-        }
-        
+        ]
+
         network_file = temp_config_dir / "network.csv"
-        edges = loader.parse_network_edges(str(network_file), agent_profiles)
-        
+        edges = loader.parse_network_edges(network_file, agent_profiles)
+
         # Should have 0 edges (agent_002 not in profiles)
         assert len(edges) == 0
-    
+
     def test_load_and_create_social_network(
         self, temp_config_dir, mock_server, mock_logger, sample_agents
     ):
         """Test loading and creating social network."""
         loader = NetworkLoader(mock_server, "test_client", mock_logger)
-        
-        agent_profiles = {agent.username: agent for agent in sample_agents}
-        
+
         # Mock ray.get to return batch count
-        with patch('YSimulator.YClient.agent_management.network_loader.ray.get') as mock_ray_get:
+        with patch("YSimulator.YClient.agent_management.network_loader.ray.get") as mock_ray_get:
             mock_ray_get.return_value = 2  # 2 edges created successfully
-            
-            loader.load_and_create_social_network(
-                str(temp_config_dir / "network.csv"),
-                agent_profiles
-            )
-            
+
+            network_file = temp_config_dir / "network.csv"
+            loader.load_and_create_social_network(network_file, sample_agents)
+
             # Verify server method was called
             mock_server.add_follow_relationships_batch.remote.assert_called()
             mock_logger.info.assert_called()
-    
+
     def test_load_and_create_social_network_empty_file(
         self, temp_config_dir, mock_server, mock_logger, sample_agents
     ):
         """Test loading network with empty file."""
         loader = NetworkLoader(mock_server, "test_client", mock_logger)
-        
-        agent_profiles = {agent.username: agent for agent in sample_agents}
-        
+
         # Create empty network file
         empty_network = temp_config_dir / "empty_network.csv"
         empty_network.write_text("")
-        
-        loader.load_and_create_social_network(
-            str(empty_network),
-            agent_profiles
-        )
-        
-        # Should log warning about no edges
-        assert any("No valid edges" in str(call) for call in mock_logger.warning.call_args_list)
+
+        loader.load_and_create_social_network(empty_network, sample_agents)
+
+        # Should log warning about no edges (case-insensitive check)
+        warning_calls = mock_logger.warning.call_args_list
+        assert any("no edges" in str(c).lower() for c in warning_calls)
 
 
 # ============================================================================
 # AgentSelector Tests
 # ============================================================================
 
+
 class TestAgentSelector:
     """Tests for AgentSelector."""
-    
+
     def test_init(self, archetype_distribution, actions_likelihood, mock_logger):
         """Test AgentSelector initialization."""
         selector = AgentSelector(
             archetype_distribution=archetype_distribution,
             agent_downcast=False,
             actions_likelihood=actions_likelihood,
-            logger=mock_logger
+            logger=mock_logger,
         )
-        
+
         assert selector.archetype_distribution == archetype_distribution
-        assert selector.agent_downcast == False
+        assert selector.agent_downcast is False
         assert selector.actions_likelihood == actions_likelihood
         assert selector.logger == mock_logger
-    
+
     def test_sample_agents_by_archetype(
         self, archetype_distribution, actions_likelihood, mock_logger, sample_agents
     ):
@@ -486,20 +540,20 @@ class TestAgentSelector:
             archetype_distribution=archetype_distribution,
             agent_downcast=False,
             actions_likelihood=actions_likelihood,
-            logger=mock_logger
+            logger=mock_logger,
         )
-        
+
         # Sample from 3 agents
-        selected = selector.sample_agents_by_archetype(sample_agents)
-        
+        selected = selector.sample_agents_by_archetype(sample_agents, num_active=2)
+
         # Should return some agents
         assert len(selected) > 0
         assert len(selected) <= len(sample_agents)
-        
+
         # All selected should be from original list
         for agent in selected:
             assert agent in sample_agents
-    
+
     def test_determine_agent_type_llm_agent(
         self, archetype_distribution, actions_likelihood, mock_logger, sample_agents
     ):
@@ -508,14 +562,14 @@ class TestAgentSelector:
             archetype_distribution=archetype_distribution,
             agent_downcast=False,
             actions_likelihood=actions_likelihood,
-            logger=mock_logger
+            logger=mock_logger,
         )
-        
+
         llm_agent = sample_agents[1]  # agent_002 is LLM
         agent_type = selector.determine_agent_type(llm_agent)
-        
+
         assert agent_type == "llm"
-    
+
     def test_determine_agent_type_rule_based(
         self, archetype_distribution, actions_likelihood, mock_logger, sample_agents
     ):
@@ -524,14 +578,14 @@ class TestAgentSelector:
             archetype_distribution=archetype_distribution,
             agent_downcast=False,
             actions_likelihood=actions_likelihood,
-            logger=mock_logger
+            logger=mock_logger,
         )
-        
+
         rule_agent = sample_agents[0]  # agent_001 is not LLM
         agent_type = selector.determine_agent_type(rule_agent)
-        
+
         assert agent_type == "rule_based"
-    
+
     def test_determine_agent_type_with_downcast(
         self, archetype_distribution, actions_likelihood, mock_logger, sample_agents
     ):
@@ -540,17 +594,17 @@ class TestAgentSelector:
             archetype_distribution=archetype_distribution,
             agent_downcast=True,  # Enable downcast
             actions_likelihood=actions_likelihood,
-            logger=mock_logger
+            logger=mock_logger,
         )
-        
+
         llm_agent = sample_agents[1]  # agent_002 is LLM
-        
+
         # With downcast, LLM agents might be downgraded to rule_based
         # (This is a probabilistic test, so we just check it returns valid type)
         agent_type = selector.determine_agent_type(llm_agent)
-        
+
         assert agent_type in ["llm", "rule_based"]
-    
+
     def test_select_action(
         self, archetype_distribution, actions_likelihood, mock_logger, sample_agents
     ):
@@ -559,15 +613,16 @@ class TestAgentSelector:
             archetype_distribution=archetype_distribution,
             agent_downcast=False,
             actions_likelihood=actions_likelihood,
-            logger=mock_logger
+            logger=mock_logger,
         )
-        
+
         agent = sample_agents[0]
-        action = selector.select_action(agent)
-        
-        # Should return one of the configured actions
-        assert action in actions_likelihood.keys()
-    
+        recent_posts = []
+        action = selector.select_action(agent, recent_posts)
+
+        # Should return a tuple (action_type, action_params)
+        assert isinstance(action, tuple)
+
     def test_extract_agent_attrs(
         self, archetype_distribution, actions_likelihood, mock_logger, sample_agents
     ):
@@ -576,30 +631,43 @@ class TestAgentSelector:
             archetype_distribution=archetype_distribution,
             agent_downcast=False,
             actions_likelihood=actions_likelihood,
-            logger=mock_logger
+            logger=mock_logger,
         )
-        
+
         agent = sample_agents[0]
-        attrs = selector.extract_agent_attrs(agent)
-        
+
+        # Create mock functions
+        def mock_validate_interests(interests):
+            return None, None
+
+        def mock_is_opinion_enabled():
+            return False
+
+        def mock_map_opinion(opinion):
+            return "neutral"
+
+        attrs = selector.extract_agent_attrs(
+            agent, mock_validate_interests, mock_is_opinion_enabled, mock_map_opinion
+        )
+
         # Should return dict with agent attributes
         assert isinstance(attrs, dict)
-        assert "username" in attrs
-        assert "cluster" in attrs
-        assert "activity_profile" in attrs
-        assert attrs["username"] == "agent_001"
+        assert "name" in attrs
+        assert "age" in attrs
+        assert "profession" in attrs
+        assert attrs["name"] == "agent_001"
 
 
 # ============================================================================
 # Integration Tests
 # ============================================================================
 
+
 class TestAgentManagementIntegration:
     """Integration tests for agent management components."""
-    
+
     def test_end_to_end_agent_creation(
-        self, temp_config_dir, mock_server, mock_logger,
-        archetype_distribution, actions_likelihood
+        self, temp_config_dir, mock_server, mock_logger, archetype_distribution, actions_likelihood
     ):
         """Test end-to-end agent creation flow."""
         # Create AgentManager
@@ -610,32 +678,42 @@ class TestAgentManagementIntegration:
             archetype_distribution=archetype_distribution,
             agent_downcast=False,
             actions_likelihood=actions_likelihood,
-            logger=mock_logger
+            logger=mock_logger,
         )
-        
+
         # Create agents
-        all_agents, agent_profiles = manager.create_agents_from_config(
-            num_agents=5,
-            network_file=None,
-            num_predefined=2,
-            agents_predefined_file="agents_predefined.csv"
-        )
-        
+        agent_config = {
+            "agents": [
+                {"id": 1, "username": "agent_001", "cluster": 1, "llm": False},
+                {"id": 2, "username": "agent_002", "cluster": 1, "llm": True},
+            ],
+            "generation_config": {
+                "num_additional_agents": 3,
+                "cluster_distribution": {"weights": [0.33, 0.33, 0.34]},
+                "llm_enabled_probability": 0.1,
+            },
+        }
+        all_agents = manager.create_agents_from_config(agent_config)
+
         assert len(all_agents) == 5
-        assert len(agent_profiles) == 5
-        
+
         # Sample agents
-        selected = manager.sample_agents_by_archetype(all_agents)
+        selected = manager.sample_agents_by_archetype(all_agents, num_active=3)
         assert len(selected) > 0
-        
+
         # Determine agent types
         for agent in selected:
             agent_type = manager.determine_agent_type(agent)
             assert agent_type in ["llm", "rule_based"]
-    
+
     def test_end_to_end_network_loading(
-        self, temp_config_dir, mock_server, mock_logger,
-        archetype_distribution, actions_likelihood, sample_agents
+        self,
+        temp_config_dir,
+        mock_server,
+        mock_logger,
+        archetype_distribution,
+        actions_likelihood,
+        sample_agents,
     ):
         """Test end-to-end network loading flow."""
         # Create AgentManager
@@ -646,20 +724,18 @@ class TestAgentManagementIntegration:
             archetype_distribution=archetype_distribution,
             agent_downcast=False,
             actions_likelihood=actions_likelihood,
-            logger=mock_logger
+            logger=mock_logger,
         )
-        
-        agent_profiles = {agent.username: agent for agent in sample_agents}
-        
+
         # Mock ray.get
-        with patch('YSimulator.YClient.agent_management.network_loader.ray.get') as mock_ray_get:
+        with patch("YSimulator.YClient.agent_management.network_loader.ray.get") as mock_ray_get:
             mock_ray_get.return_value = 2
-            
+
             # Load network
+            network_path = temp_config_dir / "network.csv"
             manager.load_and_create_social_network(
-                network_file=str(temp_config_dir / "network.csv"),
-                agent_profiles=agent_profiles
+                network_csv_path=network_path, agent_profiles=sample_agents
             )
-            
+
             # Verify server was called
             mock_server.add_follow_relationships_batch.remote.assert_called()
