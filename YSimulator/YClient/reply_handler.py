@@ -96,7 +96,9 @@ def handle_reply_to_mention(
         post_content = post_data.get("tweet", "")
         author_id = post_data.get("user_id")
 
-        logger.debug(f"[REPLY] Post content preview: '{post_content[:50]}...' (author: {author_id})")
+        logger.debug(
+            f"[REPLY] Post content preview: '{post_content[:50]}...' (author: {author_id})"
+        )
 
         # Get author username
         author_username = "Someone"

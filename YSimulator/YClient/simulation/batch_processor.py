@@ -20,7 +20,13 @@ import ray
 
 from YSimulator.YClient.classes.ray_models import ActionDTO
 from YSimulator.YClient.text_support.text_annotator import annotate_text
-from YSimulator.YClient.llm_utils import BatchHandler, ResponseParser, CostTracker, LLMManager, RetryHandler
+from YSimulator.YClient.llm_utils import (
+    BatchHandler,
+    ResponseParser,
+    CostTracker,
+    LLMManager,
+    RetryHandler,
+)
 
 # Constants
 REACTION_TYPES = ["LIKE", "LOVE", "LAUGH", "ANGRY", "SAD", "IGNORE"]
@@ -42,7 +48,7 @@ class BatchProcessor:
     - Posts (content generation)
     - Reactions (comments, reactions, shares)
     - Follows (follow decisions)
-    
+
     Now uses LLM service layer (Phase 3) for improved error handling and validation.
     """
 
@@ -80,11 +86,13 @@ class BatchProcessor:
         self.enable_emotions = enable_emotions
         self.perspective_api_key = perspective_api_key
         self.logger = logger
-        
+
         # Phase 3: Initialize all LLM utilities modules
         self.llm_manager = LLMManager(llm, logger=logger)  # Wrap LLM for consistent interface
         self.batch_handler = BatchHandler(logger=logger)
-        self.retry_handler = RetryHandler(max_retries=3, initial_delay=1.0, logger=logger)  # Add retry logic
+        self.retry_handler = RetryHandler(
+            max_retries=3, initial_delay=1.0, logger=logger
+        )  # Add retry logic
         self.response_parser = ResponseParser(logger=logger)
         self.cost_tracker = cost_tracker  # Optional cost tracking
 
@@ -106,22 +114,20 @@ class BatchProcessor:
         # Phase 3: Use batch_handler with retry logic for robustness
         futures = [p[2] for p in pending_llm_posts]
         results = self.retry_handler.retry_with_backoff(
-            self.batch_handler.gather_futures,
-            futures,
-            error_message="Gathering LLM post futures"
+            self.batch_handler.gather_futures, futures, error_message="Gathering LLM post futures"
         )  # Blocks once for ALL posts with automatic retries
 
         for i, res_txt in enumerate(results):
             pending_item = pending_llm_posts[i]
             a_id = pending_item[0]
             cid = pending_item[1]
-            
+
             # Phase 3: Validate response
             res_txt = self.response_parser.parse_text_response(res_txt, default="")
             if not res_txt:
                 self.logger.warning(f"Empty LLM post response for agent {a_id}, skipping")
                 continue
-            
+
             # Phase 3: Track LLM usage (estimate tokens from content length)
             if self.cost_tracker:
                 output_tokens = len(res_txt) // CHARS_PER_TOKEN
@@ -217,7 +223,7 @@ class BatchProcessor:
         results = self.retry_handler.retry_with_backoff(
             self.batch_handler.gather_futures,
             futures,
-            error_message="Gathering LLM reaction futures"
+            error_message="Gathering LLM reaction futures",
         )  # Blocks once for ALL reactions/comments with automatic retries
 
         for i, res_act in enumerate(results):
@@ -230,7 +236,9 @@ class BatchProcessor:
                 else:
                     # Comment/share commentary - count actual content
                     output_tokens = len(res_act) // CHARS_PER_TOKEN
-                self.cost_tracker.record_call("generate_comment", PROMPT_TOKENS_COMMENT, output_tokens)
+                self.cost_tracker.record_call(
+                    "generate_comment", PROMPT_TOKENS_COMMENT, output_tokens
+                )
             # Handle tuples of varying lengths:
             # 4-element: (agent_id, cluster_id, target_post_id, future) - regular comment/reaction
             # 5-element: (agent_id, cluster_id, target_post_id, future, mention_id_or_action_type)
@@ -393,18 +401,18 @@ class BatchProcessor:
         results = self.retry_handler.retry_with_backoff(
             self.batch_handler.gather_futures,
             futures,
-            error_message="Gathering LLM follow decision futures"
+            error_message="Gathering LLM follow decision futures",
         )  # Blocks once for ALL follow decisions with automatic retries
 
         for i, target_user in enumerate(results):
             a_id, cid, _ = pending_llm_follows[i]
-            
+
             # Phase 3: Track LLM usage
             if self.cost_tracker:
                 # Follow decision - minimal output (user_id or None)
                 output_tokens = 10
                 self.cost_tracker.record_call("decide_follow", PROMPT_TOKENS_FOLLOW, output_tokens)
-            
+
             # LLM returns user_id to follow or None to skip
             # Phase 3: validate response (target_user should be a user_id string or None)
             if target_user and isinstance(target_user, str):

@@ -107,12 +107,20 @@
         [
           "Discovery",
           "Learning",
-          "Curiosity"
+          "Curiosity",
+          "democrat",
+          "ice",
+          "election",
+          "trump"
         ],
         [
           8,
           5,
-          5
+          5,
+          1,
+          1,
+          1,
+          1
         ]
       ],
       "opinions": {
@@ -227,12 +235,16 @@
         [
           "Analysis",
           "Facts",
-          "Verification"
+          "Verification",
+          "senate",
+          "immigration"
         ],
         [
           7,
           5,
-          4
+          4,
+          1,
+          1
         ]
       ],
       "opinions": {
@@ -347,12 +359,16 @@
         [
           "Analysis",
           "Facts",
-          "Verification"
+          "Verification",
+          "stacey",
+          "2026"
         ],
         [
           7,
           5,
-          4
+          4,
+          1,
+          1
         ]
       ],
       "opinions": {
@@ -467,12 +483,16 @@
         [
           "Discovery",
           "Learning",
-          "Curiosity"
+          "Curiosity",
+          "stacey",
+          "2026"
         ],
         [
           8,
           5,
-          5
+          5,
+          1,
+          1
         ]
       ],
       "opinions": {
@@ -947,12 +967,30 @@
         [
           "Learning",
           "Education",
-          "Technology"
+          "Technology",
+          "trump-kennedy",
+          "ratings",
+          "retirement",
+          "congress",
+          "president",
+          "melanias",
+          "ice",
+          "conservative",
+          "pennsylvania"
         ],
         [
+          6,
           5,
-          5,
-          2
+          2,
+          1,
+          1,
+          1,
+          1,
+          2,
+          2,
+          1,
+          1,
+          1
         ]
       ],
       "opinions": {
@@ -1187,12 +1225,16 @@
         [
           "Learning",
           "Education",
-          "Technology"
+          "Technology",
+          "us",
+          "potential"
         ],
         [
           5,
           5,
-          2
+          2,
+          1,
+          1
         ]
       ],
       "opinions": {
@@ -1547,12 +1589,22 @@
         [
           "Analysis",
           "Facts",
-          "Verification"
+          "Verification",
+          "conservative",
+          "pennsylvania",
+          "News",
+          "stacey",
+          "2026"
         ],
         [
           7,
           5,
-          4
+          4,
+          1,
+          1,
+          1,
+          1,
+          1
         ]
       ],
       "opinions": {
@@ -1667,12 +1719,28 @@
         [
           "Discovery",
           "Learning",
-          "Curiosity"
+          "Curiosity",
+          "democrat",
+          "ice",
+          "conservative",
+          "pennsylvania",
+          "president",
+          "melanias",
+          "us",
+          "strategic"
         ],
         [
           8,
           5,
-          5
+          5,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          2,
+          1
         ]
       ],
       "opinions": {
@@ -2267,12 +2335,16 @@
         [
           "Learning",
           "Education",
-          "Technology"
+          "Technology",
+          "Analysis",
+          "ice"
         ],
         [
           5,
           5,
-          2
+          2,
+          1,
+          1
         ]
       ],
       "opinions": {
@@ -2387,12 +2459,26 @@
         [
           "Education",
           "Learning",
-          "Teaching"
+          "Teaching",
+          "us",
+          "ice",
+          "oil",
+          "senate",
+          "immigration",
+          "conservative",
+          "pennsylvania"
         ],
         [
-          8,
+          9,
           6,
-          4
+          4,
+          2,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1
         ]
       ],
       "opinions": {
@@ -2507,12 +2593,20 @@
         [
           "News",
           "Trends",
-          "Engagement"
+          "Engagement",
+          "us",
+          "russia",
+          "conservative",
+          "pennsylvania"
         ],
         [
           8,
           6,
-          5
+          5,
+          1,
+          1,
+          1,
+          1
         ]
       ],
       "opinions": {
@@ -2870,7 +2964,7 @@
           "Curiosity"
         ],
         [
-          8,
+          10,
           5,
           5
         ]
@@ -2987,12 +3081,14 @@
         [
           "News",
           "Trends",
-          "Engagement"
+          "Engagement",
+          "Education"
         ],
         [
-          8,
+          9,
           6,
-          5
+          5,
+          1
         ]
       ],
       "opinions": {
@@ -3227,12 +3323,20 @@
         [
           "News",
           "Trends",
-          "Engagement"
+          "Engagement",
+          "president",
+          "melanias",
+          "gop",
+          "national"
         ],
         [
           8,
           6,
-          5
+          5,
+          1,
+          1,
+          1,
+          1
         ]
       ],
       "opinions": {
@@ -3347,12 +3451,14 @@
         [
           "Discovery",
           "Learning",
-          "Curiosity"
+          "Curiosity",
+          "ice"
         ],
         [
           8,
           5,
-          5
+          5,
+          1
         ]
       ],
       "opinions": {
@@ -3467,12 +3573,16 @@
         [
           "Education",
           "Learning",
-          "Teaching"
+          "Teaching",
+          "us",
+          "strategic"
         ],
         [
           8,
           6,
-          4
+          4,
+          1,
+          1
         ]
       ],
       "opinions": {
@@ -3707,11 +3817,15 @@
         [
           "Learning",
           "Education",
-          "Technology"
+          "Technology",
+          "president",
+          "melanias"
         ],
         [
           5,
           5,
+          2,
+          2,
           2
         ]
       ],
@@ -3827,12 +3941,14 @@
         [
           "Discovery",
           "Learning",
-          "Curiosity"
+          "Curiosity",
+          "News"
         ],
         [
           8,
           5,
-          5
+          5,
+          1
         ]
       ],
       "opinions": {

@@ -119,7 +119,7 @@ class SimulationClient:
     - Simulation loop execution
     - Action generation (posts and reactions)
     - Coordination with LLM service for intelligent behaviors
-    
+
     Phase 5: Removed ActionExecutorMixin inheritance - action execution
     now handled by action generators (Phase 1).
     """
@@ -150,12 +150,14 @@ class SimulationClient:
         self.llm = llm_handle
         self.news_service = news_service_handle
         self.config_path = Path(config_path)
-        
+
         # Phase 3: Initialize LLM Manager for consistent LLM interface
         # Import here to avoid circular dependencies during initial setup
         from YSimulator.YClient.llm_utils import LLMManager
+
         # Use a temporary logger until _setup_logging() is called
         import logging
+
         temp_logger = logging.getLogger(f"client_{client_id}")
         self.llm_manager = LLMManager(llm_handle, logger=temp_logger) if llm_handle else None
 
@@ -237,6 +239,7 @@ class SimulationClient:
         # Initialize agent manager (Phase 6 refactoring - NEW)
         # Centralized agent lifecycle management
         from YSimulator.YClient.agent_management import AgentManager
+
         self.agent_manager = AgentManager(
             config_path=self.config_path,
             server=self.server,
@@ -282,6 +285,7 @@ class SimulationClient:
         # Initialize opinion manager (Phase 4 refactoring - NEW)
         # Centralized opinion dynamics management
         from YSimulator.YClient.opinion import OpinionManager
+
         self.opinion_manager = OpinionManager(
             simulation_config=self.simulation_config,
             server=self.server,
@@ -431,7 +435,10 @@ class SimulationClient:
         )
 
         # Initialize SecondaryFollowProcessor (Phase 1 alignment)
-        from YSimulator.YClient.simulation.secondary_follow_processor import SecondaryFollowProcessor
+        from YSimulator.YClient.simulation.secondary_follow_processor import (
+            SecondaryFollowProcessor,
+        )
+
         self._secondary_follow_processor = SecondaryFollowProcessor(
             server=self.server,
             client_id=self.client_id,
@@ -539,10 +546,10 @@ class SimulationClient:
         # Initialize tracking variables for hourly and daily summaries
         self.hourly_actions = []  # Track actions for current hour
         self.daily_actions = []  # Track actions for current day
-        
+
         # Initialize cost tracker for LLM usage monitoring (Phase 3)
         self._setup_cost_tracker()
-        
+
         # Phase 3: Update LLM Manager logger now that main logger is set up
         if self.llm_manager:
             self.llm_manager.logger = self.logger
@@ -550,16 +557,16 @@ class SimulationClient:
     def _setup_cost_tracker(self):
         """Set up optional cost tracker for LLM usage monitoring."""
         from YSimulator.YClient.llm_utils import CostTracker
-        
+
         # Get logging configuration
         logging_config = self.simulation_config.get("logging", {})
         enable_llm_usage_log = logging_config.get("enable_llm_usage_log", True)
-        
+
         # Initialize cost tracker if enabled
         if enable_llm_usage_log:
             log_dir = self.config_path / "logs"
             llm_usage_log_file = log_dir / f"{self.client_id}_llm_usage.log"
-            
+
             self.cost_tracker = CostTracker(
                 token_costs=None,  # No cost estimates by default
                 logger=self.logger,
@@ -625,9 +632,11 @@ class SimulationClient:
             return 0
 
         self.logger.info(f"Loading social network from {network_csv_path}")
-        
+
         # Delegate to agent_manager
-        return self.agent_manager.load_and_create_social_network(network_csv_path, self.agent_profiles)
+        return self.agent_manager.load_and_create_social_network(
+            network_csv_path, self.agent_profiles
+        )
 
     def run(self) -> None:
         """
@@ -910,7 +919,7 @@ class SimulationClient:
     ) -> Optional[dict]:
         """
         Calculate opinion updates when an agent comments on a post.
-        
+
         Phase 4: Delegated to OpinionManager.
 
         Args:
@@ -928,7 +937,7 @@ class SimulationClient:
     def _map_opinion_to_group(self, opinion_value: float) -> str:
         """
         Map a numeric opinion value to a discrete opinion group label.
-        
+
         Phase 4: Delegated to OpinionManager.
 
         Args:
@@ -942,9 +951,9 @@ class SimulationClient:
     def _is_opinion_dynamics_enabled(self) -> bool:
         """
         Check if opinion dynamics is enabled in the simulation configuration.
-        
+
         Phase 4: Delegated to OpinionManager.
-        
+
         Returns:
             bool: True if opinion dynamics is enabled, False otherwise
         """
@@ -955,7 +964,7 @@ class SimulationClient:
     ) -> float:
         """
         Infer opinion for a page agent on a topic from article content.
-        
+
         Phase 4: Delegated to OpinionManager.
 
         Args:
@@ -966,14 +975,12 @@ class SimulationClient:
         Returns:
             float: Opinion value in [0, 1] range
         """
-        return self.opinion_manager.infer_page_agent_opinion(
-            agent_id, article_content, topic_name
-        )
+        return self.opinion_manager.infer_page_agent_opinion(agent_id, article_content, topic_name)
 
     def _get_opinions_for_post(self, agent_id: str, post_id: str) -> dict:
         """
         Get agent's opinions on the topics discussed in a post.
-        
+
         Phase 4: Delegated to OpinionManager.
 
         Args:

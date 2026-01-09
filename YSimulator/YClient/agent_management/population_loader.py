@@ -17,18 +17,18 @@ from YSimulator.YClient.classes.ray_models import AgentProfile
 class PopulationLoader:
     """
     Manages agent population loading and creation from configuration.
-    
+
     Responsibilities:
     - Load predefined agents from configuration files
     - Generate additional agents based on generation_config
     - Validate and extract agent interests
     - Save updated agent populations back to configuration files
     """
-    
+
     def __init__(self, config_path: Path, client_id: str, logger: logging.Logger):
         """
         Initialize PopulationLoader.
-        
+
         Args:
             config_path: Path to configuration directory
             client_id: Client identifier
@@ -38,31 +38,31 @@ class PopulationLoader:
         self.client_id = client_id
         self.logger = logger
         self.AGENT_UUID_NAMESPACE = uuid.UUID("12345678-1234-5678-1234-567812345678")
-    
+
     def create_agents_from_config(self, agent_config: dict) -> List[AgentProfile]:
         """
         Create agent profiles from configuration.
         Combines predefined agents with generated agents.
-        
+
         Args:
             agent_config: Agent configuration dictionary
-            
+
         Returns:
             List of AgentProfile objects
         """
         agents = []
-        
+
         # Load predefined agents
         if "agents" in agent_config:
             agents.extend(self._load_predefined_agents(agent_config["agents"]))
-        
+
         # Generate additional agents if specified
         if "generation_config" in agent_config:
             agents.extend(self._generate_agents(agent_config["generation_config"], len(agents)))
-        
+
         self.logger.info(f"Created {len(agents)} agent profiles from configuration")
         return agents
-    
+
     def _load_predefined_agents(self, agents_config: List[dict]) -> List[AgentProfile]:
         """Load predefined agents from configuration."""
         agents = []
@@ -102,7 +102,7 @@ class PopulationLoader:
             )
             agents.append(profile)
         return agents
-    
+
     def _generate_agents(self, gen_config: dict, existing_count: int) -> List[AgentProfile]:
         """Generate additional agents based on generation configuration."""
         agents = []
@@ -111,10 +111,10 @@ class PopulationLoader:
         llm_prob = gen_config.get("llm_enabled_probability", 0.1)
         defaults = gen_config.get("default_settings", {})
         age_range = gen_config.get("age_range", [18, 65])
-        
+
         # Start indexing after predefined agents
         start_index = 10000 if existing_count > 0 else 1
-        
+
         # Lists for random selection
         archetypes = ["validator", "broadcaster", "explorer"]
         activity_profiles = ["Always On", "Morning Active", "Evening Active", "Weekend Warrior"]
@@ -122,12 +122,12 @@ class PopulationLoader:
         genders = ["male", "female", "non-binary"]
         nationalities = ["US", "UK", "CA", "AU", "EU"]
         education_levels = ["high_school", "college", "graduate", "phd"]
-        
+
         for i in range(num_additional):
             agent_index = start_index + i
             agent_id = str(uuid.uuid5(self.AGENT_UUID_NAMESPACE, f"generated_agent_{agent_index}"))
             cluster = random.choices([0, 1, 2], weights=cluster_weights)[0]
-            
+
             profile = AgentProfile(
                 id=agent_id,
                 username=f"agent_{agent_index:04d}",
@@ -157,29 +157,27 @@ class PopulationLoader:
                 is_page=defaults.get("is_page", 0),
             )
             agents.append(profile)
-        
+
         return agents
-    
+
     def save_updated_agent_population(self, updated_interests: Dict[str, Dict[str, List]]):
         """
         Save updated agent interests to agent_population.json at end of day.
-        
+
         Args:
             updated_interests: Dict of {agent_id: {"topics": [...], "counts": [...]}}
         """
         agent_config_file = self._get_agent_config_file()
-        
+
         if not agent_config_file or not agent_config_file.exists():
-            self.logger.warning(
-                f"Agent config file not found, skipping interests update"
-            )
+            self.logger.warning(f"Agent config file not found, skipping interests update")
             return
-        
+
         try:
             # Load current configuration
             with open(agent_config_file, "r") as f:
                 agent_data = json.load(f)
-            
+
             # Update interests for each agent
             if "agents" in agent_data:
                 for agent in agent_data["agents"]:
@@ -187,39 +185,39 @@ class PopulationLoader:
                     if agent_id and str(agent_id) in updated_interests:
                         interests_data = updated_interests[str(agent_id)]
                         agent["interests"] = [interests_data["topics"], interests_data["counts"]]
-            
+
             # Write updated data back
             with open(agent_config_file, "w") as f:
                 json.dump(agent_data, f, indent=2)
-            
+
             self.logger.info(
                 f"Updated {agent_config_file.name} with interests for {len(updated_interests)} agents"
             )
-        
+
         except Exception as e:
             self.logger.error(
                 f"Error updating agent population file: {e}",
-                extra={"extra_data": {"error": str(e), "file": str(agent_config_file)}}
+                extra={"extra_data": {"error": str(e), "file": str(agent_config_file)}},
             )
-    
+
     def add_agent_to_population_file(self, agent: AgentProfile):
         """
         Add a new agent to the agent_population.json file.
-        
+
         Args:
             agent: AgentProfile to add
         """
         agent_config_file = self._get_agent_config_file()
-        
+
         if not agent_config_file or not agent_config_file.exists():
             self.logger.warning("Agent config file not found, skipping agent addition")
             return
-        
+
         try:
             # Load current configuration
             with open(agent_config_file, "r") as f:
                 agent_data = json.load(f)
-            
+
             # Create agent dict
             agent_dict = {
                 "id": agent.id,
@@ -249,53 +247,53 @@ class PopulationLoader:
                 "round_actions": agent.round_actions,
                 "is_page": agent.is_page,
             }
-            
+
             # Add to agents list
             if "agents" not in agent_data:
                 agent_data["agents"] = []
             agent_data["agents"].append(agent_dict)
-            
+
             # Write updated data back
             with open(agent_config_file, "w") as f:
                 json.dump(agent_data, f, indent=2)
-            
+
             self.logger.info(f"Added agent {agent.username} to {agent_config_file.name}")
-        
+
         except Exception as e:
             self.logger.error(
                 f"Error adding agent to population file: {e}",
-                extra={"extra_data": {"error": str(e)}}
+                extra={"extra_data": {"error": str(e)}},
             )
-    
+
     def validate_and_extract_interests(self, interests) -> Tuple[Optional[List], Optional[List]]:
         """
         Validate interests structure and extract topics and counts.
-        
+
         Args:
             interests: Interest data in format [["Topic1", "Topic2"], [1, 2]]
-            
+
         Returns:
             tuple: (topics, counts) or (None, None) if invalid
         """
         if not interests or not isinstance(interests, (list, tuple)) or len(interests) != 2:
             return None, None
-        
+
         topics = interests[0]
         counts = interests[1]
-        
+
         if not topics or not counts or not isinstance(topics, list) or not isinstance(counts, list):
             return None, None
-        
+
         if len(topics) == 0:
             return None, None
-        
+
         return topics, counts
-    
+
     def _get_agent_config_file(self) -> Optional[Path]:
         """Get the agent population configuration file path."""
         client_specific = self.config_path / f"{self.client_id}_agent_population.json"
         generic = self.config_path / "agent_population.json"
-        
+
         if client_specific.exists():
             return client_specific
         elif generic.exists():

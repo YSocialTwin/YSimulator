@@ -118,15 +118,15 @@ class RoundExecutor:
             self.logger.debug(
                 f"[REPLY] Processing agent {agent.username} (type: {agent_type}, is_page: {agent.is_page})"
             )
-            
+
             # Use action generator framework for reply (Phase 1 consistency)
             immediate_actions, pending_calls, metadata = self.dispatch_action_with_generator_fn(
                 "reply", agent, agent_type, None
             )
-            
+
             # Add immediate actions (rule-based)
             actions.extend(immediate_actions)
-            
+
             # Add pending LLM calls to the pending_llm_reactions list
             pending_llm_reactions.extend(pending_calls)
 
@@ -208,4 +208,3 @@ class RoundExecutor:
             pending_llm_follows,
             rule_based_interactions,
         )
-

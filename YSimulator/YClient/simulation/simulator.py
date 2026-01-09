@@ -219,7 +219,10 @@ class Simulator:
                 # Process simulation round
                 sim_start = time.time()
                 actions, active_agent_ids = self._simulate_round(
-                    instruction.day, instruction.slot, instruction.recent_post_ids, calculate_opinion_updates_fn
+                    instruction.day,
+                    instruction.slot,
+                    instruction.recent_post_ids,
+                    calculate_opinion_updates_fn,
                 )
                 sim_time = (time.time() - sim_start) * 1000
 
@@ -321,7 +324,9 @@ class Simulator:
         else:
             self.logger.info("No network.csv found, skipping social network creation")
 
-    def _simulate_round(self, day: int, slot: int, recent_posts: list, calculate_opinion_updates_fn):
+    def _simulate_round(
+        self, day: int, slot: int, recent_posts: list, calculate_opinion_updates_fn
+    ):
         """
         Simulate agent behaviors for a given time slot.
 
@@ -476,9 +481,7 @@ class Simulator:
         """
         for action in actions:
             # Get agent username from agent_id
-            agent_profile = next(
-                (a for a in self.agent_profiles if a.id == action.agent_id), None
-            )
+            agent_profile = next((a for a in self.agent_profiles if a.id == action.agent_id), None)
             agent_name = agent_profile.username if agent_profile else str(action.agent_id)
 
             # Normalize action type to method name (lowercase)

@@ -226,8 +226,10 @@ class TestSimulator:
 
     def test_initialization(self, sample_agents, mock_logger):
         """Test Simulator initialization."""
-        from YSimulator.YClient.simulation.secondary_follow_processor import SecondaryFollowProcessor
-        
+        from YSimulator.YClient.simulation.secondary_follow_processor import (
+            SecondaryFollowProcessor,
+        )
+
         simulator = Simulator(
             server=MagicMock(),
             client_id="test_client",

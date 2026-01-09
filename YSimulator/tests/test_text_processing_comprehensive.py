@@ -64,7 +64,7 @@ class TestTextCleaning:
 
     def test_clean_text_remove_quotes(self):
         """Test quote removal."""
-        result = clean_text("user", '"Hello" \'world\'')
+        result = clean_text("user", "\"Hello\" 'world'")
         assert result == "Hello world"
 
     def test_clean_text_strip_parentheses(self):
@@ -350,9 +350,7 @@ class TestAnnotateText:
         }
         mock_perspective.return_value = mock_api
 
-        result = annotate_text(
-            "Test text", enable_toxicity=True, perspective_api_key="test_key"
-        )
+        result = annotate_text("Test text", enable_toxicity=True, perspective_api_key="test_key")
         assert result["toxicity"] is not None
         assert "TOXICITY" in result["toxicity"]
 

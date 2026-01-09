@@ -96,7 +96,9 @@ class LifecycleManager:
         self.probability_new_agents = probability_new_agents
         self.logger = logger
 
-    def evaluate_daily_follows(self, active_agent_ids: Set[str], current_day: int) -> List[ActionDTO]:
+    def evaluate_daily_follows(
+        self, active_agent_ids: Set[str], current_day: int
+    ) -> List[ActionDTO]:
         """
         Evaluate daily follow actions for agents that were active during the day.
 

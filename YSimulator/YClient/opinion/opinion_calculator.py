@@ -18,12 +18,12 @@ from YSimulator.YClient.opinion_dynamics.utils import get_opinion_group
 class OpinionCalculator:
     """
     Calculator for opinion updates based on agent interactions.
-    
+
     This class implements the core opinion dynamics models:
     - Bounded Confidence: Classic model based on confidence bounds
     - LLM Evaluation: LLM-based opinion evaluation for natural reasoning
     """
-    
+
     def __init__(
         self,
         opinion_config: Dict[str, Any],
@@ -35,7 +35,7 @@ class OpinionCalculator:
     ):
         """
         Initialize the opinion calculator.
-        
+
         Args:
             opinion_config: Opinion dynamics configuration dict
             server: Ray actor handle for orchestrator server
@@ -50,7 +50,7 @@ class OpinionCalculator:
         self.client_id = client_id
         self.logger = logger
         self.get_opinion_group_fn = get_opinion_group_fn
-    
+
     def calculate_updates(
         self,
         agent_id: str,
@@ -60,17 +60,17 @@ class OpinionCalculator:
     ) -> Optional[dict]:
         """
         Calculate opinion updates when an agent comments on a post.
-        
+
         Supports two opinion dynamics models based on configuration:
         - "bounded_confidence": Classic bounded confidence model (all agents)
         - "llm_evaluation": LLM-based evaluation (LLM agents only)
-        
+
         Args:
             agent_id: UUID of the agent making the comment
             parent_post_id: UUID of the post being commented on
             parent_post_data: Dictionary containing post data including user_id
             agent_profiles: List of agent profiles
-        
+
         Returns:
             dict: Mapping of topic_id to new opinion value, or None if no updates
         """
@@ -78,11 +78,11 @@ class OpinionCalculator:
             # Check if opinion dynamics config exists
             if not self.opinion_config:
                 return None
-            
+
             # Get model name and parameters
             model_name = self.opinion_config.get("model_name", "bounded_confidence")
             params = self.opinion_config.get("parameters", {})
-            
+
             # Validate model selection
             if model_name == "llm_evaluation":
                 # Check if this is an LLM agent
@@ -93,22 +93,22 @@ class OpinionCalculator:
                         f"Agent {agent_id} is not an LLM agent. Skipping opinion update."
                     )
                     return None
-            
+
             # Get the parent post author
             parent_author_id = parent_post_data.get("user_id")
             if not parent_author_id:
                 return None
-            
+
             # Get the post topics from server
             topic_ids = ray.get(
                 self.server.get_post_topics.remote(parent_post_id, client_id=self.client_id)
             )
             if not topic_ids:
                 return None
-            
+
             # Get post content (needed for LLM evaluation)
             post_content = parent_post_data.get("tweet", "")
-            
+
             # Calculate updated opinions for each topic
             updated_opinions = {}
             for topic_id in topic_ids:
@@ -118,21 +118,21 @@ class OpinionCalculator:
                 )
                 if not topic_name:
                     continue
-                
+
                 # Get agent's LATEST opinion from database (not cached profile)
                 agent_opinion = ray.get(
                     self.server.get_latest_agent_opinion.remote(
                         agent_id, topic_id, client_id=self.client_id
                     )
                 )
-                
+
                 # Get author's latest opinion from server
                 author_opinion = ray.get(
                     self.server.get_latest_agent_opinion.remote(
                         parent_author_id, topic_id, client_id=self.client_id
                     )
                 )
-                
+
                 # Check if author has opinion on topic
                 if author_opinion is None:
                     self.logger.debug(
@@ -142,7 +142,7 @@ class OpinionCalculator:
                         f"Skipping opinion update calculation for now."
                     )
                     continue
-                
+
                 # Calculate new opinion based on selected model
                 if model_name == "llm_evaluation":
                     new_opinion = self._calculate_llm_evaluation(
@@ -161,23 +161,23 @@ class OpinionCalculator:
                         author_opinion=author_opinion,
                         params=params,
                     )
-                
+
                 updated_opinions[topic_id] = new_opinion
-                
+
                 self.logger.info(
                     f"Opinion update calculated (model={model_name}): agent={agent_id}, "
                     f"topic={topic_name}, old={agent_opinion}, author={author_opinion}, new={new_opinion}"
                 )
-            
+
             return updated_opinions if updated_opinions else None
-        
+
         except Exception as e:
             self.logger.error(
                 f"Error calculating opinion updates for agent {agent_id}: {e}",
                 extra={"extra_data": {"error": str(e), "agent_id": agent_id}},
             )
             return None
-    
+
     def _calculate_bounded_confidence(
         self,
         agent_opinion: Optional[float],
@@ -186,12 +186,12 @@ class OpinionCalculator:
     ) -> float:
         """
         Calculate opinion update using bounded confidence model.
-        
+
         Args:
             agent_opinion: Agent's current opinion (None for cold start)
             author_opinion: Author's opinion
             params: Model parameters (epsilon, mu, theta, cold_start)
-        
+
         Returns:
             float: Updated opinion value
         """
@@ -203,7 +203,7 @@ class OpinionCalculator:
             theta=params.get("theta", 0.0),
             cold_start=params.get("cold_start", "neutral"),
         )
-    
+
     def _calculate_llm_evaluation(
         self,
         agent_id: str,
@@ -216,7 +216,7 @@ class OpinionCalculator:
     ) -> float:
         """
         Calculate opinion update using LLM evaluation model.
-        
+
         Args:
             agent_id: Agent UUID
             agent_opinion: Agent's current opinion (None for cold start)
@@ -225,14 +225,14 @@ class OpinionCalculator:
             topic_id: Topic ID
             topic_name: Topic name
             params: Model parameters (evaluation_scope, cold_start)
-        
+
         Returns:
             float: Updated opinion value
         """
         # Get evaluation scope and prepare neighbors' opinions if needed
         evaluation_scope = params.get("evaluation_scope", "interlocutor_only")
         peers_opinions = None
-        
+
         if evaluation_scope == "neighbors":
             # Get neighbors' opinions from server
             neighbor_opinion_values = ray.get(
@@ -240,16 +240,15 @@ class OpinionCalculator:
                     agent_id, topic_id, client_id=self.client_id
                 )
             )
-            
+
             if neighbor_opinion_values:
                 # Convert to opinion labels and count occurrences
                 opinion_groups = self.opinion_config.get("opinion_groups", {})
                 neighbor_labels = [
-                    get_opinion_group(val, opinion_groups)
-                    for val in neighbor_opinion_values
+                    get_opinion_group(val, opinion_groups) for val in neighbor_opinion_values
                 ]
                 peers_opinions = list(Counter(neighbor_labels).items())
-        
+
         # Calculate new opinion using LLM evaluation
         return llm_evaluation(
             x=agent_opinion,

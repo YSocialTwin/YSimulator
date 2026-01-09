@@ -82,7 +82,9 @@ class SecondaryFollowProcessor:
         )
 
         # Process each candidate for secondary follow
-        pending_secondary_follow_llm = []  # List of (agent_id, cluster_id, author_id, is_following, future)
+        pending_secondary_follow_llm = (
+            []
+        )  # List of (agent_id, cluster_id, author_id, is_following, future)
 
         for agent_id, cluster_id, author_id, post_content, is_llm_agent in all_candidates:
             # Skip if author is self

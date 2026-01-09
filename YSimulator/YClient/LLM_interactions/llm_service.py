@@ -367,7 +367,7 @@ class LLMService:
             # Fallback if prompt not configured
             logger.warning("generate_share_commentary prompt not found in config, using fallback")
             return "Sharing this!"
-        
+
         system_template = self.prompts_config["generate_share_commentary"]["system_template"]
         user_template = self.prompts_config["generate_share_commentary"]["user_template"]
 

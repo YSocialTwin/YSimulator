@@ -12,7 +12,7 @@ from YSimulator.YServer.repositories.base_repository import FollowRepository
 
 class FollowService:
     """Service for follow relationship business logic."""
-    
+
     def __init__(
         self,
         follow_repository: FollowRepository,
@@ -20,23 +20,23 @@ class FollowService:
     ):
         """
         Initialize follow service.
-        
+
         Args:
             follow_repository: Repository for follow data access
             logger: Logger instance
         """
         self.follow_repo = follow_repository
         self.logger = logger or logging.getLogger(__name__)
-    
+
     def add_follow(self, follower_id: str, followee_id: str, round_id: str) -> bool:
         """
         Add a follow relationship.
-        
+
         Args:
             follower_id: ID of the user following
             followee_id: ID of the user being followed
             round_id: Round ID when follow occurred
-            
+
         Returns:
             True if successful, False otherwise
         """
@@ -50,14 +50,14 @@ class FollowService:
         except Exception as e:
             self.logger.error(f"Error adding follow: {e}")
             return False
-    
+
     def add_follows_batch(self, follows_data: List[Tuple[str, str, str]]) -> int:
         """
         Add multiple follow relationships in a batch.
-        
+
         Args:
             follows_data: List of (follower_id, followee_id, round_id) tuples
-            
+
         Returns:
             Number of follows added
         """
@@ -72,25 +72,29 @@ class FollowService:
                     # Convert tuple/list to dict
                     if len(item) == 2:
                         # (follower_id, followee_id)
-                        follow_dicts.append({
-                            "follower_id": item[0],
-                            "followee_id": item[1],
-                            "round_id": None,
-                        })
+                        follow_dicts.append(
+                            {
+                                "follower_id": item[0],
+                                "followee_id": item[1],
+                                "round_id": None,
+                            }
+                        )
                     elif len(item) == 3:
                         # (follower_id, followee_id, round_id)
-                        follow_dicts.append({
-                            "follower_id": item[0],
-                            "followee_id": item[1],
-                            "round_id": item[2],
-                        })
+                        follow_dicts.append(
+                            {
+                                "follower_id": item[0],
+                                "followee_id": item[1],
+                                "round_id": item[2],
+                            }
+                        )
                     else:
                         self.logger.warning(f"Unexpected follow data format: {item}")
                         continue
                 else:
                     self.logger.warning(f"Unexpected follow data type: {type(item)}")
                     continue
-                    
+
             return self.follow_repo.add_follows_batch(follow_dicts)
         except Exception as e:
             self.logger.error(f"Error adding follows batch: {e}")

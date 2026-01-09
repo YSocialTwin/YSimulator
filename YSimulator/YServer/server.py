@@ -209,9 +209,11 @@ class OrchestratorServer:
 
         # Store visibility_rounds for server use
         self.visibility_rounds = simulation_config.get("posts", {}).get("visibility_rounds", 36)
-        
+
         # Store default_limit for recommendations
-        self.default_recommendation_limit = simulation_config.get("recommendations", {}).get("default_limit", 5)
+        self.default_recommendation_limit = simulation_config.get("recommendations", {}).get(
+            "default_limit", 5
+        )
 
         # Store attention_window for interest decay (sliding window)
         self.attention_window = simulation_config.get("agents", {}).get("attention_window", 336)
@@ -229,24 +231,29 @@ class OrchestratorServer:
         redis_client = None
         if redis_config and isinstance(redis_config, dict) and redis_config.get("enabled", False):
             redis_client = self._create_redis_client(redis_config)
-        
+
         # Initialize services using Repository/Service pattern
         use_new_pattern = False
         try:
             from YSimulator.YServer.service_factory import create_all_services, SERVICES_AVAILABLE
             from YSimulator.YServer.database_adapter import DatabaseServiceAdapter
-            
+
             if not SERVICES_AVAILABLE:
                 raise ImportError("Repository/Service pattern dependencies not available")
-            
-            (user_service, post_service, follow_service, interest_service, 
-             article_service, image_service, content_service, simulation_service, 
-             metadata_service, mention_service) = create_all_services(
-                db_config, 
-                str(self.config_path),
-                self.logger
-            )
-            
+
+            (
+                user_service,
+                post_service,
+                follow_service,
+                interest_service,
+                article_service,
+                image_service,
+                content_service,
+                simulation_service,
+                metadata_service,
+                mention_service,
+            ) = create_all_services(db_config, str(self.config_path), self.logger)
+
             # Phase 5: Expose services directly for explicit usage
             self.user_service = user_service
             self.post_service = post_service
@@ -260,7 +267,7 @@ class OrchestratorServer:
             self.mention_service = mention_service
             self.redis_client = redis_client
             self.use_redis = redis_client is not None
-            
+
             # Create database adapter for backwards compatibility (will be phased out)
             self.db = DatabaseServiceAdapter(
                 user_service=user_service,
@@ -283,13 +290,12 @@ class OrchestratorServer:
                     "migration_status": "PHASE_5_COMPLETE",
                     "services": "User, Post, Follow, Interest, Article, Image, Content, Simulation, Metadata, Mention",
                     "service_access": "Direct - no adapter facade",
-                    "legacy_middleware": "None - fully eliminated"
-                }
+                    "legacy_middleware": "None - fully eliminated",
+                },
             )
         except Exception as e:
             self.logger.error(
-                f"Failed to create services: {e}. "
-                "Unable to start server without service layer."
+                f"Failed to create services: {e}. " "Unable to start server without service layer."
             )
             raise RuntimeError(
                 f"Service layer initialization failed: {e}. "
@@ -307,55 +313,67 @@ class OrchestratorServer:
         # Initialize action router for modular action processing
         # Pass self (the server) so processors can access server methods like _process_annotations
         from YSimulator.YServer.action_processors.action_router import ActionRouter
+
         self.action_router = ActionRouter(self, self.logger)
-        self.logger.info("Action router initialized with processors for POST, COMMENT, SHARE, FOLLOW, UNFOLLOW, and reactions")
+        self.logger.info(
+            "Action router initialized with processors for POST, COMMENT, SHARE, FOLLOW, UNFOLLOW, and reactions"
+        )
 
         # Initialize recommendation engines
         from YSimulator.YServer.recommendation import ContentRecommender, FollowRecommender
+
         self.content_recommender = ContentRecommender(
-            self.db, 
-            self.visibility_rounds, 
-            self.num_slots_per_day,
-            self.logger
+            self.db, self.visibility_rounds, self.num_slots_per_day, self.logger
         )
         self.follow_recommender = FollowRecommender(self.db, self.logger)
-        self.logger.info("Recommendation engines initialized (ContentRecommender, FollowRecommender)")
+        self.logger.info(
+            "Recommendation engines initialized (ContentRecommender, FollowRecommender)"
+        )
 
         # Initialize opinion dynamics handler
         from YSimulator.YServer.opinion_dynamics import OpinionHandler
+
         self.opinion_handler = OpinionHandler(
             db_adapter=self.db,
             simulation_config=self.simulation_config,
             agent_profiles_cache=self.agent_profiles_cache,
             current_round_id_getter=lambda: self.current_round_id,
-            logger=self.logger
+            logger=self.logger,
         )
         self.logger.info("Opinion dynamics handler initialized")
 
         # Initialize coordination layer
         from YSimulator.YServer.coordination import (
-            ClientManager, BarrierHandler, RoundManager, ArchetypeManager
+            ClientManager,
+            BarrierHandler,
+            RoundManager,
+            ArchetypeManager,
         )
-        self.client_manager = ClientManager(timeout_seconds=self.timeout_seconds, logger=self.logger)
+
+        self.client_manager = ClientManager(
+            timeout_seconds=self.timeout_seconds, logger=self.logger
+        )
         self.barrier_handler = BarrierHandler(logger=self.logger)
         self.round_manager = RoundManager(
             db_adapter=self.db,
             interest_manager=self.interest_manager,
             visibility_rounds=self.visibility_rounds,
             num_slots_per_day=self.num_slots_per_day,
-            logger=self.logger
+            logger=self.logger,
         )
         self.archetype_manager = ArchetypeManager(
             db_adapter=self.db,
             archetypes_enabled=self.archetypes_enabled,
             archetype_transitions=self.archetype_transitions,
-            logger=self.logger
+            logger=self.logger,
         )
-        self.logger.info("Coordination layer initialized (ClientManager, BarrierHandler, RoundManager, ArchetypeManager)")
-        
+        self.logger.info(
+            "Coordination layer initialized (ClientManager, BarrierHandler, RoundManager, ArchetypeManager)"
+        )
+
         # Initialize first round using RoundManager (no need to store, accessed via property)
         self.round_manager.initialize_first_round()
-        
+
         # Expose properties for backward compatibility
         self.registered_clients = self.client_manager.registered_clients
         self.completed_clients = self.client_manager.completed_clients
@@ -393,12 +411,12 @@ class OrchestratorServer:
     def day(self) -> int:
         """Get current simulation day from RoundManager."""
         return self.round_manager.day
-    
+
     @property
     def slot(self) -> int:
         """Get current simulation slot from RoundManager."""
         return self.round_manager.slot
-    
+
     @property
     def current_round_id(self) -> str:
         """Get current round ID from RoundManager."""
@@ -407,10 +425,10 @@ class OrchestratorServer:
     def _create_redis_client(self, redis_config: dict):
         """
         Create and initialize a Redis client.
-        
+
         Args:
             redis_config: Redis configuration dict with host, port, db, password, enabled
-            
+
         Returns:
             Redis client instance or None if connection fails
         """
@@ -422,13 +440,13 @@ class OrchestratorServer:
                 "Install with: pip install redis"
             )
             return None
-        
+
         if not redis_config.get("host"):
             self.logger.info(
                 "Redis is enabled but no host specified in config, skipping Redis initialization"
             )
             return None
-        
+
         try:
             redis_client = redis.Redis(
                 host=redis_config.get("host"),
@@ -591,9 +609,9 @@ class OrchestratorServer:
     ):
         """
         Ensure an agent has an opinion recorded for a topic.
-        
+
         Delegates to OpinionHandler for opinion management logic.
-        
+
         Args:
             agent_id: Agent UUID
             topic_id: Topic UUID (from interests table)
@@ -936,7 +954,9 @@ class OrchestratorServer:
 
         try:
             # Batch register users - returns (count, set of newly registered IDs)
-            registered_count, newly_registered_ids = self.user_service.register_users_batch(users_data)
+            registered_count, newly_registered_ids = self.user_service.register_users_batch(
+                users_data
+            )
 
             # All agents (new and existing) should be in registered_agents dict
             # Also cache agent profiles for opinion lookups (when opinion dynamics enabled)
@@ -1230,7 +1250,7 @@ class OrchestratorServer:
     def register_client(self, client_id: str, num_days: int = 0) -> dict:
         """
         Register a new client with the server.
-        
+
         Delegates to ClientManager for client lifecycle management.
 
         Args:
@@ -1240,15 +1260,13 @@ class OrchestratorServer:
         Returns:
             dict: {"registered": bool, "start_day": int, "start_slot": int}
         """
-        return self.client_manager.register_client(
-            client_id, num_days, self.day, self.slot
-        )
+        return self.client_manager.register_client(client_id, num_days, self.day, self.slot)
 
     @log_server_request
     def complete_client(self, client_id: str) -> bool:
         """
         Mark a client as completed (finished all planned activities).
-        
+
         Delegates to ClientManager for client lifecycle management.
 
         Args:
@@ -1258,17 +1276,17 @@ class OrchestratorServer:
             bool: True if successfully marked as complete
         """
         result = self.client_manager.complete_client(client_id)
-        
+
         # Check if completing this client unblocks the barrier
         self._check_barrier_and_advance()
-        
+
         return result
 
     @log_server_request
     def heartbeat(self, client_id: str) -> bool:
         """
         Record a heartbeat from a client to indicate it's still alive.
-        
+
         Delegates to ClientManager for heartbeat tracking.
 
         Args:
@@ -1282,7 +1300,7 @@ class OrchestratorServer:
     def _get_active_clients(self) -> set:
         """
         Get the set of active clients (registered but not completed).
-        
+
         Delegates to ClientManager.
 
         Returns:
@@ -1293,7 +1311,7 @@ class OrchestratorServer:
     def _check_for_stale_clients(self):
         """
         Check for clients that haven't sent a heartbeat recently and remove them.
-        
+
         Delegates to ClientManager for stale client detection.
         """
         self.client_manager.check_for_stale_clients()
@@ -1301,7 +1319,7 @@ class OrchestratorServer:
     def _mark_client_as_completed(self, client_id: str):
         """
         Mark a client as completed internally.
-        
+
         Delegates to ClientManager.
 
         Args:
@@ -1313,7 +1331,7 @@ class OrchestratorServer:
     def deregister_client(self, client_id: str) -> bool:
         """
         Remove a client from the server.
-        
+
         Delegates to ClientManager for client deregistration.
 
         Args:
@@ -1323,10 +1341,10 @@ class OrchestratorServer:
             bool: True if deregistration successful
         """
         result = self.client_manager.deregister_client(client_id)
-        
+
         # Check if leaving unblocked the barrier
         self._check_barrier_and_advance()
-        
+
         return result
 
     @log_server_request
@@ -1378,16 +1396,15 @@ class OrchestratorServer:
         try:
             # Create action context with current simulation state
             from YSimulator.YServer.action_processors.base_processor import ActionContext
+
             context = ActionContext(
-                current_round_id=self.current_round_id,
-                day=self.day,
-                slot=self.slot
+                current_round_id=self.current_round_id, day=self.day, slot=self.slot
             )
 
             # Process each action through the router
             for act in actions:
                 result = self.action_router.route(act, context)
-                
+
                 # Collect new post IDs from successful results
                 if result.success and result.new_ids:
                     new_ids.extend(result.new_ids)
@@ -1431,7 +1448,6 @@ class OrchestratorServer:
 
         # Check if EVERYONE is done
         self._check_barrier_and_advance()
-
 
     def get_current_day(self) -> int:
         """
@@ -1587,33 +1603,35 @@ class OrchestratorServer:
     def _check_barrier_and_advance(self) -> None:
         """
         Check if all active clients have submitted actions and advance simulation state.
-        
+
         Delegates to BarrierHandler and RoundManager for coordination logic.
         """
         active_clients = self._get_active_clients()
-        
+
         # Check if barrier should be released
         should_advance = self.barrier_handler.check_barrier_and_should_advance(
             active_clients, self.submitted_clients
         )
-        
+
         if should_advance:
             # Clear submitted clients for next round
             self.client_manager.clear_submitted_clients()
-            
+
             # Advance simulation using RoundManager
             result = self.round_manager.advance_simulation(
                 recompute_interests_callback=self._recompute_all_agent_interests
             )
-            
+
             # Check if it's time for archetype transitions (every 7 days)
-            if result["day_completed"] and self.archetype_manager.should_perform_transitions(self.day):
+            if result["day_completed"] and self.archetype_manager.should_perform_transitions(
+                self.day
+            ):
                 self.archetype_manager.perform_transitions(self.day)
 
     def _perform_archetype_transitions(self) -> None:
         """
         Perform archetype transitions for all registered agents.
-        
+
         Delegates to ArchetypeManager for transition logic.
         """
         self.archetype_manager.perform_transitions(self.day)
@@ -1711,7 +1729,7 @@ class OrchestratorServer:
     ) -> List[str]:
         """
         Get recommended posts for an agent using the specified recommendation strategy.
-        
+
         Delegates to ContentRecommender for recommendation logic.
 
         Args:
@@ -1727,7 +1745,7 @@ class OrchestratorServer:
         # Use configured default if limit not specified
         if limit is None:
             limit = self.default_recommendation_limit
-        
+
         # Delegate to ContentRecommender
         post_ids = self.content_recommender.get_recommended_posts(
             agent_id=agent_id,
@@ -1737,11 +1755,11 @@ class OrchestratorServer:
             day=self.day,
             slot=self.slot,
         )
-        
+
         # Save recommendations to database (and Redis if enabled)
         if post_ids:
             self._save_recommendation(agent_id, post_ids)
-        
+
         return post_ids
 
     @log_server_request
@@ -1845,7 +1863,7 @@ class OrchestratorServer:
     ) -> Optional[float]:
         """
         Get the latest opinion value for an agent on a topic.
-        
+
         Delegates to OpinionHandler for opinion retrieval.
 
         Args:
@@ -1870,7 +1888,7 @@ class OrchestratorServer:
     ) -> bool:
         """
         Add an agent opinion record to the database.
-        
+
         Delegates to OpinionHandler for opinion storage.
 
         Args:
@@ -1894,7 +1912,7 @@ class OrchestratorServer:
     ) -> List[float]:
         """
         Get the opinions of an agent's neighbors (followees) on a specific topic.
-        
+
         Delegates to OpinionHandler for neighbor opinion retrieval.
 
         This method retrieves the latest opinions of all users that the agent follows
@@ -1949,7 +1967,7 @@ class OrchestratorServer:
     ) -> List[str]:
         """
         Get follow suggestions using SQL queries.
-        
+
         Delegates to FollowRecommender for recommendation logic.
         """
         return self.follow_recommender.get_follow_suggestions(
@@ -1964,7 +1982,7 @@ class OrchestratorServer:
     ) -> List[str]:
         """
         Get follow suggestions using Redis.
-        
+
         Delegates to FollowRecommender for recommendation logic.
         """
         return self.follow_recommender.get_follow_suggestions(

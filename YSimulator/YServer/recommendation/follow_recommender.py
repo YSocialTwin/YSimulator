@@ -14,26 +14,22 @@ from YSimulator.YServer.recsys import follow_recsys_db, follow_recsys_redis
 class FollowRecommender:
     """
     Follow recommendation engine for user suggestions.
-    
+
     Encapsulates all follow recommendation logic and strategies,
     supporting both SQL and Redis backends.
     """
-    
-    def __init__(
-        self,
-        db_adapter,
-        logger: Optional[logging.Logger] = None
-    ):
+
+    def __init__(self, db_adapter, logger: Optional[logging.Logger] = None):
         """
         Initialize follow recommender.
-        
+
         Args:
             db_adapter: Database adapter (with engine, redis_client, use_redis flag)
             logger: Logger instance
         """
         self.db = db_adapter
         self.logger = logger or logging.getLogger(__name__)
-    
+
     def get_follow_suggestions(
         self,
         agent_id: str,
@@ -43,26 +39,22 @@ class FollowRecommender:
     ) -> List[str]:
         """
         Get follow suggestions for an agent.
-        
+
         Args:
             agent_id: UUID of the agent requesting suggestions
             mode: Recommendation mode (random, common_neighbors, jaccard, etc.)
             n_neighbors: Number of suggestions to return
             leaning_bias: Political leaning bias strength (0 = no bias)
-            
+
         Returns:
             List of user UUIDs recommended to follow
         """
         try:
             if self.db.use_redis:
-                suggestions = self._get_suggestions_redis(
-                    agent_id, mode, n_neighbors, leaning_bias
-                )
+                suggestions = self._get_suggestions_redis(agent_id, mode, n_neighbors, leaning_bias)
             else:
-                suggestions = self._get_suggestions_sql(
-                    agent_id, mode, n_neighbors, leaning_bias
-                )
-            
+                suggestions = self._get_suggestions_sql(agent_id, mode, n_neighbors, leaning_bias)
+
             self.logger.info(
                 f"Generated {len(suggestions)} follow suggestions (mode={mode})",
                 extra={
@@ -74,16 +66,16 @@ class FollowRecommender:
                     }
                 },
             )
-            
+
             return suggestions
-            
+
         except Exception as e:
             self.logger.error(
                 f"Error getting follow suggestions: {e}",
                 extra={"extra_data": {"agent_id": agent_id, "mode": mode, "error": str(e)}},
             )
             return []
-    
+
     def _get_suggestions_sql(
         self,
         agent_id: str,
@@ -95,16 +87,16 @@ class FollowRecommender:
         try:
             from sqlalchemy import and_, func
             from sqlalchemy.orm import Session
-            
+
             from YSimulator.YServer.classes.models import Follow, User_mgmt
-            
+
             with Session(self.db.engine) as session:
                 # Get agent's info
                 agent = session.query(User_mgmt).filter_by(id=agent_id).first()
                 if not agent:
                     self.logger.warning(f"Agent {agent_id} not found for follow suggestions")
                     return []
-                
+
                 # Get users that agent is currently following
                 latest_follows_subq = (
                     session.query(
@@ -116,7 +108,7 @@ class FollowRecommender:
                     .group_by(Follow.follower_id, Follow.user_id)
                     .subquery()
                 )
-                
+
                 following = (
                     session.query(Follow.user_id)
                     .join(
@@ -131,7 +123,7 @@ class FollowRecommender:
                     .all()
                 )
                 following_ids = {f.user_id for f in following}
-                
+
                 # Dispatch to appropriate recommendation function
                 if mode == "random":
                     suggestions = follow_recsys_db.recommend_random_follows(
@@ -159,14 +151,14 @@ class FollowRecommender:
                     suggestions = follow_recsys_db.recommend_random_follows(
                         session, agent_id, following_ids, n_neighbors
                     )
-                
+
                 # Apply leaning bias if requested
                 suggestions = follow_recsys_db.apply_leaning_bias(
                     session, agent_id, suggestions, leaning_bias, n_neighbors
                 )
-                
+
                 return suggestions[:n_neighbors]
-                
+
         except Exception as e:
             self.logger.error(
                 f"Error getting SQL follow suggestions: {e}",
@@ -174,7 +166,7 @@ class FollowRecommender:
             )
             # Fallback to simple random
             return self._get_fallback_suggestions_sql(agent_id, n_neighbors)
-    
+
     def _get_suggestions_redis(
         self,
         agent_id: str,
@@ -211,7 +203,7 @@ class FollowRecommender:
                 recommendations = follow_recsys_redis.recommend_random_follows_redis(
                     self.db.redis_client, self.db._redis_key, agent_id, n_neighbors, self.logger
                 )
-            
+
             # Apply political leaning bias if specified
             if leaning_bias > 0 and recommendations:
                 recommendations = follow_recsys_redis.apply_leaning_bias_redis(
@@ -222,9 +214,9 @@ class FollowRecommender:
                     leaning_bias,
                     self.logger,
                 )
-            
+
             return recommendations
-            
+
         except Exception as e:
             self.logger.error(
                 f"Error getting Redis follow suggestions: {e}",
@@ -232,14 +224,14 @@ class FollowRecommender:
             )
             # Fallback to random
             return self._get_fallback_suggestions_redis(agent_id, n_neighbors)
-    
+
     def _get_fallback_suggestions_sql(self, agent_id: str, n_neighbors: int) -> List[str]:
         """Fallback to simple random SQL suggestions."""
         try:
             from sqlalchemy.orm import Session
-            
+
             from YSimulator.YServer.classes.models import User_mgmt
-            
+
             with Session(self.db.engine) as session:
                 candidates = (
                     session.query(User_mgmt.id)
@@ -253,7 +245,7 @@ class FollowRecommender:
         except Exception as e:
             self.logger.error(f"Failed to get fallback SQL follow suggestions: {e}")
             return []
-    
+
     def _get_fallback_suggestions_redis(self, agent_id: str, n_neighbors: int) -> List[str]:
         """Fallback to simple random Redis suggestions."""
         try:

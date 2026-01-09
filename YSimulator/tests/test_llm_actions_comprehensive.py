@@ -80,9 +80,7 @@ class TestGenerateLLMPostAsync:
         mock_ref = MagicMock()
         mock_llm.generate_post.remote.return_value = mock_ref
 
-        result = generate_llm_post_async(
-            mock_llm, cluster_id=1, day=1, slot=1, agent_attrs={}
-        )
+        result = generate_llm_post_async(mock_llm, cluster_id=1, day=1, slot=1, agent_attrs={})
 
         mock_llm.generate_post.remote.assert_called_once_with(1, 1, 1, {})
         assert result == mock_ref
@@ -144,9 +142,7 @@ class TestGenerateLLMReactionAsync:
         mock_llm.decide_reaction.remote.return_value = mock_ref
 
         for cluster_id in [0, 1, 5, 10]:
-            result = generate_llm_reaction_async(
-                mock_llm, cluster_id=cluster_id, content="Test"
-            )
+            result = generate_llm_reaction_async(mock_llm, cluster_id=cluster_id, content="Test")
             assert result == mock_ref
 
 
@@ -206,9 +202,7 @@ class TestGenerateNewsPostAsync:
             website_name="TechNews",
         )
 
-        mock_commentary.remote.assert_called_once_with(
-            mock_llm_service, 2, article, "TechNews"
-        )
+        mock_commentary.remote.assert_called_once_with(mock_llm_service, 2, article, "TechNews")
         assert article_id == "article456"
 
     @patch("YSimulator.YClient.actions.llm_actions.ray")
@@ -512,9 +506,7 @@ class TestGenerateImagePostAsync:
         mock_server = MagicMock()
         mock_llm_service = MagicMock()
         mock_commentary_future = MagicMock()
-        mock_llm_service.generate_image_commentary.remote.return_value = (
-            mock_commentary_future
-        )
+        mock_llm_service.generate_image_commentary.remote.return_value = mock_commentary_future
 
         image_data = {
             "id": "img123",
@@ -538,9 +530,7 @@ class TestGenerateImagePostAsync:
         mock_server = MagicMock()
         mock_llm_service = MagicMock()
         mock_commentary_future = MagicMock()
-        mock_llm_service.generate_image_commentary.remote.return_value = (
-            mock_commentary_future
-        )
+        mock_llm_service.generate_image_commentary.remote.return_value = mock_commentary_future
 
         image_data = {
             "id": "img456",
@@ -567,9 +557,7 @@ class TestGenerateImagePostAsync:
         mock_server = MagicMock()
         mock_llm_service = MagicMock()
         mock_commentary_future = MagicMock()
-        mock_llm_service.generate_image_commentary.remote.return_value = (
-            mock_commentary_future
-        )
+        mock_llm_service.generate_image_commentary.remote.return_value = mock_commentary_future
 
         image_data = {"id": "img789", "description": "City skyline"}
         topics = ["urban", "architecture"]
@@ -594,9 +582,7 @@ class TestGenerateImagePostAsync:
         mock_server = MagicMock()
         mock_llm_service = MagicMock()
         mock_commentary_future = MagicMock()
-        mock_llm_service.generate_image_commentary.remote.return_value = (
-            mock_commentary_future
-        )
+        mock_llm_service.generate_image_commentary.remote.return_value = mock_commentary_future
 
         image_data = {"id": "img999", "url": "http://example.com/pic.jpg"}
 
@@ -614,9 +600,7 @@ class TestGenerateImagePostAsync:
         mock_server = MagicMock()
         mock_llm_service = MagicMock()
         mock_commentary_future = MagicMock()
-        mock_llm_service.generate_image_commentary.remote.return_value = (
-            mock_commentary_future
-        )
+        mock_llm_service.generate_image_commentary.remote.return_value = mock_commentary_future
 
         image_data = {"id": "img000", "description": "Abstract art"}
 
@@ -656,14 +640,10 @@ class TestLLMActionsIntegration:
         result3 = generate_llm_read_async(mock_llm, 1, "content")
         result4 = generate_llm_follow_async(mock_llm, 1, [])
         result5 = generate_llm_search_action_async(mock_llm, 1, "content")
-        result6 = generate_llm_reply_to_mention_async(
-            mock_llm, 1, "content", {}, "author", []
-        )
+        result6 = generate_llm_reply_to_mention_async(mock_llm, 1, "content", {}, "author", [])
 
         # Verify all return the mock ref
-        assert all(
-            r == mock_ref for r in [result1, result2, result3, result4, result5, result6]
-        )
+        assert all(r == mock_ref for r in [result1, result2, result3, result4, result5, result6])
 
     def test_scatter_gather_pattern_simulation(self):
         """Test scatter-gather pattern with multiple agents."""
