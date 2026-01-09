@@ -353,6 +353,7 @@ class TestServerFollowRecommenders:
             func = getattr(follow_recsys_db, func_name)
             assert callable(func)
 
+
 # ================================================
 # INTEGRATION AND EDGE CASE TESTS
 # ================================================
