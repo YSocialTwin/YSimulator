@@ -7,7 +7,9 @@ agent sampling, and action selection for simulation agents.
 
 import logging
 import random
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
+
+import ray
 
 from YSimulator.YClient.classes.ray_models import AgentProfile
 
@@ -167,11 +169,125 @@ def determine_agent_type(agent_profile: AgentProfile) -> str:
     return "llm" if agent_profile.llm else "rule_based"
 
 
+def calculate_follow_action_decay(
+    agent_joined_round: Optional[str],
+    current_day: int,
+    current_hour: int,
+    server: Any,
+    decay_config: Optional[Dict[str, Any]],
+    logger: logging.Logger,
+) -> float:
+    """
+    Calculate time-based decay multiplier for follow action probability.
+
+    Primary follow actions (not resulting from other interactions) typically occur
+    during the first period of user activity. This function implements a decreasing
+    likelihood based on the time (in rounds) since agent registration.
+
+    Args:
+        agent_joined_round: Round ID (UUID) when agent joined, or None for initial agents
+        current_day: Current simulation day
+        current_hour: Current simulation hour/slot
+        server: Ray server actor handle for querying round information
+        decay_config: Configuration dictionary with:
+            - enabled (bool): Whether decay is enabled
+            - decay_function (str): Type of decay ("exponential" or "linear")
+            - half_life_rounds (int): For exponential, rounds to reach 50% of initial value
+            - decay_rate (float): For linear, reduction per round (0.0-1.0)
+            - min_probability_ratio (float): Minimum multiplier (0.0-1.0), default 0.1
+        logger: Logger instance
+
+    Returns:
+        float: Decay multiplier between min_probability_ratio and 1.0 (1.0 = no decay)
+
+    Example:
+        >>> # Exponential decay: agent joined 100 rounds ago, half-life is 50 rounds
+        >>> decay = calculate_follow_action_decay(
+        ...     joined_round, 5, 10, server, config, logger
+        ... )
+        >>> # Result: 0.25 (if 2 half-lives passed, so 0.5^2 = 0.25)
+    """
+    # If decay is not configured or not enabled, return 1.0 (no decay)
+    if not decay_config or not decay_config.get("enabled", False):
+        return 1.0
+
+    # If agent has no joined_on date (initial agents from population file), apply no decay
+    if not agent_joined_round:
+        return 1.0
+
+    try:
+        # Get agent's join round info from server
+        join_round_info = ray.get(server.get_round_info.remote(agent_joined_round))
+        
+        if not join_round_info:
+            logger.debug(
+                f"Could not find round info for agent join round {agent_joined_round}"
+            )
+            return 1.0
+
+        join_day = join_round_info.get("day", 0)
+        join_hour = join_round_info.get("hour", 0)
+
+        # Calculate elapsed rounds
+        # Each day has num_slots_per_day hours/slots
+        # We need to get num_slots_per_day from somewhere - let's use 24 as default
+        # or get it from decay_config
+        slots_per_day = decay_config.get("slots_per_day", 24)
+        
+        current_total_rounds = current_day * slots_per_day + current_hour
+        join_total_rounds = join_day * slots_per_day + join_hour
+        rounds_since_join = max(0, current_total_rounds - join_total_rounds)
+
+        # Get decay parameters
+        decay_function = decay_config.get("decay_function", "exponential")
+        min_ratio = decay_config.get("min_probability_ratio", 0.1)
+        min_ratio = max(0.0, min(1.0, min_ratio))  # Clamp between 0 and 1
+
+        # Calculate decay based on function type
+        if decay_function == "exponential":
+            half_life = decay_config.get("half_life_rounds", 50)
+            if half_life <= 0:
+                logger.warning(f"Invalid half_life_rounds {half_life}, using no decay")
+                return 1.0
+            
+            # Exponential decay: multiplier = 0.5 ^ (rounds_since_join / half_life)
+            decay_multiplier = 0.5 ** (rounds_since_join / half_life)
+        
+        elif decay_function == "linear":
+            decay_rate = decay_config.get("decay_rate", 0.01)
+            decay_rate = max(0.0, min(1.0, decay_rate))  # Clamp between 0 and 1
+            
+            # Linear decay: multiplier = 1.0 - (decay_rate * rounds_since_join)
+            decay_multiplier = 1.0 - (decay_rate * rounds_since_join)
+        
+        else:
+            logger.warning(f"Unknown decay_function '{decay_function}', using no decay")
+            return 1.0
+
+        # Apply minimum ratio constraint
+        final_multiplier = max(min_ratio, decay_multiplier)
+        
+        logger.debug(
+            f"Follow action decay: rounds_since_join={rounds_since_join}, "
+            f"function={decay_function}, multiplier={final_multiplier:.3f}"
+        )
+        
+        return final_multiplier
+
+    except Exception as e:
+        logger.warning(f"Error calculating follow action decay: {e}")
+        return 1.0
+
+
 def select_action(
     agent_profile: AgentProfile,
     recent_posts: List[str],
     actions_likelihood: Dict[str, float],
     logger: logging.Logger,
+    server: Any = None,
+    current_day: int = 0,
+    current_hour: int = 0,
+    follow_action_decay_config: Optional[Dict[str, Any]] = None,
 ) -> Tuple[Optional[str], Optional[str], Optional[str]]:
     """
     Determine which action an agent should perform.
@@ -182,16 +298,21 @@ def select_action(
     - Availability of recent posts (for comment/reaction actions)
     - Agent type (LLM vs rule-based)
     - Page agents can ONLY perform share_link action
+    - Time-based decay for follow actions (based on rounds since registration)
 
     Args:
         agent_profile: Agent profile containing behavior settings
         recent_posts: List of recent post UUIDs available for reactions
         actions_likelihood: Dictionary mapping action types to weights
         logger: Logger instance
+        server: Ray server actor handle (optional, for follow decay calculation)
+        current_day: Current simulation day (optional, for follow decay)
+        current_hour: Current simulation hour/slot (optional, for follow decay)
+        follow_action_decay_config: Configuration for time-based follow action decay
 
     Returns:
         tuple: (action_type, agent_type, target_post_id) where:
-            - action_type: "post", "comment", "read", "image", "share_link", "share", "search", "cast", or None
+            - action_type: "post", "comment", "read", "image", "share_link", "share", "search", "cast", "follow", or None
             - agent_type: "llm" or "rule_based"
             - target_post_id: UUID string for comment/read/share actions, None for posts/no-action
 
@@ -249,6 +370,25 @@ def select_action(
         for action, weight in actions_likelihood.items()
         if action in available_actions and weight > 0
     }
+
+    # Apply time-based decay to follow action probability if configured
+    if "follow" in filtered_likelihood and follow_action_decay_config:
+        original_follow_weight = filtered_likelihood["follow"]
+        decay_multiplier = calculate_follow_action_decay(
+            agent_profile.joined_on,
+            current_day,
+            current_hour,
+            server,
+            follow_action_decay_config,
+            logger,
+        )
+        filtered_likelihood["follow"] = original_follow_weight * decay_multiplier
+        
+        if decay_multiplier < 1.0:
+            logger.debug(
+                f"Agent {agent_profile.username}: Applied follow decay {decay_multiplier:.3f}, "
+                f"follow weight: {original_follow_weight:.2f} -> {filtered_likelihood['follow']:.2f}"
+            )
 
     # If no valid actions, return no action
     if not filtered_likelihood:

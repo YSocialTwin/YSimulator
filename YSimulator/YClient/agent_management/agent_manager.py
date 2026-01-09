@@ -37,6 +37,7 @@ class AgentManager:
         agent_downcast: bool,
         actions_likelihood: Dict,
         logger: logging.Logger,
+        follow_action_decay_config: Dict = None,
     ):
         """
         Initialize AgentManager.
@@ -49,6 +50,7 @@ class AgentManager:
             agent_downcast: Whether to downcast certain agent types
             actions_likelihood: Action probability configuration
             logger: Logger instance
+            follow_action_decay_config: Configuration for time-based follow action decay
         """
         self.config_path = config_path
         self.server = server
@@ -59,7 +61,14 @@ class AgentManager:
         self.population_loader = PopulationLoader(config_path, client_id, logger)
         self.network_loader = NetworkLoader(server, client_id, logger)
         self.agent_selector = AgentSelector(
-            archetype_distribution, agent_downcast, actions_likelihood, logger
+            archetype_distribution,
+            agent_downcast,
+            actions_likelihood,
+            logger,
+            server=server,
+            current_day=0,
+            current_hour=0,
+            follow_action_decay_config=follow_action_decay_config,
         )
 
     # ========== Population Management ==========
@@ -109,6 +118,10 @@ class AgentManager:
     def select_action(self, agent_profile: AgentProfile, recent_posts: list):
         """Determine which action an agent should perform."""
         return self.agent_selector.select_action(agent_profile, recent_posts)
+
+    def update_round_info(self, current_day: int, current_hour: int):
+        """Update the current round information for action selection (e.g., follow decay)."""
+        self.agent_selector.update_round_info(current_day, current_hour)
 
     def extract_agent_attrs(
         self,

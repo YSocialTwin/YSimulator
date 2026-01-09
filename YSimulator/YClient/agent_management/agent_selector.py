@@ -28,6 +28,10 @@ class AgentSelector:
         agent_downcast: bool,
         actions_likelihood: Dict,
         logger: logging.Logger,
+        server=None,
+        current_day: int = 0,
+        current_hour: int = 0,
+        follow_action_decay_config: Dict = None,
     ):
         """
         Initialize AgentSelector.
@@ -37,11 +41,19 @@ class AgentSelector:
             agent_downcast: Whether to downcast certain agent types to rule-based
             actions_likelihood: Action probability configuration
             logger: Logger instance
+            server: Ray server actor handle (optional, for follow decay)
+            current_day: Current simulation day (optional, for follow decay)
+            current_hour: Current simulation hour (optional, for follow decay)
+            follow_action_decay_config: Configuration for time-based follow action decay
         """
         self.archetype_distribution = archetype_distribution
         self.agent_downcast = agent_downcast
         self.actions_likelihood = actions_likelihood
         self.logger = logger
+        self.server = server
+        self.current_day = current_day
+        self.current_hour = current_hour
+        self.follow_action_decay_config = follow_action_decay_config
 
     def sample_agents_by_archetype(
         self, available_agents: List[AgentProfile], num_active: int
@@ -103,7 +115,22 @@ class AgentSelector:
             recent_posts,
             self.actions_likelihood,
             self.logger,
+            server=self.server,
+            current_day=self.current_day,
+            current_hour=self.current_hour,
+            follow_action_decay_config=self.follow_action_decay_config,
         )
+    
+    def update_round_info(self, current_day: int, current_hour: int):
+        """
+        Update the current round information for decay calculations.
+        
+        Args:
+            current_day: Current simulation day
+            current_hour: Current simulation hour/slot
+        """
+        self.current_day = current_day
+        self.current_hour = current_hour
 
     def extract_agent_attrs(
         self,
