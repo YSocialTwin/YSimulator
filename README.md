@@ -208,4 +208,18 @@ The `scripts/` directory contains utility scripts:
 
 ## Contributing
 
-Code contributions should follow the formatting guidelines in [docs/development/FORMATTING.md](docs/development/FORMATTING.md). Pre-commit hooks automatically enforce `black` and `isort` formatting.
+Code contributions should follow the formatting guidelines in [docs/development/FORMATTING.md](docs/development/FORMATTING.md).
+
+### Development Setup
+
+1. Install development dependencies:
+   ```bash
+   pip install -r requirements-dev.txt
+   ```
+
+2. Install pre-commit hooks:
+   ```bash
+   pre-commit install
+   ```
+
+The pre-commit hooks will automatically run `black`, `isort`, and `flake8` on every commit to ensure code quality and consistency.
