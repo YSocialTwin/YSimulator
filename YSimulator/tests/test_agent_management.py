@@ -167,9 +167,9 @@ class TestAgentManager:
         
         with patch.object(manager.agent_selector, 'sample_agents_by_archetype') as mock_sample:
             mock_sample.return_value = sample_agents[:2]
-            result = manager.sample_agents_by_archetype(sample_agents)
+            result = manager.sample_agents_by_archetype(sample_agents, num_active=2)
             
-            mock_sample.assert_called_once_with(sample_agents)
+            mock_sample.assert_called_once_with(sample_agents, 2)
             assert len(result) == 2
     
     def test_create_agents_from_config_delegates(
@@ -188,16 +188,12 @@ class TestAgentManager:
         )
         
         with patch.object(manager.population_loader, 'create_agents_from_config') as mock_create:
-            mock_create.return_value = ([], [])
-            result = manager.create_agents_from_config(
-                num_agents=10,
-                network_file=None,
-                num_predefined=2,
-                agents_predefined_file="agents_predefined.csv"
-            )
+            mock_create.return_value = []
+            agent_config = {"agents": [], "generation_config": {"num_additional_agents": 10}}
+            result = manager.create_agents_from_config(agent_config)
             
-            mock_create.assert_called_once()
-            assert isinstance(result, tuple)
+            mock_create.assert_called_once_with(agent_config)
+            assert isinstance(result, list)
     
     def test_load_and_create_social_network_delegates(
         self, temp_config_dir, mock_server, mock_logger,
@@ -214,16 +210,16 @@ class TestAgentManager:
             logger=mock_logger
         )
         
-        agent_profiles = {agent.username: agent for agent in sample_agents}
+        network_path = temp_config_dir / "network.csv"
         
         with patch.object(manager.network_loader, 'load_and_create_social_network') as mock_load:
-            mock_load.return_value = None
+            mock_load.return_value = 0
             manager.load_and_create_social_network(
-                network_file="network.csv",
-                agent_profiles=agent_profiles
+                network_csv_path=network_path,
+                agent_profiles=sample_agents
             )
             
-            mock_load.assert_called_once_with("network.csv", agent_profiles)
+            mock_load.assert_called_once_with(network_path, sample_agents)
     
     def test_determine_agent_type_delegates(
         self, temp_config_dir, mock_server, mock_logger,
@@ -266,10 +262,17 @@ class TestPopulationLoader:
         assert loader.logger == mock_logger
     
     def test_load_predefined_agents(self, temp_config_dir, mock_logger):
-        """Test loading predefined agents from CSV."""
+        """Test loading predefined agents from config."""
         loader = PopulationLoader(temp_config_dir, "test_client", mock_logger)
         
-        agents = loader._load_predefined_agents("agents_predefined.csv", 2)
+        agents_config = [
+            {"id": 1, "username": "agent_001", "cluster": 1, "llm": False, 
+             "daily_activity_level": 3, "activity_profile": "default"},
+            {"id": 2, "username": "agent_002", "cluster": 1, "llm": True,
+             "daily_activity_level": 5, "activity_profile": "influencer"}
+        ]
+        
+        agents = loader._load_predefined_agents(agents_config)
         
         assert len(agents) == 2
         assert agents[0].username == "agent_001"
@@ -277,20 +280,29 @@ class TestPopulationLoader:
         assert agents[1].username == "agent_002"
         assert agents[1].llm == True
     
-    def test_generate_random_agent(self, temp_config_dir, mock_logger):
-        """Test generating a random agent."""
+    def test_generate_agents(self, temp_config_dir, mock_logger):
+        """Test generating random agents."""
         loader = PopulationLoader(temp_config_dir, "test_client", mock_logger)
         
-        agent = loader._generate_random_agent(
-            agent_id=100,
-            cluster=1,
-            archetype="default"
-        )
+        gen_config = {
+            "num_additional_agents": 5,
+            "cluster_distribution": {
+                "weights": [0.33, 0.33, 0.34]
+            },
+            "llm_enabled_probability": 0.1,
+            "default_settings": {
+                "password": "test_password",
+                "leaning": "neutral"
+            },
+            "age_range": [18, 65]
+        }
         
-        assert agent.id == 100
-        assert agent.cluster == 1
-        assert agent.username.startswith("agent_")
-        assert agent.activity_profile == "default"
+        agents = loader._generate_agents(gen_config, existing_count=0)
+        
+        assert len(agents) == 5
+        for agent in agents:
+            assert agent.username.startswith("agent_")
+            assert agent.cluster in [0, 1, 2]
     
     def test_create_agents_from_config_with_predefined(
         self, temp_config_dir, mock_logger
@@ -298,16 +310,22 @@ class TestPopulationLoader:
         """Test creating agents with predefined agents."""
         loader = PopulationLoader(temp_config_dir, "test_client", mock_logger)
         
-        all_agents, agent_profiles = loader.create_agents_from_config(
-            num_agents=5,
-            network_file=None,
-            num_predefined=2,
-            agents_predefined_file="agents_predefined.csv"
-        )
+        agent_config = {
+            "agents": [
+                {"id": 1, "username": "agent_001", "cluster": 1, "llm": False},
+                {"id": 2, "username": "agent_002", "cluster": 1, "llm": True}
+            ],
+            "generation_config": {
+                "num_additional_agents": 3,
+                "cluster_distribution": {"weights": [0.33, 0.33, 0.34]},
+                "llm_enabled_probability": 0.1
+            }
+        }
+        
+        all_agents = loader.create_agents_from_config(agent_config)
         
         # Should have 2 predefined + 3 generated = 5 total
         assert len(all_agents) == 5
-        assert len(agent_profiles) == 5
         
         # First two should be predefined
         assert all_agents[0].username == "agent_001"
@@ -319,50 +337,68 @@ class TestPopulationLoader:
         """Test creating agents without predefined agents."""
         loader = PopulationLoader(temp_config_dir, "test_client", mock_logger)
         
-        all_agents, agent_profiles = loader.create_agents_from_config(
-            num_agents=3,
-            network_file=None,
-            num_predefined=0,
-            agents_predefined_file=None
-        )
+        agent_config = {
+            "generation_config": {
+                "num_additional_agents": 3,
+                "cluster_distribution": {"weights": [0.33, 0.33, 0.34]},
+                "llm_enabled_probability": 0.1
+            }
+        }
+        
+        all_agents = loader.create_agents_from_config(agent_config)
         
         # Should have 3 generated agents
         assert len(all_agents) == 3
-        assert len(agent_profiles) == 3
     
     def test_validate_and_extract_interests(self, temp_config_dir, mock_logger):
         """Test interest validation and extraction."""
         loader = PopulationLoader(temp_config_dir, "test_client", mock_logger)
         
         # Valid interests
-        interests = loader._validate_and_extract_interests("tech,science,art")
-        assert interests == ["tech", "science", "art"]
+        topics, counts = loader.validate_and_extract_interests([["tech", "science", "art"], [5, 3, 2]])
+        assert topics == ["tech", "science", "art"]
+        assert counts == [5, 3, 2]
         
         # Empty interests
-        interests = loader._validate_and_extract_interests("")
-        assert interests == []
+        topics, counts = loader.validate_and_extract_interests([])
+        assert topics is None
+        assert counts is None
         
         # None interests
-        interests = loader._validate_and_extract_interests(None)
-        assert interests == []
+        topics, counts = loader.validate_and_extract_interests(None)
+        assert topics is None
+        assert counts is None
     
     def test_save_updated_agent_population(self, temp_config_dir, mock_logger, sample_agents):
         """Test saving updated agent population."""
         loader = PopulationLoader(temp_config_dir, "test_client", mock_logger)
         
-        output_file = "agents_updated.csv"
-        loader.save_updated_agent_population(sample_agents, output_file)
+        # Create initial agent config file
+        import json
+        agent_config_file = temp_config_dir / "agent_population.json"
+        agent_data = {
+            "agents": [
+                {"id": str(agent.id), "username": agent.username} 
+                for agent in sample_agents
+            ]
+        }
+        with open(agent_config_file, "w") as f:
+            json.dump(agent_data, f)
         
-        # Verify file was created
-        output_path = temp_config_dir / output_file
-        assert output_path.exists()
+        # Update interests
+        updated_interests = {
+            str(sample_agents[0].id): {"topics": ["tech", "science"], "counts": [5, 3]}
+        }
+        loader.save_updated_agent_population(updated_interests)
+        
+        # Verify file was updated
+        assert agent_config_file.exists()
         
         # Verify content
-        with open(output_path, "r") as f:
-            reader = csv.DictReader(f)
-            rows = list(reader)
-            assert len(rows) == 3
-            assert rows[0]["username"] == "agent_001"
+        with open(agent_config_file, "r") as f:
+            updated_data = json.load(f)
+            assert "agents" in updated_data
+            assert updated_data["agents"][0]["interests"] == [["tech", "science"], [5, 3]]
 
 
 # ============================================================================
@@ -384,16 +420,13 @@ class TestNetworkLoader:
         """Test parsing network edges from CSV."""
         loader = NetworkLoader(mock_server, "test_client", mock_logger)
         
-        # Create agent_profiles dict
-        agent_profiles = {agent.username: agent for agent in sample_agents}
-        
         network_file = temp_config_dir / "network.csv"
-        edges = loader.parse_network_edges(str(network_file), agent_profiles)
+        edges = loader.parse_network_edges(network_file, sample_agents)
         
         # Should have 2 edges
         assert len(edges) == 2
-        assert edges[0] == (1, 2)  # agent_001 -> agent_002
-        assert edges[1] == (2, 1)  # agent_002 -> agent_001
+        assert edges[0] == (str(sample_agents[0].id), str(sample_agents[1].id))  # agent_001 -> agent_002
+        assert edges[1] == (str(sample_agents[1].id), str(sample_agents[0].id))  # agent_002 -> agent_001
     
     def test_parse_network_edges_missing_agents(
         self, temp_config_dir, mock_server, mock_logger
@@ -402,15 +435,15 @@ class TestNetworkLoader:
         loader = NetworkLoader(mock_server, "test_client", mock_logger)
         
         # Only one agent in profiles
-        agent_profiles = {
-            "agent_001": AgentProfile(
+        agent_profiles = [
+            AgentProfile(
                 id=1, username="agent_001", cluster=1, llm=False,
                 is_page=0, daily_activity_level=3, activity_profile="default"
             )
-        }
+        ]
         
         network_file = temp_config_dir / "network.csv"
-        edges = loader.parse_network_edges(str(network_file), agent_profiles)
+        edges = loader.parse_network_edges(network_file, agent_profiles)
         
         # Should have 0 edges (agent_002 not in profiles)
         assert len(edges) == 0
@@ -421,16 +454,12 @@ class TestNetworkLoader:
         """Test loading and creating social network."""
         loader = NetworkLoader(mock_server, "test_client", mock_logger)
         
-        agent_profiles = {agent.username: agent for agent in sample_agents}
-        
         # Mock ray.get to return batch count
         with patch('YSimulator.YClient.agent_management.network_loader.ray.get') as mock_ray_get:
             mock_ray_get.return_value = 2  # 2 edges created successfully
             
-            loader.load_and_create_social_network(
-                str(temp_config_dir / "network.csv"),
-                agent_profiles
-            )
+            network_file = temp_config_dir / "network.csv"
+            loader.load_and_create_social_network(network_file, sample_agents)
             
             # Verify server method was called
             mock_server.add_follow_relationships_batch.remote.assert_called()
@@ -442,19 +471,14 @@ class TestNetworkLoader:
         """Test loading network with empty file."""
         loader = NetworkLoader(mock_server, "test_client", mock_logger)
         
-        agent_profiles = {agent.username: agent for agent in sample_agents}
-        
         # Create empty network file
         empty_network = temp_config_dir / "empty_network.csv"
         empty_network.write_text("")
         
-        loader.load_and_create_social_network(
-            str(empty_network),
-            agent_profiles
-        )
+        loader.load_and_create_social_network(empty_network, sample_agents)
         
         # Should log warning about no edges
-        assert any("No valid edges" in str(call) for call in mock_logger.warning.call_args_list)
+        assert any("No edges" in str(call) or "no edges" in str(call).lower() for call in mock_logger.warning.call_args_list)
 
 
 # ============================================================================
@@ -490,7 +514,7 @@ class TestAgentSelector:
         )
         
         # Sample from 3 agents
-        selected = selector.sample_agents_by_archetype(sample_agents)
+        selected = selector.sample_agents_by_archetype(sample_agents, num_active=2)
         
         # Should return some agents
         assert len(selected) > 0
@@ -563,10 +587,11 @@ class TestAgentSelector:
         )
         
         agent = sample_agents[0]
-        action = selector.select_action(agent)
+        recent_posts = []
+        action = selector.select_action(agent, recent_posts)
         
-        # Should return one of the configured actions
-        assert action in actions_likelihood.keys()
+        # Should return a tuple (action_type, action_params)
+        assert isinstance(action, tuple)
     
     def test_extract_agent_attrs(
         self, archetype_distribution, actions_likelihood, mock_logger, sample_agents
@@ -580,14 +605,30 @@ class TestAgentSelector:
         )
         
         agent = sample_agents[0]
-        attrs = selector.extract_agent_attrs(agent)
+        
+        # Create mock functions
+        def mock_validate_interests(interests):
+            return None, None
+        
+        def mock_is_opinion_enabled():
+            return False
+        
+        def mock_map_opinion(opinion):
+            return "neutral"
+        
+        attrs = selector.extract_agent_attrs(
+            agent,
+            mock_validate_interests,
+            mock_is_opinion_enabled,
+            mock_map_opinion
+        )
         
         # Should return dict with agent attributes
         assert isinstance(attrs, dict)
-        assert "username" in attrs
-        assert "cluster" in attrs
-        assert "activity_profile" in attrs
-        assert attrs["username"] == "agent_001"
+        assert "name" in attrs
+        assert "age" in attrs
+        assert "profession" in attrs
+        assert attrs["name"] == "agent_001"
 
 
 # ============================================================================
@@ -614,18 +655,23 @@ class TestAgentManagementIntegration:
         )
         
         # Create agents
-        all_agents, agent_profiles = manager.create_agents_from_config(
-            num_agents=5,
-            network_file=None,
-            num_predefined=2,
-            agents_predefined_file="agents_predefined.csv"
-        )
+        agent_config = {
+            "agents": [
+                {"id": 1, "username": "agent_001", "cluster": 1, "llm": False},
+                {"id": 2, "username": "agent_002", "cluster": 1, "llm": True}
+            ],
+            "generation_config": {
+                "num_additional_agents": 3,
+                "cluster_distribution": {"weights": [0.33, 0.33, 0.34]},
+                "llm_enabled_probability": 0.1
+            }
+        }
+        all_agents = manager.create_agents_from_config(agent_config)
         
         assert len(all_agents) == 5
-        assert len(agent_profiles) == 5
         
         # Sample agents
-        selected = manager.sample_agents_by_archetype(all_agents)
+        selected = manager.sample_agents_by_archetype(all_agents, num_active=3)
         assert len(selected) > 0
         
         # Determine agent types
@@ -649,16 +695,15 @@ class TestAgentManagementIntegration:
             logger=mock_logger
         )
         
-        agent_profiles = {agent.username: agent for agent in sample_agents}
-        
         # Mock ray.get
         with patch('YSimulator.YClient.agent_management.network_loader.ray.get') as mock_ray_get:
             mock_ray_get.return_value = 2
             
             # Load network
+            network_path = temp_config_dir / "network.csv"
             manager.load_and_create_social_network(
-                network_file=str(temp_config_dir / "network.csv"),
-                agent_profiles=agent_profiles
+                network_csv_path=network_path,
+                agent_profiles=sample_agents
             )
             
             # Verify server was called
