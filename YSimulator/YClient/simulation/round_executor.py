@@ -15,8 +15,6 @@ import logging
 import random
 from typing import List, Tuple
 
-import ray
-
 from YSimulator.YClient.action_generators import ActionGeneratorFactory
 from YSimulator.YClient.classes.ray_models import ActionDTO, AgentProfile
 
@@ -177,22 +175,16 @@ class RoundExecutor:
                 # Track rule-based interactions if metadata indicates it
                 if metadata.get("rule_based_interaction"):
                     rb_interaction = metadata["rule_based_interaction"]
-                    # Need to fetch post data for secondary follow
-                    post_data = ray.get(
-                        self.server.get_post.remote(
-                            rb_interaction["target_post"], client_id=self.client_id
+                    # Use post data already available in rb_interaction
+                    rule_based_interactions.append(
+                        (
+                            rb_interaction["agent_id"],
+                            rb_interaction["cluster_id"],
+                            rb_interaction["post_author_id"],
+                            rb_interaction["post_content"],
+                            False,
                         )
                     )
-                    if post_data:
-                        rule_based_interactions.append(
-                            (
-                                rb_interaction["agent_id"],
-                                rb_interaction["cluster_id"],
-                                post_data.get("user_id"),
-                                post_data.get("tweet", ""),
-                                False,
-                            )
-                        )
 
         self.logger.info(
             f"Scatter phase complete: pending_llm_posts={len(pending_llm_posts)}, "
