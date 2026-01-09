@@ -343,8 +343,7 @@ class Simulator:
         """
         # Update round info for follow action decay calculation
         # This needs to be called before execute_round to ensure up-to-date info
-        # Note: This is a hook point that client.py should implement
-        if hasattr(self, "update_round_info_fn") and self.update_round_info_fn:
+        if self.update_round_info_fn:
             self.update_round_info_fn(day, slot)
 
         # Select active agents for this slot

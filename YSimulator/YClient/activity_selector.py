@@ -235,8 +235,7 @@ def calculate_follow_action_decay(
 
         # Calculate elapsed rounds
         # Each day has num_slots_per_day hours/slots
-        # We need to get num_slots_per_day from somewhere - let's use 24 as default
-        # or get it from decay_config
+        # Get slots_per_day from decay_config
         slots_per_day = decay_config.get("slots_per_day", 24)
 
         current_total_rounds = current_day * slots_per_day + current_hour
