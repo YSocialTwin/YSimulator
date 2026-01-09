@@ -120,11 +120,11 @@ class AgentSelector:
             current_hour=self.current_hour,
             follow_action_decay_config=self.follow_action_decay_config,
         )
-    
+
     def update_round_info(self, current_day: int, current_hour: int):
         """
         Update the current round information for decay calculations.
-        
+
         Args:
             current_day: Current simulation day
             current_hour: Current simulation hour/slot

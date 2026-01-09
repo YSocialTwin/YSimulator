@@ -225,11 +225,9 @@ def calculate_follow_action_decay(
     try:
         # Get agent's join round info from server
         join_round_info = ray.get(server.get_round_info.remote(agent_joined_round))
-        
+
         if not join_round_info:
-            logger.debug(
-                f"Could not find round info for agent join round {agent_joined_round}"
-            )
+            logger.debug(f"Could not find round info for agent join round {agent_joined_round}")
             return 1.0
 
         join_day = join_round_info.get("day", 0)
@@ -240,7 +238,7 @@ def calculate_follow_action_decay(
         # We need to get num_slots_per_day from somewhere - let's use 24 as default
         # or get it from decay_config
         slots_per_day = decay_config.get("slots_per_day", 24)
-        
+
         current_total_rounds = current_day * slots_per_day + current_hour
         join_total_rounds = join_day * slots_per_day + join_hour
         rounds_since_join = max(0, current_total_rounds - join_total_rounds)
@@ -256,29 +254,29 @@ def calculate_follow_action_decay(
             if half_life <= 0:
                 logger.warning(f"Invalid half_life_rounds {half_life}, using no decay")
                 return 1.0
-            
+
             # Exponential decay: multiplier = 0.5 ^ (rounds_since_join / half_life)
             decay_multiplier = 0.5 ** (rounds_since_join / half_life)
-        
+
         elif decay_function == "linear":
             decay_rate = decay_config.get("decay_rate", 0.01)
             decay_rate = max(0.0, min(1.0, decay_rate))  # Clamp between 0 and 1
-            
+
             # Linear decay: multiplier = 1.0 - (decay_rate * rounds_since_join)
             decay_multiplier = 1.0 - (decay_rate * rounds_since_join)
-        
+
         else:
             logger.warning(f"Unknown decay_function '{decay_function}', using no decay")
             return 1.0
 
         # Apply minimum ratio constraint
         final_multiplier = max(min_ratio, decay_multiplier)
-        
+
         logger.debug(
             f"Follow action decay: rounds_since_join={rounds_since_join}, "
             f"function={decay_function}, multiplier={final_multiplier:.3f}"
         )
-        
+
         return final_multiplier
 
     except Exception as e:
@@ -390,7 +388,7 @@ def select_action(
             logger,
         )
         filtered_likelihood["follow"] = original_follow_weight * decay_multiplier
-        
+
         if decay_multiplier < 1.0:
             logger.debug(
                 f"Agent {agent_profile.username}: Applied follow decay {decay_multiplier:.3f}, "

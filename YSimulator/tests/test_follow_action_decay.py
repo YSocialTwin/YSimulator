@@ -180,8 +180,12 @@ class TestCalculateFollowActionDecay:
 class TestSelectActionWithDecay:
     """Test the select_action function with follow action decay."""
 
-    def test_follow_action_decay_applied(self):
+    @patch("YSimulator.YClient.activity_selector.calculate_follow_action_decay")
+    def test_follow_action_decay_applied(self, mock_decay_fn):
         """Test that decay is applied to follow action weight."""
+        # Mock the decay function to return 0.1 (10% of original)
+        mock_decay_fn.return_value = 0.1
+
         agent = AgentProfile(
             id="agent-1",
             username="test_agent",
@@ -190,13 +194,13 @@ class TestSelectActionWithDecay:
             is_page=0,
             daily_activity_level=3,
             activity_profile="default",
-            archetype="explorer",  # Explorer can do follow
+            archetype=None,  # No archetype, so all actions available
             joined_on="round-123",
         )
 
         actions_likelihood = {
             "follow": 1.0,  # High follow probability
-            "search": 0.1,
+            "post": 0.1,  # Low post probability
         }
 
         decay_config = {
@@ -208,40 +212,37 @@ class TestSelectActionWithDecay:
         }
 
         mock_server = MagicMock()
-        mock_server.get_round_info.remote.return_value = "future"
         mock_logger = MagicMock()
 
-        with patch("ray.get", return_value={"day": 0, "hour": 0}):
-            with patch(
-                "YSimulator.YClient.activity_selector.ray.get", return_value={"day": 0, "hour": 0}
-            ):
-                # Call select_action multiple times and check that follow is less likely
-                # than without decay (statistical test)
-                follow_count = 0
-                iterations = 100
+        # Call select_action multiple times and check that follow is less likely
+        # than without decay (statistical test)
+        follow_count = 0
+        iterations = 100
 
-                for _ in range(iterations):
-                    action_type, _, _ = select_action(
-                        agent,
-                        [],
-                        actions_likelihood,
-                        mock_logger,
-                        server=mock_server,
-                        current_day=2,
-                        current_hour=2,
-                        follow_action_decay_config=decay_config,
-                    )
-                    if action_type == "follow":
-                        follow_count += 1
+        for _ in range(iterations):
+            action_type, _, _ = select_action(
+                agent,
+                [],
+                actions_likelihood,
+                mock_logger,
+                server=mock_server,
+                current_day=2,
+                current_hour=2,
+                follow_action_decay_config=decay_config,
+            )
+            if action_type == "follow":
+                follow_count += 1
 
-                # With decay applied (50 rounds = 5 half-lives, multiplier ≈ 0.03125)
-                # but clamped to min_probability_ratio = 0.1
-                # Follow weight becomes 1.0 * 0.1 = 0.1, search weight is 0.1
-                # Expected probability: 0.1 / (0.1 + 0.1) = 50%
-                # Allow some variance due to randomness
-                assert (
-                    30 <= follow_count <= 70
-                ), f"Expected ~50% follow rate, got {follow_count}%"
+        # With decay applied (mocked to return 0.1)
+        # Follow weight becomes 1.0 * 0.1 = 0.1, post weight is 0.1
+        # Expected probability: 0.1 / (0.1 + 0.1) = 50%
+        # Allow some variance due to randomness
+        assert (
+            30 <= follow_count <= 70
+        ), f"Expected ~50% follow rate, got {follow_count}%"
+
+        # Verify decay function was called
+        assert mock_decay_fn.called, "Decay function should have been called"
 
     def test_follow_action_no_decay_when_disabled(self):
         """Test that decay is not applied when disabled in config."""
