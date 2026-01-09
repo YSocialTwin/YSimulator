@@ -334,8 +334,10 @@ Primary follow actions (mechanism 1 above) can be configured to decay over time,
 
 **Behavior:**
 - When enabled, the probability of selecting the FOLLOW action decreases as a function of rounds since the agent joined the simulation
-- Only affects agents with a `joined_on` round (newly joined agents during simulation)
-- Initial agents from `agent_population.json` are not affected
+- All agents (both initial and dynamically added) are affected by decay
+- When agents are first registered, they receive a `joined_on` timestamp
+- Initial agents get `joined_on` set to the round when simulation starts
+- New agents get `joined_on` set to the round when they join
 - Two decay functions available:
   - **Exponential**: `multiplier = 0.5 ^ (rounds_since_join / half_life_rounds)`
   - **Linear**: `multiplier = 1.0 - (decay_rate × rounds_since_join)`

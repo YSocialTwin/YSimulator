@@ -574,8 +574,10 @@ Control time-based decay of follow action probability. This models the realistic
 - Reaches min_probability_ratio when: rounds = (1.0 - min_probability_ratio) / decay_rate
 
 **Notes:**
-- Decay only applies to agents with a `joined_on` round recorded (new agents joining during simulation)
-- Initial agents from `agent_population.json` (without `joined_on`) are not affected by decay
+- All agents (both initial and dynamically added) are affected by decay
+- When agents are first registered with the server, they receive a `joined_on` timestamp
+- Initial agents from `agent_population.json` get `joined_on` set to the round when the simulation starts
+- New agents added during simulation get `joined_on` set to the round when they join
 - Decay multiplier is applied to the `follow` action weight from `actions_likelihood`
 - The final follow probability never goes below `min_probability_ratio` times the original weight
 

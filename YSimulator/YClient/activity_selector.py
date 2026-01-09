@@ -185,7 +185,7 @@ def calculate_follow_action_decay(
     likelihood based on the time (in rounds) since agent registration.
 
     Args:
-        agent_joined_round: Round ID (UUID) when agent joined, or None for initial agents
+        agent_joined_round: Round ID (UUID) when agent joined
         current_day: Current simulation day
         current_hour: Current simulation hour/slot
         server: Ray server actor handle for querying round information
@@ -206,13 +206,20 @@ def calculate_follow_action_decay(
         ...     joined_round, 5, 10, server, config, logger
         ... )
         >>> # Result: 0.25 (if 2 half-lives passed, so 0.5^2 = 0.25)
+
+    Note:
+        All agents are assigned a joined_on round when first registered with the server.
+        Initial agents from agent_population.json get the round ID from their first
+        registration at simulation start.
     """
     # If decay is not configured or not enabled, return 1.0 (no decay)
     if not decay_config or not decay_config.get("enabled", False):
         return 1.0
 
-    # If agent has no joined_on date (initial agents from population file), apply no decay
+    # If agent has no joined_on date, apply no decay
+    # This should rarely happen as all agents get joined_on during registration
     if not agent_joined_round:
+        logger.debug("Agent has no joined_on round, skipping decay calculation")
         return 1.0
 
     try:
