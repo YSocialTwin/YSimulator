@@ -15,8 +15,6 @@ import logging
 import random
 from typing import List, Tuple
 
-import ray
-
 from YSimulator.YClient.action_generators import ActionGeneratorFactory
 from YSimulator.YClient.classes.ray_models import ActionDTO, AgentProfile
 
