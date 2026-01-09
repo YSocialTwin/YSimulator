@@ -6,7 +6,7 @@ with appropriate repository implementations based on configuration.
 """
 
 import logging
-from typing import Dict, Any, Optional, Tuple
+from typing import Dict, Any, Optional
 
 try:
     from sqlalchemy import create_engine
@@ -134,11 +134,14 @@ def create_all_services(
         logger: Optional logger instance
 
     Returns:
-        Tuple of (UserService, PostService, FollowService, InterestService, ArticleService, ImageService, ContentService, SimulationService, MetadataService, MentionService)
+        Tuple of (UserService, PostService, FollowService, InterestService,
+        ArticleService, ImageService, ContentService, SimulationService,
+        MetadataService, MentionService)
     """
     if not SERVICES_AVAILABLE:
         raise ImportError(
-            f"Required dependencies are not installed. Please install with: pip install -r requirements.txt\n"
+            f"Required dependencies are not installed. "
+            f"Please install with: pip install -r requirements.txt\n"
             f"Error: {import_error if 'import_error' in globals() else 'Unknown import error'}"
         )
 

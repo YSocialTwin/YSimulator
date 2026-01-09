@@ -77,7 +77,7 @@ def test_followee_data_byte_handling():
     assert isinstance(user_id_str, str)
     assert user_id_str == "user-uuid-being-followed"
 
-    print(f"  ✓ Follow data properly handled and decoded")
+    print("  ✓ Follow data properly handled and decoded")
 
 
 def test_empty_neighbors_opinions():
@@ -95,7 +95,7 @@ def test_empty_neighbors_opinions():
     assert opinions == []
     assert isinstance(opinions, list)
 
-    print(f"  ✓ Empty list returned when no followees")
+    print("  ✓ Empty list returned when no followees")
 
 
 def test_opinion_filtering():
@@ -112,7 +112,7 @@ def test_opinion_filtering():
     assert None not in filtered_opinions
     assert all(isinstance(op, float) for op in filtered_opinions)
 
-    print(f"  ✓ None values properly filtered from opinions")
+    print("  ✓ None values properly filtered from opinions")
 
 
 if __name__ == "__main__":

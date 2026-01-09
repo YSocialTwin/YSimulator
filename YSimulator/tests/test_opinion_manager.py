@@ -10,8 +10,7 @@ Tests cover:
 """
 
 import pytest
-import ray
-from unittest.mock import Mock, MagicMock, patch
+from unittest.mock import Mock, patch
 from YSimulator.YClient.opinion import (
     OpinionManager,
     OpinionCalculator,

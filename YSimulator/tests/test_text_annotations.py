@@ -10,7 +10,6 @@ This test verifies that:
 
 from YSimulator.YClient.text_support.text_annotator import annotate_text
 from YSimulator.YClient.text_support.cleaning import extract_components
-from YSimulator.YClient.text_support.annotations import vader_sentiment
 
 
 def test_extract_hashtags():

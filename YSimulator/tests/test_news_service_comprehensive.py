@@ -6,9 +6,8 @@ feedparser, and database interactions.
 """
 
 import pytest
-from unittest.mock import Mock, MagicMock, patch, call
+from unittest.mock import Mock, patch
 import time
-from datetime import datetime
 import uuid
 
 

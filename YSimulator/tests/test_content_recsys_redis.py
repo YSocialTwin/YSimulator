@@ -7,7 +7,6 @@ Targeting 80%+ coverage.
 
 import pytest
 from unittest.mock import Mock, MagicMock, patch
-from typing import List, Dict, Any
 
 
 class TestRecommendRchronoRedis:

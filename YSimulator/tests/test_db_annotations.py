@@ -6,7 +6,6 @@ without errors. Full integration testing would require a running database.
 """
 
 import sys
-import uuid
 
 
 def test_db_method_signatures():

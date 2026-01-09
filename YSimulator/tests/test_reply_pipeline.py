@@ -58,9 +58,9 @@ def test_client_reply_handler():
 
     print("\n3. Testing SimulationClient reply handler...")
     if not hasattr(SimulationClient, "_handle_reply_to_mention"):
-        print(f"  ✗ Missing method: _handle_reply_to_mention")
+        print("  ✗ Missing method: _handle_reply_to_mention")
     else:
-        print(f"  ✓ Method exists: _handle_reply_to_mention")
+        print("  ✓ Method exists: _handle_reply_to_mention")
 
 
 def test_mention_data_structure():
@@ -83,7 +83,7 @@ def test_mention_data_structure():
         if key not in sample_mention:
             print(f"  ✗ Missing key in mention structure: {key}")
 
-    print(f"  ✓ Mention structure is valid:")
+    print("  ✓ Mention structure is valid:")
     print(f"    - Keys: {list(sample_mention.keys())}")
     print(f"    - answered field: {sample_mention['answered']}")
 

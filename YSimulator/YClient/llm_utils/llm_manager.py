@@ -8,8 +8,6 @@ and providing consistent error handling, logging, and retry logic.
 import logging
 from typing import Any, Optional
 
-import ray
-
 
 class LLMManager:
     """
@@ -109,7 +107,8 @@ class LLMManager:
             Ray ObjectRef (future) for the LLM call
         """
         self.logger.debug(
-            f"LLM generate_comment: cluster={cluster_id}, post_len={len(post_content)}, author={author_name}"
+            f"LLM generate_comment: cluster={cluster_id}, post_len={
+                len(post_content)}, author={author_name}"
         )
         return self.llm.generate_comment.remote(
             cluster_id, post_content, agent_attrs, author_name, thread_context
@@ -153,7 +152,9 @@ class LLMManager:
             Ray ObjectRef (future) for the LLM call
         """
         self.logger.debug(
-            f"LLM decide_follow: cluster={cluster_id}, target={target_user.get('username', 'unknown')}"
+            f"LLM decide_follow: cluster={cluster_id}, target={
+                target_user.get(
+                    'username', 'unknown')}"
         )
         return self.llm.decide_follow.remote(cluster_id, agent_attrs, target_user, recent_posts)
 

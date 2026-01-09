@@ -9,6 +9,11 @@ Tests cover:
 - CostTracker: Usage and cost monitoring
 """
 
+from YSimulator.YClient.llm_utils.cost_tracker import CostTracker
+from YSimulator.YClient.llm_utils.response_parser import ResponseParser
+from YSimulator.YClient.llm_utils.retry_handler import RetryHandler
+from YSimulator.YClient.llm_utils.batch_handler import BatchHandler
+from YSimulator.YClient.llm_utils.llm_manager import LLMManager
 import logging
 import sys
 import unittest
@@ -16,12 +21,6 @@ from unittest.mock import MagicMock, Mock, patch
 
 # Mock ray before importing llm_utils components
 sys.modules["ray"] = MagicMock()
-
-from YSimulator.YClient.llm_utils.llm_manager import LLMManager
-from YSimulator.YClient.llm_utils.batch_handler import BatchHandler
-from YSimulator.YClient.llm_utils.retry_handler import RetryHandler
-from YSimulator.YClient.llm_utils.response_parser import ResponseParser
-from YSimulator.YClient.llm_utils.cost_tracker import CostTracker
 
 
 class TestLLMManager(unittest.TestCase):

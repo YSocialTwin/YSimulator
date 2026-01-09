@@ -2,20 +2,17 @@
 Unit tests for page agent integration.
 """
 
+from sqlalchemy.orm import Session
+from YSimulator.YClient.classes.ray_models import AgentProfile
+from YSimulator.YServer.classes.db_middleware import DatabaseMiddleware
+from YSimulator.YServer.classes.models import Website, User_mgmt, Round
+import uuid
+import unittest
 import sys
-import os
 from pathlib import Path
 
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent))
-
-import unittest
-import uuid
-
-from YSimulator.YServer.classes.models import Website, User_mgmt, Round
-from YSimulator.YServer.classes.db_middleware import DatabaseMiddleware
-from YSimulator.YClient.classes.ray_models import AgentProfile
-from sqlalchemy.orm import Session
 
 
 class TestPageAgentIntegration(unittest.TestCase):
@@ -59,7 +56,7 @@ class TestPageAgentIntegration(unittest.TestCase):
 
         self.assertEqual(page_profile.is_page, 1)
         self.assertEqual(page_profile.feed_url, "https://example.com/feed.xml")
-        print(f"✓ AgentProfile supports is_page and feed_url fields")
+        print("✓ AgentProfile supports is_page and feed_url fields")
 
     def test_02_page_agent_creates_website(self):
         """Test that page agent registration creates a Website entry."""
@@ -142,7 +139,7 @@ class TestPageAgentIntegration(unittest.TestCase):
             website = session.execute(stmt).scalar_one_or_none()
             self.assertIsNone(website)
 
-            print(f"✓ Regular agent exists without Website entry")
+            print("✓ Regular agent exists without Website entry")
 
     def test_04_multiple_pages_different_feeds(self):
         """Test multiple page agents with different feeds."""
@@ -175,7 +172,7 @@ class TestPageAgentIntegration(unittest.TestCase):
                 "password": "test123",
                 "is_page": 1,
             }
-            user_result = self.db.register_user(user_data)
+            self.db.register_user(user_data)
 
             # Create website
             website_data = {

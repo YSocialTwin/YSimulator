@@ -13,7 +13,7 @@ Extracted from client.py's _simulate() method as part of Phase 2 refactoring.
 
 import logging
 import random
-from typing import List, Set, Tuple
+from typing import List, Tuple
 
 import ray
 
@@ -116,7 +116,9 @@ class RoundExecutor:
             # This happens BEFORE the agent's normal actions
             # Page agents are excluded from reply pipeline (handled in ReplyGenerator)
             self.logger.debug(
-                f"[REPLY] Processing agent {agent.username} (type: {agent_type}, is_page: {agent.is_page})"
+                f"[REPLY] Processing agent {
+                    agent.username} (type: {agent_type}, is_page: {
+                    agent.is_page})"
             )
 
             # Use action generator framework for reply (Phase 1 consistency)
@@ -154,7 +156,9 @@ class RoundExecutor:
 
                 if agent.is_page == 1:
                     self.logger.info(
-                        f"Page agent {agent.username} action {action_idx+1}/{num_actions}: type={action_type}, agent_type={agent_type}"
+                        f"Page agent {
+                            agent.username} action {
+                            action_idx + 1}/{num_actions}: type={action_type}, agent_type={agent_type}"
                     )
 
                 # Dispatch action using action generator framework

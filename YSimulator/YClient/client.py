@@ -9,9 +9,7 @@ import gzip
 import json
 import logging
 import os
-import random
 import shutil
-import time
 from datetime import datetime
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
@@ -21,30 +19,10 @@ import ray
 
 # Phase 5: Removed ActionExecutorMixin - dead code replaced by action generators in Phase 1
 from YSimulator.YClient.action_generators import ActionContext, ActionGeneratorFactory
-from YSimulator.YClient.actions import (
-    generate_image_post_async,
-    generate_llm_follow_async,
-    generate_llm_post_async,
-    generate_llm_reaction_async,
-    generate_llm_read_async,
-    generate_llm_reply_to_mention_async,
-    generate_llm_search_action_async,
-    generate_news_post_async,
-    generate_rule_based_comment,
-    generate_rule_based_follow,
-    generate_rule_based_image_post,
-    generate_rule_based_news_post,
-    generate_rule_based_post,
-    generate_rule_based_reaction,
-    generate_rule_based_read,
-    generate_rule_based_reply_to_mention,
-    generate_rule_based_share,
-)
 from YSimulator.YClient.classes.ray_models import ActionDTO, AgentProfile
 from YSimulator.YClient.recsys import (
     CommonInterests,
     CommonUserInterests,
-    ContentRecSys,
     RandomOrder,
     ReverseChrono,
     ReverseChronoComments,
@@ -57,7 +35,6 @@ from YSimulator.YClient.recsys import (
 from YSimulator.YClient.recsys.FollowRecSysRay import (
     AdamicAdarFollowRecSys,
     CommonNeighborsFollowRecSys,
-    FollowRecSysRay,
     JaccardFollowRecSys,
     PreferentialAttachmentFollowRecSys,
     RandomFollowRecSys,
@@ -850,7 +827,21 @@ class SimulationClient:
             )
             action.annotations = annotations
             self.logger.info(
-                f"Annotated action content: has_sentiment={bool(annotations.get('sentiment'))}, has_toxicity={bool(annotations.get('toxicity'))}, has_emotions={bool(annotations.get('emotions'))}, hashtags={len(annotations.get('hashtags', []))}, mentions={len(annotations.get('mentions', []))}"
+                f"Annotated action content: has_sentiment={
+                    bool(
+                        annotations.get('sentiment'))}, has_toxicity={
+                    bool(
+                        annotations.get('toxicity'))}, has_emotions={
+                    bool(
+                        annotations.get('emotions'))}, hashtags={
+                    len(
+                        annotations.get(
+                            'hashtags',
+                            []))}, mentions={
+                    len(
+                        annotations.get(
+                            'mentions',
+                            []))}"
             )
 
     def _dispatch_action_with_generator(
@@ -905,7 +896,9 @@ class SimulationClient:
         # Check if generator can handle this agent
         if not generator.can_generate(agent, agent_type):
             self.logger.debug(
-                f"Generator {generator.__class__.__name__} cannot generate for agent {agent.username}"
+                f"Generator {
+                    generator.__class__.__name__} cannot generate for agent {
+                    agent.username}"
             )
             return [], [], {"skipped": True, "reason": "cannot_generate"}
 

@@ -160,7 +160,7 @@ class BatchHandler:
                 if future in ready_futures:
                     try:
                         results.append(ray.get(future, timeout=0))
-                    except:
+                    except BaseException:
                         results.append(None)
                 else:
                     results.append(None)

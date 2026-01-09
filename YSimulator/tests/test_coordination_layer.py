@@ -5,7 +5,7 @@ Tests ClientManager, BarrierHandler, RoundManager, and ArchetypeManager.
 """
 
 import pytest
-from unittest.mock import Mock, MagicMock, patch, call
+from unittest.mock import Mock
 import time
 
 from YSimulator.YServer.coordination.client_manager import ClientManager

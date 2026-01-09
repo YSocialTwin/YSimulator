@@ -4,22 +4,19 @@ Unit tests for news feed database integration.
 Tests the entire pipeline from news service to database writes.
 """
 
+from sqlalchemy.orm import Session
+from YSimulator.YServer.classes.db_middleware import DatabaseMiddleware
+from YSimulator.YServer.classes.models import Website, Article, Post
+import uuid
+import unittest
 import sys
-import os
 from pathlib import Path
 
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent))
 
-import unittest
-from unittest.mock import Mock, MagicMock, patch
-import uuid
-import json
 
 # Import the modules we need to test
-from YSimulator.YServer.classes.models import Website, Article, Post
-from YSimulator.YServer.classes.db_middleware import DatabaseMiddleware
-from sqlalchemy.orm import Session
 
 
 class TestNewsIntegration(unittest.TestCase):
@@ -330,7 +327,7 @@ class TestNewsIntegration(unittest.TestCase):
             stmt = select(Post).where(Post.id == post_id)
             post = session.execute(stmt).scalar_one()
 
-            print(f"\nPost details:")
+            print("\nPost details:")
             print(f"  ID: {post.id}")
             print(f"  Tweet: {post.tweet}")
             print(f"  User ID: {post.user_id}")
@@ -340,7 +337,7 @@ class TestNewsIntegration(unittest.TestCase):
             stmt = select(Article).where(Article.id == post.news_id)
             article = session.execute(stmt).scalar_one()
 
-            print(f"\nArticle details:")
+            print("\nArticle details:")
             print(f"  ID: {article.id}")
             print(f"  Title: {article.title}")
             print(f"  Website ID: {article.website_id}")
@@ -349,7 +346,7 @@ class TestNewsIntegration(unittest.TestCase):
             stmt = select(Website).where(Website.id == article.website_id)
             website = session.execute(stmt).scalar_one()
 
-            print(f"\nWebsite details:")
+            print("\nWebsite details:")
             print(f"  ID: {website.id}")
             print(f"  Name: {website.name}")
             print(f"  RSS: {website.rss}")

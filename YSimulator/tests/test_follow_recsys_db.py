@@ -5,9 +5,7 @@ Tests SQL-based follow recommendation algorithms using mock SQLAlchemy sessions.
 Uses the same successful mocking strategy as content_recsys_redis.py tests.
 """
 
-import pytest
-import math
-from unittest.mock import Mock, MagicMock, patch, call
+from unittest.mock import Mock
 from sqlalchemy.orm import Session
 
 

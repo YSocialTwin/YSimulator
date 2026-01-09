@@ -13,7 +13,7 @@ Extracted from client.py as part of Phase 2 refactoring.
 import logging
 import random
 import uuid
-from typing import Dict, List, Optional, Set
+from typing import Dict, List, Set
 
 import ray
 from faker import Faker

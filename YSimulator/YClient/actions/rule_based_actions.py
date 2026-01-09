@@ -7,7 +7,7 @@ and probability distributions.
 """
 
 import random
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 import ray
 

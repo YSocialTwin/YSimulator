@@ -9,7 +9,6 @@ This test validates:
 """
 
 import sys
-import tempfile
 import json
 from pathlib import Path
 

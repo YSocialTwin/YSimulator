@@ -9,9 +9,7 @@ Achieving 80%+ coverage for:
 - YServer/recsys/utils.py
 """
 
-import pytest
-from unittest.mock import Mock, MagicMock, patch
-import ray
+from unittest.mock import Mock, patch
 
 
 # ================================================

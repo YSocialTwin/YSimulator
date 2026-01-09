@@ -13,14 +13,13 @@ Usage:
     python diagnose_reply_pipeline.py --config path/to/config.yaml
 """
 
+from YSimulator.YServer.classes.db_middleware import DatabaseMiddleware
 import argparse
 import sys
 import os
 
 # Add the parent directory to the path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-
-from YSimulator.YServer.classes.db_middleware import DatabaseMiddleware
 
 
 def diagnose_mentions(db: DatabaseMiddleware):
@@ -39,7 +38,6 @@ def diagnose_mentions(db: DatabaseMiddleware):
 
     # Check mentions for each user
     total_mentions = 0
-    users_with_mentions = 0
     users_with_unreplied = 0
 
     for user in users[:10]:  # Check first 10 users
@@ -59,12 +57,12 @@ def diagnose_mentions(db: DatabaseMiddleware):
             # Show details of first mention
             if unreplied:
                 mention = unreplied[0]
-                print(f"      - First mention:")
+                print("      - First mention:")
                 print(f"        * mention_id: {mention.get('id')}")
                 print(f"        * post_id: {mention.get('post_id')}")
                 print(f"        * answered: {mention.get('answered')}")
 
-    print(f"\n2. Summary:")
+    print("\n2. Summary:")
     print(f"   - Users with unreplied mentions: {users_with_unreplied}")
     print(f"   - Total unreplied mentions: {total_mentions}")
 

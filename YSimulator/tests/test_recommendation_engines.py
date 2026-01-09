@@ -5,7 +5,7 @@ Tests ContentRecommender and FollowRecommender classes with mocked backends.
 """
 
 import pytest
-from unittest.mock import Mock, MagicMock, patch
+from unittest.mock import Mock, patch
 from YSimulator.YServer.recommendation.content_recommender import ContentRecommender
 from YSimulator.YServer.recommendation.follow_recommender import FollowRecommender
 
@@ -94,12 +94,12 @@ class TestContentRecommender:
 
         # Test rchrono mode
         mock_recsys_db.recommend_rchrono = Mock(return_value=["post1"])
-        result = recommender.get_recommended_posts(agent_id="agent1", mode="rchrono", day=1, slot=5)
+        _ = recommender.get_recommended_posts(agent_id="agent1", mode="rchrono", day=1, slot=5)
         assert mock_recsys_db.recommend_rchrono.called
 
         # Test rchrono_popularity mode
         mock_recsys_db.recommend_rchrono_popularity = Mock(return_value=["post2"])
-        result = recommender.get_recommended_posts(
+        _ = recommender.get_recommended_posts(
             agent_id="agent1", mode="rchrono_popularity", day=1, slot=5
         )
         assert mock_recsys_db.recommend_rchrono_popularity.called
@@ -192,7 +192,7 @@ class TestFollowRecommender:
         mock_recsys_redis.apply_leaning_bias_redis = Mock(return_value=["user1"])
 
         recommender = FollowRecommender(mock_db_adapter_redis)
-        result = recommender.get_follow_suggestions(
+        _ = recommender.get_follow_suggestions(
             agent_id="agent1", mode="random", n_neighbors=2, leaning_bias=1
         )
 
@@ -216,16 +216,14 @@ class TestFollowRecommender:
 
         # Test common_neighbors mode
         mock_recsys_redis.recommend_common_neighbors_redis = Mock(return_value=["user1"])
-        result = recommender.get_follow_suggestions(
+        _ = recommender.get_follow_suggestions(
             agent_id="agent1", mode="common_neighbors", n_neighbors=1
         )
         assert mock_recsys_redis.recommend_common_neighbors_redis.called
 
         # Test jaccard mode
         mock_recsys_redis.recommend_jaccard_redis = Mock(return_value=["user2"])
-        result = recommender.get_follow_suggestions(
-            agent_id="agent1", mode="jaccard", n_neighbors=1
-        )
+        _ = recommender.get_follow_suggestions(agent_id="agent1", mode="jaccard", n_neighbors=1)
         assert mock_recsys_redis.recommend_jaccard_redis.called
 
 

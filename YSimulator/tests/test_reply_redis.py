@@ -24,7 +24,7 @@ def test_redis_byte_handling():
         if mention_id_str.startswith("b'"):
             print(f"  ✗ mention_id not properly decoded: {mention_id_str}")
 
-    print(f"  ✓ All mention_ids properly decoded from bytes to strings")
+    print("  ✓ All mention_ids properly decoded from bytes to strings")
 
 
 def test_mention_data_byte_handling():
@@ -53,13 +53,13 @@ def test_mention_data_byte_handling():
         if not isinstance(value, str):
             print(f"  ✗ Value not converted to string: {value}")
 
-    print(f"  ✓ All mention data properly converted from bytes to strings")
+    print("  ✓ All mention data properly converted from bytes to strings")
 
     # Test answered field comparison
     if mention_dict.get("answered", "0") == "0":
-        print(f"  ✓ Answered field comparison works correctly")
+        print("  ✓ Answered field comparison works correctly")
     else:
-        print(f"  ✗ Answered field comparison failed")
+        print("  ✗ Answered field comparison failed")
 
 
 def test_redis_key_generation():

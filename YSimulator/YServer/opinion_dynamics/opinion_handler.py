@@ -5,7 +5,7 @@ Handles opinion existence checks, updates, and neighbor opinion retrieval.
 """
 
 import logging
-from typing import Dict, List, Optional
+from typing import List, Optional
 
 
 class OpinionHandler:
@@ -193,7 +193,8 @@ class OpinionHandler:
         from YSimulator.YServer.classes.models import Follow
 
         with Session(self.db.engine) as session:
-            # Get list of user_ids that agent follows (where agent is the follower and action='follow')
+            # Get list of user_ids that agent follows (where agent is the follower and
+            # action='follow')
             followees_query = (
                 session.query(Follow.user_id)
                 .filter(Follow.follower_id == agent_id, Follow.action == "follow")

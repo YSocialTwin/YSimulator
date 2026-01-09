@@ -34,7 +34,6 @@ def test_get_user_by_username_lookup():
 
     # Simulate Redis lookup flow
     username = "testuser"
-    expected_user_id = "user-123"
 
     # Step 1: Look up user ID from username index
     username_key = f"ysim:user_mgmt:by_username:{username}"

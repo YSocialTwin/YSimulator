@@ -4,12 +4,11 @@ Target: 80%+ coverage for text_support package.
 
 Tests cover:
 - Text cleaning (cleaning.py)
-- Text annotations (annotations.py) 
+- Text annotations (annotations.py)
 - Text annotator integration (text_annotator.py)
 """
 
-import pytest
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import patch, MagicMock
 from YSimulator.YClient.text_support.cleaning import clean_text, extract_components
 from YSimulator.YClient.text_support.annotations import vader_sentiment, toxicity
 from YSimulator.YClient.text_support.text_annotator import (

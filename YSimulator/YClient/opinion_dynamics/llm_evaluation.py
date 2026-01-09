@@ -1,5 +1,4 @@
 from enum import Enum
-from typing import Optional
 
 from YSimulator.YClient.opinion_dynamics.utils import get_opinion_group
 

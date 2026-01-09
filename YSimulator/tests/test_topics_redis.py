@@ -44,7 +44,7 @@ def test_add_or_get_interest_flow():
 
     assert name_index_key == f"ysim:interest:by_name:{interest_name}"
     assert interest_key.startswith("ysim:interest:")
-    print(f"  ✓ Interest creation flow correct")
+    print("  ✓ Interest creation flow correct")
 
 
 def test_get_topic_id_by_name():
@@ -52,13 +52,12 @@ def test_get_topic_id_by_name():
     print("\n3. Testing get_topic_id_by_name...")
 
     topic_name = "sports"
-    expected_topic_id = "topic-uuid-456"
 
     name_index_key = f"ysim:interest:by_name:{topic_name}"
     # redis_client.get(name_index_key) -> "topic-uuid-456"
 
     assert name_index_key == f"ysim:interest:by_name:{topic_name}"
-    print(f"  ✓ Topic ID lookup by name works")
+    print("  ✓ Topic ID lookup by name works")
 
 
 def test_post_topics_set():
@@ -66,7 +65,6 @@ def test_post_topics_set():
     print("\n4. Testing post topics set...")
 
     post_id = "post-uuid-123"
-    topic_ids = {"topic-1", "topic-2", "topic-3"}
 
     post_topics_key = f"ysim:post:{post_id}:topics:"
 
@@ -86,7 +84,6 @@ def test_user_interests_set():
     print("\n5. Testing user interests set...")
 
     user_id = "user-uuid-456"
-    interest_ids = {"interest-1", "interest-2"}
 
     user_interests_key = f"ysim:user:{user_id}:interests:"
 
@@ -99,7 +96,6 @@ def test_article_topics_set():
     print("\n6. Testing article topics set...")
 
     article_id = "article-uuid-789"
-    topic_ids = {"topic-1", "topic-2"}
 
     article_topics_key = f"ysim:article:{article_id}:topics:"
 
@@ -126,7 +122,7 @@ def test_interest_data_structure():
     assert decoded["iid"] == "interest-uuid-123"
     assert decoded["interest"] == "technology"
     assert all(isinstance(k, str) for k in decoded.keys())
-    print(f"  ✓ Interest data properly decoded")
+    print("  ✓ Interest data properly decoded")
 
 
 if __name__ == "__main__":

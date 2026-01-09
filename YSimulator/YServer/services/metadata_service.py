@@ -5,7 +5,7 @@ This service encapsulates all post metadata-related business operations.
 """
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 from YSimulator.YServer.repositories.base_repository import PostRepository
 

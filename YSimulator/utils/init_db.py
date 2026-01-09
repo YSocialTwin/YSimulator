@@ -13,7 +13,6 @@ from pathlib import Path
 from urllib.parse import quote_plus
 
 from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
 
 # Import models
 from YSimulator.YServer.classes.models import Base
@@ -112,7 +111,7 @@ def initialize_database(db_config: dict, config_path: Path = None, logger=None):
 
         if logger:
             logger.info(
-                f"Database initialized successfully",
+                "Database initialized successfully",
                 extra={"extra_data": {"db_type": db_config.get("type", "sqlite")}},
             )
         else:

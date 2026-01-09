@@ -1,0 +1,25 @@
+[flake8]
+# Set max line length to 120 to be less strict and match common Python standards
+# This prevents GitHub Actions from failing on minor line length issues
+max-line-length = 120
+# Ignore E203 (whitespace before ':') which conflicts with Black
+# Ignore E127 (continuation line over-indented) which is often a false positive
+extend-ignore = E203, E127, W503
+per-file-ignores =
+    # Long strings in template configurations
+    YSimulator/YClient/LLM_interactions/llm_service.py:E501
+    # Long strings in example scripts
+    example/*/generate_population.py:E501
+    scripts/generate_all_populations.py:E501
+exclude =
+    .git,
+    __pycache__,
+    .eggs,
+    *.egg,
+    build,
+    dist,
+    .venv,
+    venv,
+    .mypy_cache,
+    .tox,
+    htmlcov

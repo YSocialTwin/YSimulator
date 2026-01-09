@@ -11,7 +11,6 @@ import pytest
 from YSimulator.YClient.action_generators import (
     ActionContext,
     ActionGeneratorFactory,
-    BaseActionGenerator,
 )
 from YSimulator.YClient.action_generators.follow_generator import FollowGenerator
 from YSimulator.YClient.action_generators.post_generator import PostGenerator

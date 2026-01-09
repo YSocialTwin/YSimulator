@@ -9,8 +9,7 @@ Tests cover:
 - Parameter validation
 """
 
-import pytest
-from unittest.mock import Mock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 from YSimulator.YClient.actions.llm_actions import (
     generate_llm_post_async,
     generate_llm_reaction_async,

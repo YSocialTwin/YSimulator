@@ -107,7 +107,9 @@ class AgentScheduler:
                     regular_agents.append(agent)
 
         self.logger.info(
-            f"Activity sampling: slot={slot}, regular_agents={len(regular_agents)}, page_agents={len(page_agents)}"
+            f"Activity sampling: slot={slot}, regular_agents={
+                len(regular_agents)}, page_agents={
+                len(page_agents)}"
         )
         if page_agents:
             self.logger.info(f"Active page agents: {[p.username for p in page_agents]}")
@@ -155,7 +157,8 @@ class AgentScheduler:
                     self._churned_agents_cache_valid = True
                     if churned_agent_ids:
                         self.logger.info(
-                            f"Refreshed churned agents cache: {len(churned_agent_ids)} churned agents"
+                            f"Refreshed churned agents cache: {
+                                len(churned_agent_ids)} churned agents"
                         )
                 else:
                     # Use cached value

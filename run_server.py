@@ -272,7 +272,7 @@ if __name__ == "__main__":
     print(f"--- 📝 Namespace: {namespace} ---")
     print(f"--- 💾 Database Type: {db_config.get('type', 'sqlite').upper()} ---")
     print(f"--- 📋 Logs: {config_dir / 'logs'} ---")
-    print(f"--- 💾 Waiting for clients... ---")
+    print("--- 💾 Waiting for clients... ---")
 
     # Start orchestrator actor
     actor_start = time.time()

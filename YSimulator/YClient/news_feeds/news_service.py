@@ -13,7 +13,7 @@ import datetime
 import logging
 import random
 import time
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional
 
 import feedparser
 import ray
@@ -78,7 +78,7 @@ class NewsFeedService:
         # Get server actor reference
         try:
             self.server = ray.get_actor("Orchestrator")
-        except ValueError as e:
+        except ValueError:
             # Orchestrator actor not found - this is expected if news service starts before server
             self.logger.warning("Orchestrator actor not yet available, will retry later")
             self.server = None
@@ -137,7 +137,7 @@ class NewsFeedService:
                 if website_id:
                     self.website_ids[feed_url] = website_id
 
-            except Exception as e:
+            except Exception:
                 # Failed to register feed, continue with others
                 pass
 
@@ -179,7 +179,7 @@ class NewsFeedService:
         try:
             self.refresh_feed(feed_url)
             return True
-        except Exception as e:
+        except Exception:
             # Log specific error
             return False
 
@@ -224,7 +224,11 @@ class NewsFeedService:
                     if image_urls:
                         total_images_found += len(image_urls)
                         self.logger.debug(
-                            f"Article '{entry.get('title', 'No title')[:50]}' has {len(image_urls)} image(s)"
+                            f"Article '{
+                                entry.get(
+                                    'title', 'No title')[
+                                    :50]}' has {
+                                len(image_urls)} image(s)"
                         )
 
                     article = {
@@ -247,7 +251,6 @@ class NewsFeedService:
         except Exception as e:
             # Feed parsing failed, return empty list
             self.logger.error(f"Failed to parse feed {feed_url}: {e}")
-            pass
 
         self.logger.info(
             f"Feed {feed_name}: {len(articles)} articles, {total_images_found} total images"
@@ -455,7 +458,10 @@ class NewsFeedService:
                 article = random.choice(articles)
                 image_count = len(article.get("image_urls", []))
                 self.logger.info(
-                    f"Returning article: '{article.get('title', 'NO TITLE')[:50]}' with {image_count} image(s)"
+                    f"Returning article: '{
+                        article.get(
+                            'title', 'NO TITLE')[
+                            :50]}' with {image_count} image(s)"
                 )
                 return article
             else:
@@ -476,11 +482,11 @@ class NewsFeedService:
             str: Article ID if successful, None otherwise
         """
         if not self.server:
-            self.logger.error(f"No server connection for saving article")
+            self.logger.error("No server connection for saving article")
             return None
 
         if not article:
-            self.logger.error(f"No article data provided")
+            self.logger.error("No article data provided")
             return None
 
         import uuid
@@ -518,9 +524,9 @@ class NewsFeedService:
                             f"LLM service not available, skipping {len(image_urls)} image(s)"
                         )
                 else:
-                    self.logger.info(f"No images to process for this article")
+                    self.logger.info("No images to process for this article")
             else:
-                self.logger.error(f"Failed to save article (server returned None)")
+                self.logger.error("Failed to save article (server returned None)")
 
             return article_id
 
@@ -544,7 +550,7 @@ class NewsFeedService:
 
         # Check if LLM service is available
         if not self.llm_service:
-            self.logger.warning(f"LLM service not available, skipping image descriptions")
+            self.logger.warning("LLM service not available, skipping image descriptions")
             return
 
         self.logger.info(f"Processing {len(image_urls)} image(s) for article {article_id}")

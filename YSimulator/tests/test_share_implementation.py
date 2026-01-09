@@ -2,20 +2,17 @@
 Unit tests for share action and thread_id implementation.
 """
 
+from sqlalchemy.orm import Session
+from YSimulator.YClient.classes.ray_models import ActionDTO
+from YSimulator.YServer.classes.db_middleware import DatabaseMiddleware
+from YSimulator.YServer.classes.models import User_mgmt, Round
+import uuid
+import unittest
 import sys
-import os
 from pathlib import Path
 
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent))
-
-import unittest
-import uuid
-
-from YSimulator.YServer.classes.models import Website, Article, Post, User_mgmt, Round
-from YSimulator.YServer.classes.db_middleware import DatabaseMiddleware
-from YSimulator.YClient.classes.ray_models import ActionDTO
-from sqlalchemy.orm import Session
 
 
 class TestShareImplementation(unittest.TestCase):
@@ -206,7 +203,7 @@ class TestShareImplementation(unittest.TestCase):
 
         self.assertEqual(action.action_type, "SHARE")
         self.assertEqual(action.target_post_id, "post-uuid-123")
-        print(f"✓ ActionDTO supports SHARE action type")
+        print("✓ ActionDTO supports SHARE action type")
 
     def test_06_nested_comments_inherit_root_thread_id(self):
         """Test that nested comments (comment on a comment) inherit the root thread_id."""
@@ -238,7 +235,9 @@ class TestShareImplementation(unittest.TestCase):
         comment1 = self.db.get_post(comment1_id)
 
         print(
-            f"Comment 1: {comment1_id}, thread_id={comment1['thread_id']}, comment_to={comment1['comment_to']}"
+            f"Comment 1: {comment1_id}, thread_id={
+                comment1['thread_id']}, comment_to={
+                comment1['comment_to']}"
         )
         self.assertEqual(
             comment1["thread_id"], root_post_id, "First-level comment should have root thread_id"
@@ -259,7 +258,9 @@ class TestShareImplementation(unittest.TestCase):
         comment2 = self.db.get_post(comment2_id)
 
         print(
-            f"Comment 2: {comment2_id}, thread_id={comment2['thread_id']}, comment_to={comment2['comment_to']}"
+            f"Comment 2: {comment2_id}, thread_id={
+                comment2['thread_id']}, comment_to={
+                comment2['comment_to']}"
         )
         self.assertEqual(
             comment2["thread_id"], root_post_id, "Second-level comment should have root thread_id"

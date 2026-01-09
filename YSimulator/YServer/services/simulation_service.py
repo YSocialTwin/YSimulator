@@ -5,7 +5,7 @@ This service encapsulates simulation-related operations.
 """
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict
 
 from YSimulator.YServer.repositories.base_repository import RecommendationRepository
 

@@ -162,7 +162,9 @@ class InterestManager:
             agent_ids: List of agent IDs to recompute interests for
         """
         self.logger.info(
-            f"Recomputing interests for {len(agent_ids)} agents using attention window of {self.attention_window} rounds"
+            f"Recomputing interests for {
+                len(agent_ids)} agents using attention window of {
+                self.attention_window} rounds"
         )
 
         for agent_id in agent_ids:
@@ -172,7 +174,8 @@ class InterestManager:
         agents_with_interests = len(self.agent_interests)
         total_topics = sum(len(data["topics"]) for data in self.agent_interests.values())
         self.logger.info(
-            f"Interest recomputation complete: {agents_with_interests} agents have interests, {total_topics} total topics"
+            f"Interest recomputation complete: {agents_with_interests} agents have interests, "
+            f"{total_topics} total topics"
         )
 
     def get_agent_interests(self) -> Dict[str, Dict[str, list]]:

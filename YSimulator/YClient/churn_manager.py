@@ -178,7 +178,8 @@ def evaluate_new_agents(
         int: Number of new agents added
     """
     logger.info(
-        f"Starting new agents evaluation: enabled={new_agents_enabled}, probability={probability_new_agents}, percentage={percentage_new_agents}"
+        f"Starting new agents evaluation: enabled={new_agents_enabled}, "
+        f"probability={probability_new_agents}, percentage={percentage_new_agents}"
     )
 
     if not new_agents_enabled:
@@ -189,7 +190,11 @@ def evaluate_new_agents(
     non_churned_agents = [agent for agent in agent_profiles if agent.left_on is None]
 
     logger.info(
-        f"Non-churned agents: {len(non_churned_agents)} out of {len(agent_profiles)} total (churned: {len(agent_profiles) - len(non_churned_agents)})"
+        f"Non-churned agents: {
+            len(non_churned_agents)} out of {
+            len(agent_profiles)} total (churned: {
+                len(agent_profiles) -
+            len(non_churned_agents)})"
     )
 
     if not non_churned_agents:
@@ -217,12 +222,12 @@ def evaluate_new_agents(
         # With probability_new_agents, add a new agent
         roll = random.random()
         logger.debug(
-            f"New agent slot {i+1}/{x}: roll={roll:.4f}, threshold={probability_new_agents}"
+            f"New agent slot {i + 1}/{x}: roll={roll:.4f}, threshold={probability_new_agents}"
         )
 
         if roll < probability_new_agents:
             logger.info(
-                f"Creating new agent {i+1}/{x} (roll {roll:.4f} < {probability_new_agents})"
+                f"Creating new agent {i + 1}/{x} (roll {roll:.4f} < {probability_new_agents})"
             )
 
             # Select a random existing agent as template
@@ -301,16 +306,14 @@ def evaluate_new_agents(
             )
         else:
             logger.debug(
-                f"Skipping new agent slot {i+1}/{x} (roll {roll:.4f} >= {probability_new_agents})"
+                f"Skipping new agent slot {i + 1}/{x} (roll {roll:.4f} >= {probability_new_agents})"
             )
 
     # Batch register all new agents with server in a single call
     if new_agents_to_register:
         try:
             logger.info(f"Batch registering {len(new_agents_to_register)} new agents with server")
-            registration_result = ray.get(
-                server.register_agents.remote(new_agents_to_register, client_id=client_id)
-            )
+            _ = ray.get(server.register_agents.remote(new_agents_to_register, client_id=client_id))
             new_agents_added = len(new_agents_to_register)
 
             logger.info(

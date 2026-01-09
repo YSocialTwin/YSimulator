@@ -5,12 +5,9 @@ Tests the Orchestrator Server functionality with comprehensive mocking.
 """
 
 import pytest
-from unittest.mock import Mock, MagicMock, patch, call, PropertyMock
+from unittest.mock import Mock, patch
 from pathlib import Path
 import tempfile
-import json
-import time
-from datetime import datetime, timezone
 
 
 # Patch ray.remote at module level to allow direct instantiation of actors in tests
@@ -188,7 +185,7 @@ class TestOrchestratorServerInit:
             )
 
             # Verify redis is enabled
-            assert server.db.use_redis == True
+            assert server.db.use_redis is True
             mock_redis_class.assert_called_once()
 
     @patch("YSimulator.YServer.interests_modeling.InterestManager")
@@ -215,7 +212,7 @@ class TestOrchestratorServerInit:
             )
 
             # Verify archetype config
-            assert server.archetypes_enabled == True
+            assert server.archetypes_enabled is True
             assert server.archetype_distribution == {"casual": 0.7, "activist": 0.3}
 
 
@@ -452,7 +449,7 @@ class TestCheckFollowRelationship:
 
             result = server.check_follow_relationship("user1", "user2")
 
-            assert result == True
+            assert result is True
 
     @patch("YSimulator.YServer.interests_modeling.InterestManager")
     @patch("sqlalchemy.orm.Session")
@@ -478,7 +475,7 @@ class TestCheckFollowRelationship:
 
             result = server.check_follow_relationship("user1", "user3")
 
-            assert result == False
+            assert result is False
 
 
 class TestGetCurrentDay:
@@ -547,7 +544,7 @@ class TestHeartbeat:
             # Send heartbeat
             result = server.heartbeat("client_1")
 
-            assert result == True
+            assert result is True
             assert "client_1" in server.last_heartbeat
             assert isinstance(server.last_heartbeat["client_1"], float)
 
@@ -566,7 +563,7 @@ class TestHeartbeat:
             # Send heartbeat without registering
             result = server.heartbeat("unknown_client")
 
-            assert result == False
+            assert result is False
 
 
 class TestGetActiveClients:

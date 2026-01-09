@@ -11,7 +11,7 @@ Main Components:
 
 Usage:
     from YSimulator.YClient.opinion import OpinionManager
-    
+
     opinion_manager = OpinionManager(
         simulation_config=config,
         server=server_handle,
@@ -20,7 +20,7 @@ Usage:
         client_id="client_1",
         logger=logger,
     )
-    
+
     # Check if enabled
     if opinion_manager.is_enabled():
         # Calculate opinion updates

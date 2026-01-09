@@ -7,7 +7,7 @@ using Redis key-value operations for better scalability.
 
 import math
 import random
-from typing import Dict, List, Set
+from typing import List
 
 from redis import Redis
 

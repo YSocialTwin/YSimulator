@@ -18,8 +18,7 @@ For complete mapping documentation, see docs/REPOSITORY_PATTERN.md
 """
 
 import pytest
-from unittest.mock import Mock, MagicMock, patch
-from sqlalchemy import create_engine
+from unittest.mock import Mock, patch
 from sqlalchemy.orm import Session
 
 from YSimulator.YServer.repositories.sql_repository import (

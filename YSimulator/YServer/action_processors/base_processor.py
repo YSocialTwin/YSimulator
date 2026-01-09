@@ -71,7 +71,6 @@ class BaseActionProcessor(ABC):
         Returns:
             ActionResult with processing outcome
         """
-        pass
 
     def validate(self, action: Any) -> bool:
         """

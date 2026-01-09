@@ -5,7 +5,7 @@ Tests each action processor in isolation with mocked services.
 """
 
 import pytest
-from unittest.mock import Mock, MagicMock
+from unittest.mock import Mock
 from YSimulator.YServer.action_processors.base_processor import ActionContext, ActionResult
 from YSimulator.YServer.action_processors.post_processor import PostProcessor
 from YSimulator.YServer.action_processors.comment_processor import CommentProcessor

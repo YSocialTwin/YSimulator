@@ -6,7 +6,7 @@ between multiple repositories to implement business logic.
 """
 
 import pytest
-from unittest.mock import Mock, MagicMock
+from unittest.mock import Mock
 
 from YSimulator.YServer.services.user_service import UserService
 from YSimulator.YServer.services.post_service import PostService

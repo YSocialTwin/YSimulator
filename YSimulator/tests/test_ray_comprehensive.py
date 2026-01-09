@@ -4,7 +4,6 @@ Comprehensive tests for Ray models and data transfer objects.
 Achieving 80%+ coverage for Ray models including all DTOs and dataclasses.
 """
 
-import pytest
 from dataclasses import asdict
 from YSimulator.YClient.classes.ray_models import (
     AgentProfile,

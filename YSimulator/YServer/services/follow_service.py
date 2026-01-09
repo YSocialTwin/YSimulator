@@ -5,7 +5,7 @@ This service encapsulates all follow-related business operations.
 """
 
 import logging
-from typing import Any, Dict, List, Tuple
+from typing import List, Tuple
 
 from YSimulator.YServer.repositories.base_repository import FollowRepository
 

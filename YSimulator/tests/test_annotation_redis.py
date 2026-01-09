@@ -46,7 +46,7 @@ def test_emotion_data_decoding():
     assert decoded["icon"] == "mdi-emoticon"
     assert all(isinstance(k, str) for k in decoded.keys())
     assert all(isinstance(v, str) for v in decoded.values())
-    print(f"  ✓ All emotion data properly decoded")
+    print("  ✓ All emotion data properly decoded")
 
 
 def test_emotion_cache_fallback():
@@ -64,7 +64,7 @@ def test_emotion_cache_fallback():
     #    - redis_client.set("ysim:emotion:by_name:anger", emotion_id)
 
     emotion_id = "emotion-uuid-456"
-    emotion_data = {"id": emotion_id, "emotion": emotion_name, "icon": "mdi-emoticon-devil"}
+    _ = {"id": emotion_id, "emotion": emotion_name, "icon": "mdi-emoticon-devil"}
 
     # Verify cache keys
     emotion_key = f"ysim:emotion:{emotion_id}"

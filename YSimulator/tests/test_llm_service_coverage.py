@@ -10,11 +10,7 @@ initialized before any imports occur.
 """
 
 import pytest
-from typing import Dict, Any, Optional
-from unittest.mock import Mock, patch, MagicMock
-import ray
-import importlib
-import sys
+from unittest.mock import Mock, patch
 
 
 @pytest.mark.xdist_group(name="llm_service_init")
@@ -25,16 +21,16 @@ class TestLLMServiceInitialization:
         """Test LLM service initialization with valid configuration."""
         from YSimulator.YClient.LLM_interactions.llm_service import LLMService
 
-        llm_config = {
+        _ = {
             "model": "test-model",
             "temperature": 0.7,
             "base_url": "http://localhost:11434",
         }
-        prompts_config = {
+        _ = {
             "post": "Generate a post about {topic}",
             "comment": "Comment on: {content}",
         }
-        llm_v_config = {"enabled": True, "model": "test-validator"}
+        _ = {"enabled": True, "model": "test-validator"}
 
         # Verify LLMService class exists and is importable
         assert LLMService is not None
