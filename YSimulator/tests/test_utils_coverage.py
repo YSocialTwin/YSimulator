@@ -267,19 +267,6 @@ class TestTextCleaning:
             pytest.skip("clean_text not available or signature changed")
 
 
-class TestTextAnnotations:
-    """Test text annotation utilities."""
-
-    def test_extract_hashtags(self):
-        """Test hashtag extraction."""
-        try:
-            from YSimulator.YClient.text_support.annotations import extract_components
-            
-            assert clean == ""
-        except ImportError:
-            pytest.skip("Text cleaning module not available")
-
-
 class TestAnnotations:
     """Test text annotation functionality."""
 
