@@ -162,9 +162,7 @@ class InterestManager:
             agent_ids: List of agent IDs to recompute interests for
         """
         self.logger.info(
-            f"Recomputing interests for {
-                len(agent_ids)} agents using attention window of {
-                self.attention_window} rounds"
+ f"Recomputing interests for {len(agent_ids)}agents using attention window of {self.attention_window}rounds"
         )
 
         for agent_id in agent_ids:

@@ -177,10 +177,7 @@ class ShareLinkGenerator(BaseActionGenerator):
             if not existing_topics:
                 # Extract topics using LLM (client-side)
                 self.context.logger.info(
-                    f"Extracting topics for article {article_id}: {
-                        article.get(
-                            'title', '')[
-                            :50]}..."
+ f"Extracting topics for article {article_id}: {article.get( 'title', '')[ :50]}..."
                 )
                 topics_future = self.context.llm.extract_topics_from_article.remote(
                     article.get("title", ""), article.get("summary", "")
@@ -241,9 +238,7 @@ class ShareLinkGenerator(BaseActionGenerator):
                         )
                     )
                     self.context.logger.info(
-                        f"Stored opinion {
-                            opinion_value:.3f} for page {
-                            agent.username} on topic '{topic_name}'"
+ f"Stored opinion {opinion_value:.3f}for page {agent.username}on topic '{topic_name}'"
                     )
             except Exception as e:
                 self.context.logger.warning(
@@ -278,9 +273,7 @@ class ShareLinkGenerator(BaseActionGenerator):
                         )
                     )
                     self.context.logger.info(
-                        f"Stored opinion {
-                            opinion_value:.3f} for page {
-                            agent.username} on existing topic '{topic_name}'"
+ f"Stored opinion {opinion_value:.3f}for page {agent.username}on existing topic '{topic_name}'"
                     )
             except Exception as e:
                 self.context.logger.warning(f"Failed to ensure opinion for existing topic: {e}")

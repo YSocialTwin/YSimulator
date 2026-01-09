@@ -78,8 +78,7 @@ class OpinionInferencer:
 
         except Exception as e:
             self.logger.error(
-                f"Error inferring opinion for agent {
-                    agent_profile.id if agent_profile else 'unknown'}: {e}. "
+ f"Error inferring opinion for agent {agent_profile.id if agent_profile else 'unknown'}: {e}. "
                 f"Using random value."
             )
             return random.random()

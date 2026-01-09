@@ -107,9 +107,7 @@ class CommentProcessor(BaseActionProcessor):
             )
             if count_updated:
                 self.logger.info(
-                    f"Incremented reaction count for post {
-                        action.target_post_id} after COMMENT by agent {
-                        action.agent_id}"
+ f"Incremented reaction count for post {action.target_post_id}after COMMENT by agent {action.agent_id}"
                 )
             else:
                 self.logger.warning(
@@ -126,8 +124,7 @@ class CommentProcessor(BaseActionProcessor):
                             topics_linked += 1
                         else:
                             self.logger.warning(
-                                f"Failed to link topic {topic_id} from parent post {
-                                    action.target_post_id} to comment {post_id}"
+ f"Failed to link topic {topic_id}from parent post {action.target_post_id}to comment {post_id}"
                             )
                     except Exception as e:
                         self.logger.error(
@@ -135,9 +132,7 @@ class CommentProcessor(BaseActionProcessor):
                         )
                 if topics_linked > 0:
                     self.logger.info(
-                        f"Linked {topics_linked}/{
-                            len(parent_topic_ids)} topics from parent post {
-                            action.target_post_id} to comment {post_id}"
+ f"Linked {topics_linked}/{len(parent_topic_ids)}topics from parent post {action.target_post_id}to comment {post_id}"
                     )
             else:
                 self.logger.warning(
@@ -216,8 +211,7 @@ class CommentProcessor(BaseActionProcessor):
                 else:
                     parent_sentiment = "neu"
                 self.logger.info(
-                    f"Parent sentiment: compound={
-                        sentiment_parent_compound:.3f} -> {parent_sentiment}"
+ f"Parent sentiment: compound={sentiment_parent_compound:.3f}-> {parent_sentiment}"
                 )
                 return parent_sentiment
             else:

@@ -235,9 +235,7 @@ class TestShareImplementation(unittest.TestCase):
         comment1 = self.db.get_post(comment1_id)
 
         print(
-            f"Comment 1: {comment1_id}, thread_id={
-                comment1['thread_id']}, comment_to={
-                comment1['comment_to']}"
+            f"Comment 1: {comment1_id}, thread_id={comment1['thread_id']}, comment_to={comment1['comment_to']}"
         )
         self.assertEqual(
             comment1["thread_id"], root_post_id, "First-level comment should have root thread_id"
@@ -258,9 +256,7 @@ class TestShareImplementation(unittest.TestCase):
         comment2 = self.db.get_post(comment2_id)
 
         print(
-            f"Comment 2: {comment2_id}, thread_id={
-                comment2['thread_id']}, comment_to={
-                comment2['comment_to']}"
+            f"Comment 2: {comment2_id}, thread_id={comment2['thread_id']}, comment_to={comment2['comment_to']}"
         )
         self.assertEqual(
             comment2["thread_id"], root_post_id, "Second-level comment should have root thread_id"

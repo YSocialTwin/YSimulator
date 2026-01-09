@@ -141,11 +141,7 @@ class BatchProcessor:
                 action.image_id = image_id  # Set image_id as attribute
                 action.topic_ids = topic_ids  # Store for later processing
                 self.logger.info(
-                    f"LLM image post for agent {a_id}: image_id={image_id}, has_image_id_attr={
-                        hasattr(
-                            action, 'image_id')}, topics={
-                        len(topic_ids)}, content_len={
-                        len(res_txt)}"
+ f"LLM image post for agent {a_id}: image_id={image_id}, has_image_id_attr={hasattr( action, 'image_id')}, topics={len(topic_ids)}, content_len={len(res_txt)}"
                 )
             else:
                 # Regular/news post: (agent_id, cluster_id, future, topic_or_article_id)
@@ -159,15 +155,13 @@ class BatchProcessor:
                         uuid.UUID(topic_or_article)
                         action.article_id = topic_or_article
                         self.logger.info(
-                            f"LLM post for agent {a_id}: article_id={topic_or_article}, content_len={
-                                len(res_txt)}"
+ f"LLM post for agent {a_id}: article_id={topic_or_article}, content_len={len(res_txt)}"
                         )
                     except ValueError:
                         # Not a valid UUID, treat as topic string
                         action.topic = topic_or_article
                         self.logger.info(
-                            f"LLM post for agent {a_id}: topic={topic_or_article}, content_len={
-                                len(res_txt)}"
+ f"LLM post for agent {a_id}: topic={topic_or_article}, content_len={len(res_txt)}"
                         )
                 else:
                     self.logger.info(
@@ -185,21 +179,7 @@ class BatchProcessor:
             )
             action.annotations = annotations
             self.logger.info(
-                f"LLM post annotated for agent {a_id}: has_sentiment={
-                    bool(
-                        annotations.get('sentiment'))}, has_toxicity={
-                    bool(
-                        annotations.get('toxicity'))}, has_emotions={
-                    bool(
-                        annotations.get('emotions'))}, hashtags={
-                    len(
-                        annotations.get(
-                            'hashtags',
-                            []))}, mentions={
-                    len(
-                        annotations.get(
-                            'mentions',
-                            []))}"
+ f"LLM post annotated for agent {a_id}: has_sentiment={bool( annotations.get('sentiment'))}, has_toxicity={bool( annotations.get('toxicity'))}, has_emotions={bool( annotations.get('emotions'))}, hashtags={len( annotations.get( 'hashtags', []))}, mentions={len( annotations.get( 'mentions', []))}"
             )
 
             actions.append(action)
@@ -302,21 +282,7 @@ class BatchProcessor:
                     llm_handle=self.llm,
                 )
                 self.logger.info(
-                    f"LLM {determined_action_type} annotated for agent {a_id}: has_sentiment={
-                        bool(
-                            annotations.get('sentiment'))}, has_toxicity={
-                        bool(
-                            annotations.get('toxicity'))}, has_emotions={
-                        bool(
-                            annotations.get('emotions'))}, hashtags={
-                                len(
-                                    annotations.get(
-                                        'hashtags',
-                                        []))}, mentions={
-                                            len(
-                                                annotations.get(
-                                                    'mentions',
-                                                    []))}"
+ f"LLM {determined_action_type}annotated for agent {a_id}: has_sentiment={bool( annotations.get('sentiment'))}, has_toxicity={bool( annotations.get('toxicity'))}, has_emotions={bool( annotations.get('emotions'))}, hashtags={len( annotations.get( 'hashtags', []))}, mentions={len( annotations.get( 'mentions', []))}"
                 )
 
                 # Calculate opinion updates

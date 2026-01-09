@@ -689,17 +689,7 @@ class OrchestratorServer:
             parent_sentiment: Compound sentiment of parent post (for comments)
         """
         self.logger.info(
-            f"_process_annotations called for post {post_id}: has_hashtags={
-                bool(
-                    annotations.get('hashtags'))}, has_mentions={
-                bool(
-                    annotations.get('mentions'))}, has_sentiment={
-                        bool(
-                            annotations.get('sentiment'))}, has_toxicity={
-                                bool(
-                                    annotations.get('toxicity'))}, has_emotions={
-                                        bool(
-                                            annotations.get('emotions'))}"
+ f"_process_annotations called for post {post_id}: has_hashtags={bool( annotations.get('hashtags'))}, has_mentions={bool( annotations.get('mentions'))}, has_sentiment={bool( annotations.get('sentiment'))}, has_toxicity={bool( annotations.get('toxicity'))}, has_emotions={bool( annotations.get('emotions'))}"
         )
 
         # Process hashtags
@@ -728,9 +718,7 @@ class OrchestratorServer:
         sentiment_scores = annotations.get("sentiment")
         if sentiment_scores:
             self.logger.info(
-                f"Processing sentiment for post {post_id}: compound={
-                    sentiment_scores.get(
-                        'compound', 0):.3f}"
+ f"Processing sentiment for post {post_id}: compound={sentiment_scores.get( 'compound', 0):.3f}"
             )
             # Get topics associated with this post/comment
             topic_ids = self.post_service.get_post_topics(post_id)
@@ -740,8 +728,7 @@ class OrchestratorServer:
                 topic_ids = self.post_service.get_post_topics(parent_post_id)
                 if topic_ids:
                     self.logger.info(
-                        f"Using {
-                            len(topic_ids)} topics from parent post {parent_post_id} for comment {post_id}"
+ f"Using {len(topic_ids)}topics from parent post {parent_post_id}for comment {post_id}"
                     )
 
             if not topic_ids:
@@ -775,8 +762,7 @@ class OrchestratorServer:
 
             if topic_ids:
                 self.logger.info(
-                    f"Successfully added sentiment for post {post_id} across {
-                        len(topic_ids)} topics"
+ f"Successfully added sentiment for post {post_id}across {len(topic_ids)}topics"
                 )
         else:
             self.logger.debug(f"No sentiment data in annotations for post {post_id}")
@@ -785,9 +771,7 @@ class OrchestratorServer:
         toxicity_scores = annotations.get("toxicity")
         if toxicity_scores:
             self.logger.info(
-                f"Processing toxicity for post {post_id}: TOXICITY={
-                    toxicity_scores.get(
-                        'TOXICITY', 0):.3f}"
+                f"Processing toxicity for post {post_id}: TOXICITY={toxicity_scores.get('TOXICITY', 0):.3f}"
             )
             toxicity_data = {
                 "post_id": post_id,
@@ -1237,8 +1221,7 @@ class OrchestratorServer:
         """
         result = self.mention_service.get_unreplied_mentions(user_id)
         self.logger.debug(
-            f"[REPLY_SERVER] get_unreplied_mentions for user {user_id}: found {
-                len(result)} unreplied mentions"
+            f"[REPLY_SERVER] get_unreplied_mentions for user {user_id}: found {len(result)} unreplied mentions"
         )
         return result
 

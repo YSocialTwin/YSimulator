@@ -2972,9 +2972,7 @@ class DatabaseMiddleware:
                 self.redis_client.sadd(post_mentions_key, mention_id)
 
                 self.logger.info(
-                    f"Created mention: id={mention_id}, user_id={
-                        mention_data['user_id']}, post_id={
-                        mention_data['post_id']}"
+ f"Created mention: id={mention_id}, user_id={mention_data['user_id']}, post_id={mention_data['post_id']}"
                 )
                 return True
             else:
@@ -2986,9 +2984,7 @@ class DatabaseMiddleware:
                     session.add(mention)
                     session.commit()
                     self.logger.info(
-                        f"Created mention: id={mention_id}, user_id={
-                            mention_data['user_id']}, post_id={
-                            mention_data['post_id']}"
+ f"Created mention: id={mention_id}, user_id={mention_data['user_id']}, post_id={mention_data['post_id']}"
                     )
                     return True
                 finally:
@@ -3021,8 +3017,7 @@ class DatabaseMiddleware:
                 mention_ids = self.redis_client.smembers(user_mentions_key)
 
                 self.logger.debug(
-                    f"[REPLY_DB] Found {
-                        len(mention_ids) if mention_ids else 0} total mentions for user {user_id}"
+ f"[REPLY_DB] Found {len(mention_ids) if mention_ids else 0}total mentions for user {user_id}"
                 )
 
                 if not mention_ids:
@@ -3055,8 +3050,7 @@ class DatabaseMiddleware:
                             unreplied_mentions.append(mention_dict)
 
                 self.logger.info(
-                    f"[REPLY_DB] Returning {
-                        len(unreplied_mentions)} unreplied mentions for user {user_id}"
+ f"[REPLY_DB] Returning {len(unreplied_mentions)}unreplied mentions for user {user_id}"
                 )
                 return unreplied_mentions
             else:
@@ -3084,8 +3078,7 @@ class DatabaseMiddleware:
                         for m in mentions
                     ]
                     self.logger.info(
-                        f"[REPLY_DB] Returning {
-                            len(result)} unreplied mentions for user {user_id} (SQL)"
+ f"[REPLY_DB] Returning {len(result)}unreplied mentions for user {user_id}(SQL)"
                     )
                     return result
                 finally:
@@ -3606,9 +3599,7 @@ class DatabaseMiddleware:
 
             session.commit()
             self.logger.info(
-                f"Initialized emotions table: {created_count} new emotions added, {
-                    len(emotions_data) -
-                    created_count} already existed"
+ f"Initialized emotions table: {created_count}new emotions added, {len(emotions_data) - created_count}already existed"
             )
             return True
 
@@ -3745,8 +3736,7 @@ class DatabaseMiddleware:
                     )
 
                     self.logger.info(
-                        f"Found {
-                            len(inactive_agents)} inactive agents (threshold={inactivity_threshold})"
+ f"Found {len(inactive_agents)}inactive agents (threshold={inactivity_threshold})"
                     )
 
                     return [agent.id for agent in inactive_agents]

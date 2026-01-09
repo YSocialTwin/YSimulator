@@ -163,8 +163,7 @@ def parse_network_edges(network_csv_path: Path, logger: logging.Logger) -> List[
             # Validate required columns
             if "source" not in reader.fieldnames or "target" not in reader.fieldnames:
                 logger.error(
-                    f"Network CSV must contain 'source' and 'target' columns. Found: {
-                        reader.fieldnames}"
+ f"Network CSV must contain 'source' and 'target' columns. Found: {reader.fieldnames}"
                 )
                 return edges
 
@@ -242,8 +241,7 @@ def load_and_create_social_network(
             )
 
     logger.info(
-        f"Network creation complete: {success_count} successful, {failed_count} failed out of {
-            len(edges)} total edges"
+ f"Network creation complete: {success_count}successful, {failed_count}failed out of {len(edges)}total edges"
     )
 
     return success_count
@@ -361,9 +359,7 @@ def save_updated_agent_population(
             json.dump(agent_data, f, indent=2)
 
         logger.info(
-            f"Updated {
-                agent_config_file.name} with current interests for {
-                len(updated_interests)} agents"
+ f"Updated {agent_config_file.name}with current interests for {len(updated_interests)}agents"
         )
 
     except Exception as e:

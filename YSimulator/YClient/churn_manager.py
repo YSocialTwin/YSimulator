@@ -190,11 +190,7 @@ def evaluate_new_agents(
     non_churned_agents = [agent for agent in agent_profiles if agent.left_on is None]
 
     logger.info(
-        f"Non-churned agents: {
-            len(non_churned_agents)} out of {
-            len(agent_profiles)} total (churned: {
-                len(agent_profiles) -
-            len(non_churned_agents)})"
+ f"Non-churned agents: {len(non_churned_agents)}out of {len(agent_profiles)}total (churned: {len(agent_profiles) - len(non_churned_agents)})"
     )
 
     if not non_churned_agents:
