@@ -6,7 +6,7 @@ Handles agent selection logic including archetype-based sampling and action sele
 
 import logging
 import random
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional, Tuple
 
 from YSimulator.YClient.classes.ray_models import AgentProfile
 
@@ -28,10 +28,9 @@ class AgentSelector:
         agent_downcast: bool,
         actions_likelihood: Dict,
         logger: logging.Logger,
-        server=None,
+        follow_decay_manager=None,
         current_day: int = 0,
         current_hour: int = 0,
-        follow_action_decay_config: Dict = None,
     ):
         """
         Initialize AgentSelector.
@@ -41,19 +40,17 @@ class AgentSelector:
             agent_downcast: Whether to downcast certain agent types to rule-based
             actions_likelihood: Action probability configuration
             logger: Logger instance
-            server: Ray server actor handle (optional, for follow decay)
-            current_day: Current simulation day (optional, for follow decay)
-            current_hour: Current simulation hour (optional, for follow decay)
-            follow_action_decay_config: Configuration for time-based follow action decay
+            follow_decay_manager: Optional FollowDecayManager for time-based follow decay
+            current_day: Current simulation day (for follow decay)
+            current_hour: Current simulation hour (for follow decay)
         """
         self.archetype_distribution = archetype_distribution
         self.agent_downcast = agent_downcast
         self.actions_likelihood = actions_likelihood
         self.logger = logger
-        self.server = server
+        self.follow_decay_manager = follow_decay_manager
         self.current_day = current_day
         self.current_hour = current_hour
-        self.follow_action_decay_config = follow_action_decay_config
 
     def sample_agents_by_archetype(
         self, available_agents: List[AgentProfile], num_active: int
@@ -115,10 +112,9 @@ class AgentSelector:
             recent_posts,
             self.actions_likelihood,
             self.logger,
-            server=self.server,
+            follow_decay_manager=self.follow_decay_manager,
             current_day=self.current_day,
             current_hour=self.current_hour,
-            follow_action_decay_config=self.follow_action_decay_config,
         )
 
     def update_round_info(self, current_day: int, current_hour: int):

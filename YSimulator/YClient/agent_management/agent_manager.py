@@ -57,6 +57,15 @@ class AgentManager:
         self.client_id = client_id
         self.logger = logger
 
+        # Initialize follow decay manager if configured
+        follow_decay_manager = None
+        if follow_action_decay_config and follow_action_decay_config.get("enabled", False):
+            from YSimulator.YClient.simulation.follow_decay_manager import (
+                FollowDecayManager,
+            )
+
+            follow_decay_manager = FollowDecayManager(server, follow_action_decay_config, logger)
+
         # Initialize specialized components
         self.population_loader = PopulationLoader(config_path, client_id, logger)
         self.network_loader = NetworkLoader(server, client_id, logger)
@@ -65,10 +74,9 @@ class AgentManager:
             agent_downcast,
             actions_likelihood,
             logger,
-            server=server,
+            follow_decay_manager=follow_decay_manager,
             current_day=0,
             current_hour=0,
-            follow_action_decay_config=follow_action_decay_config,
         )
 
     # ========== Population Management ==========
