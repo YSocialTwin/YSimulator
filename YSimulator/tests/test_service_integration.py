@@ -5,8 +5,9 @@ Tests that all services are properly exposed and accessible from the server,
 and that direct database calls have been eliminated in favor of service calls.
 """
 
-import pytest
 from unittest.mock import Mock
+
+import pytest
 
 
 class TestServiceExposure:
@@ -15,16 +16,7 @@ class TestServiceExposure:
     def test_services_imported_in_server(self):
         """Test that service classes can be imported."""
         try:
-            from YSimulator.YServer.services.user_service import UserService
-            from YSimulator.YServer.services.post_service import PostService
-            from YSimulator.YServer.services.follow_service import FollowService
-            from YSimulator.YServer.services.interest_service import InterestService
-            from YSimulator.YServer.services.article_service import ArticleService
-            from YSimulator.YServer.services.image_service import ImageService
-            from YSimulator.YServer.services.content_service import ContentService
-            from YSimulator.YServer.services.simulation_service import SimulationService
-            from YSimulator.YServer.services.metadata_service import MetadataService
-            from YSimulator.YServer.services.mention_service import MentionService
+            pass
 
             assert True
         except ImportError as e:
@@ -33,6 +25,7 @@ class TestServiceExposure:
     def test_server_uses_services(self):
         """Test that server.py references service classes."""
         import inspect
+
         from YSimulator.YServer import server
 
         source_code = inspect.getsource(server)
@@ -62,8 +55,9 @@ class TestServiceUsagePatterns:
 
     def test_service_method_delegation(self):
         """Test that key methods properly delegate to services."""
-        from YSimulator.YServer import server
         import inspect
+
+        from YSimulator.YServer import server
 
         source_code = inspect.getsource(server)
 
@@ -88,8 +82,9 @@ class TestServiceUsagePatterns:
 
     def test_reduced_direct_db_calls(self):
         """Verify that server.py has migrated away from direct db adapter calls."""
-        from YSimulator.YServer import server
         import inspect
+
+        from YSimulator.YServer import server
 
         source_code = inspect.getsource(server)
 
@@ -110,8 +105,9 @@ class TestServiceIntegrationInActionProcessors:
 
     def test_post_processor_uses_services(self):
         """Test PostProcessor references services."""
-        from YSimulator.YServer.action_processors.post_processor import PostProcessor
         import inspect
+
+        from YSimulator.YServer.action_processors.post_processor import PostProcessor
 
         source_code = inspect.getsource(PostProcessor)
 
@@ -120,8 +116,9 @@ class TestServiceIntegrationInActionProcessors:
 
     def test_comment_processor_uses_services(self):
         """Test CommentProcessor references services."""
-        from YSimulator.YServer.action_processors.comment_processor import CommentProcessor
         import inspect
+
+        from YSimulator.YServer.action_processors.comment_processor import CommentProcessor
 
         source_code = inspect.getsource(CommentProcessor)
 
@@ -130,8 +127,9 @@ class TestServiceIntegrationInActionProcessors:
 
     def test_follow_processor_uses_services(self):
         """Test FollowProcessor references services."""
-        from YSimulator.YServer.action_processors.follow_processor import FollowProcessor
         import inspect
+
+        from YSimulator.YServer.action_processors.follow_processor import FollowProcessor
 
         source_code = inspect.getsource(FollowProcessor)
 

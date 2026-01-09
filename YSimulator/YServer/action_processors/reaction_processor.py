@@ -4,13 +4,13 @@ Reaction action processor.
 Handles reaction actions (LIKE, LOVE, ANGRY, SAD, LAUGH, etc.) on posts.
 """
 
-from typing import Any, Optional
 import logging
+from typing import Any, Optional
 
 from YSimulator.YServer.action_processors.base_processor import (
-    BaseActionProcessor,
     ActionContext,
     ActionResult,
+    BaseActionProcessor,
 )
 
 
@@ -62,7 +62,7 @@ class ReactionProcessor(BaseActionProcessor):
                 )
                 if count_updated:
                     self.logger.info(
-                        f"Incremented reaction count for post {action.target_post_id} after {action.action_type} by agent {action.agent_id}"
+                        f"Incremented reaction count for post {action.target_post_id}after {action.action_type}by agent {action.agent_id}"
                     )
                 else:
                     self.logger.warning(
@@ -149,11 +149,11 @@ class ReactionProcessor(BaseActionProcessor):
             success = self.services.metadata_service.add_post_sentiment(sentiment_data)
             if success:
                 self.logger.info(
-                    f"Added reaction sentiment for {action.action_type} on post {action.target_post_id}, topic {topic_id}"
+                    f"Added reaction sentiment for {action.action_type}on post {action.target_post_id}, topic {topic_id}"
                 )
             else:
                 self.logger.error(
-                    f"Failed to add reaction sentiment for {action.action_type} on post {action.target_post_id}, topic {topic_id}"
+                    f"Failed to add reaction sentiment for {action.action_type}on post {action.target_post_id}, topic {topic_id}"
                 )
 
     def _get_parent_sentiment(self, post_id: str) -> str:
@@ -182,7 +182,7 @@ class ReactionProcessor(BaseActionProcessor):
                 else:
                     parent_sentiment = "neu"
                 self.logger.info(
-                    f"Parent sentiment for reaction on post {post_id}: compound={sentiment_parent_compound:.3f} -> {parent_sentiment}"
+                    f"Parent sentiment for reaction on post {post_id}: compound={sentiment_parent_compound:.3f}-> {parent_sentiment}"
                 )
                 return parent_sentiment
             else:

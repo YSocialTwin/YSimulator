@@ -16,8 +16,9 @@ This module tests the two opinion dynamics models implemented in YSimulator:
 """
 
 import pytest
+
 from YSimulator.YClient.opinion_dynamics.confidence_bound import bounded_confidence
-from YSimulator.YClient.opinion_dynamics.llm_evaluation import shift_class, Direction
+from YSimulator.YClient.opinion_dynamics.llm_evaluation import Direction, shift_class
 
 
 class TestBoundedConfidence:

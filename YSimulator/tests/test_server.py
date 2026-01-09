@@ -4,14 +4,11 @@ Unit tests for YServer/server.py
 Tests the Orchestrator Server functionality with comprehensive mocking.
 """
 
-import pytest
-from unittest.mock import Mock, MagicMock, patch, call, PropertyMock
-from pathlib import Path
 import tempfile
-import json
-import time
-from datetime import datetime, timezone
+from pathlib import Path
+from unittest.mock import Mock, patch
 
+import pytest
 
 # Patch ray.remote at module level to allow direct instantiation of actors in tests
 pytest_mock_ray_remote = patch("ray.remote", lambda x: x)
@@ -102,8 +99,9 @@ class TestCompressRotatedLog:
 
     def test_compress_rotated_log(self):
         """Test log compression functionality."""
-        from YSimulator.YServer.server import compress_rotated_log
         import gzip
+
+        from YSimulator.YServer.server import compress_rotated_log
 
         with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".log") as source_file:
             source_file.write("Test log content\n")
@@ -139,7 +137,6 @@ class TestOrchestratorServerInit:
         from YSimulator.YServer.server import OrchestratorServer
 
         # Mock database middleware
-
         # Mock interest manager
         mock_interest_mgr = Mock()
         mock_interest_mgr_class.return_value = mock_interest_mgr
@@ -188,7 +185,7 @@ class TestOrchestratorServerInit:
             )
 
             # Verify redis is enabled
-            assert server.db.use_redis == True
+            assert server.db.use_redis is True
             mock_redis_class.assert_called_once()
 
     @patch("YSimulator.YServer.interests_modeling.InterestManager")
@@ -215,7 +212,7 @@ class TestOrchestratorServerInit:
             )
 
             # Verify archetype config
-            assert server.archetypes_enabled == True
+            assert server.archetypes_enabled is True
             assert server.archetype_distribution == {"casual": 0.7, "activist": 0.3}
 
 
@@ -452,7 +449,7 @@ class TestCheckFollowRelationship:
 
             result = server.check_follow_relationship("user1", "user2")
 
-            assert result == True
+            assert result is True
 
     @patch("YSimulator.YServer.interests_modeling.InterestManager")
     @patch("sqlalchemy.orm.Session")
@@ -478,7 +475,7 @@ class TestCheckFollowRelationship:
 
             result = server.check_follow_relationship("user1", "user3")
 
-            assert result == False
+            assert result is False
 
 
 class TestGetCurrentDay:
@@ -547,7 +544,7 @@ class TestHeartbeat:
             # Send heartbeat
             result = server.heartbeat("client_1")
 
-            assert result == True
+            assert result is True
             assert "client_1" in server.last_heartbeat
             assert isinstance(server.last_heartbeat["client_1"], float)
 
@@ -566,7 +563,7 @@ class TestHeartbeat:
             # Send heartbeat without registering
             result = server.heartbeat("unknown_client")
 
-            assert result == False
+            assert result is False
 
 
 class TestGetActiveClients:

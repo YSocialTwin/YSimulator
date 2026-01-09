@@ -7,13 +7,10 @@ managing client registration, agent actions, and simulation state progression.
 
 import functools
 import gzip
-import inspect
 import json
 import logging
 import os
-import random
 import shutil
-import sys
 import time
 import uuid
 from datetime import datetime, timezone
@@ -25,7 +22,6 @@ import ray
 from YSimulator.YClient.classes.ray_models import SimulationInstruction
 from YSimulator.YServer.classes.models import Recommendation
 from YSimulator.YServer.interests_modeling import InterestManager
-from YSimulator.YServer.recsys import content_recsys_db, content_recsys_redis, follow_recsys_db
 
 # Constants
 RECOMMENDATION_TTL_SECONDS = 7 * 24 * 60 * 60  # 7 days in seconds
@@ -56,7 +52,8 @@ def log_server_request(func: callable) -> callable:
         request_id = f"{time.time()}-{uuid.uuid4().hex[:10]}"
 
         # Extract client_name from arguments
-        # Only look for explicit client_id parameter - this represents the actual client making the request
+        # Only look for explicit client_id parameter - this represents the actual
+        # client making the request
         client_name = kwargs.get("client_id")
 
         # If not in kwargs, check if first positional arg is client_id by checking parameter name
@@ -73,7 +70,7 @@ def log_server_request(func: callable) -> callable:
                     # Only use first arg as client_name if the parameter is named 'client_id'
                     if first_param_name == "client_id" and isinstance(args[0], str):
                         client_name = args[0]
-            except (ValueError, TypeError, AttributeError) as e:
+            except (ValueError, TypeError, AttributeError):
                 # Signature inspection can fail for various reasons, fallback to "unknown"
                 pass
 
@@ -233,10 +230,9 @@ class OrchestratorServer:
             redis_client = self._create_redis_client(redis_config)
 
         # Initialize services using Repository/Service pattern
-        use_new_pattern = False
         try:
-            from YSimulator.YServer.service_factory import create_all_services, SERVICES_AVAILABLE
             from YSimulator.YServer.database_adapter import DatabaseServiceAdapter
+            from YSimulator.YServer.service_factory import SERVICES_AVAILABLE, create_all_services
 
             if not SERVICES_AVAILABLE:
                 raise ImportError("Repository/Service pattern dependencies not available")
@@ -283,7 +279,6 @@ class OrchestratorServer:
                 redis_client=redis_client,
                 logger=self.logger,
             )
-            use_new_pattern = True
             self.logger.info(
                 "Orchestrator server initialized - Repository/Service pattern 100% with direct service access!",
                 extra={
@@ -344,10 +339,10 @@ class OrchestratorServer:
 
         # Initialize coordination layer
         from YSimulator.YServer.coordination import (
-            ClientManager,
-            BarrierHandler,
-            RoundManager,
             ArchetypeManager,
+            BarrierHandler,
+            ClientManager,
+            RoundManager,
         )
 
         self.client_manager = ClientManager(
@@ -694,7 +689,7 @@ class OrchestratorServer:
             parent_sentiment: Compound sentiment of parent post (for comments)
         """
         self.logger.info(
-            f"_process_annotations called for post {post_id}: has_hashtags={bool(annotations.get('hashtags'))}, has_mentions={bool(annotations.get('mentions'))}, has_sentiment={bool(annotations.get('sentiment'))}, has_toxicity={bool(annotations.get('toxicity'))}, has_emotions={bool(annotations.get('emotions'))}"
+            f"_process_annotations called for post {post_id}: has_hashtags={bool( annotations.get('hashtags'))}, has_mentions={bool( annotations.get('mentions'))}, has_sentiment={bool( annotations.get('sentiment'))}, has_toxicity={bool( annotations.get('toxicity'))}, has_emotions={bool( annotations.get('emotions'))}"
         )
 
         # Process hashtags
@@ -723,7 +718,7 @@ class OrchestratorServer:
         sentiment_scores = annotations.get("sentiment")
         if sentiment_scores:
             self.logger.info(
-                f"Processing sentiment for post {post_id}: compound={sentiment_scores.get('compound', 0):.3f}"
+                f"Processing sentiment for post {post_id}: compound={sentiment_scores.get( 'compound', 0):.3f}"
             )
             # Get topics associated with this post/comment
             topic_ids = self.post_service.get_post_topics(post_id)
@@ -733,7 +728,7 @@ class OrchestratorServer:
                 topic_ids = self.post_service.get_post_topics(parent_post_id)
                 if topic_ids:
                     self.logger.info(
-                        f"Using {len(topic_ids)} topics from parent post {parent_post_id} for comment {post_id}"
+                        f"Using {len(topic_ids)}topics from parent post {parent_post_id}for comment {post_id}"
                     )
 
             if not topic_ids:
@@ -767,7 +762,7 @@ class OrchestratorServer:
 
             if topic_ids:
                 self.logger.info(
-                    f"Successfully added sentiment for post {post_id} across {len(topic_ids)} topics"
+                    f"Successfully added sentiment for post {post_id}across {len(topic_ids)}topics"
                 )
         else:
             self.logger.debug(f"No sentiment data in annotations for post {post_id}")
@@ -1021,7 +1016,8 @@ class OrchestratorServer:
             )
 
             self.logger.info(
-                f"[Server] 👥 Agent Registration: {registered_count} new, {skipped_count} existing, {pages_registered} pages"
+                f"[Server] 👥 Agent Registration: {registered_count} new, "
+                f"{skipped_count} existing, {pages_registered} pages"
             )
 
             return {
@@ -1695,7 +1691,8 @@ class OrchestratorServer:
 
             # Also save to Redis if enabled
             if self.use_redis:
-                # Store recommendation in Redis with key format: ysim:recommendations:{user_id}:{round_id}
+                # Store recommendation in Redis with key format:
+                # ysim:recommendations:{user_id}:{round_id}
                 rec_key = f"ysim:recommendations:{agent_id}:{self.current_round_id}"
                 self.redis_client.set(rec_key, post_ids_str)
                 # Set TTL to prevent unbounded growth

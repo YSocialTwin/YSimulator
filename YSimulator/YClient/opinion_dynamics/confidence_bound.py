@@ -1,3 +1,6 @@
+from typing import Union
+
+
 def bounded_confidence(
     x: float,
     y: float,
@@ -5,7 +8,7 @@ def bounded_confidence(
     mu: float = 0.5,
     theta: float = 0.0,
     cold_start: str = "neutral",
-) -> float | str:
+) -> Union[float, str]:
     """
     Calculate the confidence bound for a given score x and total count y.
 
@@ -19,7 +22,7 @@ def bounded_confidence(
     - discrete (bool): Whether to return discrete class labels.
 
     Returns:
-    - float | str: The confidence bound score or class label.
+    - Union[float, str]: The confidence bound score or class label.
     """
 
     if x is None:

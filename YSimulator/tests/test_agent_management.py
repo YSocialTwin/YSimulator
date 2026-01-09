@@ -9,16 +9,18 @@ Tests cover:
 - AgentSelector for agent selection and type determination
 """
 
-import pytest
-import tempfile
 import csv
+import tempfile
 from pathlib import Path
 from unittest.mock import Mock, patch
+
+import pytest
+
 from YSimulator.YClient.agent_management import (
     AgentManager,
-    PopulationLoader,
-    NetworkLoader,
     AgentSelector,
+    NetworkLoader,
+    PopulationLoader,
 )
 from YSimulator.YClient.classes.ray_models import AgentProfile
 

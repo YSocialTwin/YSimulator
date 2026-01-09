@@ -4,13 +4,13 @@ Post action processor.
 Handles POST actions including article posts, image posts, and regular posts with topics.
 """
 
-from typing import Any, Optional
 import logging
+from typing import Any, Optional
 
 from YSimulator.YServer.action_processors.base_processor import (
-    BaseActionProcessor,
     ActionContext,
     ActionResult,
+    BaseActionProcessor,
 )
 
 
@@ -149,10 +149,11 @@ class PostProcessor(BaseActionProcessor):
                                 article_content=article_content,
                             )
                     self.logger.info(
-                        f"Linked {len(existing_topic_ids)} existing article topics to post {post_id}"
+                        f"Linked {len(existing_topic_ids)}existing article topics to post {post_id}"
                     )
             else:
-                # Article not found in database - this shouldn't happen if website was loaded properly
+                # Article not found in database - this shouldn't happen if website was
+                # loaded properly
                 self.logger.warning(
                     f"Article {article_id} not found in database for post {post_id}. "
                     "This may indicate articles were not stored during website loading."

@@ -155,7 +155,7 @@ class AgentScheduler:
                     self._churned_agents_cache_valid = True
                     if churned_agent_ids:
                         self.logger.info(
-                            f"Refreshed churned agents cache: {len(churned_agent_ids)} churned agents"
+                            f"Refreshed churned agents cache: {len(churned_agent_ids)}churned agents"
                         )
                 else:
                     # Use cached value

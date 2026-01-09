@@ -4,12 +4,11 @@ Unit tests for utils/init_db.py
 Tests the database initialization functionality for different database backends.
 """
 
-import pytest
-from unittest.mock import Mock, MagicMock, patch, call
-from pathlib import Path
-from sqlalchemy import create_engine
 import tempfile
-import os
+from pathlib import Path
+from unittest.mock import Mock, patch
+
+import pytest
 
 
 class TestCreateDatabaseEngine:

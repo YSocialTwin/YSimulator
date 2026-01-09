@@ -5,7 +5,7 @@ This service encapsulates all interest/topic-related business operations.
 """
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import List, Optional
 
 from YSimulator.YServer.repositories.base_repository import InterestRepository
 

@@ -124,7 +124,7 @@ class RoundManager:
                 or cleanup_result.get("removed_interactions", 0) > 0
             ):
                 self.logger.info(
-                    f"Redis temporal cleanup complete - removed posts older than visibility_rounds",
+                    "Redis temporal cleanup complete - removed posts older than visibility_rounds",
                     extra={
                         "extra_data": {
                             "day": self.day,

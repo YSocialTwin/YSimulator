@@ -44,7 +44,7 @@ def recommend_random_follows(
         random.shuffle(candidate_ids)
         return candidate_ids[:n_neighbors]
 
-    except Exception as e:
+    except Exception:
         return []
 
 
@@ -113,7 +113,7 @@ def recommend_common_neighbors(
 
         return suggestions[:n_neighbors]
 
-    except Exception as e:
+    except Exception:
         return recommend_random_follows(session, agent_id, following_ids, n_neighbors)
 
 
@@ -223,7 +223,7 @@ def recommend_jaccard(
 
         return suggestions[:n_neighbors]
 
-    except Exception as e:
+    except Exception:
         return recommend_random_follows(session, agent_id, following_ids, n_neighbors)
 
 
@@ -330,7 +330,7 @@ def recommend_adamic_adar(
 
         return suggestions[:n_neighbors]
 
-    except Exception as e:
+    except Exception:
         return recommend_random_follows(session, agent_id, following_ids, n_neighbors)
 
 
@@ -387,7 +387,7 @@ def recommend_preferential_attachment(
 
         return suggestions[:n_neighbors]
 
-    except Exception as e:
+    except Exception:
         return recommend_random_follows(session, agent_id, following_ids, n_neighbors)
 
 
@@ -444,5 +444,5 @@ def apply_leaning_bias(
         )
         return weighted_suggestions
 
-    except Exception as e:
+    except Exception:
         return suggestions[:n_neighbors]

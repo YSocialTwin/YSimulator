@@ -17,26 +17,25 @@ The repository layer handles translation between API field names and database mo
 For complete mapping documentation, see docs/REPOSITORY_PATTERN.md
 """
 
+from unittest.mock import Mock, patch
+
 import pytest
-from unittest.mock import Mock, MagicMock, patch
-from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
-from YSimulator.YServer.repositories.sql_repository import (
-    SQLUserRepository,
-    SQLPostRepository,
-    SQLFollowRepository,
-    SQLInterestRepository,
-    SQLRecommendationRepository,
-)
 from YSimulator.YServer.repositories.redis_repository import (
-    RedisUserRepository,
-    RedisPostRepository,
     RedisFollowRepository,
     RedisInterestRepository,
+    RedisPostRepository,
     RedisRecommendationRepository,
+    RedisUserRepository,
 )
-
+from YSimulator.YServer.repositories.sql_repository import (
+    SQLFollowRepository,
+    SQLInterestRepository,
+    SQLPostRepository,
+    SQLRecommendationRepository,
+    SQLUserRepository,
+)
 
 # ============================================================================
 # SQL Repository Tests

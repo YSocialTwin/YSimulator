@@ -51,6 +51,6 @@ def toxicity(text, api_key: str) -> dict:
                 "FLIRTATION": toxicity_score["FLIRTATION"],
             }
 
-        except Exception as e:
+        except Exception:
             return {}
     return {}

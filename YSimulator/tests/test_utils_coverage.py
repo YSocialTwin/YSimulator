@@ -5,11 +5,8 @@ These tests cover configuration validation, logging setup,
 and utility functions that are critical to the application.
 """
 
-import os
-import tempfile
-from pathlib import Path
-from unittest.mock import Mock, patch, MagicMock
 import logging
+from pathlib import Path
 
 import pytest
 

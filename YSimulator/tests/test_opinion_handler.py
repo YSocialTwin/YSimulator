@@ -4,8 +4,10 @@ Unit tests for opinion dynamics handler.
 Tests OpinionHandler class with mocked database backends.
 """
 
+from unittest.mock import MagicMock, Mock, patch
+
 import pytest
-from unittest.mock import Mock, MagicMock, patch
+
 from YSimulator.YServer.opinion_dynamics.opinion_handler import OpinionHandler
 
 

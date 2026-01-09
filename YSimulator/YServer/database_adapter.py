@@ -9,16 +9,16 @@ All database operations go through this adapter with services handling the logic
 import logging
 from typing import Any, Dict, List, Optional, Set, Tuple
 
-from YSimulator.YServer.services.user_service import UserService
-from YSimulator.YServer.services.post_service import PostService
-from YSimulator.YServer.services.follow_service import FollowService
-from YSimulator.YServer.services.interest_service import InterestService
-from YSimulator.YServer.services.content_service import ContentService
 from YSimulator.YServer.services.article_service import ArticleService
+from YSimulator.YServer.services.content_service import ContentService
+from YSimulator.YServer.services.follow_service import FollowService
 from YSimulator.YServer.services.image_service import ImageService
-from YSimulator.YServer.services.simulation_service import SimulationService
-from YSimulator.YServer.services.metadata_service import MetadataService
+from YSimulator.YServer.services.interest_service import InterestService
 from YSimulator.YServer.services.mention_service import MentionService
+from YSimulator.YServer.services.metadata_service import MetadataService
+from YSimulator.YServer.services.post_service import PostService
+from YSimulator.YServer.services.simulation_service import SimulationService
+from YSimulator.YServer.services.user_service import UserService
 
 
 class DatabaseServiceAdapter:
@@ -251,10 +251,10 @@ class DatabaseServiceAdapter:
             bool: True if successful, False otherwise
         """
         # Extract parameters from dict - old middleware signature
-        user_id = follow_data.get("user_id")  # User being followed
-        follower_id = follow_data.get("follower_id")
-        action = follow_data.get("action", "follow")
-        round_id = follow_data.get("round")
+        _ = follow_data.get("user_id")  # User being followed
+        follow_data.get("follower_id")
+        follow_data.get("action", "follow")
+        follow_data.get("round")
 
         # Call repository directly with full data to maintain action field
         return self.follow_service.follow_repo.add_follow_full(follow_data)
@@ -389,9 +389,9 @@ class DatabaseServiceAdapter:
             bool: True if successful, False otherwise
         """
         # Extract parameters from dict for new service signature
-        user_id = mention_data.get("user_id")
-        post_id = mention_data.get("post_id")
-        round_id = mention_data.get("round")
+        mention_data.get("user_id")
+        mention_data.get("post_id")
+        mention_data.get("round")
 
         # Store the round_id and other fields for the actual repository to use
         # The service expects simplified parameters but repository needs full data

@@ -28,7 +28,7 @@ fixed as examples. Other write methods still need this fix applied.
 import logging
 from typing import Any, Dict, List, Optional, Set, Tuple
 
-from sqlalchemy import create_engine, func
+from sqlalchemy import func
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 
@@ -53,6 +53,7 @@ from YSimulator.YServer.classes.models import (
     UserInterest,
     Website,
 )
+
 from .base_repository import (
     ArticleRepository,
     FollowRepository,
@@ -492,7 +493,7 @@ class SQLPostRepository(PostRepository):
                 session.add(reaction)
                 session.commit()
                 return True
-            except Exception as e:
+            except Exception:
                 session.rollback()
                 raise
             finally:
@@ -539,7 +540,7 @@ class SQLPostRepository(PostRepository):
                 session.add(post_topic)
                 session.commit()
                 return True
-            except Exception as e:
+            except Exception:
                 session.rollback()
                 raise
             finally:
@@ -699,7 +700,7 @@ class SQLPostRepository(PostRepository):
 
                 session.commit()
                 self.logger.info(
-                    f"Initialized emotions table: {created_count} new emotions added, {len(emotions_data) - created_count} already existed"
+                    f"Initialized emotions table: {created_count}new emotions added, {len(emotions_data) - created_count}already existed"
                 )
                 return True
             finally:
@@ -736,7 +737,7 @@ class SQLPostRepository(PostRepository):
                 session.add(post_sentiment)
                 session.commit()
                 return True
-            except Exception as e:
+            except Exception:
                 session.rollback()
                 raise
             finally:
@@ -763,7 +764,7 @@ class SQLPostRepository(PostRepository):
                 session.add(post_sentiment)
                 session.commit()
                 return True
-            except Exception as e:
+            except Exception:
                 session.rollback()
                 raise
             finally:
@@ -834,7 +835,7 @@ class SQLPostRepository(PostRepository):
                 session.add(post_toxicity)
                 session.commit()
                 return True
-            except Exception as e:
+            except Exception:
                 session.rollback()
                 raise
             finally:
@@ -861,7 +862,7 @@ class SQLPostRepository(PostRepository):
                 session.add(post_toxicity)
                 session.commit()
                 return True
-            except Exception as e:
+            except Exception:
                 session.rollback()
                 raise
             finally:
@@ -923,8 +924,9 @@ class SQLPostRepository(PostRepository):
     def add_mention(self, post_id: str, mentioned_user_id: str) -> bool:
         """Add a mention to a post."""
         try:
-            from YSimulator.YServer.classes.models import Mention, Post
             import uuid
+
+            from YSimulator.YServer.classes.models import Mention, Post
 
             session = Session(self.engine)
             try:
@@ -942,7 +944,7 @@ class SQLPostRepository(PostRepository):
                 session.add(mention)
                 session.commit()
                 return True
-            except Exception as e:
+            except Exception:
                 session.rollback()
                 raise
             finally:
@@ -954,8 +956,9 @@ class SQLPostRepository(PostRepository):
     def add_mention_full(self, mention_data: Dict[str, Any]) -> bool:
         """Add a mention using full dict (old middleware signature)."""
         try:
-            from YSimulator.YServer.classes.models import Mention
             import uuid
+
+            from YSimulator.YServer.classes.models import Mention
 
             session = Session(self.engine)
             try:
@@ -968,7 +971,7 @@ class SQLPostRepository(PostRepository):
                 session.add(mention)
                 session.commit()
                 return True
-            except Exception as e:
+            except Exception:
                 session.rollback()
                 raise
             finally:
@@ -1064,7 +1067,7 @@ class SQLPostRepository(PostRepository):
                 mention.answered = 1  # Model uses answered (0=unreplied, 1=replied)
                 session.commit()
                 return True
-            except Exception as e:
+            except Exception:
                 session.rollback()
                 raise
             finally:
@@ -1091,7 +1094,7 @@ class SQLPostRepository(PostRepository):
                 mention.answered = 1  # Model uses answered (0=unreplied, 1=replied)
                 session.commit()
                 return True
-            except Exception as e:
+            except Exception:
                 session.rollback()
                 raise
             finally:
@@ -1146,7 +1149,7 @@ class SQLFollowRepository(FollowRepository):
                 session.add(follow)
                 session.commit()
                 return True
-            except Exception as e:
+            except Exception:
                 session.rollback()
                 raise
             finally:
@@ -1320,7 +1323,7 @@ class SQLInterestRepository(InterestRepository):
                 session.add(user_interest)
                 session.commit()
                 return True
-            except Exception as e:
+            except Exception:
                 session.rollback()
                 raise
             finally:
@@ -1359,7 +1362,7 @@ class SQLInterestRepository(InterestRepository):
                 session.add(agent_opinion)
                 session.commit()
                 return True
-            except Exception as e:
+            except Exception:
                 session.rollback()
                 raise
             finally:
@@ -1599,7 +1602,7 @@ class SQLArticleRepository(ArticleRepository):
                 session.add(website)
                 session.commit()
                 return website_id
-            except Exception as e:
+            except Exception:
                 session.rollback()
                 raise
             finally:
@@ -1715,7 +1718,7 @@ class SQLArticleRepository(ArticleRepository):
                 session.add(article)
                 session.commit()
                 return article_id
-            except Exception as e:
+            except Exception:
                 session.rollback()
                 raise
             finally:
@@ -1818,7 +1821,7 @@ class SQLArticleRepository(ArticleRepository):
                 session.add(article_topic)
                 session.commit()
                 return True
-            except Exception as e:
+            except Exception:
                 session.rollback()
                 raise
             finally:

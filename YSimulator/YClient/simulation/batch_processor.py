@@ -19,14 +19,14 @@ from typing import List, Optional, Tuple
 import ray
 
 from YSimulator.YClient.classes.ray_models import ActionDTO
-from YSimulator.YClient.text_support.text_annotator import annotate_text
 from YSimulator.YClient.llm_utils import (
     BatchHandler,
-    ResponseParser,
     CostTracker,
     LLMManager,
+    ResponseParser,
     RetryHandler,
 )
+from YSimulator.YClient.text_support.text_annotator import annotate_text
 
 # Constants
 REACTION_TYPES = ["LIKE", "LOVE", "LAUGH", "ANGRY", "SAD", "IGNORE"]
@@ -141,7 +141,7 @@ class BatchProcessor:
                 action.image_id = image_id  # Set image_id as attribute
                 action.topic_ids = topic_ids  # Store for later processing
                 self.logger.info(
-                    f"LLM image post for agent {a_id}: image_id={image_id}, has_image_id_attr={hasattr(action, 'image_id')}, topics={len(topic_ids)}, content_len={len(res_txt)}"
+                    f"LLM image post for agent {a_id}: image_id={image_id}, has_image_id_attr={hasattr( action, 'image_id')}, topics={len(topic_ids)}, content_len={len(res_txt)}"
                 )
             else:
                 # Regular/news post: (agent_id, cluster_id, future, topic_or_article_id)
@@ -179,7 +179,7 @@ class BatchProcessor:
             )
             action.annotations = annotations
             self.logger.info(
-                f"LLM post annotated for agent {a_id}: has_sentiment={bool(annotations.get('sentiment'))}, has_toxicity={bool(annotations.get('toxicity'))}, has_emotions={bool(annotations.get('emotions'))}, hashtags={len(annotations.get('hashtags', []))}, mentions={len(annotations.get('mentions', []))}"
+                f"LLM post annotated for agent {a_id}: has_sentiment={bool( annotations.get('sentiment'))}, has_toxicity={bool( annotations.get('toxicity'))}, has_emotions={bool( annotations.get('emotions'))}, hashtags={len( annotations.get( 'hashtags', []))}, mentions={len( annotations.get( 'mentions', []))}"
             )
 
             actions.append(action)
@@ -268,7 +268,8 @@ class BatchProcessor:
                 determined_action_type = action_type_override if action_type_override else "COMMENT"
 
                 self.logger.debug(
-                    f"[REPLY] LLM generated {determined_action_type} for agent {a_id}: '{res_act[:50]}...' (is_mention_reply: {mention_id is not None})"
+                    f"[REPLY] LLM generated {determined_action_type} for agent {a_id}: "
+                    f"'{res_act[:50]}...' (is_mention_reply: {mention_id is not None})"
                 )
 
                 # Annotate the text
@@ -281,7 +282,7 @@ class BatchProcessor:
                     llm_handle=self.llm,
                 )
                 self.logger.info(
-                    f"LLM {determined_action_type} annotated for agent {a_id}: has_sentiment={bool(annotations.get('sentiment'))}, has_toxicity={bool(annotations.get('toxicity'))}, has_emotions={bool(annotations.get('emotions'))}, hashtags={len(annotations.get('hashtags', []))}, mentions={len(annotations.get('mentions', []))}"
+                    f"LLM {determined_action_type}annotated for agent {a_id}: has_sentiment={bool( annotations.get('sentiment'))}, has_toxicity={bool( annotations.get('toxicity'))}, has_emotions={bool( annotations.get('emotions'))}, hashtags={len( annotations.get( 'hashtags', []))}, mentions={len( annotations.get( 'mentions', []))}"
                 )
 
                 # Calculate opinion updates

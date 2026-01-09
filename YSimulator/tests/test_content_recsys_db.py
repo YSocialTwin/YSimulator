@@ -6,7 +6,8 @@ Uses the same successful mocking strategy as follow_recsys_db.py tests.
 """
 
 import unittest
-from unittest.mock import Mock, MagicMock, patch, call
+from unittest.mock import Mock, patch
+
 from sqlalchemy.orm import Session
 
 
@@ -252,7 +253,7 @@ class TestRecommendRchronoFollowers(unittest.TestCase):
             mock_query.all.return_value = [("post1",), ("post2",)]
 
             # With 10 posts and 0.6 ratio, should get 6 from followers, 4 additional
-            result = recommend_rchrono_followers(mock_session, "agent1", 1, 0, 10, 0.6)
+            recommend_rchrono_followers(mock_session, "agent1", 1, 0, 10, 0.6)
 
             # First limit call should be 6 (60% of 10)
             calls = mock_query.limit.call_args_list

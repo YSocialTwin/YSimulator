@@ -115,7 +115,7 @@ class LLMService:
                     ne=agent_attrs.get("ne", "average in neuroticism"),
                 )
                 return persona
-            except KeyError as e:
+            except KeyError:
                 # If template formatting fails, fall back to cluster-based persona
                 pass
 
@@ -221,7 +221,7 @@ class LLMService:
                 commentary = commentary[:277] + "..."
 
             return commentary
-        except Exception as e:
+        except Exception:
             # Fallback if LLM fails - truncate title if too long
             title = article_title if len(article_title) <= 97 else article_title[:97] + "..."
             return f"Check out this article: {title}"
@@ -313,7 +313,7 @@ class LLMService:
                 comment = comment[:277] + "..."
 
             return comment
-        except Exception as e:
+        except Exception:
             # Fallback if LLM fails
             return "Interesting perspective!"
 
@@ -393,7 +393,7 @@ class LLMService:
                 commentary = commentary[:197] + "..."
 
             return commentary
-        except Exception as e:
+        except Exception:
             # Fallback if LLM fails
             return "Sharing this!"
 
@@ -468,7 +468,7 @@ class LLMService:
 
             # Default to fallback reaction if unclear
             return DEFAULT_FALLBACK_REACTION
-        except Exception as e:
+        except Exception:
             # Fallback if LLM fails
             return DEFAULT_FALLBACK_REACTION
 
@@ -582,7 +582,7 @@ class LLMService:
 
             # Default to fallback reaction if unclear
             return DEFAULT_FALLBACK_REACTION
-        except Exception as e:
+        except Exception:
             # Fallback if LLM fails
             return DEFAULT_FALLBACK_REACTION
 
@@ -669,7 +669,7 @@ class LLMService:
 
             # Return up to 2 single-word topics
             return single_word_topics[:2]
-        except Exception as e:
+        except Exception:
             # If extraction fails, return empty list
             return []
 
@@ -713,7 +713,7 @@ class LLMService:
             valid_emotions = emotion_list.split(", ")
             emotions = [e for e in emotions if e in valid_emotions]
             return emotions
-        except Exception as e:
+        except Exception:
             # If extraction fails, return empty list
             return []
 
@@ -732,7 +732,7 @@ class LLMService:
         """
         # Check if vision LLM is available
         if not self.llm_v:
-            logger.warning(f" Vision LLM (llm_v) not configured, cannot describe image")
+            logger.warning(" Vision LLM (llm_v) not configured, cannot describe image")
             return None
 
         # Get prompts from configuration with defaults
@@ -763,7 +763,7 @@ class LLMService:
                 logger.info(f" Vision LLM returned description ({len(result)} chars)")
                 return result
             else:
-                logger.warning(f" Vision LLM returned empty description")
+                logger.warning(" Vision LLM returned empty description")
                 return None
         except Exception as e:
             # If description fails, return None
@@ -847,7 +847,7 @@ class LLMService:
 
                 return random.random()
 
-        except Exception as e:
+        except Exception:
             # If extraction fails, return random value
             import random
 

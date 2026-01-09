@@ -262,7 +262,8 @@ class RedisUserRepository(UserRepository):
 
     def get_inactive_agents(self, current_day: int, inactivity_threshold: int) -> List[str]:
         """Get inactive agents."""
-        # Note: db_middleware.get_inactive_agents requires both current_day and inactivity_threshold parameters
+        # Note: db_middleware.get_inactive_agents requires both current_day and
+        # inactivity_threshold parameters
         return self.db_middleware.get_inactive_agents(current_day, inactivity_threshold)
 
 
@@ -564,7 +565,6 @@ class RedisPostRepository(PostRepository):
             "initialize_emotions_table is typically a SQL-only operation. "
             "Redis implementation will not populate emotions."
         )
-        pass
 
     def add_post_sentiment(self, post_id: str, sentiment_score: float) -> bool:
         """Add sentiment score to a post."""

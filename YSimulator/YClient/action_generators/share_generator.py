@@ -82,7 +82,8 @@ class ShareGenerator(BaseActionGenerator):
             future = generate_llm_share_async(
                 self.context.llm, agent.cluster, post_content, agent_attrs, author_name
             )
-            # Store with action_type indicator: (agent_id, cluster_id, target_post_id, future, action_type)
+            # Store with action_type indicator: (agent_id, cluster_id, target_post_id,
+            # future, action_type)
             result.pending_llm_calls.append((agent.id, agent.cluster, target_post, future, "SHARE"))
             result.metadata["author_name"] = author_name
         else:

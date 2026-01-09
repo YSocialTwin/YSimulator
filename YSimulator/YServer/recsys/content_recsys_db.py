@@ -7,7 +7,7 @@ All functions follow a consistent signature for easy integration with the server
 
 from typing import List
 
-from sqlalchemy import and_, case, desc, func, or_
+from sqlalchemy import and_, desc, func, or_
 from sqlalchemy.orm import aliased
 
 from YSimulator.YServer.classes.models import (

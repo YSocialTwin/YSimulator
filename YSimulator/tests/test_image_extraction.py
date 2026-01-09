@@ -8,19 +8,19 @@ Tests the complete pipeline:
 """
 
 import sys
-import os
+import unittest
+import uuid
 from pathlib import Path
+from unittest.mock import MagicMock
+
+from YSimulator.YServer.classes.db_middleware import DatabaseMiddleware
+from YSimulator.YServer.classes.models import Image
 
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent))
 
-import unittest
-from unittest.mock import Mock, MagicMock, patch
-import uuid
 
 # Import the modules we need to test
-from YSimulator.YServer.classes.models import Image, Article, Website
-from YSimulator.YServer.classes.db_middleware import DatabaseMiddleware
 
 
 class TestImageExtraction(unittest.TestCase):
@@ -152,7 +152,7 @@ class TestImageExtraction(unittest.TestCase):
             self.assertEqual(saved_image.url, image_data["url"])
             self.assertEqual(saved_image.description, image_data["description"])
             self.assertEqual(saved_image.article_id, article_id)
-            print(f"✓ Image data verified in database")
+            print("✓ Image data verified in database")
         finally:
             session.close()
 
@@ -241,7 +241,7 @@ class TestImageExtraction(unittest.TestCase):
         self.assertEqual(len(image_urls), 1)
         self.assertEqual(image_urls[0], duplicate_url)
 
-        print(f"✓ Correctly filtered duplicate URLs")
+        print("✓ Correctly filtered duplicate URLs")
 
     def test_06_llm_service_describe_image(self):
         """Test that LLMService.describe_image method exists and has correct signature."""

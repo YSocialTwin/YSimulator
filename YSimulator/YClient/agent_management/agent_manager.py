@@ -7,7 +7,7 @@ Phase 6 of CLIENT_REFACTORING_REPORT.md.
 
 import logging
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List
 
 from YSimulator.YClient.agent_management.agent_selector import AgentSelector
 from YSimulator.YClient.agent_management.network_loader import NetworkLoader

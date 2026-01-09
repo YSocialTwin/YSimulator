@@ -5,11 +5,11 @@ Tests the NewsFeedService Ray actor with extensive mocking for Ray actors,
 feedparser, and database interactions.
 """
 
-import pytest
-from unittest.mock import Mock, MagicMock, patch, call
 import time
-from datetime import datetime
 import uuid
+from unittest.mock import Mock, patch
+
+import pytest
 
 
 class MockNewsFeedService:

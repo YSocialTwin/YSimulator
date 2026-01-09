@@ -131,7 +131,8 @@ class ReadGenerator(BaseActionGenerator):
                     )
 
                     # Choose reaction based on opinion
-                    # Higher opinion -> more likely to LIKE, lower -> more likely to express negative reaction
+                    # Higher opinion -> more likely to LIKE, lower -> more likely to express
+                    # negative reaction
                     if avg_opinion > 0.6:
                         # Positive opinion - mostly LIKE
                         reaction_type = random.choices(

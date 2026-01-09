@@ -5,9 +5,9 @@ These tests cover content recommendation, follow recommendation,
 and interest tracking functionality.
 """
 
+from unittest.mock import Mock, patch
+
 import pytest
-from unittest.mock import Mock, patch, MagicMock
-from typing import List, Dict, Any
 
 
 class TestContentRecommendationSystem:
@@ -138,8 +138,8 @@ class TestInterestManager:
     def test_interest_manager_initialization(self):
         """Test interest manager initialization."""
         try:
-            from YSimulator.YServer.interests_modeling.interest_manager import InterestManager
             from YSimulator.YServer.classes.db_middleware import DatabaseMiddleware
+            from YSimulator.YServer.interests_modeling.interest_manager import InterestManager
 
             # Create mock db_middleware
             db_config = {"type": "sqlite", "sqlite": {"filename": ":memory:"}}
@@ -155,8 +155,8 @@ class TestInterestManager:
     def test_interest_manager_update_interests(self):
         """Test updating user interests."""
         try:
-            from YSimulator.YServer.interests_modeling.interest_manager import InterestManager
             from YSimulator.YServer.classes.db_middleware import DatabaseMiddleware
+            from YSimulator.YServer.interests_modeling.interest_manager import InterestManager
 
             db_config = {"type": "sqlite", "sqlite": {"filename": ":memory:"}}
             db_middleware = DatabaseMiddleware(
@@ -181,8 +181,8 @@ class TestInterestManager:
     def test_interest_manager_track_interaction(self):
         """Test tracking interest-based interactions."""
         try:
-            from YSimulator.YServer.interests_modeling.interest_manager import InterestManager
             from YSimulator.YServer.classes.db_middleware import DatabaseMiddleware
+            from YSimulator.YServer.interests_modeling.interest_manager import InterestManager
 
             db_config = {"type": "sqlite", "sqlite": {"filename": ":memory:"}}
             db_middleware = DatabaseMiddleware(
@@ -207,8 +207,8 @@ class TestInterestManager:
     def test_interest_manager_get_trending_topics(self):
         """Test getting trending topics."""
         try:
-            from YSimulator.YServer.interests_modeling.interest_manager import InterestManager
             from YSimulator.YServer.classes.db_middleware import DatabaseMiddleware
+            from YSimulator.YServer.interests_modeling.interest_manager import InterestManager
 
             db_config = {"type": "sqlite", "sqlite": {"filename": ":memory:"}}
             db_middleware = DatabaseMiddleware(

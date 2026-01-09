@@ -11,7 +11,7 @@ def test_article_retrieval():
 
     # Expected Redis key
     article_id = "article-uuid-123"
-    redis_key = f"ysim:articles:{article_id}"
+    _ = f"ysim:articles:{article_id}"
 
     # Simulate Redis hgetall result
     mock_article_data = {
@@ -31,7 +31,7 @@ def test_article_retrieval():
     assert decoded["id"] == "article-uuid-123"
     assert decoded["title"] == "Test Article"
     assert all(isinstance(k, str) for k in decoded.keys())
-    print(f"  ✓ Article data properly decoded from Redis")
+    print("  ✓ Article data properly decoded from Redis")
 
 
 def test_website_rss_index():
@@ -69,7 +69,7 @@ def test_get_website_by_rss_lookup():
 
     assert rss_index_key == f"ysim:website:by_rss:{rss_url}"
     assert website_data_key == f"ysim:websites:{expected_website_id}"
-    print(f"  ✓ RSS URL lookup flow correct")
+    print("  ✓ RSS URL lookup flow correct")
 
 
 def test_image_ids_set():

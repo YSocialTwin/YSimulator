@@ -61,7 +61,7 @@ class OpinionInferencer:
         try:
             # Check if agent profile exists
             if not agent_profile:
-                self.logger.warning(f"Agent profile not found, using random opinion")
+                self.logger.warning("Agent profile not found, using random opinion")
                 return random.random()
 
             # Check if this is an LLM agent

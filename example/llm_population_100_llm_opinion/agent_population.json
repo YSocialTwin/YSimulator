@@ -111,12 +111,20 @@
           "democrat",
           "ice",
           "election",
-          "trump"
+          "trump",
+          "dnc",
+          "supreme",
+          "us",
+          "covid-19"
         ],
         [
-          8,
+          9,
           5,
           5,
+          1,
+          1,
+          1,
+          1,
           1,
           1,
           1,
@@ -237,12 +245,28 @@
           "Facts",
           "Verification",
           "senate",
-          "immigration"
+          "immigration",
+          "no",
+          "one",
+          "us",
+          "tariff",
+          "transgender",
+          "catholic",
+          "military",
+          "us-venezuela"
         ],
         [
           7,
           5,
           4,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          2,
+          2,
           1,
           1
         ]
@@ -361,12 +385,24 @@
           "Facts",
           "Verification",
           "stacey",
-          "2026"
+          "2026",
+          "donald",
+          "california",
+          "us",
+          "payment",
+          "dnc",
+          "supreme"
         ],
         [
           7,
-          5,
+          6,
           4,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
           1,
           1
         ]
@@ -607,12 +643,20 @@
         [
           "Education",
           "Learning",
-          "Teaching"
+          "Teaching",
+          "nationwide",
+          "immigration",
+          "transgender",
+          "catholic"
         ],
         [
           8,
-          6,
-          4
+          7,
+          4,
+          1,
+          1,
+          1,
+          1
         ]
       ],
       "opinions": {
@@ -727,12 +771,16 @@
         [
           "Discovery",
           "Learning",
-          "Curiosity"
+          "Curiosity",
+          "immigration",
+          "democratic"
         ],
         [
           8,
           5,
-          5
+          5,
+          1,
+          1
         ]
       ],
       "opinions": {
@@ -976,10 +1024,16 @@
           "melanias",
           "ice",
           "conservative",
-          "pennsylvania"
+          "pennsylvania",
+          "house",
+          "republican",
+          "no",
+          "one",
+          "transgender",
+          "catholic"
         ],
         [
-          6,
+          7,
           5,
           2,
           1,
@@ -988,6 +1042,12 @@
           1,
           2,
           2,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
           1,
           1,
           1
@@ -1105,12 +1165,16 @@
         [
           "Education",
           "Learning",
-          "Teaching"
+          "Teaching",
+          "donald",
+          "california"
         ],
         [
           8,
           6,
-          4
+          4,
+          1,
+          1
         ]
       ],
       "opinions": {
@@ -1227,12 +1291,20 @@
           "Education",
           "Technology",
           "us",
-          "potential"
+          "potential",
+          "donald",
+          "california",
+          "dnc",
+          "supreme"
         ],
         [
           5,
           5,
           2,
+          1,
+          1,
+          1,
+          1,
           1,
           1
         ]
@@ -1727,10 +1799,16 @@
           "president",
           "melanias",
           "us",
-          "strategic"
+          "strategic",
+          "donald",
+          "california",
+          "north",
+          "truck",
+          "lawsuits",
+          "catholic"
         ],
         [
-          8,
+          10,
           5,
           5,
           1,
@@ -1740,6 +1818,12 @@
           1,
           1,
           2,
+          1,
+          2,
+          4,
+          1,
+          1,
+          1,
           1
         ]
       ],
@@ -1855,12 +1939,16 @@
         [
           "Learning",
           "Education",
-          "Technology"
+          "Technology",
+          "us-venezuela",
+          "president"
         ],
         [
           5,
           5,
-          2
+          2,
+          1,
+          1
         ]
       ],
       "opinions": {
@@ -1975,12 +2063,20 @@
         [
           "Education",
           "Learning",
-          "Teaching"
+          "Teaching",
+          "donald",
+          "california",
+          "us",
+          "covid-19"
         ],
         [
           8,
           6,
-          4
+          4,
+          1,
+          1,
+          1,
+          1
         ]
       ],
       "opinions": {
@@ -2597,12 +2693,20 @@
           "us",
           "russia",
           "conservative",
-          "pennsylvania"
+          "pennsylvania",
+          "police",
+          "immigration",
+          "us-venezuela",
+          "venezuela"
         ],
         [
           8,
           6,
           5,
+          1,
+          1,
+          1,
+          1,
           1,
           1,
           1,
@@ -2961,12 +3065,20 @@
         [
           "Discovery",
           "Learning",
-          "Curiosity"
+          "Curiosity",
+          "us",
+          "financial",
+          "north",
+          "illegal"
         ],
         [
-          10,
+          12,
           5,
-          5
+          5,
+          1,
+          1,
+          1,
+          1
         ]
       ],
       "opinions": {
@@ -3082,12 +3194,16 @@
           "News",
           "Trends",
           "Engagement",
-          "Education"
+          "Education",
+          "police",
+          "immigration"
         ],
         [
           9,
           6,
           5,
+          1,
+          1,
           1
         ]
       ],
@@ -3203,12 +3319,16 @@
         [
           "Education",
           "Learning",
-          "Teaching"
+          "Teaching",
+          "venezuela",
+          "us"
         ],
         [
           8,
           6,
-          4
+          4,
+          1,
+          1
         ]
       ],
       "opinions": {
@@ -3575,12 +3695,14 @@
           "Learning",
           "Teaching",
           "us",
-          "strategic"
+          "strategic",
+          "senate"
         ],
         [
           8,
           6,
           4,
+          1,
           1,
           1
         ]
@@ -3819,14 +3941,18 @@
           "Education",
           "Technology",
           "president",
-          "melanias"
+          "melanias",
+          "transgender",
+          "catholic"
         ],
         [
           5,
           5,
           2,
           2,
-          2
+          2,
+          1,
+          1
         ]
       ],
       "opinions": {
@@ -3942,12 +4068,20 @@
           "Discovery",
           "Learning",
           "Curiosity",
-          "News"
+          "News",
+          "transgender",
+          "catholic",
+          "military",
+          "us-venezuela"
         ],
         [
           8,
           5,
           5,
+          1,
+          2,
+          2,
+          1,
           1
         ]
       ],

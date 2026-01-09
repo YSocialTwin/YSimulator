@@ -5,9 +5,9 @@ Tests all recommendation algorithms with extensive mocking and edge cases.
 Targeting 80%+ coverage.
 """
 
+from unittest.mock import MagicMock, Mock, patch
+
 import pytest
-from unittest.mock import Mock, MagicMock, patch
-from typing import List, Dict, Any
 
 
 class TestRecommendRchronoRedis:

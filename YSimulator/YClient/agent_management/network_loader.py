@@ -164,7 +164,7 @@ class NetworkLoader:
                 )
 
         self.logger.info(
-            f"Network creation complete: {success_count} successful, {failed_count} failed out of {len(edges)} total edges"
+            f"Network creation complete: {success_count}successful, {failed_count}failed out of {len(edges)}total edges"
         )
 
         return success_count

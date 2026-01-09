@@ -372,7 +372,7 @@ def generate_llm_news_commentary(
     try:
         commentary = ray.get(llm_service.generate_news_commentary.remote(article, website_name))
         return commentary
-    except Exception as e:
+    except Exception:
         # Fallback if LLM fails - truncate title if too long
         article_title = article.get("title", "News Article")
         title = article_title if len(article_title) <= 97 else article_title[:97] + "..."

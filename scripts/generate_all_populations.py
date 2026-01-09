@@ -5,10 +5,9 @@ Creates variations with different population sizes and LLM/rule-based ratios.
 """
 
 import os
-import sys
 import shutil
-import json
 import subprocess
+import sys
 
 # Add parent directory to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
@@ -95,7 +94,7 @@ random.seed(42)
 def generate_agent_population():
     """Generate {total} agents and 1 page agent."""
     agents = []
-    
+
     # 1 Page agent (always LLM-enabled)
     page_agent = {{
         "id": str(uuid.uuid5(uuid.NAMESPACE_DNS, "NewsPage")),
@@ -126,20 +125,20 @@ def generate_agent_population():
         ]
     }}
     agents.append(page_agent)
-    
+
     # Archetypes distribution
     archetypes = ["validator", "broadcaster", "explorer"]
-    
+
     # Political leanings
     leanings = ["left", "center", "right", "neutral"]
-    
+
     # Activity profiles
     activity_profiles = ["Always On", "Morning Active", "Evening Active"]
-    
+
     # Recommendation systems
     recsys_types = ["random", "rchrono", "rchrono_followers"]
     frecsys_types = ["random", "common_neighbors", "jaccard", "adamic_adar", "preferential_attachment"]
-    
+
     # Interest topics for agents
     interests_options = [
         (["Analysis", "Facts", "Verification"], [7, 5, 4]),
@@ -148,26 +147,26 @@ def generate_agent_population():
         (["Discovery", "Learning", "Curiosity"], [8, 5, 5]),
         (["Education", "Learning", "Teaching"], [8, 6, 4])
     ]
-    
+
     # Generate {total} agents
     for i in range({total}):
         # First {rule_count} are rule-based, next {llm_count} are LLM
         is_llm = i >= {rule_count}
-        
+
         username = f"agent_{{i:0{len(str(total))}d}}"
         agent_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, username))
-        
+
         # Distribute across archetypes evenly
         archetype = archetypes[i % 3]
         cluster = i % 3
-        
+
         # Random attributes
         age = random.randint(18, 65)
         leaning = random.choice(leanings)
         activity_profile = random.choice(activity_profiles)
         daily_activity_level = random.randint(1, 3)
         round_actions = random.randint(2, 5)
-        
+
         agent = {{
             "id": agent_id,
             "username": username,
@@ -193,7 +192,7 @@ def generate_agent_population():
             "interests": random.choice(interests_options)
         }}
         agents.append(agent)
-    
+
     return {{
         "agents": agents,
         "generation_config": {{
@@ -226,17 +225,17 @@ def generate_random_network(agents, avg_degree=10):
     edges = []
     usernames = [agent["username"] for agent in agents]
     n = len(usernames)
-    
+
     # Calculate probability for desired average degree
     # avg_degree ≈ p * (n - 1), so p = avg_degree / (n - 1)
     p = avg_degree / (n - 1) if n > 1 else 0
-    
+
     # Generate edges
     for i, follower in enumerate(usernames):
         for j, followee in enumerate(usernames):
             if i != j and random.random() < p:
                 edges.append((follower, followee))
-    
+
     return edges
 
 def write_network_csv(edges, filepath):
@@ -393,38 +392,38 @@ def generate_server_config():
 def main():
     """Generate all configuration files."""
     import os
-    
+
     output_dir = os.path.dirname(os.path.abspath(__file__))
-    
+
     print("Generating agent population...")
     agent_data = generate_agent_population()
-    
+
     with open(os.path.join(output_dir, "agent_population.json"), 'w') as f:
         json.dump(agent_data, f, indent=2)
     print(f"✓ Created agent_population.json with {{len(agent_data['agents'])}} agents")
     print(f"  - 1 page agent (LLM-enabled)")
     print(f"  - {llm_count} LLM-enabled agents")
     print(f"  - {rule_count} rule-based agents")
-    
+
     print("\\nGenerating random social network...")
     edges = generate_random_network(agent_data['agents'], avg_degree=10)
     network_path = os.path.join(output_dir, "network.csv")
     write_network_csv(edges, network_path)
     print(f"✓ Created network.csv with {{len(edges)}} follow relationships")
     print(f"  - Average degree: ~{{len(edges) / len(agent_data['agents']):.1f}} connections per agent")
-    
+
     print("\\nGenerating simulation configuration...")
     sim_config = generate_simulation_config()
     with open(os.path.join(output_dir, "simulation_config.json"), 'w') as f:
         json.dump(sim_config, f, indent=2)
     print("✓ Created simulation_config.json")
-    
+
     print("\\nGenerating server configuration...")
     server_config = generate_server_config()
     with open(os.path.join(output_dir, "server_config.json"), 'w') as f:
         json.dump(server_config, f, indent=2)
     print("✓ Created server_config.json")
-    
+
     print("\\n" + "="*60)
     print("Configuration generation complete!")
     print("="*60)
@@ -437,7 +436,7 @@ if __name__ == "__main__":
     with open(script_path, "w") as f:
         f.write(script_content)
     os.chmod(script_path, 0o755)
-    print(f"  ✓ Created generate_population.py")
+    print("  ✓ Created generate_population.py")
 
 
 def create_readme(dest_dir, pop_config):
@@ -445,7 +444,7 @@ def create_readme(dest_dir, pop_config):
     total = pop_config["total"]
     llm_count = int(total * pop_config["llm_ratio"])
     rule_count = total - llm_count
-    pop_type = pop_config["type"].capitalize()
+    pop_config["type"].capitalize()
 
     if pop_config["llm_ratio"] == 1.0:
         agent_desc = f"**{total} LLM-enabled agents**"
@@ -573,13 +572,13 @@ Edit `simulation_config.json` to adjust:
     readme_path = os.path.join(dest_dir, "README.md")
     with open(readme_path, "w") as f:
         f.write(readme_content)
-    print(f"  ✓ Created README.md")
+    print("  ✓ Created README.md")
 
 
 def generate_population(pop_dir):
     """Run the generate_population.py script to create configuration files."""
     script_path = os.path.join(pop_dir, "generate_population.py")
-    print(f"  Running generate_population.py...")
+    print("  Running generate_population.py...")
 
     try:
         result = subprocess.run(
@@ -591,19 +590,19 @@ def generate_population(pop_dir):
         )
 
         if result.returncode == 0:
-            print(f"  ✓ Generated configuration files successfully")
+            print("  ✓ Generated configuration files successfully")
             # Print some stats from stdout
             for line in result.stdout.split("\n"):
                 if "Created" in line or "agents" in line:
                     print(f"    {line}")
         else:
-            print(f"  ✗ Error generating files:")
+            print("  ✗ Error generating files:")
             print(result.stderr)
             return False
 
         return True
     except subprocess.TimeoutExpired:
-        print(f"  ✗ Timeout generating population (>5 minutes)")
+        print("  ✗ Timeout generating population (>5 minutes)")
         return False
     except Exception as e:
         print(f"  ✗ Error running script: {e}")

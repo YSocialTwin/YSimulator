@@ -5,7 +5,7 @@ Each function implements a specific recommendation algorithm using Redis key-val
 """
 
 import random
-from typing import Any, Dict, List, Optional, Set
+from typing import Any, Dict, List
 
 from YSimulator.YServer.classes.models import Follow, PostTopic, Reaction, User_mgmt, UserInterest
 
@@ -249,9 +249,6 @@ def recommend_common_interests_redis(
         # Redis implementation when data is available
         user_interests = redis_client.smembers(user_interests_key)
 
-        # Create mapping for efficient lookup
-        post_id_to_data = {all_post_ids[i]: posts_data[i] for i in range(len(all_post_ids))}
-
         # Score posts by number of matching interests
         posts_with_scores = []
         for post in valid_posts_with_data:
@@ -276,7 +273,7 @@ def recommend_common_interests_redis(
     else:
         # Fallback to SQL query when Redis data not available yet
         logger.info(
-            f"Mode common_interests - Redis cache for interests/topics not available yet, using SQLAlchemy ORM"
+            "Mode common_interests - Redis cache for interests/topics not available yet, using SQLAlchemy ORM"
         )
         from sqlalchemy.orm import Session
 
@@ -367,7 +364,6 @@ def recommend_common_user_interests_redis(
 
         # Get posts liked by similar users
         posts_with_scores = []
-        post_id_to_data = {all_post_ids[i]: posts_data[i] for i in range(len(all_post_ids))}
 
         for post in valid_posts_with_data:
             # Check if any similar user liked this post
@@ -389,7 +385,7 @@ def recommend_common_user_interests_redis(
     else:
         # Fallback to SQLAlchemy ORM
         logger.info(
-            f"Mode common_user_interests - Redis cache for interests not available yet, using SQLAlchemy ORM"
+            "Mode common_user_interests - Redis cache for interests not available yet, using SQLAlchemy ORM"
         )
         from sqlalchemy import desc
         from sqlalchemy.orm import Session, aliased
@@ -468,7 +464,6 @@ def recommend_similar_users_react_redis(
         agent_leaning = agent_data.get("leaning")
 
         # Create mapping
-        post_id_to_data = {all_post_ids[i]: posts_data[i] for i in range(len(all_post_ids))}
 
         # Get posts liked by similar users
         posts_with_scores = []
@@ -506,7 +501,7 @@ def recommend_similar_users_react_redis(
             post_ids.extend(additional[: limit - len(post_ids)])
     else:
         # Fallback to SQLAlchemy ORM query
-        logger.info(f"Mode similar_users_react - Using SQLAlchemy ORM for user demographics query")
+        logger.info("Mode similar_users_react - Using SQLAlchemy ORM for user demographics query")
         from sqlalchemy import desc, or_
         from sqlalchemy.orm import Session, aliased
 
@@ -626,7 +621,7 @@ def recommend_similar_users_posts_redis(
             post_ids.extend(additional[: limit - len(post_ids)])
     else:
         # Fallback to SQLAlchemy ORM query
-        logger.info(f"Mode similar_users_posts - Using SQLAlchemy ORM for user demographics query")
+        logger.info("Mode similar_users_posts - Using SQLAlchemy ORM for user demographics query")
         from sqlalchemy import desc, or_
         from sqlalchemy.orm import Session, aliased
 

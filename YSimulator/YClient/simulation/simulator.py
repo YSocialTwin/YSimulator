@@ -15,7 +15,6 @@ The Simulator coordinates:
 
 import logging
 import time
-from typing import Optional
 
 import ray
 
@@ -282,7 +281,7 @@ class Simulator:
             try:
                 ray.get(self.server.complete_client.remote(self.client_id))
                 self.logger.info("Notified server of completion")
-                self.logger.info(f" Simulation complete. Server notified.")
+                self.logger.info(" Simulation complete. Server notified.")
             except Exception as e:
                 self.logger.warning(
                     f"Failed to notify server of completion: {e}",
@@ -318,7 +317,7 @@ class Simulator:
                     self.load_and_create_social_network_fn(network_csv_path)
                 else:
                     self.logger.info("Network already loaded (edges exist in database)")
-                    self.logger.info(f" Social network already loaded, skipping")
+                    self.logger.info(" Social network already loaded, skipping")
             else:
                 self.logger.warning(f"No valid edges found in {network_csv_path.name}")
         else:
@@ -404,7 +403,7 @@ class Simulator:
         # Evaluate daily follows at the end of each day
         if self.lifecycle_manager.probability_of_daily_follow > 0 and active_agents_today:
             self.logger.info(
-                f"End of day {current_day}: Evaluating daily follows for {len(active_agents_today)} active agents, "
+                f"End of day {current_day}: Evaluating daily follows for {len(active_agents_today)}active agents, "
                 f"probability={self.lifecycle_manager.probability_of_daily_follow}"
             )
             daily_follow_actions = self.lifecycle_manager.evaluate_daily_follows(
@@ -427,8 +426,8 @@ class Simulator:
                 )
                 if churn_stats["churned"] > 0:
                     self.logger.info(
-                        f"Churn evaluation: {churn_stats['churned']} agents churned out of "
-                        f"{churn_stats['candidates']} candidates ({churn_stats['inactive_agents']} inactive)"
+                        f"Churn evaluation: {churn_stats['churned']}agents churned out of "
+                        f"{churn_stats['candidates']}candidates ({churn_stats['inactive_agents']}inactive)"
                     )
                     # Invalidate churned agents cache after new churns
                     self.agent_scheduler.invalidate_churn_cache()

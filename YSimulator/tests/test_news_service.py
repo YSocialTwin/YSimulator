@@ -4,10 +4,10 @@ Unit tests for news_feeds/news_service.py
 Tests the NewsFeedService Ray actor for fetching and caching RSS feeds.
 """
 
-import pytest
-from unittest.mock import Mock, MagicMock, patch
 import time
-from datetime import datetime
+from unittest.mock import MagicMock, patch
+
+import pytest
 
 
 class TestNewsFeedServiceInit:

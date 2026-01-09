@@ -4,8 +4,6 @@ Image action generator for YSimulator agents.
 This module generates IMAGE actions where agents post images.
 """
 
-import ray
-
 from YSimulator.YClient.action_generators.base_generator import (
     ActionGeneratorResult,
     BaseActionGenerator,

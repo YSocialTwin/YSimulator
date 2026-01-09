@@ -7,7 +7,6 @@ Replaces the legacy reply_handler pattern with the action generator framework.
 
 import random
 import traceback
-from typing import Optional
 
 import ray
 
@@ -89,7 +88,7 @@ class ReplyGenerator(BaseActionGenerator):
             post_id = selected_mention["post_id"]
 
             self.context.logger.info(
-                f"[REPLY] Agent {agent.username} ({agent_type}) selected mention {mention_id} in post {post_id}"
+                f"[REPLY] Agent {agent.username}({agent_type}) selected mention {mention_id}in post {post_id}"
             )
 
             # Get the post content to reply to
@@ -135,7 +134,7 @@ class ReplyGenerator(BaseActionGenerator):
                     )
                 )
                 self.context.logger.debug(
-                    f"[REPLY] Retrieved thread context: {len(thread_context)} previous posts/comments"
+                    f"[REPLY] Retrieved thread context: {len(thread_context)}previous posts/comments"
                 )
 
                 # Fire off async LLM call to generate reply
@@ -154,7 +153,7 @@ class ReplyGenerator(BaseActionGenerator):
                     (agent.id, agent.cluster, post_id, future, mention_id)
                 )
                 self.context.logger.info(
-                    f"[REPLY] LLM reply request queued for agent {agent.username} (mention: {mention_id})"
+                    f"[REPLY] LLM reply request queued for agent {agent.username}(mention: {mention_id})"
                 )
             else:
                 # Rule-based: Generate reply with @username mention

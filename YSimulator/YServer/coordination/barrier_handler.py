@@ -5,7 +5,7 @@ Manages dynamic barrier synchronization between active clients.
 """
 
 import logging
-from typing import Callable, Optional, Set
+from typing import Optional, Set
 
 
 class BarrierHandler:
@@ -56,6 +56,6 @@ class BarrierHandler:
             return True
         else:
             self.logger.debug(
-                f"[Barrier] Waiting for {active_count - active_submitted_count}/{active_count} clients"
+                f"[Barrier] Waiting for {active_count - active_submitted_count}/{active_count}clients"
             )
             return False

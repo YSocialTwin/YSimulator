@@ -3,18 +3,17 @@ Unit tests for thread context retrieval implementation.
 """
 
 import sys
-import os
+import unittest
+import uuid
 from pathlib import Path
+
+from sqlalchemy.orm import Session
+
+from YSimulator.YServer.classes.db_middleware import DatabaseMiddleware
+from YSimulator.YServer.classes.models import Round, User_mgmt
 
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent))
-
-import unittest
-import uuid
-
-from YSimulator.YServer.classes.models import Post, User_mgmt, Round
-from YSimulator.YServer.classes.db_middleware import DatabaseMiddleware
-from sqlalchemy.orm import Session
 
 
 class TestThreadContext(unittest.TestCase):
@@ -149,7 +148,7 @@ class TestThreadContext(unittest.TestCase):
             "comment_to": root_post_id,
             "thread_id": root_post["thread_id"],
         }
-        comment1_id = self.db.add_post(comment1_data)
+        self.db.add_post(comment1_data)
 
         # Create second comment
         comment2_data = {
@@ -159,7 +158,7 @@ class TestThreadContext(unittest.TestCase):
             "comment_to": root_post_id,
             "thread_id": root_post["thread_id"],
         }
-        comment2_id = self.db.add_post(comment2_data)
+        self.db.add_post(comment2_data)
 
         # Create third comment (the one we're getting context for)
         comment3_data = {
@@ -185,7 +184,7 @@ class TestThreadContext(unittest.TestCase):
 
         print("✓ Thread context returned in chronological order:")
         for i, ctx in enumerate(context):
-            print(f"  {i+1}. {ctx['username']}: {ctx['tweet']}")
+            print(f"  {i + 1}. {ctx['username']}: {ctx['tweet']}")
 
     def test_04_max_length_limit(self):
         """Test that thread context respects max_length limit."""
@@ -220,7 +219,7 @@ class TestThreadContext(unittest.TestCase):
         for i in range(10):
             comment_data = {
                 "user_id": self.user2_id,
-                "tweet": f"Comment {i+1}",
+                "tweet": f"Comment {i + 1}",
                 "round": round_ids[i],
                 "comment_to": root_post_id,
                 "thread_id": root_post["thread_id"],

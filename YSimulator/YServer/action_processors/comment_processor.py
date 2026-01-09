@@ -4,13 +4,13 @@ Comment action processor.
 Handles COMMENT actions on posts, including thread tracking and opinion updates.
 """
 
-from typing import Any, Optional
 import logging
+from typing import Any, Optional
 
 from YSimulator.YServer.action_processors.base_processor import (
-    BaseActionProcessor,
     ActionContext,
     ActionResult,
+    BaseActionProcessor,
 )
 
 
@@ -107,7 +107,7 @@ class CommentProcessor(BaseActionProcessor):
             )
             if count_updated:
                 self.logger.info(
-                    f"Incremented reaction count for post {action.target_post_id} after COMMENT by agent {action.agent_id}"
+                    f"Incremented reaction count for post {action.target_post_id}after COMMENT by agent {action.agent_id}"
                 )
             else:
                 self.logger.warning(
@@ -124,7 +124,7 @@ class CommentProcessor(BaseActionProcessor):
                             topics_linked += 1
                         else:
                             self.logger.warning(
-                                f"Failed to link topic {topic_id} from parent post {action.target_post_id} to comment {post_id}"
+                                f"Failed to link topic {topic_id}from parent post {action.target_post_id}to comment {post_id}"
                             )
                     except Exception as e:
                         self.logger.error(
@@ -132,7 +132,7 @@ class CommentProcessor(BaseActionProcessor):
                         )
                 if topics_linked > 0:
                     self.logger.info(
-                        f"Linked {topics_linked}/{len(parent_topic_ids)} topics from parent post {action.target_post_id} to comment {post_id}"
+                        f"Linked {topics_linked}/{len(parent_topic_ids)}topics from parent post {action.target_post_id}to comment {post_id}"
                     )
             else:
                 self.logger.warning(
@@ -211,7 +211,7 @@ class CommentProcessor(BaseActionProcessor):
                 else:
                     parent_sentiment = "neu"
                 self.logger.info(
-                    f"Parent sentiment: compound={sentiment_parent_compound:.3f} -> {parent_sentiment}"
+                    f"Parent sentiment: compound={sentiment_parent_compound:.3f}-> {parent_sentiment}"
                 )
                 return parent_sentiment
             else:
@@ -252,7 +252,7 @@ class CommentProcessor(BaseActionProcessor):
         elif hasattr(self.services, "_get_topic_name_from_id"):
             return self.services._get_topic_name_from_id(topic_id)
 
-        self.logger.warning(f"get_topic_name_from_id not available in services")
+        self.logger.warning("get_topic_name_from_id not available in services")
         return None
 
     def _update_agent_interest_counter(

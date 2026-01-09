@@ -6,7 +6,7 @@ implementing the scatter/gather pattern for optimal performance.
 """
 
 import logging
-from typing import Any, List, Tuple, Optional
+from typing import Any, List, Optional, Tuple
 
 import ray
 
@@ -160,7 +160,7 @@ class BatchHandler:
                 if future in ready_futures:
                     try:
                         results.append(ray.get(future, timeout=0))
-                    except:
+                    except BaseException:
                         results.append(None)
                 else:
                     results.append(None)

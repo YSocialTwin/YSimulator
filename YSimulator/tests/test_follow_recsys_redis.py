@@ -4,8 +4,7 @@ Unit tests for follow_recsys_redis.py
 Tests Redis-based follow recommendation algorithms using mock Redis clients.
 """
 
-import pytest
-from unittest.mock import Mock, MagicMock, patch
+from unittest.mock import Mock
 
 
 class TestRecommendRandomFollowsRedis:
@@ -35,7 +34,8 @@ class TestRecommendRandomFollowsRedis:
         assert isinstance(result, list)
         assert len(result) <= 2
         # Result contains bytes, agent_id is compared as string
-        # Should not include self (b"agent1") but check allows it since comparison is string vs bytes
+        # Should not include self (b"agent1") but check allows it since comparison
+        # is string vs bytes
 
     def test_random_follows_no_users(self):
         """Test when no users exist."""

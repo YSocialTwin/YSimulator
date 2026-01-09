@@ -10,10 +10,10 @@ agents maintain their original type.
 import sys
 from pathlib import Path
 
+from YSimulator.YClient.classes.ray_models import AgentProfile
+
 # Add parent directory to path to allow imports
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
-
-from YSimulator.YClient.classes.ray_models import AgentProfile
 
 
 # Shared helper function for determining agent type based on configuration

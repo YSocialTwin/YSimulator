@@ -3,19 +3,18 @@ Unit tests for share action and thread_id implementation.
 """
 
 import sys
-import os
+import unittest
+import uuid
 from pathlib import Path
+
+from sqlalchemy.orm import Session
+
+from YSimulator.YClient.classes.ray_models import ActionDTO
+from YSimulator.YServer.classes.db_middleware import DatabaseMiddleware
+from YSimulator.YServer.classes.models import Round, User_mgmt
 
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent))
-
-import unittest
-import uuid
-
-from YSimulator.YServer.classes.models import Website, Article, Post, User_mgmt, Round
-from YSimulator.YServer.classes.db_middleware import DatabaseMiddleware
-from YSimulator.YClient.classes.ray_models import ActionDTO
-from sqlalchemy.orm import Session
 
 
 class TestShareImplementation(unittest.TestCase):
@@ -206,7 +205,7 @@ class TestShareImplementation(unittest.TestCase):
 
         self.assertEqual(action.action_type, "SHARE")
         self.assertEqual(action.target_post_id, "post-uuid-123")
-        print(f"✓ ActionDTO supports SHARE action type")
+        print("✓ ActionDTO supports SHARE action type")
 
     def test_06_nested_comments_inherit_root_thread_id(self):
         """Test that nested comments (comment on a comment) inherit the root thread_id."""

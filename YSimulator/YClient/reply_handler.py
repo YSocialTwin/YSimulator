@@ -82,7 +82,7 @@ def handle_reply_to_mention(
         post_id = selected_mention["post_id"]
 
         logger.info(
-            f"[REPLY] Agent {agent.username} ({agent_type}) selected mention {mention_id} in post {post_id}"
+            f"[REPLY] Agent {agent.username}({agent_type}) selected mention {mention_id}in post {post_id}"
         )
 
         # Get the post content to reply to
@@ -134,7 +134,7 @@ def handle_reply_to_mention(
             # Store the mention_id with the pending reaction so we can mark it as replied later
             pending_llm_reactions.append((agent.id, agent.cluster, post_id, future, mention_id))
             logger.info(
-                f"[REPLY] LLM reply request queued for agent {agent.username} (mention: {mention_id})"
+                f"[REPLY] LLM reply request queued for agent {agent.username}(mention: {mention_id})"
             )
         else:
             # Rule-based: Generate reply with @username mention

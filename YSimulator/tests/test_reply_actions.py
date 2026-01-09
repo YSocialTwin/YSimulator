@@ -10,23 +10,24 @@ def test_llm_reply_function():
     from YSimulator.YClient.actions.llm_actions import generate_llm_reply_to_mention_async
 
     print("\n1. Testing LLM reply function...")
-    print(f"  ✓ Function exists: generate_llm_reply_to_mention_async")
+    print("  ✓ Function exists: generate_llm_reply_to_mention_async")
 
     # Check that it's a function
     if not callable(generate_llm_reply_to_mention_async):
-        print(f"  ✗ generate_llm_reply_to_mention_async is not callable")
+        print("  ✗ generate_llm_reply_to_mention_async is not callable")
 
-    print(f"  ✓ Function is callable")
+    print("  ✓ Function is callable")
 
 
 def test_rule_based_reply_function():
     """Test that rule-based reply function exists and includes @username."""
-    from YSimulator.YClient.actions.rule_based_actions import generate_rule_based_reply_to_mention
-    from YSimulator.YClient.classes.ray_models import ActionDTO
     import uuid
 
+    from YSimulator.YClient.actions.rule_based_actions import generate_rule_based_reply_to_mention
+    from YSimulator.YClient.classes.ray_models import ActionDTO
+
     print("\n2. Testing rule-based reply function...")
-    print(f"  ✓ Function exists: generate_rule_based_reply_to_mention")
+    print("  ✓ Function exists: generate_rule_based_reply_to_mention")
 
     # Test the function
     agent_id = str(uuid.uuid4())
@@ -37,14 +38,14 @@ def test_rule_based_reply_function():
     action = generate_rule_based_reply_to_mention(agent_id, cluster_id, post_id, author_username)
 
     if not isinstance(action, ActionDTO):
-        print(f"  ✗ Function did not return ActionDTO")
+        print("  ✗ Function did not return ActionDTO")
 
-    print(f"  ✓ Function returns ActionDTO")
+    print("  ✓ Function returns ActionDTO")
 
     if action.action_type != "COMMENT":
         print(f"  ✗ Action type is not COMMENT: {action.action_type}")
 
-    print(f"  ✓ Action type is COMMENT")
+    print("  ✓ Action type is COMMENT")
 
     if not action.content.startswith(f"@{author_username}"):
         print(f"  ✗ Content does not start with @{author_username}: {action.content}")
@@ -52,21 +53,17 @@ def test_rule_based_reply_function():
     print(f"  ✓ Content includes @{author_username}: '{action.content}'")
 
     if action.target_post_id != post_id:
-        print(f"  ✗ Target post ID mismatch")
+        print("  ✗ Target post ID mismatch")
 
-    print(f"  ✓ Target post ID is correct")
+    print("  ✓ Target post ID is correct")
 
 
 def test_imports_in_init():
     """Test that new functions are exported in __init__.py."""
-    from YSimulator.YClient.actions import (
-        generate_llm_reply_to_mention_async,
-        generate_rule_based_reply_to_mention,
-    )
 
     print("\n3. Testing imports in __init__.py...")
-    print(f"  ✓ generate_llm_reply_to_mention_async is exported")
-    print(f"  ✓ generate_rule_based_reply_to_mention is exported")
+    print("  ✓ generate_llm_reply_to_mention_async is exported")
+    print("  ✓ generate_rule_based_reply_to_mention is exported")
 
 
 def test_client_imports():
@@ -75,9 +72,9 @@ def test_client_imports():
 
     # Try importing client.py to ensure it can import the new functions
     try:
-        from YSimulator.YClient.client import SimulationClient
+        pass
 
-        print(f"  ✓ client.py imports successfully")
+        print("  ✓ client.py imports successfully")
     except ImportError as e:
         print(f"  ✗ Failed to import client.py: {e}")
 

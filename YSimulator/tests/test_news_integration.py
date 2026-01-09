@@ -5,21 +5,20 @@ Tests the entire pipeline from news service to database writes.
 """
 
 import sys
-import os
+import unittest
+import uuid
 from pathlib import Path
+
+from sqlalchemy.orm import Session
+
+from YSimulator.YServer.classes.db_middleware import DatabaseMiddleware
+from YSimulator.YServer.classes.models import Article, Post, Website
 
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent))
 
-import unittest
-from unittest.mock import Mock, MagicMock, patch
-import uuid
-import json
 
 # Import the modules we need to test
-from YSimulator.YServer.classes.models import Website, Article, Post
-from YSimulator.YServer.classes.db_middleware import DatabaseMiddleware
-from sqlalchemy.orm import Session
 
 
 class TestNewsIntegration(unittest.TestCase):
@@ -244,7 +243,7 @@ class TestNewsIntegration(unittest.TestCase):
         )
 
         # Verify only one website exists
-        from sqlalchemy import select, func
+        from sqlalchemy import func, select
 
         with Session(self.db.engine) as session:
             stmt = (
@@ -283,7 +282,7 @@ class TestNewsIntegration(unittest.TestCase):
         print(f"Step 2: Created article {article_id}")
 
         # Step 3: Create user for post
-        from YSimulator.YServer.classes.models import User_mgmt, Round
+        from YSimulator.YServer.classes.models import Round, User_mgmt
 
         with Session(self.db.engine) as session:
             # Create round with unique day/hour to avoid UNIQUE constraint violations
@@ -330,7 +329,7 @@ class TestNewsIntegration(unittest.TestCase):
             stmt = select(Post).where(Post.id == post_id)
             post = session.execute(stmt).scalar_one()
 
-            print(f"\nPost details:")
+            print("\nPost details:")
             print(f"  ID: {post.id}")
             print(f"  Tweet: {post.tweet}")
             print(f"  User ID: {post.user_id}")
@@ -340,7 +339,7 @@ class TestNewsIntegration(unittest.TestCase):
             stmt = select(Article).where(Article.id == post.news_id)
             article = session.execute(stmt).scalar_one()
 
-            print(f"\nArticle details:")
+            print("\nArticle details:")
             print(f"  ID: {article.id}")
             print(f"  Title: {article.title}")
             print(f"  Website ID: {article.website_id}")
@@ -349,7 +348,7 @@ class TestNewsIntegration(unittest.TestCase):
             stmt = select(Website).where(Website.id == article.website_id)
             website = session.execute(stmt).scalar_one()
 
-            print(f"\nWebsite details:")
+            print("\nWebsite details:")
             print(f"  ID: {website.id}")
             print(f"  Name: {website.name}")
             print(f"  RSS: {website.rss}")

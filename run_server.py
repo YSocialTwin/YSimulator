@@ -20,8 +20,8 @@ from pathlib import Path
 import ray
 
 from YSimulator.common_utils import validate_config_directory
+from YSimulator.utils.init_db import database_exists, initialize_database
 from YSimulator.YServer.server import OrchestratorServer
-from YSimulator.utils.init_db import initialize_database, database_exists
 
 
 def compress_rotated_log(source, dest):
@@ -272,7 +272,7 @@ if __name__ == "__main__":
     print(f"--- 📝 Namespace: {namespace} ---")
     print(f"--- 💾 Database Type: {db_config.get('type', 'sqlite').upper()} ---")
     print(f"--- 📋 Logs: {config_dir / 'logs'} ---")
-    print(f"--- 💾 Waiting for clients... ---")
+    print("--- 💾 Waiting for clients... ---")
 
     # Start orchestrator actor
     actor_start = time.time()
