@@ -4,14 +4,15 @@ Comprehensive unit tests for the coordination layer components.
 Tests ClientManager, BarrierHandler, RoundManager, and ArchetypeManager.
 """
 
-import pytest
-from unittest.mock import Mock
 import time
+from unittest.mock import Mock
 
-from YSimulator.YServer.coordination.client_manager import ClientManager
-from YSimulator.YServer.coordination.barrier_handler import BarrierHandler
-from YSimulator.YServer.coordination.round_manager import RoundManager
+import pytest
+
 from YSimulator.YServer.coordination.archetype_manager import ArchetypeManager
+from YSimulator.YServer.coordination.barrier_handler import BarrierHandler
+from YSimulator.YServer.coordination.client_manager import ClientManager
+from YSimulator.YServer.coordination.round_manager import RoundManager
 
 
 class TestClientManager:

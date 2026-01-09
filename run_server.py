@@ -20,8 +20,8 @@ from pathlib import Path
 import ray
 
 from YSimulator.common_utils import validate_config_directory
+from YSimulator.utils.init_db import database_exists, initialize_database
 from YSimulator.YServer.server import OrchestratorServer
-from YSimulator.utils.init_db import initialize_database, database_exists
 
 
 def compress_rotated_log(source, dest):

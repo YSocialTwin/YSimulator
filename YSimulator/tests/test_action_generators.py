@@ -8,10 +8,7 @@ from unittest.mock import MagicMock, Mock
 
 import pytest
 
-from YSimulator.YClient.action_generators import (
-    ActionContext,
-    ActionGeneratorFactory,
-)
+from YSimulator.YClient.action_generators import ActionContext, ActionGeneratorFactory
 from YSimulator.YClient.action_generators.follow_generator import FollowGenerator
 from YSimulator.YClient.action_generators.post_generator import PostGenerator
 from YSimulator.YClient.classes.ray_models import ActionDTO, AgentProfile

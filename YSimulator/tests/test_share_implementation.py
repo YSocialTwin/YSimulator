@@ -2,14 +2,16 @@
 Unit tests for share action and thread_id implementation.
 """
 
+import sys
+import unittest
+import uuid
+from pathlib import Path
+
 from sqlalchemy.orm import Session
+
 from YSimulator.YClient.classes.ray_models import ActionDTO
 from YSimulator.YServer.classes.db_middleware import DatabaseMiddleware
-from YSimulator.YServer.classes.models import User_mgmt, Round
-import uuid
-import unittest
-import sys
-from pathlib import Path
+from YSimulator.YServer.classes.models import Round, User_mgmt
 
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent))

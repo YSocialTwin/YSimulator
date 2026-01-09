@@ -53,6 +53,7 @@ from YSimulator.YServer.classes.models import (
     UserInterest,
     Website,
 )
+
 from .base_repository import (
     ArticleRepository,
     FollowRepository,
@@ -923,8 +924,9 @@ class SQLPostRepository(PostRepository):
     def add_mention(self, post_id: str, mentioned_user_id: str) -> bool:
         """Add a mention to a post."""
         try:
-            from YSimulator.YServer.classes.models import Mention, Post
             import uuid
+
+            from YSimulator.YServer.classes.models import Mention, Post
 
             session = Session(self.engine)
             try:
@@ -954,8 +956,9 @@ class SQLPostRepository(PostRepository):
     def add_mention_full(self, mention_data: Dict[str, Any]) -> bool:
         """Add a mention using full dict (old middleware signature)."""
         try:
-            from YSimulator.YServer.classes.models import Mention
             import uuid
+
+            from YSimulator.YServer.classes.models import Mention
 
             session = Session(self.engine)
             try:

@@ -4,10 +4,10 @@ Base classes for action processing framework.
 Defines abstract base class and data structures for action processing.
 """
 
+import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
-import logging
 
 
 @dataclass

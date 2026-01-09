@@ -6,7 +6,7 @@ implementing the scatter/gather pattern for optimal performance.
 """
 
 import logging
-from typing import Any, List, Tuple, Optional
+from typing import Any, List, Optional, Tuple
 
 import ray
 

@@ -9,16 +9,16 @@ All database operations go through this adapter with services handling the logic
 import logging
 from typing import Any, Dict, List, Optional, Set, Tuple
 
-from YSimulator.YServer.services.user_service import UserService
-from YSimulator.YServer.services.post_service import PostService
-from YSimulator.YServer.services.follow_service import FollowService
-from YSimulator.YServer.services.interest_service import InterestService
-from YSimulator.YServer.services.content_service import ContentService
 from YSimulator.YServer.services.article_service import ArticleService
+from YSimulator.YServer.services.content_service import ContentService
+from YSimulator.YServer.services.follow_service import FollowService
 from YSimulator.YServer.services.image_service import ImageService
-from YSimulator.YServer.services.simulation_service import SimulationService
-from YSimulator.YServer.services.metadata_service import MetadataService
+from YSimulator.YServer.services.interest_service import InterestService
 from YSimulator.YServer.services.mention_service import MentionService
+from YSimulator.YServer.services.metadata_service import MetadataService
+from YSimulator.YServer.services.post_service import PostService
+from YSimulator.YServer.services.simulation_service import SimulationService
+from YSimulator.YServer.services.user_service import UserService
 
 
 class DatabaseServiceAdapter:

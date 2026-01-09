@@ -4,11 +4,11 @@ Unit tests for YServer/server.py
 Tests the Orchestrator Server functionality with comprehensive mocking.
 """
 
-import pytest
-from unittest.mock import Mock, patch
-from pathlib import Path
 import tempfile
+from pathlib import Path
+from unittest.mock import Mock, patch
 
+import pytest
 
 # Patch ray.remote at module level to allow direct instantiation of actors in tests
 pytest_mock_ray_remote = patch("ray.remote", lambda x: x)
@@ -99,8 +99,9 @@ class TestCompressRotatedLog:
 
     def test_compress_rotated_log(self):
         """Test log compression functionality."""
-        from YSimulator.YServer.server import compress_rotated_log
         import gzip
+
+        from YSimulator.YServer.server import compress_rotated_log
 
         with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".log") as source_file:
             source_file.write("Test log content\n")
@@ -136,7 +137,6 @@ class TestOrchestratorServerInit:
         from YSimulator.YServer.server import OrchestratorServer
 
         # Mock database middleware
-
         # Mock interest manager
         mock_interest_mgr = Mock()
         mock_interest_mgr_class.return_value = mock_interest_mgr

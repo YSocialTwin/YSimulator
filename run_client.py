@@ -20,9 +20,9 @@ from pathlib import Path
 import ray
 
 from YSimulator.common_utils import validate_config_directory
+from YSimulator.YClient.client import SimulationClient
 from YSimulator.YClient.LLM_interactions.llm_service import LLMService
 from YSimulator.YClient.news_feeds.news_service import NewsFeedService
-from YSimulator.YClient.client import SimulationClient
 
 
 def compress_rotated_log(source, dest):

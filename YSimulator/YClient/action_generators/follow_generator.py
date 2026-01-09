@@ -6,7 +6,6 @@ This module generates FOLLOW actions where agents follow other users.
 
 import random
 
-
 from YSimulator.YClient.action_generators.base_generator import (
     ActionGeneratorResult,
     BaseActionGenerator,

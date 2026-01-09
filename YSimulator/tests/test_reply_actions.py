@@ -21,9 +21,10 @@ def test_llm_reply_function():
 
 def test_rule_based_reply_function():
     """Test that rule-based reply function exists and includes @username."""
+    import uuid
+
     from YSimulator.YClient.actions.rule_based_actions import generate_rule_based_reply_to_mention
     from YSimulator.YClient.classes.ray_models import ActionDTO
-    import uuid
 
     print("\n2. Testing rule-based reply function...")
     print("  ✓ Function exists: generate_rule_based_reply_to_mention")

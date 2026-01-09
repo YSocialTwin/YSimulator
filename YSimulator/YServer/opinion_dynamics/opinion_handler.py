@@ -190,6 +190,7 @@ class OpinionHandler:
     def _get_neighbors_opinions_sql(self, agent_id: str, topic_id: str) -> List[float]:
         """Get neighbors opinions using SQL backend."""
         from sqlalchemy.orm import Session
+
         from YSimulator.YServer.classes.models import Follow
 
         with Session(self.db.engine) as session:

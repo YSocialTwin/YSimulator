@@ -7,25 +7,25 @@ following the Repository Pattern to separate storage logic from business logic.
 
 from .base_repository import (
     BaseRepository,
-    UserRepository,
-    PostRepository,
     FollowRepository,
     InterestRepository,
+    PostRepository,
     RecommendationRepository,
-)
-from .sql_repository import (
-    SQLUserRepository,
-    SQLPostRepository,
-    SQLFollowRepository,
-    SQLInterestRepository,
-    SQLRecommendationRepository,
+    UserRepository,
 )
 from .redis_repository import (
-    RedisUserRepository,
-    RedisPostRepository,
     RedisFollowRepository,
     RedisInterestRepository,
+    RedisPostRepository,
     RedisRecommendationRepository,
+    RedisUserRepository,
+)
+from .sql_repository import (
+    SQLFollowRepository,
+    SQLInterestRepository,
+    SQLPostRepository,
+    SQLRecommendationRepository,
+    SQLUserRepository,
 )
 
 __all__ = [

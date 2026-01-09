@@ -8,10 +8,7 @@ coordinating between repositories to perform complex tasks.
 import logging
 from typing import Any, Dict, List, Optional
 
-from YSimulator.YServer.repositories.base_repository import (
-    ArticleRepository,
-    InterestRepository,
-)
+from YSimulator.YServer.repositories.base_repository import ArticleRepository, InterestRepository
 
 
 class ArticleService:

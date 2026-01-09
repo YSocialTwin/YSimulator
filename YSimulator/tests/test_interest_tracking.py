@@ -2,21 +2,23 @@
 Unit tests for interest tracking implementation.
 """
 
+import sys
+import unittest
+import uuid
+from pathlib import Path
+
 from sqlalchemy.orm import Session
+
 from YSimulator.YClient.classes.ray_models import ActionDTO, AgentProfile
 from YSimulator.YServer.classes.db_middleware import DatabaseMiddleware
 from YSimulator.YServer.classes.models import (
     Interest,
-    UserInterest,
-    PostTopic,
     Post,
-    User_mgmt,
+    PostTopic,
     Round,
+    User_mgmt,
+    UserInterest,
 )
-import uuid
-import unittest
-import sys
-from pathlib import Path
 
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent))

@@ -7,6 +7,7 @@ Uses the same successful mocking strategy as follow_recsys_db.py tests.
 
 import unittest
 from unittest.mock import Mock, patch
+
 from sqlalchemy.orm import Session
 
 

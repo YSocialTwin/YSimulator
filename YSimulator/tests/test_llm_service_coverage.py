@@ -9,8 +9,9 @@ The Ray actor decorator behavior is tested in integration tests where Ray is pro
 initialized before any imports occur.
 """
 
-import pytest
 from unittest.mock import Mock, patch
+
+import pytest
 
 
 @pytest.mark.xdist_group(name="llm_service_init")
@@ -147,9 +148,7 @@ class TestRuleBasedActions:
 
     def test_generate_rule_based_news_post_basic(self):
         """Test basic rule-based news post generation."""
-        from YSimulator.YClient.actions.rule_based_actions import (
-            generate_rule_based_news_post,
-        )
+        from YSimulator.YClient.actions.rule_based_actions import generate_rule_based_news_post
 
         mock_news_service = Mock()
         mock_news_service.generate_commentary = Mock(return_value="Test commentary")
@@ -173,9 +172,7 @@ class TestRuleBasedActions:
 
     def test_generate_rule_based_news_post_without_article_id(self):
         """Test rule-based news post without article ID."""
-        from YSimulator.YClient.actions.rule_based_actions import (
-            generate_rule_based_news_post,
-        )
+        from YSimulator.YClient.actions.rule_based_actions import generate_rule_based_news_post
 
         with patch("YSimulator.YClient.actions.rule_based_actions.ray.get") as mock_ray_get:
             mock_ray_get.return_value = "saved-article-id"
@@ -208,8 +205,9 @@ class TestActionTypeHints:
 
     def test_llm_actions_have_type_hints(self):
         """Verify LLM action functions have type hints."""
-        from YSimulator.YClient.actions import llm_actions
         import inspect
+
+        from YSimulator.YClient.actions import llm_actions
 
         functions = [
             "generate_llm_post_async",
@@ -229,8 +227,9 @@ class TestActionTypeHints:
 
     def test_rule_based_actions_have_type_hints(self):
         """Verify rule-based action functions have type hints."""
-        from YSimulator.YClient.actions import rule_based_actions
         import inspect
+
+        from YSimulator.YClient.actions import rule_based_actions
 
         if hasattr(rule_based_actions, "generate_rule_based_news_post"):
             func = rule_based_actions.generate_rule_based_news_post

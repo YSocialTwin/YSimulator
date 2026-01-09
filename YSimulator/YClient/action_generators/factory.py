@@ -10,10 +10,7 @@ action generator based on action type. The factory pattern enables:
 
 from typing import Dict, Type
 
-from YSimulator.YClient.action_generators.base_generator import (
-    ActionContext,
-    BaseActionGenerator,
-)
+from YSimulator.YClient.action_generators.base_generator import ActionContext, BaseActionGenerator
 
 
 class ActionGeneratorFactory:
@@ -53,9 +50,7 @@ class ActionGeneratorFactory:
         from YSimulator.YClient.action_generators.reply_generator import ReplyGenerator
         from YSimulator.YClient.action_generators.search_generator import SearchGenerator
         from YSimulator.YClient.action_generators.share_generator import ShareGenerator
-        from YSimulator.YClient.action_generators.share_link_generator import (
-            ShareLinkGenerator,
-        )
+        from YSimulator.YClient.action_generators.share_link_generator import ShareLinkGenerator
 
         # Register generators by action type
         self._registry["post"] = PostGenerator

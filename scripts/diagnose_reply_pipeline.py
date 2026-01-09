@@ -13,10 +13,11 @@ Usage:
     python diagnose_reply_pipeline.py --config path/to/config.yaml
 """
 
-from YSimulator.YServer.classes.db_middleware import DatabaseMiddleware
 import argparse
-import sys
 import os
+import sys
+
+from YSimulator.YServer.classes.db_middleware import DatabaseMiddleware
 
 # Add the parent directory to the path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))

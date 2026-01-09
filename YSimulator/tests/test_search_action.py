@@ -2,13 +2,15 @@
 Test the search action implementation to verify it works correctly.
 """
 
-from sqlalchemy.orm import Session
-from YSimulator.YServer.classes.db_middleware import DatabaseMiddleware
-from YSimulator.YServer.classes.models import Interest, Post, User_mgmt, Round, PostTopic
-import uuid
-import unittest
 import sys
+import unittest
+import uuid
 from pathlib import Path
+
+from sqlalchemy.orm import Session
+
+from YSimulator.YServer.classes.db_middleware import DatabaseMiddleware
+from YSimulator.YServer.classes.models import Interest, Post, PostTopic, Round, User_mgmt
 
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent))

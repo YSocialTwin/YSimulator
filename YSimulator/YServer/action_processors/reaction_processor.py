@@ -4,13 +4,13 @@ Reaction action processor.
 Handles reaction actions (LIKE, LOVE, ANGRY, SAD, LAUGH, etc.) on posts.
 """
 
-from typing import Any, Optional
 import logging
+from typing import Any, Optional
 
 from YSimulator.YServer.action_processors.base_processor import (
-    BaseActionProcessor,
     ActionContext,
     ActionResult,
+    BaseActionProcessor,
 )
 
 

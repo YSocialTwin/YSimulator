@@ -55,9 +55,9 @@ class OpinionManager:
         self.opinion_config = simulation_config.get("opinion_dynamics", {})
 
         # Import sub-components lazily to avoid circular imports
+        from YSimulator.YClient.opinion.opinion_cache import OpinionCache
         from YSimulator.YClient.opinion.opinion_calculator import OpinionCalculator
         from YSimulator.YClient.opinion.opinion_inferencer import OpinionInferencer
-        from YSimulator.YClient.opinion.opinion_cache import OpinionCache
 
         # Initialize sub-components
         self.calculator = OpinionCalculator(

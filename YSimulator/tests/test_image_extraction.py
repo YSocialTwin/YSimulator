@@ -7,13 +7,14 @@ Tests the complete pipeline:
 3. Saving images to database
 """
 
+import sys
+import unittest
+import uuid
+from pathlib import Path
+from unittest.mock import MagicMock
+
 from YSimulator.YServer.classes.db_middleware import DatabaseMiddleware
 from YSimulator.YServer.classes.models import Image
-import uuid
-from unittest.mock import MagicMock
-import unittest
-import sys
-from pathlib import Path
 
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent))

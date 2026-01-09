@@ -8,9 +8,10 @@ Tests cover:
 - Text annotator integration (text_annotator.py)
 """
 
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
+
+from YSimulator.YClient.text_support.annotations import toxicity, vader_sentiment
 from YSimulator.YClient.text_support.cleaning import clean_text, extract_components
-from YSimulator.YClient.text_support.annotations import vader_sentiment, toxicity
 from YSimulator.YClient.text_support.text_annotator import (
     annotate_text,
     prepare_sentiment_data,

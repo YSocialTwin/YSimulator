@@ -4,13 +4,13 @@ Comment action processor.
 Handles COMMENT actions on posts, including thread tracking and opinion updates.
 """
 
-from typing import Any, Optional
 import logging
+from typing import Any, Optional
 
 from YSimulator.YServer.action_processors.base_processor import (
-    BaseActionProcessor,
     ActionContext,
     ActionResult,
+    BaseActionProcessor,
 )
 
 

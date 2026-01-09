@@ -9,15 +9,17 @@ Tests cover:
 - OpinionCache for performance optimization
 """
 
-import pytest
 from unittest.mock import Mock, patch
+
+import pytest
+
+from YSimulator.YClient.classes.ray_models import AgentProfile
 from YSimulator.YClient.opinion import (
-    OpinionManager,
+    OpinionCache,
     OpinionCalculator,
     OpinionInferencer,
-    OpinionCache,
+    OpinionManager,
 )
-from YSimulator.YClient.classes.ray_models import AgentProfile
 
 
 @pytest.fixture

@@ -11,7 +11,6 @@ Achieving 80%+ coverage for:
 
 from unittest.mock import Mock, patch
 
-
 # ================================================
 # CLIENT-SIDE RECOMMENDER SYSTEM TESTS
 # ================================================
@@ -567,7 +566,7 @@ class TestRecommenderClassHierarchy:
 
     def test_reverse_chrono_inherits_content_recsys(self):
         """Test ReverseChrono inherits from ContentRecSys."""
-        from YSimulator.YClient.recsys.ContentRecSys import ReverseChrono, ContentRecSys
+        from YSimulator.YClient.recsys.ContentRecSys import ContentRecSys, ReverseChrono
 
         recsys = ReverseChrono()
         assert isinstance(recsys, ContentRecSys)
@@ -575,7 +574,7 @@ class TestRecommenderClassHierarchy:
 
     def test_random_order_inherits_content_recsys(self):
         """Test RandomOrder inherits from ContentRecSys."""
-        from YSimulator.YClient.recsys.ContentRecSys import RandomOrder, ContentRecSys
+        from YSimulator.YClient.recsys.ContentRecSys import ContentRecSys, RandomOrder
 
         recsys = RandomOrder()
         assert isinstance(recsys, ContentRecSys)
@@ -583,7 +582,7 @@ class TestRecommenderClassHierarchy:
 
     def test_random_follow_inherits_follow_recsys(self):
         """Test RandomFollowRecSys inherits from FollowRecSysRay."""
-        from YSimulator.YClient.recsys.FollowRecSysRay import RandomFollowRecSys, FollowRecSysRay
+        from YSimulator.YClient.recsys.FollowRecSysRay import FollowRecSysRay, RandomFollowRecSys
 
         recsys = RandomFollowRecSys()
         assert isinstance(recsys, FollowRecSysRay)
@@ -591,7 +590,7 @@ class TestRecommenderClassHierarchy:
 
     def test_jaccard_follow_inherits_follow_recsys(self):
         """Test JaccardFollowRecSys inherits from FollowRecSysRay."""
-        from YSimulator.YClient.recsys.FollowRecSysRay import JaccardFollowRecSys, FollowRecSysRay
+        from YSimulator.YClient.recsys.FollowRecSysRay import FollowRecSysRay, JaccardFollowRecSys
 
         recsys = JaccardFollowRecSys()
         assert isinstance(recsys, FollowRecSysRay)
@@ -600,10 +599,10 @@ class TestRecommenderClassHierarchy:
     def test_all_content_subclasses_have_get_recommendations(self):
         """Test all content recommendation subclasses have get_recommendations method."""
         from YSimulator.YClient.recsys.ContentRecSys import (
+            CommonInterests,
+            RandomOrder,
             ReverseChrono,
             ReverseChronoPopularity,
-            RandomOrder,
-            CommonInterests,
             SimilarUsersReact,
         )
 
@@ -622,11 +621,11 @@ class TestRecommenderClassHierarchy:
     def test_all_follow_subclasses_have_get_follow_suggestions(self):
         """Test all follow recommendation subclasses have get_follow_suggestions method."""
         from YSimulator.YClient.recsys.FollowRecSysRay import (
-            RandomFollowRecSys,
+            AdamicAdarFollowRecSys,
             CommonNeighborsFollowRecSys,
             JaccardFollowRecSys,
-            AdamicAdarFollowRecSys,
             PreferentialAttachmentFollowRecSys,
+            RandomFollowRecSys,
         )
 
         subclasses = [

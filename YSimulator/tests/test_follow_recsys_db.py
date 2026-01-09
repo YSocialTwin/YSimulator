@@ -6,6 +6,7 @@ Uses the same successful mocking strategy as content_recsys_redis.py tests.
 """
 
 from unittest.mock import Mock
+
 from sqlalchemy.orm import Session
 
 
@@ -677,11 +678,11 @@ class TestEdgeCases:
     def test_empty_following_ids(self):
         """Test all algorithms with empty following_ids set."""
         from YSimulator.YServer.recsys.follow_recsys_db import (
-            recommend_random_follows,
+            recommend_adamic_adar,
             recommend_common_neighbors,
             recommend_jaccard,
-            recommend_adamic_adar,
             recommend_preferential_attachment,
+            recommend_random_follows,
         )
 
         mock_session = Mock(spec=Session)

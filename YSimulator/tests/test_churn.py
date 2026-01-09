@@ -8,8 +8,8 @@ This test validates:
 4. Churned agent filtering from selection
 """
 
-import sys
 import json
+import sys
 from pathlib import Path
 
 # Add parent directory to path

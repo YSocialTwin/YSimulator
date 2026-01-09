@@ -4,13 +4,15 @@ Unit tests for news feed database integration.
 Tests the entire pipeline from news service to database writes.
 """
 
-from sqlalchemy.orm import Session
-from YSimulator.YServer.classes.db_middleware import DatabaseMiddleware
-from YSimulator.YServer.classes.models import Website, Article, Post
-import uuid
-import unittest
 import sys
+import unittest
+import uuid
 from pathlib import Path
+
+from sqlalchemy.orm import Session
+
+from YSimulator.YServer.classes.db_middleware import DatabaseMiddleware
+from YSimulator.YServer.classes.models import Article, Post, Website
 
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent))
@@ -241,7 +243,7 @@ class TestNewsIntegration(unittest.TestCase):
         )
 
         # Verify only one website exists
-        from sqlalchemy import select, func
+        from sqlalchemy import func, select
 
         with Session(self.db.engine) as session:
             stmt = (
@@ -280,7 +282,7 @@ class TestNewsIntegration(unittest.TestCase):
         print(f"Step 2: Created article {article_id}")
 
         # Step 3: Create user for post
-        from YSimulator.YServer.classes.models import User_mgmt, Round
+        from YSimulator.YServer.classes.models import Round, User_mgmt
 
         with Session(self.db.engine) as session:
             # Create round with unique day/hour to avoid UNIQUE constraint violations

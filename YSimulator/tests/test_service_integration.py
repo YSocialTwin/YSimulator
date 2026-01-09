@@ -5,8 +5,9 @@ Tests that all services are properly exposed and accessible from the server,
 and that direct database calls have been eliminated in favor of service calls.
 """
 
-import pytest
 from unittest.mock import Mock
+
+import pytest
 
 
 class TestServiceExposure:
@@ -24,6 +25,7 @@ class TestServiceExposure:
     def test_server_uses_services(self):
         """Test that server.py references service classes."""
         import inspect
+
         from YSimulator.YServer import server
 
         source_code = inspect.getsource(server)
@@ -53,8 +55,9 @@ class TestServiceUsagePatterns:
 
     def test_service_method_delegation(self):
         """Test that key methods properly delegate to services."""
-        from YSimulator.YServer import server
         import inspect
+
+        from YSimulator.YServer import server
 
         source_code = inspect.getsource(server)
 
@@ -79,8 +82,9 @@ class TestServiceUsagePatterns:
 
     def test_reduced_direct_db_calls(self):
         """Verify that server.py has migrated away from direct db adapter calls."""
-        from YSimulator.YServer import server
         import inspect
+
+        from YSimulator.YServer import server
 
         source_code = inspect.getsource(server)
 
@@ -101,8 +105,9 @@ class TestServiceIntegrationInActionProcessors:
 
     def test_post_processor_uses_services(self):
         """Test PostProcessor references services."""
-        from YSimulator.YServer.action_processors.post_processor import PostProcessor
         import inspect
+
+        from YSimulator.YServer.action_processors.post_processor import PostProcessor
 
         source_code = inspect.getsource(PostProcessor)
 
@@ -111,8 +116,9 @@ class TestServiceIntegrationInActionProcessors:
 
     def test_comment_processor_uses_services(self):
         """Test CommentProcessor references services."""
-        from YSimulator.YServer.action_processors.comment_processor import CommentProcessor
         import inspect
+
+        from YSimulator.YServer.action_processors.comment_processor import CommentProcessor
 
         source_code = inspect.getsource(CommentProcessor)
 
@@ -121,8 +127,9 @@ class TestServiceIntegrationInActionProcessors:
 
     def test_follow_processor_uses_services(self):
         """Test FollowProcessor references services."""
-        from YSimulator.YServer.action_processors.follow_processor import FollowProcessor
         import inspect
+
+        from YSimulator.YServer.action_processors.follow_processor import FollowProcessor
 
         source_code = inspect.getsource(FollowProcessor)
 

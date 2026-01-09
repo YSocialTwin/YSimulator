@@ -9,10 +9,7 @@ or work directly with repositories for backward compatibility.
 import logging
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
-from YSimulator.YServer.repositories.base_repository import (
-    ArticleRepository,
-    ImageRepository,
-)
+from YSimulator.YServer.repositories.base_repository import ArticleRepository, ImageRepository
 
 if TYPE_CHECKING:
     from YSimulator.YServer.services.article_service import ArticleService

@@ -130,10 +130,10 @@ class SimulationClient:
 
         # Phase 3: Initialize LLM Manager for consistent LLM interface
         # Import here to avoid circular dependencies during initial setup
-        from YSimulator.YClient.llm_utils import LLMManager
-
         # Use a temporary logger until _setup_logging() is called
         import logging
+
+        from YSimulator.YClient.llm_utils import LLMManager
 
         temp_logger = logging.getLogger(f"client_{client_id}")
         self.llm_manager = LLMManager(llm_handle, logger=temp_logger) if llm_handle else None

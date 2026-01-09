@@ -231,8 +231,8 @@ class OrchestratorServer:
 
         # Initialize services using Repository/Service pattern
         try:
-            from YSimulator.YServer.service_factory import create_all_services, SERVICES_AVAILABLE
             from YSimulator.YServer.database_adapter import DatabaseServiceAdapter
+            from YSimulator.YServer.service_factory import SERVICES_AVAILABLE, create_all_services
 
             if not SERVICES_AVAILABLE:
                 raise ImportError("Repository/Service pattern dependencies not available")
@@ -339,10 +339,10 @@ class OrchestratorServer:
 
         # Initialize coordination layer
         from YSimulator.YServer.coordination import (
-            ClientManager,
-            BarrierHandler,
-            RoundManager,
             ArchetypeManager,
+            BarrierHandler,
+            ClientManager,
+            RoundManager,
         )
 
         self.client_manager = ClientManager(

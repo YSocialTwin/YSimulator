@@ -7,8 +7,8 @@ This test validates:
 3. New agent creation with probability
 """
 
-import sys
 import json
+import sys
 from pathlib import Path
 
 # Add parent directory to path

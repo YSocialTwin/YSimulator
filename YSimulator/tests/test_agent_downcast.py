@@ -7,9 +7,10 @@ even if they are defined as LLM agents, while broadcaster
 agents maintain their original type.
 """
 
-from YSimulator.YClient.classes.ray_models import AgentProfile
 import sys
 from pathlib import Path
+
+from YSimulator.YClient.classes.ray_models import AgentProfile
 
 # Add parent directory to path to allow imports
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))

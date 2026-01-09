@@ -4,8 +4,10 @@ Unit tests for recommendation engines.
 Tests ContentRecommender and FollowRecommender classes with mocked backends.
 """
 
-import pytest
 from unittest.mock import Mock, patch
+
+import pytest
+
 from YSimulator.YServer.recommendation.content_recommender import ContentRecommender
 from YSimulator.YServer.recommendation.follow_recommender import FollowRecommender
 
@@ -142,6 +144,7 @@ class TestFollowRecommender:
     def test_get_follow_suggestions_sql(self, mock_recsys_db, mock_db_adapter):
         """Test follow suggestions using SQL backend."""
         from unittest.mock import MagicMock
+
         from sqlalchemy.orm import Session
 
         # Mock session and query results
