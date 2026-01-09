@@ -149,7 +149,7 @@ class PostProcessor(BaseActionProcessor):
                                 article_content=article_content,
                             )
                     self.logger.info(
- f"Linked {len(existing_topic_ids)}existing article topics to post {post_id}"
+                        f"Linked {len(existing_topic_ids)}existing article topics to post {post_id}"
                     )
             else:
                 # Article not found in database - this shouldn't happen if website was

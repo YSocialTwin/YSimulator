@@ -224,7 +224,7 @@ class NewsFeedService:
                     if image_urls:
                         total_images_found += len(image_urls)
                         self.logger.debug(
- f"Article '{entry.get( 'title', 'No title')[ :50]}' has {len(image_urls)}image(s)"
+                            f"Article '{entry.get( 'title', 'No title')[ :50]}' has {len(image_urls)}image(s)"
                         )
 
                     article = {
@@ -454,7 +454,7 @@ class NewsFeedService:
                 article = random.choice(articles)
                 image_count = len(article.get("image_urls", []))
                 self.logger.info(
- f"Returning article: '{article.get( 'title', 'NO TITLE')[ :50]}' with {image_count}image(s)"
+                    f"Returning article: '{article.get( 'title', 'NO TITLE')[ :50]}' with {image_count}image(s)"
                 )
                 return article
             else:

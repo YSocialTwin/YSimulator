@@ -56,6 +56,6 @@ class BarrierHandler:
             return True
         else:
             self.logger.debug(
- f"[Barrier] Waiting for {active_count - active_submitted_count}/{active_count}clients"
+                f"[Barrier] Waiting for {active_count - active_submitted_count}/{active_count}clients"
             )
             return False

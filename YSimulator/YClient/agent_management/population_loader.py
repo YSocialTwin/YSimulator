@@ -191,7 +191,7 @@ class PopulationLoader:
                 json.dump(agent_data, f, indent=2)
 
             self.logger.info(
- f"Updated {agent_config_file.name}with interests for {len(updated_interests)}agents"
+                f"Updated {agent_config_file.name}with interests for {len(updated_interests)}agents"
             )
 
         except Exception as e:

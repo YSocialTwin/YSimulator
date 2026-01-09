@@ -403,8 +403,8 @@ class Simulator:
         # Evaluate daily follows at the end of each day
         if self.lifecycle_manager.probability_of_daily_follow > 0 and active_agents_today:
             self.logger.info(
- f"End of day {current_day}: Evaluating daily follows for {len(active_agents_today)}active agents, "
- f"probability={self.lifecycle_manager.probability_of_daily_follow}"
+                f"End of day {current_day}: Evaluating daily follows for {len(active_agents_today)}active agents, "
+                f"probability={self.lifecycle_manager.probability_of_daily_follow}"
             )
             daily_follow_actions = self.lifecycle_manager.evaluate_daily_follows(
                 active_agents_today, instruction_day
@@ -417,7 +417,7 @@ class Simulator:
         if self.lifecycle_manager.churn_enabled:
             try:
                 self.logger.info(
- f"End of day {current_day}: Evaluating churn (enabled={self.lifecycle_manager.churn_enabled})"
+                    f"End of day {current_day}: Evaluating churn (enabled={self.lifecycle_manager.churn_enabled})"
                 )
                 churn_stats = self.lifecycle_manager.evaluate_churn()
                 self.logger.info(
@@ -426,8 +426,8 @@ class Simulator:
                 )
                 if churn_stats["churned"] > 0:
                     self.logger.info(
- f"Churn evaluation: {churn_stats['churned']}agents churned out of "
- f"{churn_stats['candidates']}candidates ({churn_stats['inactive_agents']}inactive)"
+                        f"Churn evaluation: {churn_stats['churned']}agents churned out of "
+                        f"{churn_stats['candidates']}candidates ({churn_stats['inactive_agents']}inactive)"
                     )
                     # Invalidate churned agents cache after new churns
                     self.agent_scheduler.invalidate_churn_cache()
@@ -441,7 +441,7 @@ class Simulator:
         if self.lifecycle_manager.new_agents_enabled:
             try:
                 self.logger.info(
- f"End of day {current_day}: Evaluating new agents (enabled={self.lifecycle_manager.new_agents_enabled})"
+                    f"End of day {current_day}: Evaluating new agents (enabled={self.lifecycle_manager.new_agents_enabled})"
                 )
                 # Get current round_id from server
                 current_round_id = ray.get(self.server.get_current_round_id.remote())

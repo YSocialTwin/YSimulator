@@ -699,7 +699,7 @@ class SQLPostRepository(PostRepository):
 
                 session.commit()
                 self.logger.info(
- f"Initialized emotions table: {created_count}new emotions added, {len(emotions_data) - created_count}already existed"
+                    f"Initialized emotions table: {created_count}new emotions added, {len(emotions_data) - created_count}already existed"
                 )
                 return True
             finally:

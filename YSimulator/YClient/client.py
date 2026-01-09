@@ -827,7 +827,7 @@ class SimulationClient:
             )
             action.annotations = annotations
             self.logger.info(
- f"Annotated action content: has_sentiment={bool( annotations.get('sentiment'))}, has_toxicity={bool( annotations.get('toxicity'))}, has_emotions={bool( annotations.get('emotions'))}, hashtags={len( annotations.get( 'hashtags', []))}, mentions={len( annotations.get( 'mentions', []))}"
+                f"Annotated action content: has_sentiment={bool( annotations.get('sentiment'))}, has_toxicity={bool( annotations.get('toxicity'))}, has_emotions={bool( annotations.get('emotions'))}, hashtags={len( annotations.get( 'hashtags', []))}, mentions={len( annotations.get( 'mentions', []))}"
             )
 
     def _dispatch_action_with_generator(
@@ -882,7 +882,7 @@ class SimulationClient:
         # Check if generator can handle this agent
         if not generator.can_generate(agent, agent_type):
             self.logger.debug(
- f"Generator {generator.__class__.__name__}cannot generate for agent {agent.username}"
+                f"Generator {generator.__class__.__name__}cannot generate for agent {agent.username}"
             )
             return [], [], {"skipped": True, "reason": "cannot_generate"}
 

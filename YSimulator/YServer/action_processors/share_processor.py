@@ -103,13 +103,13 @@ class ShareProcessor(BaseActionProcessor):
                             topics_linked += 1
                         else:
                             self.logger.warning(
- f"Failed to link topic {topic_id}from original post {action.target_post_id}to share {post_id}"
+                                f"Failed to link topic {topic_id}from original post {action.target_post_id}to share {post_id}"
                             )
                     except Exception as e:
                         self.logger.error(f"Error linking topic {topic_id} to share {post_id}: {e}")
                 if topics_linked > 0:
                     self.logger.info(
- f"Linked {topics_linked}/{len(original_topic_ids)}topics from original post {action.target_post_id}to share {post_id}"
+                        f"Linked {topics_linked}/{len(original_topic_ids)}topics from original post {action.target_post_id}to share {post_id}"
                     )
             else:
                 self.logger.warning(
