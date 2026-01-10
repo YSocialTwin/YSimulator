@@ -210,10 +210,6 @@ class LLMActorPool:
             backend=backend,
             logger=logger,
         )
-            num_actors=num_actors,
-            strategy=strategy,
-            logger=logger,
-        )
         self.enable_monitoring = enable_monitoring
 
         # Initialize monitoring counters
