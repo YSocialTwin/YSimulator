@@ -9,7 +9,7 @@ Performance Impact: 2-4x speedup with 4 actors (scalable with resources)
 Usage:
     # In client initialization
     load_balancer = LLMLoadBalancer(num_actors=4, strategy='hash')
-    
+
     # In action generators
     llm_actor = load_balancer.get_actor_for_agent(agent_id)
     future = llm_actor.generate_post.remote(...)
@@ -271,10 +271,13 @@ class LLMActorPool:
         # Calculate load balance score (0 = perfectly balanced, higher = more imbalanced)
         if sum(self.request_counts) > 0:
             expected_per_actor = sum(self.request_counts) / self.load_balancer.num_actors
-            variance = sum(
-                (count - expected_per_actor) ** 2 for count in self.request_counts
-            ) / self.load_balancer.num_actors
-            stats["load_balance_score"] = variance / expected_per_actor if expected_per_actor > 0 else 0
+            variance = (
+                sum((count - expected_per_actor) ** 2 for count in self.request_counts)
+                / self.load_balancer.num_actors
+            )
+            stats["load_balance_score"] = (
+                variance / expected_per_actor if expected_per_actor > 0 else 0
+            )
         else:
             stats["load_balance_score"] = 0
 
