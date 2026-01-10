@@ -47,6 +47,7 @@ markers = [
 
 [tool.coverage.run]
 branch = true
+relative_files = true
 source = ["YSimulator"]
 omit = [
     "*/tests/*",
