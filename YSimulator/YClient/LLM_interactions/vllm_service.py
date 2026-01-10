@@ -57,6 +57,21 @@ class VLLMService:
                 "vLLM is not installed. Install it with: pip install vllm\n"
                 "Note: vLLM requires Linux and is not supported on macOS."
             ) from e
+        
+        # Import backend registration utilities
+        try:
+            from vllm.attention.backends.registry import register_backend, Backend
+            from vllm.attention.backends.torch_sdpa import TorchSDPABackend
+        except ImportError:
+            # Fallback for different vLLM versions
+            try:
+                from vllm.attention.backends.torch_sdpa import TorchSDPABackend
+                Backend = None
+                register_backend = None
+            except ImportError:
+                Backend = None
+                register_backend = None
+                TorchSDPABackend = None
 
         # Load configuration with defaults
         if llm_config is None:
@@ -117,9 +132,18 @@ class VLLMService:
             # This is required for GPUs with compute capability < 8.0 (e.g., RTX 2080 Ti)
             if not enable_flashattention:
                 vllm_params["disable_custom_all_reduce"] = True
-                # Use TORCH_SDPA backend instead of FlashAttention
+                # Register and use TORCH_SDPA backend instead of FlashAttention
                 import os
                 os.environ["VLLM_ATTENTION_BACKEND"] = "TORCH_SDPA"
+                
+                # Register TORCH_SDPA backend if registration utilities are available
+                if register_backend and Backend and TorchSDPABackend:
+                    try:
+                        register_backend(Backend.TORCH_SDPA, TorchSDPABackend)
+                        logger.info("[vLLM] TORCH_SDPA backend registered successfully")
+                    except Exception as reg_err:
+                        # Backend may already be registered, which is fine
+                        logger.debug(f"[vLLM] Backend registration note: {reg_err}")
             
             self.llm = LLM(**vllm_params)
 
