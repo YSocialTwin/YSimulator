@@ -87,10 +87,17 @@ class LLMLoadBalancer:
             ServiceClass = LLMService
 
         for i in range(num_actors):
-            actor = ServiceClass.remote(
-                llm_config=llm_config,
-                prompts_config=prompts_config,
-            )
+            # Allocate GPU resources for vLLM actors
+            if self.backend == "vllm":
+                actor = ServiceClass.options(num_gpus=1).remote(
+                    llm_config=llm_config,
+                    prompts_config=prompts_config,
+                )
+            else:
+                actor = ServiceClass.remote(
+                    llm_config=llm_config,
+                    prompts_config=prompts_config,
+                )
             self.actors.append(actor)
             self.logger.info(f"Created LLM actor {i+1}/{num_actors} ({self.backend})")
 
@@ -341,7 +348,8 @@ def create_llm_actors(
         if backend_lower == "vllm":
             from YSimulator.YClient.LLM_interactions.vllm_service import VLLMService
 
-            return VLLMService.remote(llm_config=llm_config, prompts_config=prompts_config)
+            # Allocate GPU resources for vLLM
+            return VLLMService.options(num_gpus=1).remote(llm_config=llm_config, prompts_config=prompts_config)
         else:
             from YSimulator.YClient.LLM_interactions.llm_service import LLMService
 

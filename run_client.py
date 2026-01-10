@@ -259,7 +259,9 @@ if __name__ == "__main__":
         logger.info("Using vLLM backend for LLM inference")
         print("--- Using vLLM backend (batch inference) ---")
         try:
-            llm_service = VLLMService.remote(llm_config, prompts_config, llm_v_config)
+            # Allocate GPU resources to the Ray actor for vLLM
+            # This ensures CUDA GPUs are visible to the vLLM engine
+            llm_service = VLLMService.options(num_gpus=1).remote(llm_config, prompts_config, llm_v_config)
         except ImportError as e:
             logger.error(f"Failed to import vLLM: {e}")
             print(f"❌ Error: vLLM not available: {e}")
@@ -274,6 +276,7 @@ if __name__ == "__main__":
             print("   - Insufficient GPU memory (try reducing gpu_memory_utilization)")
             print("   - Model not found (check model path)")
             print("   - GPU compatibility issues (check CUDA version)")
+            print("   - No GPU allocated to Ray actor (ensure Ray has GPU resources)")
             sys.exit(1)
     else:
         # Default to Ollama backend
