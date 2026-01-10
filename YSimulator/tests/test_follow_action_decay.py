@@ -9,9 +9,9 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from YSimulator.YClient.activity_selector import select_action
 from YSimulator.YClient.classes.ray_models import AgentProfile
 from YSimulator.YClient.simulation.follow_decay_manager import FollowDecayManager
-from YSimulator.YClient.activity_selector import select_action
 
 
 class TestFollowDecayManager:

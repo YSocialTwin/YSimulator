@@ -60,9 +60,7 @@ class AgentManager:
         # Initialize follow decay manager if configured
         follow_decay_manager = None
         if follow_action_decay_config and follow_action_decay_config.get("enabled", False):
-            from YSimulator.YClient.simulation.follow_decay_manager import (
-                FollowDecayManager,
-            )
+            from YSimulator.YClient.simulation.follow_decay_manager import FollowDecayManager
 
             follow_decay_manager = FollowDecayManager(server, follow_action_decay_config, logger)
 
