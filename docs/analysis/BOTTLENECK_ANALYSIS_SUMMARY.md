@@ -4,7 +4,7 @@
 
 **Date**: January 10, 2026  
 **Status**: Active  
-**Related**: [Performance Optimization Roadmap](../PERFORMANCE_OPTIMIZATION_ROADMAP.md)
+**Related**: [Performance Optimization Roadmap](./PERFORMANCE_OPTIMIZATION_ROADMAP.md)
 
 ---
 
@@ -191,7 +191,7 @@ results = vllm_service.generate_batch(prompts)  # Parallel inference!
 
 ### Phase 3: Advanced Features (4-6 weeks) → **30x+ Cumulative Speedup**
 
-See [full roadmap](../PERFORMANCE_OPTIMIZATION_ROADMAP.md#phase-3-advanced-features-4-6-weeks) for details.
+See [full roadmap](./PERFORMANCE_OPTIMIZATION_ROADMAP.md#phase-3-advanced-features-4-6-weeks) for details.
 
 ---
 
@@ -363,7 +363,7 @@ CACHE_CONFIG = {
 
 ## Next Steps
 
-1. **Read Full Roadmap**: [PERFORMANCE_OPTIMIZATION_ROADMAP.md](../PERFORMANCE_OPTIMIZATION_ROADMAP.md)
+1. **Read Full Roadmap**: [PERFORMANCE_OPTIMIZATION_ROADMAP.md](./PERFORMANCE_OPTIMIZATION_ROADMAP.md)
 2. **Implement Phase 1**: Follow quick implementation guide above
 3. **Benchmark & Validate**: Measure improvements, ensure quality maintained
 4. **Plan Phase 2**: vLLM integration and advanced caching

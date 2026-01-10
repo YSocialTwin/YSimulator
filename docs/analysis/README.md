@@ -6,7 +6,7 @@ This directory contains analysis reports, performance optimization documentation
 
 ### 📊 Main Documents
 
-1. **[PERFORMANCE_OPTIMIZATION_ROADMAP.md](../PERFORMANCE_OPTIMIZATION_ROADMAP.md)** *(47KB)*
+1. **[PERFORMANCE_OPTIMIZATION_ROADMAP.md](./PERFORMANCE_OPTIMIZATION_ROADMAP.md)** *(47KB)*
    - **Complete reference** for performance optimization
    - Detailed bottleneck analysis with 6 identified bottlenecks
    - 3-phase optimization roadmap with expected **30x+ speedup**
@@ -39,15 +39,15 @@ Phase 2 (2-4 weeks):  Advanced          → 16x cumulative speedup
 Phase 3 (4-6 weeks):  Advanced features → 30x+ cumulative speedup
 ```
 
-## Existing Analysis Documents
+## Related Analysis Documents
 
-- **[CRITICAL_CODE_PATHS.md](CRITICAL_CODE_PATHS.md)** - Performance-critical paths (530+ lines)
+- **[CRITICAL_CODE_PATHS.md](../architecture/CRITICAL_CODE_PATHS.md)** - Performance-critical paths (530+ lines)
   - Hot paths identification
   - Performance bottlenecks
   - Optimization opportunities
   - Profiling results
 
-- **[TEST_COVERAGE_REPORT.md](TEST_COVERAGE_REPORT.md)** - Test coverage status
+- **[TEST_COVERAGE_REPORT.md](../testing/TEST_COVERAGE_REPORT.md)** - Test coverage status
   - Coverage metrics by module
   - Test implementation phases
   - Testing infrastructure overview
@@ -59,10 +59,10 @@ Phase 3 (4-6 weeks):  Advanced features → 30x+ cumulative speedup
 → Start with [BOTTLENECK_ANALYSIS_SUMMARY.md](./BOTTLENECK_ANALYSIS_SUMMARY.md)
 
 **For Comprehensive Understanding:**
-→ Read [PERFORMANCE_OPTIMIZATION_ROADMAP.md](../PERFORMANCE_OPTIMIZATION_ROADMAP.md)
+→ Read [PERFORMANCE_OPTIMIZATION_ROADMAP.md](./PERFORMANCE_OPTIMIZATION_ROADMAP.md)
 
 **For Code-Level Performance:**
-→ See [CRITICAL_CODE_PATHS.md](CRITICAL_CODE_PATHS.md)
+→ See [CRITICAL_CODE_PATHS.md](../architecture/CRITICAL_CODE_PATHS.md)
 
 ## Quick Links
 
