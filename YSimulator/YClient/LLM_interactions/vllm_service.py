@@ -45,7 +45,10 @@ class VLLMService:
                 - tensor_parallel_size: Number of GPUs for tensor parallelism (default: 1)
                 - gpu_memory_utilization: GPU memory utilization (default: 0.9)
             prompts_config: Prompt templates configuration (same as LLMService)
-            llm_v_config: Vision LLM configuration (not supported in this implementation)
+            llm_v_config: Vision LLM configuration with keys:
+                - model: Vision model name/path (e.g., "openbmb/MiniCPM-V-2_6")
+                - temperature: Sampling temperature (default: 0.5)
+                - max_tokens: Maximum tokens to generate (default: 300)
         """
         try:
             from vllm import LLM, SamplingParams
@@ -85,13 +88,13 @@ class VLLMService:
         # Store prompts configuration
         self.prompts_config = prompts_config
 
-        # Initialize vLLM engine
+        # Initialize vLLM engine for text generation
         model_name = llm_config.get("model", "meta-llama/Llama-3.2-3B")
         tensor_parallel_size = llm_config.get("tensor_parallel_size", 1)
         gpu_memory_utilization = llm_config.get("gpu_memory_utilization", 0.9)
 
         logger.info(
-            f"Initializing vLLM engine with model={model_name}, "
+            f"Initializing vLLM engine with text model={model_name}, "
             f"tensor_parallel_size={tensor_parallel_size}, "
             f"gpu_memory_utilization={gpu_memory_utilization}"
         )
@@ -103,7 +106,7 @@ class VLLMService:
             trust_remote_code=True,
         )
 
-        # Set up sampling parameters
+        # Set up sampling parameters for text generation
         temperature = llm_config.get("temperature", 0.7)
         max_tokens = llm_config.get("max_tokens", 256)
 
@@ -113,11 +116,46 @@ class VLLMService:
             top_p=0.95,
         )
 
-        logger.info("vLLM engine initialized successfully")
+        logger.info("vLLM text generation engine initialized successfully")
 
-        # Vision LLM not supported in this implementation
+        # Initialize vision LLM if config provided
         self.llm_v = None
+        self.sampling_params_v = None
         if llm_v_config:
+            vision_model = llm_v_config.get("model", "openbmb/MiniCPM-V-2_6")
+            vision_temp = llm_v_config.get("temperature", 0.5)
+            vision_max_tokens = llm_v_config.get("max_tokens", 300)
+            
+            logger.info(
+                f"Initializing vLLM vision engine with model={vision_model}, "
+                f"temperature={vision_temp}, max_tokens={vision_max_tokens}"
+            )
+            
+            try:
+                # Initialize vision model with vLLM
+                # Note: Vision models in vLLM require trust_remote_code=True
+                self.llm_v = LLM(
+                    model=vision_model,
+                    tensor_parallel_size=tensor_parallel_size,
+                    gpu_memory_utilization=gpu_memory_utilization,
+                    trust_remote_code=True,
+                    # Vision-specific settings
+                    max_model_len=vision_max_tokens if "max_model_len" not in llm_v_config else llm_v_config["max_model_len"],
+                )
+                
+                # Set up sampling parameters for vision model
+                self.sampling_params_v = SamplingParams(
+                    temperature=vision_temp,
+                    max_tokens=vision_max_tokens,
+                    top_p=0.95,
+                )
+                
+                logger.info("vLLM vision engine initialized successfully")
+            except Exception as e:
+                logger.error(f"Failed to initialize vLLM vision engine: {e}")
+                logger.warning("Vision model functionality will be disabled")
+                self.llm_v = None
+                self.sampling_params_v = None
             logger.warning("Vision LLM (llm_v) not supported with vLLM backend")
 
     def _build_persona(self, cluster_id: int, agent_attrs: dict = None) -> str:
@@ -680,9 +718,67 @@ class VLLMService:
             return []
 
     def describe_image(self, image_url: str) -> Optional[str]:
-        """Generate a description of an image using the vision LLM."""
-        logger.warning("Image description not supported with vLLM backend")
-        return None
+        """
+        Generate a description of an image using the vision LLM.
+
+        This method uses the llm_v (vision) model loaded in vLLM to analyze and 
+        describe an image from a given URL.
+
+        Args:
+            image_url: URL of the image to describe
+
+        Returns:
+            Optional[str]: Description of the image, or None if vision LLM not available or error occurs
+        """
+        # Check if vision LLM is available
+        if not self.llm_v:
+            logger.warning("Vision LLM (llm_v) not configured, cannot describe image")
+            return None
+
+        # Get prompts from configuration with defaults
+        describe_image_config = self.prompts_config.get(
+            "describe_image",
+            {
+                "system_template": "You are an image description assistant. Describe images accurately and concisely in English.",
+                "user_template": "Describe the following image. Write in english. <img {url}>",
+            },
+        )
+        system_template = describe_image_config.get(
+            "system_template",
+            "You are an image description assistant. Describe images accurately and concisely in English.",
+        )
+        user_template = describe_image_config.get(
+            "user_template", "Describe the following image. Write in english. <img {url}>"
+        )
+
+        # Format templates
+        system_msg = system_template
+        user_msg = user_template.format(url=image_url)
+
+        # For vision models, we need to format the prompt with image information
+        # vLLM vision models expect a specific format
+        prompt = f"{system_msg}\n\n{user_msg}"
+
+        try:
+            logger.info(f"Calling vLLM vision model to describe image: {image_url[:80]}...")
+            
+            # Generate description using vision model
+            outputs = self.llm_v.generate([prompt], self.sampling_params_v)
+            
+            if outputs and len(outputs) > 0:
+                description = outputs[0].outputs[0].text.strip()
+                logger.info(f"vLLM vision model returned description ({len(description)} chars)")
+                return description
+            else:
+                logger.warning("vLLM vision model returned empty description")
+                return None
+        except Exception as e:
+            # If description fails, return None
+            logger.error(f"vLLM vision model failed to describe image: {e}")
+            import traceback
+
+            traceback.print_exc()
+            return None
 
     def infer_article_opinion(
         self, article_content: str, topic_name: str, opinion_groups: dict

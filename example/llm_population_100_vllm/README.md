@@ -6,7 +6,8 @@ This example demonstrates YSimulator running with **vLLM backend** for efficient
 
 - **Population**: 100 LLM-based agents
 - **Backend**: vLLM (batch inference)
-- **Model**: Llama-3.2-3B
+- **Text Model**: Llama-3.2-3B
+- **Vision Model**: MiniCPM-V-2_6 (for image annotation)
 - **Duration**: 3 days
 - **Opinion Dynamics**: Disabled
 
@@ -19,6 +20,7 @@ This example uses vLLM instead of Ollama for LLM inference, providing:
 - **Batch Processing**: Multiple prompts processed in parallel
 - **GPU Acceleration**: Efficient tensor operations on GPU
 - **Higher Throughput**: Significantly faster than sequential Ollama processing
+- **Unified Model Management**: Both text and vision models loaded in same vLLM instance
 
 ### Performance Benefits
 
@@ -57,11 +59,20 @@ pip install vllm>=0.6.0
     "max_tokens": 256,
     "tensor_parallel_size": 1,
     "gpu_memory_utilization": 0.9
+  },
+  "llm_v": {
+    "model": "openbmb/MiniCPM-V-2_6",
+    "temperature": 0.5,
+    "max_tokens": 300
   }
 }
 ```
 
+**Important**: When using vLLM backend, both text (`llm`) and vision (`llm_v`) models are loaded within the same vLLM instance for efficient GPU memory usage.
+
 ### Configuration Options
+
+#### Text Generation Model (`llm`)
 
 - `backend`: Set to `"vllm"` to use vLLM (default is `"ollama"`)
 - `model`: HuggingFace model path or local model path
@@ -69,6 +80,12 @@ pip install vllm>=0.6.0
 - `max_tokens`: Maximum tokens to generate per prompt
 - `tensor_parallel_size`: Number of GPUs for tensor parallelism
 - `gpu_memory_utilization`: GPU memory utilization (0.0-1.0)
+
+#### Vision Model (`llm_v`, Optional)
+
+- `model`: Vision model path (e.g., "openbmb/MiniCPM-V-2_6")
+- `temperature`: Sampling temperature (0.0-1.0)
+- `max_tokens`: Maximum tokens to generate per prompt
 
 ## Usage
 

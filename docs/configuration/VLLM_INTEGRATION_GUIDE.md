@@ -34,9 +34,16 @@ In your `simulation_config.json`, set the LLM backend:
     "max_tokens": 256,
     "tensor_parallel_size": 1,
     "gpu_memory_utilization": 0.9
+  },
+  "llm_v": {
+    "model": "openbmb/MiniCPM-V-2_6",
+    "temperature": 0.5,
+    "max_tokens": 300
   }
 }
 ```
+
+**Note**: When using vLLM backend, both text (`llm`) and vision (`llm_v`) models are loaded within the same vLLM instance for efficient GPU memory usage.
 
 ### 3. Run Simulation
 
@@ -52,6 +59,8 @@ python run_client.py --config example/llm_population_100_vllm
 
 ### vLLM Backend Configuration
 
+#### Text Generation Model (`llm`)
+
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
 | `backend` | string | `"ollama"` | LLM backend: `"ollama"` or `"vllm"` |
@@ -60,6 +69,16 @@ python run_client.py --config example/llm_population_100_vllm
 | `max_tokens` | int | `256` | Maximum tokens per generation |
 | `tensor_parallel_size` | int | `1` | Number of GPUs for tensor parallelism |
 | `gpu_memory_utilization` | float | `0.9` | GPU memory utilization (0.0-1.0) |
+
+#### Vision Model (`llm_v`, Optional)
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `model` | string | `"openbmb/MiniCPM-V-2_6"` | Vision model path (HuggingFace or local) |
+| `temperature` | float | `0.5` | Sampling temperature (0.0-1.0) |
+| `max_tokens` | int | `300` | Maximum tokens per generation |
+
+**Important**: When `backend: "vllm"` is specified, both text and vision models are loaded within the same vLLM instance, sharing GPU resources efficiently.
 
 ### Ollama Backend Configuration (Default)
 

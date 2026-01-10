@@ -14,12 +14,9 @@
     "gpu_memory_utilization": 0.9
   },
   "llm_v": {
-    "address": "localhost",
-    "port": 11434,
-    "model": "minicpm-v",
+    "model": "openbmb/MiniCPM-V-2_6",
     "temperature": 0.5,
-    "llm_api_key": "NULL",
-    "llm_max_tokens": 300
+    "max_tokens": 300
   },
   "simulation": {
     "num_days": 3,
