@@ -31,7 +31,7 @@ class TestFollowDecayManager:
         result = manager.get_decay_multiplier(None, 10, 5)
         assert result == 1.0
 
-    @patch("ray.get")
+    @patch("YSimulator.YClient.simulation.follow_decay_manager.ray.get")
     def test_exponential_decay(self, mock_ray_get):
         """Test exponential decay calculation."""
         # Mock server response for round info
@@ -57,7 +57,7 @@ class TestFollowDecayManager:
 
         assert result == pytest.approx(0.5, rel=0.01)
 
-    @patch("ray.get")
+    @patch("YSimulator.YClient.simulation.follow_decay_manager.ray.get")
     def test_exponential_decay_multiple_half_lives(self, mock_ray_get):
         """Test exponential decay with multiple half-lives."""
         mock_server = MagicMock()
@@ -80,7 +80,7 @@ class TestFollowDecayManager:
 
         assert result == pytest.approx(0.25, rel=0.01)
 
-    @patch("ray.get")
+    @patch("YSimulator.YClient.simulation.follow_decay_manager.ray.get")
     def test_exponential_decay_with_min_ratio(self, mock_ray_get):
         """Test that exponential decay respects min_probability_ratio."""
         mock_server = MagicMock()
@@ -104,7 +104,7 @@ class TestFollowDecayManager:
 
         assert result == pytest.approx(0.2, rel=0.01)
 
-    @patch("ray.get")
+    @patch("YSimulator.YClient.simulation.follow_decay_manager.ray.get")
     def test_linear_decay(self, mock_ray_get):
         """Test linear decay calculation."""
         mock_server = MagicMock()
@@ -127,7 +127,7 @@ class TestFollowDecayManager:
 
         assert result == pytest.approx(0.5, rel=0.01)
 
-    @patch("ray.get")
+    @patch("YSimulator.YClient.simulation.follow_decay_manager.ray.get")
     def test_linear_decay_with_min_ratio(self, mock_ray_get):
         """Test that linear decay respects min_probability_ratio."""
         mock_server = MagicMock()
@@ -151,7 +151,7 @@ class TestFollowDecayManager:
 
         assert result == pytest.approx(0.2, rel=0.01)
 
-    @patch("ray.get")
+    @patch("YSimulator.YClient.simulation.follow_decay_manager.ray.get")
     def test_decay_with_missing_round_info(self, mock_ray_get):
         """Test graceful handling when round info is not found."""
         mock_server = MagicMock()
