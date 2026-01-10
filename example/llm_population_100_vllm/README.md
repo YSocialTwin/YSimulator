@@ -57,13 +57,16 @@ pip install vllm>=0.6.0
     "model": "meta-llama/Llama-3.2-3B",
     "temperature": 0.9,
     "max_tokens": 256,
+    "max_model_len": 40000,
     "tensor_parallel_size": 1,
-    "gpu_memory_utilization": 0.9
+    "gpu_memory_utilization": 0.9,
+    "enable_flashattention": false
   },
   "llm_v": {
     "model": "openbmb/MiniCPM-V-2_6",
     "temperature": 0.5,
-    "max_tokens": 300
+    "max_tokens": 300,
+    "max_model_len": 40000
   }
 }
 ```
@@ -78,6 +81,10 @@ pip install vllm>=0.6.0
 - `model`: HuggingFace model path or local model path
 - `temperature`: Sampling temperature (0.0-1.0)
 - `max_tokens`: Maximum tokens to generate per prompt
+- `max_model_len`: Maximum sequence length for the model (default: 40000)
+  - Controls the maximum context window size
+  - Set based on model capabilities and memory constraints
+  - Default of 40000 provides good balance for most models
 - `tensor_parallel_size`: Number of GPUs for tensor parallelism
 - `gpu_memory_utilization`: GPU memory utilization (0.0-1.0)
 - `enable_flashattention`: Enable FlashAttention 2 (default: `false`)
@@ -91,6 +98,7 @@ pip install vllm>=0.6.0
 - `model`: Vision model path (e.g., "openbmb/MiniCPM-V-2_6")
 - `temperature`: Sampling temperature (0.0-1.0)
 - `max_tokens`: Maximum tokens to generate per prompt
+- `max_model_len`: Maximum sequence length for the vision model (default: 40000)
 
 ## Usage
 
@@ -158,6 +166,7 @@ If you encounter GPU OOM errors:
 1. Reduce `gpu_memory_utilization` (e.g., to 0.7 or 0.5)
 2. Use a smaller model (e.g., `meta-llama/Llama-3.2-1B`)
 3. Reduce `max_tokens`
+4. Reduce `max_model_len` (e.g., to 20000 or 10000)
 
 ### Model Not Found
 

@@ -42,13 +42,16 @@ class VLLMService:
                 - model: Model name/path (e.g., "meta-llama/Llama-3.2-3B")
                 - temperature: Sampling temperature (default: 0.7)
                 - max_tokens: Maximum tokens to generate (default: 256)
+                - max_model_len: Maximum sequence length (default: 40000)
                 - tensor_parallel_size: Number of GPUs for tensor parallelism (default: 1)
                 - gpu_memory_utilization: GPU memory utilization (default: 0.9)
+                - enable_flashattention: Enable FlashAttention 2 (default: False)
             prompts_config: Prompt templates configuration (same as LLMService)
             llm_v_config: Vision LLM configuration with keys:
                 - model: Vision model name/path (e.g., "openbmb/MiniCPM-V-2_6")
                 - temperature: Sampling temperature (default: 0.5)
                 - max_tokens: Maximum tokens to generate (default: 300)
+                - max_model_len: Maximum sequence length (default: 40000)
         """
         try:
             from vllm import LLM, SamplingParams
@@ -92,6 +95,7 @@ class VLLMService:
         model_name = llm_config.get("model", "meta-llama/Llama-3.2-3B")
         tensor_parallel_size = llm_config.get("tensor_parallel_size", 1)
         gpu_memory_utilization = llm_config.get("gpu_memory_utilization", 0.9)
+        max_model_len = llm_config.get("max_model_len", 40000)
         
         # Disable FlashAttention by default (requires compute capability >= 8.0)
         # Can be enabled via config: "enable_flashattention": true
@@ -101,6 +105,7 @@ class VLLMService:
             f"[vLLM] Initializing vLLM engine with text model={model_name}, "
             f"tensor_parallel_size={tensor_parallel_size}, "
             f"gpu_memory_utilization={gpu_memory_utilization}, "
+            f"max_model_len={max_model_len}, "
             f"enable_flashattention={enable_flashattention}"
         )
 
@@ -110,6 +115,7 @@ class VLLMService:
                 "model": model_name,
                 "tensor_parallel_size": tensor_parallel_size,
                 "gpu_memory_utilization": gpu_memory_utilization,
+                "max_model_len": max_model_len,
                 "trust_remote_code": True,
             }
             
@@ -143,6 +149,7 @@ class VLLMService:
             logger.error(f"[vLLM]   - Model: {model_name}")
             logger.error(f"[vLLM]   - Tensor parallel size: {tensor_parallel_size}")
             logger.error(f"[vLLM]   - GPU memory utilization: {gpu_memory_utilization}")
+            logger.error(f"[vLLM]   - Max model length: {max_model_len}")
             logger.error(f"[vLLM]   - FlashAttention enabled: {enable_flashattention}")
             logger.error(f"[vLLM] ============================================================")
             
@@ -163,10 +170,12 @@ class VLLMService:
             vision_model = llm_v_config.get("model", "openbmb/MiniCPM-V-2_6")
             vision_temp = llm_v_config.get("temperature", 0.5)
             vision_max_tokens = llm_v_config.get("max_tokens", 300)
+            vision_max_model_len = llm_v_config.get("max_model_len", 40000)
             
             logger.info(
                 f"[vLLM] Initializing vLLM vision engine with model={vision_model}, "
-                f"temperature={vision_temp}, max_tokens={vision_max_tokens}"
+                f"temperature={vision_temp}, max_tokens={vision_max_tokens}, "
+                f"max_model_len={vision_max_model_len}"
             )
             
             try:
@@ -176,9 +185,8 @@ class VLLMService:
                     model=vision_model,
                     tensor_parallel_size=tensor_parallel_size,
                     gpu_memory_utilization=gpu_memory_utilization,
+                    max_model_len=vision_max_model_len,
                     trust_remote_code=True,
-                    # Vision-specific settings
-                    max_model_len=vision_max_tokens if "max_model_len" not in llm_v_config else llm_v_config["max_model_len"],
                 )
                 
                 # Set up sampling parameters for vision model
