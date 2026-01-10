@@ -322,6 +322,42 @@ class DatabaseServiceAdapter:
             agent_id, round_id, topic_id, opinion, id_interacted_with, id_post
         )
 
+    def add_or_get_interests_batch(self, interest_names: List[str]) -> Dict[str, str]:
+        """
+        Add multiple interests or get existing ones' IDs in batch.
+
+        Args:
+            interest_names: List of interest/topic names
+
+        Returns:
+            Dict mapping interest names to their IDs
+        """
+        return self.interest_service.add_or_get_interests_batch(interest_names)
+
+    def add_user_interests_batch(self, user_interests_data: List[Dict[str, str]]) -> int:
+        """
+        Add multiple user interests in batch.
+
+        Args:
+            user_interests_data: List of dicts with user_id, interest_id, round_id
+
+        Returns:
+            Number of user interests successfully added
+        """
+        return self.interest_service.add_user_interests_batch(user_interests_data)
+
+    def add_agent_opinions_batch(self, agent_opinions_data: List[Dict[str, Any]]) -> int:
+        """
+        Add multiple agent opinions in batch.
+
+        Args:
+            agent_opinions_data: List of dicts with agent_id, tid, topic_id, opinion, etc.
+
+        Returns:
+            Number of agent opinions successfully added
+        """
+        return self.interest_service.add_agent_opinions_batch(agent_opinions_data)
+
     def get_latest_agent_opinion(self, agent_id: str, topic_id: str) -> Optional[float]:
         """Get latest agent opinion."""
         return self.interest_service.get_latest_agent_opinion(agent_id, topic_id)
