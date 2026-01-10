@@ -58,6 +58,7 @@ class Simulator:
         log_action_fn,
         log_hourly_summary_fn,
         log_daily_summary_fn,
+        update_round_info_fn=None,
     ):
         """
         Initialize the Simulator.
@@ -82,6 +83,7 @@ class Simulator:
             log_action_fn: Function to log individual actions
             log_hourly_summary_fn: Function to log hourly summaries
             log_daily_summary_fn: Function to log daily summaries
+            update_round_info_fn: Function to update round info (for follow decay)
         """
         self.server = server
         self.client_id = client_id
@@ -102,6 +104,7 @@ class Simulator:
         self.log_action_fn = log_action_fn
         self.log_hourly_summary_fn = log_hourly_summary_fn
         self.log_daily_summary_fn = log_daily_summary_fn
+        self.update_round_info_fn = update_round_info_fn
 
     def run(self, calculate_opinion_updates_fn) -> None:
         """
@@ -338,6 +341,11 @@ class Simulator:
         Returns:
             Tuple of (actions, active_agent_ids)
         """
+        # Update round info for follow action decay calculation
+        # This needs to be called before execute_round to ensure up-to-date info
+        if self.update_round_info_fn:
+            self.update_round_info_fn(day, slot)
+
         # Select active agents for this slot
         regular_agents, page_agents = self.agent_scheduler.select_active_agents(slot)
         active_agents = regular_agents + page_agents

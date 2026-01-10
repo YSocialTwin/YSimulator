@@ -37,6 +37,7 @@ class AgentManager:
         agent_downcast: bool,
         actions_likelihood: Dict,
         logger: logging.Logger,
+        follow_action_decay_config: Dict = None,
     ):
         """
         Initialize AgentManager.
@@ -49,17 +50,31 @@ class AgentManager:
             agent_downcast: Whether to downcast certain agent types
             actions_likelihood: Action probability configuration
             logger: Logger instance
+            follow_action_decay_config: Configuration for time-based follow action decay
         """
         self.config_path = config_path
         self.server = server
         self.client_id = client_id
         self.logger = logger
 
+        # Initialize follow decay manager if configured
+        follow_decay_manager = None
+        if follow_action_decay_config and follow_action_decay_config.get("enabled", False):
+            from YSimulator.YClient.simulation.follow_decay_manager import FollowDecayManager
+
+            follow_decay_manager = FollowDecayManager(server, follow_action_decay_config, logger)
+
         # Initialize specialized components
         self.population_loader = PopulationLoader(config_path, client_id, logger)
         self.network_loader = NetworkLoader(server, client_id, logger)
         self.agent_selector = AgentSelector(
-            archetype_distribution, agent_downcast, actions_likelihood, logger
+            archetype_distribution,
+            agent_downcast,
+            actions_likelihood,
+            logger,
+            follow_decay_manager=follow_decay_manager,
+            current_day=0,
+            current_hour=0,
         )
 
     # ========== Population Management ==========
@@ -109,6 +124,10 @@ class AgentManager:
     def select_action(self, agent_profile: AgentProfile, recent_posts: list):
         """Determine which action an agent should perform."""
         return self.agent_selector.select_action(agent_profile, recent_posts)
+
+    def update_round_info(self, current_day: int, current_hour: int):
+        """Update the current round information for action selection (e.g., follow decay)."""
+        self.agent_selector.update_round_info(current_day, current_hour)
 
     def extract_agent_attrs(
         self,

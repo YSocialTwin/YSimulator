@@ -96,6 +96,13 @@
     "attention_window": 336,
     "probability_of_daily_follow": 0.1,
     "probability_of_secondary_follow": 0.1,
+    "follow_action_decay": {
+      "enabled": false,
+      "decay_function": "exponential",
+      "half_life_rounds": 168,
+      "decay_rate": 0.01,
+      "min_probability_ratio": 0.1
+    },
     "churn": {
       "enabled": true,
       "churn_probability": 0.1,

@@ -1463,6 +1463,22 @@ class OrchestratorServer:
         """
         return self.current_round_id
 
+    def get_round_info(self, round_id: str) -> Optional[Dict[str, int]]:
+        """
+        Get round information (day and hour) for a given round ID.
+
+        Args:
+            round_id: Round ID (UUID)
+
+        Returns:
+            Dictionary with 'day' and 'hour' keys, or None if round not found
+        """
+        try:
+            return self.simulation_service.get_round_info(round_id)
+        except Exception as e:
+            self.logger.error(f"Error getting round info for {round_id}: {e}")
+            return None
+
     def get_inactive_agents(self, current_day: int, inactivity_threshold: int) -> List[str]:
         """
         Get list of inactive agents from database (simple database wrapper for client use).

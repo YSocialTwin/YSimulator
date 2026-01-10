@@ -200,6 +200,12 @@ class SimulationClient:
         self.probability_new_agents = new_agents_config.get("probability_new_agents", 0.01)
         self.percentage_new_agents = new_agents_config.get("percentage_new_agents", 0.01)
 
+        # Load follow action decay configuration
+        self.follow_action_decay_config = agents_config.get("follow_action_decay", {})
+        # Add slots_per_day to decay config for proper calculation
+        if self.follow_action_decay_config:
+            self.follow_action_decay_config["slots_per_day"] = self.num_slots_per_day
+
         # Load text annotation configuration
         self.enable_sentiment = simulation_config["simulation"].get("enable_sentiment", False)
         self.enable_toxicity = simulation_config["simulation"].get("enable_toxicity", False)
@@ -225,6 +231,7 @@ class SimulationClient:
             agent_downcast=self.agent_downcast,
             actions_likelihood=self.actions_likelihood,
             logger=self.logger,
+            follow_action_decay_config=self.follow_action_decay_config,
         )
 
         # Create agents from configuration
@@ -445,6 +452,7 @@ class SimulationClient:
             log_action_fn=self._log_action,
             log_hourly_summary_fn=self._log_hourly_summary,
             log_daily_summary_fn=self._log_daily_summary,
+            update_round_info_fn=self._update_round_info,
         )
 
         self.logger.info("Simulation orchestrator initialized (Phase 2)")
@@ -654,6 +662,13 @@ class SimulationClient:
         Delegates to agent_manager (Phase 6).
         """
         return self.agent_manager.select_action(agent_profile, recent_posts)
+
+    def _update_round_info(self, current_day: int, current_hour: int):
+        """
+        Update the current round information for action selection (e.g., follow decay).
+        Delegates to agent_manager.
+        """
+        self.agent_manager.update_round_info(current_day, current_hour)
 
     def _extract_agent_attrs(self, agent) -> dict:
         """

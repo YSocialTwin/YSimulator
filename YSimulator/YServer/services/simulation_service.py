@@ -45,6 +45,22 @@ class SimulationService:
             self.logger.error(f"Error getting/creating round: {e}")
             raise
 
+    def get_round_info(self, round_id: str) -> dict:
+        """
+        Get round information (day and hour) for a given round ID.
+
+        Args:
+            round_id: Round ID (UUID)
+
+        Returns:
+            Dictionary with 'day' and 'hour' keys, or None if round not found
+        """
+        try:
+            return self.recommendation_repo.get_round_info(round_id)
+        except Exception as e:
+            self.logger.error(f"Error getting round info: {e}")
+            return None
+
     def cleanup_old_posts_from_redis(self, current_day: int, current_slot: int) -> Dict[str, int]:
         """
         Cleanup old posts from Redis (Redis-only operation).

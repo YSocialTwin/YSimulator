@@ -312,6 +312,50 @@ YSimulator supports three ways agents establish follow relationships:
 2. **Daily Follow Evaluation**: End-of-day follow suggestions (see [AGENT_TEMPORAL_ACTIVITIES.md](AGENT_TEMPORAL_ACTIVITIES.md))
 3. **Secondary Follow**: After reading/commenting on posts (see [ARCHITECTURE.md](../architecture/ARCHITECTURE.md#secondary-follow-mechanism))
 
+#### Time-Based Follow Action Decay
+
+Primary follow actions (mechanism 1 above) can be configured to decay over time, modeling the realistic behavior where users are most active in following others during their initial period of platform activity.
+
+**Configuration:**
+
+```json
+{
+  "agents": {
+    "follow_action_decay": {
+      "enabled": true,
+      "decay_function": "exponential",
+      "half_life_rounds": 168,
+      "decay_rate": 0.01,
+      "min_probability_ratio": 0.1
+    }
+  }
+}
+```
+
+**Behavior:**
+- When enabled, the probability of selecting the FOLLOW action decreases as a function of rounds since the agent joined the simulation
+- All agents (both initial and dynamically added) are affected by decay
+- When agents are first registered, they receive a `joined_on` timestamp
+- Initial agents get `joined_on` set to the round when simulation starts
+- New agents get `joined_on` set to the round when they join
+- Two decay functions available:
+  - **Exponential**: `multiplier = 0.5 ^ (rounds_since_join / half_life_rounds)`
+  - **Linear**: `multiplier = 1.0 - (decay_rate × rounds_since_join)`
+- The decay multiplier is applied to the follow action weight in `actions_likelihood`
+- Multiplier never goes below `min_probability_ratio` (default: 0.1)
+
+**Example:**
+With exponential decay and half_life_rounds=168 (7 days × 24 slots):
+- Day 0 (join): 100% follow probability
+- Day 7: 50% follow probability
+- Day 14: 25% follow probability
+- Day 21: 12.5% follow probability (but clamped to min_probability_ratio if below 10%)
+
+**Notes:**
+- Decay only applies to primary follow actions selected during normal action selection
+- Daily follow evaluation and secondary follows are not affected by this decay
+- See [CONFIG.md](../configuration/CONFIG.md#follow-action-decay-configuration) for detailed configuration options
+
 #### Configuration
 
 ```json
@@ -323,7 +367,13 @@ YSimulator supports three ways agents establish follow relationships:
   },
   "agents": {
     "probability_of_daily_follow": 0.1,
-    "probability_of_secondary_follow": 0.3
+    "probability_of_secondary_follow": 0.3,
+    "follow_action_decay": {
+      "enabled": false,
+      "decay_function": "exponential",
+      "half_life_rounds": 168,
+      "min_probability_ratio": 0.1
+    }
   }
 }
 ```

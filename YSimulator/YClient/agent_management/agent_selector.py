@@ -6,7 +6,7 @@ Handles agent selection logic including archetype-based sampling and action sele
 
 import logging
 import random
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional, Tuple
 
 from YSimulator.YClient.classes.ray_models import AgentProfile
 
@@ -28,6 +28,9 @@ class AgentSelector:
         agent_downcast: bool,
         actions_likelihood: Dict,
         logger: logging.Logger,
+        follow_decay_manager=None,
+        current_day: int = 0,
+        current_hour: int = 0,
     ):
         """
         Initialize AgentSelector.
@@ -37,11 +40,17 @@ class AgentSelector:
             agent_downcast: Whether to downcast certain agent types to rule-based
             actions_likelihood: Action probability configuration
             logger: Logger instance
+            follow_decay_manager: Optional FollowDecayManager for time-based follow decay
+            current_day: Current simulation day (for follow decay)
+            current_hour: Current simulation hour (for follow decay)
         """
         self.archetype_distribution = archetype_distribution
         self.agent_downcast = agent_downcast
         self.actions_likelihood = actions_likelihood
         self.logger = logger
+        self.follow_decay_manager = follow_decay_manager
+        self.current_day = current_day
+        self.current_hour = current_hour
 
     def sample_agents_by_archetype(
         self, available_agents: List[AgentProfile], num_active: int
@@ -103,7 +112,21 @@ class AgentSelector:
             recent_posts,
             self.actions_likelihood,
             self.logger,
+            follow_decay_manager=self.follow_decay_manager,
+            current_day=self.current_day,
+            current_hour=self.current_hour,
         )
+
+    def update_round_info(self, current_day: int, current_hour: int):
+        """
+        Update the current round information for decay calculations.
+
+        Args:
+            current_day: Current simulation day
+            current_hour: Current simulation hour/slot
+        """
+        self.current_day = current_day
+        self.current_hour = current_hour
 
     def extract_agent_attrs(
         self,

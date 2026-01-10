@@ -172,6 +172,9 @@ def select_action(
     recent_posts: List[str],
     actions_likelihood: Dict[str, float],
     logger: logging.Logger,
+    follow_decay_manager=None,
+    current_day: int = 0,
+    current_hour: int = 0,
 ) -> Tuple[Optional[str], Optional[str], Optional[str]]:
     """
     Determine which action an agent should perform.
@@ -182,16 +185,20 @@ def select_action(
     - Availability of recent posts (for comment/reaction actions)
     - Agent type (LLM vs rule-based)
     - Page agents can ONLY perform share_link action
+    - Time-based decay for follow actions (based on rounds since registration)
 
     Args:
         agent_profile: Agent profile containing behavior settings
         recent_posts: List of recent post UUIDs available for reactions
         actions_likelihood: Dictionary mapping action types to weights
         logger: Logger instance
+        follow_decay_manager: Optional FollowDecayManager for time-based follow decay
+        current_day: Current simulation day (for follow decay)
+        current_hour: Current simulation hour/slot (for follow decay)
 
     Returns:
         tuple: (action_type, agent_type, target_post_id) where:
-            - action_type: "post", "comment", "read", "image", "share_link", "share", "search", "cast", or None
+            - action_type: "post", "comment", "read", "image", "share_link", "share", "search", "cast", "follow", or None
             - agent_type: "llm" or "rule_based"
             - target_post_id: UUID string for comment/read/share actions, None for posts/no-action
 
@@ -226,6 +233,7 @@ def select_action(
         ],  # Broadcasters post, comment and share contents and images: they are content producers
         "explorer": [
             "follow",
+            "search",
         ],  # Explorers follow and search to grow network: they are lurkers
     }
 
@@ -249,6 +257,22 @@ def select_action(
         for action, weight in actions_likelihood.items()
         if action in available_actions and weight > 0
     }
+
+    # Apply time-based decay to follow action probability if manager is provided
+    if "follow" in filtered_likelihood and follow_decay_manager:
+        original_follow_weight = filtered_likelihood["follow"]
+        decay_multiplier = follow_decay_manager.get_decay_multiplier(
+            agent_profile.joined_on,
+            current_day,
+            current_hour,
+        )
+        filtered_likelihood["follow"] = original_follow_weight * decay_multiplier
+
+        if decay_multiplier < 1.0:
+            logger.debug(
+                f"Agent {agent_profile.username}: Applied follow decay {decay_multiplier:.3f}, "
+                f"follow weight: {original_follow_weight:.2f} -> {filtered_likelihood['follow']:.2f}"
+            )
 
     # If no valid actions, return no action
     if not filtered_likelihood:

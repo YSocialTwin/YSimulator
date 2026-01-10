@@ -1542,6 +1542,32 @@ class SQLRecommendationRepository(RecommendationRepository):
             )
             raise RuntimeError(f"Failed to get or create round for day={day}, hour={hour}: {e}")
 
+    def get_round_info(self, round_id: str) -> Optional[Dict[str, int]]:
+        """
+        Get round information (day and hour) for a given round ID.
+
+        Args:
+            round_id: Round ID (UUID)
+
+        Returns:
+            Dictionary with 'day' and 'hour' keys, or None if round not found
+        """
+        try:
+            session = Session(self.engine)
+            try:
+                round_obj = session.query(Round).filter_by(id=round_id).first()
+                if round_obj:
+                    return {"day": round_obj.day, "hour": round_obj.hour}
+                return None
+            finally:
+                session.close()
+        except Exception as e:
+            self.logger.error(
+                f"Error getting round info for {round_id}: {e}",
+                extra={"extra_data": {"round_id": round_id, "error": str(e)}},
+            )
+            return None
+
     def cleanup_old_posts_from_redis(self, current_day: int, current_slot: int) -> Dict[str, int]:
         """Cleanup old posts (not applicable for SQL)."""
         return {"status": "not_applicable", "method": "sql"}
