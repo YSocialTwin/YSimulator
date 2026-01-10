@@ -50,6 +50,7 @@ class LLMLoadBalancer:
         prompts_config: dict,
         num_actors: int = 4,
         strategy: str = "hash",
+        backend: str = "ollama",
         logger: Optional[logging.Logger] = None,
     ):
         """
@@ -60,30 +61,41 @@ class LLMLoadBalancer:
             prompts_config: Prompt templates configuration
             num_actors: Number of LLM actor instances to create
             strategy: Load balancing strategy ('hash', 'round_robin')
+            backend: LLM backend to use ('ollama' or 'vllm')
             logger: Optional logger instance
         """
         self.logger = logger or logging.getLogger(__name__)
         self.num_actors = num_actors
         self.strategy = LoadBalancingStrategy(strategy)
         self.current_idx = 0  # For round-robin
+        self.backend = backend.lower()
 
         # Create multiple LLM actors
-        self.logger.info(f"Creating {num_actors} LLM actors for parallel inference")
+        self.logger.info(
+            f"Creating {num_actors} LLM actors for parallel inference using {self.backend} backend"
+        )
         self.actors = []
 
-        # Import here to avoid circular dependency
-        from YSimulator.YClient.LLM_interactions.llm_service import LLMService
+        # Import appropriate service based on backend
+        if self.backend == "vllm":
+            from YSimulator.YClient.LLM_interactions.vllm_service import VLLMService
+
+            ServiceClass = VLLMService
+        else:
+            from YSimulator.YClient.LLM_interactions.llm_service import LLMService
+
+            ServiceClass = LLMService
 
         for i in range(num_actors):
-            actor = LLMService.remote(
+            actor = ServiceClass.remote(
                 llm_config=llm_config,
                 prompts_config=prompts_config,
             )
             self.actors.append(actor)
-            self.logger.info(f"Created LLM actor {i+1}/{num_actors}")
+            self.logger.info(f"Created LLM actor {i+1}/{num_actors} ({self.backend})")
 
         self.logger.info(
-            f"LLM load balancer initialized with {num_actors} actors, strategy={strategy}"
+            f"LLM load balancer initialized with {num_actors} actors, strategy={strategy}, backend={self.backend}"
         )
 
     def get_actor_for_agent(self, agent_id: str) -> Any:
@@ -173,6 +185,7 @@ class LLMActorPool:
         prompts_config: dict,
         num_actors: int = 4,
         strategy: str = "hash",
+        backend: str = "ollama",
         enable_monitoring: bool = True,
         logger: Optional[logging.Logger] = None,
     ):
@@ -184,6 +197,7 @@ class LLMActorPool:
             prompts_config: Prompt templates configuration
             num_actors: Number of LLM actor instances to create
             strategy: Load balancing strategy ('hash', 'round_robin')
+            backend: LLM backend to use ('ollama' or 'vllm')
             enable_monitoring: Whether to track per-actor statistics
             logger: Optional logger instance
         """
@@ -191,6 +205,11 @@ class LLMActorPool:
         self.load_balancer = LLMLoadBalancer(
             llm_config=llm_config,
             prompts_config=prompts_config,
+            num_actors=num_actors,
+            strategy=strategy,
+            backend=backend,
+            logger=logger,
+        )
             num_actors=num_actors,
             strategy=strategy,
             logger=logger,
@@ -296,6 +315,7 @@ def create_llm_actors(
     prompts_config: dict,
     num_actors: int = 1,
     strategy: str = "hash",
+    backend: str = "ollama",
     enable_monitoring: bool = False,
     logger: Optional[logging.Logger] = None,
 ) -> Any:
@@ -309,6 +329,7 @@ def create_llm_actors(
         prompts_config: Prompt templates configuration
         num_actors: Number of actors (1 = no load balancing)
         strategy: Load balancing strategy if num_actors > 1
+        backend: LLM backend to use ('ollama' or 'vllm')
         enable_monitoring: Whether to enable per-actor monitoring
         logger: Optional logger instance
 
@@ -317,11 +338,18 @@ def create_llm_actors(
         - If num_actors > 1 and enable_monitoring: LLMActorPool instance
         - If num_actors > 1 and not enable_monitoring: LLMLoadBalancer instance
     """
+    backend_lower = backend.lower()
+    
     if num_actors == 1:
         # Single actor - backwards compatible
-        from YSimulator.YClient.LLM_interactions.llm_service import LLMService
+        if backend_lower == "vllm":
+            from YSimulator.YClient.LLM_interactions.vllm_service import VLLMService
 
-        return LLMService.remote(llm_config=llm_config, prompts_config=prompts_config)
+            return VLLMService.remote(llm_config=llm_config, prompts_config=prompts_config)
+        else:
+            from YSimulator.YClient.LLM_interactions.llm_service import LLMService
+
+            return LLMService.remote(llm_config=llm_config, prompts_config=prompts_config)
 
     # Multiple actors - use load balancing
     if enable_monitoring:
@@ -330,6 +358,7 @@ def create_llm_actors(
             prompts_config=prompts_config,
             num_actors=num_actors,
             strategy=strategy,
+            backend=backend,
             enable_monitoring=True,
             logger=logger,
         )
@@ -339,5 +368,6 @@ def create_llm_actors(
             prompts_config=prompts_config,
             num_actors=num_actors,
             strategy=strategy,
+            backend=backend,
             logger=logger,
         )

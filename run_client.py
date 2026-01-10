@@ -22,6 +22,7 @@ import ray
 from YSimulator.common_utils import validate_config_directory
 from YSimulator.YClient.client import SimulationClient
 from YSimulator.YClient.LLM_interactions.llm_service import LLMService
+from YSimulator.YClient.LLM_interactions.vllm_service import VLLMService
 from YSimulator.YClient.news_feeds.news_service import NewsFeedService
 
 
@@ -245,9 +246,31 @@ if __name__ == "__main__":
     )
 
     # Create LLM service with configuration
+    # Support both Ollama (default) and vLLM backends
     llm_start = time.time()
+    llm_config = sim_config["llm"]
     llm_v_config = sim_config.get("llm_v")  # Get vision LLM config if available
-    llm_service = LLMService.remote(sim_config["llm"], prompts_config, llm_v_config)
+    
+    # Determine which LLM backend to use
+    # Default to "ollama" for backward compatibility and macOS support
+    llm_backend = llm_config.get("backend", "ollama").lower()
+    
+    if llm_backend == "vllm":
+        logger.info("Using vLLM backend for LLM inference")
+        print("--- Using vLLM backend (batch inference) ---")
+        try:
+            llm_service = VLLMService.remote(llm_config, prompts_config, llm_v_config)
+        except ImportError as e:
+            logger.error(f"Failed to initialize vLLM: {e}")
+            print(f"❌ Error: vLLM not available: {e}")
+            print("💡 Tip: vLLM requires Linux. On macOS, use 'ollama' backend instead.")
+            sys.exit(1)
+    else:
+        # Default to Ollama backend
+        logger.info("Using Ollama backend for LLM inference")
+        print("--- Using Ollama backend ---")
+        llm_service = LLMService.remote(llm_config, prompts_config, llm_v_config)
+    
     llm_time = (time.time() - llm_start) * 1000
 
     # Create News Feed service with configuration (optional)
