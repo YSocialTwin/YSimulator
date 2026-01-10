@@ -369,7 +369,8 @@ class InterestManager:
         if user_interests_data:
             added_count = self.db.add_user_interests_batch(user_interests_data)
             self.logger.info(
-                f"Batch initialized {added_count} user interest entries for {len(valid_agents)} agents"
+                f"Batch initialized {added_count} user interest entries for "
+                f"{len(valid_agents)} agents"
             )
 
         return results

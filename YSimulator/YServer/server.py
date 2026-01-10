@@ -997,7 +997,8 @@ class OrchestratorServer:
                 )
                 success_count = sum(1 for success in interest_results.values() if success)
                 self.logger.info(
-                    f"Batch initialized interests for {success_count}/{len(agents_with_interests)} agents"
+                    f"Batch initialized interests for {success_count}/"
+                    f"{len(agents_with_interests)} agents"
                 )
 
             # Batch initialize opinions for all agents
@@ -1031,7 +1032,8 @@ class OrchestratorServer:
                         agent_opinions_data
                     )
                     self.logger.info(
-                        f"Batch initialized {opinions_added} opinions for {len(agents_with_opinions)} agents"
+                        f"Batch initialized {opinions_added} opinions for "
+                        f"{len(agents_with_opinions)} agents"
                     )
 
             # Batch register websites for page agents

@@ -412,10 +412,11 @@ class SQLPostRepository(PostRepository):
                     "parent_post": post.comment_to,  # API: parent_post <-> Model: comment_to
                     "shared_from": post.shared_from,
                     "author": post.user_id,  # API: author <-> Model: user_id
-                    "user_id": post.user_id,  # Alias for backward compatibility with client code
+                    "user_id": post.user_id,  # Alias for backward compatibility
                     "text": post.tweet,  # API: text <-> Model: tweet
                     "round": post.round,
-                    "num_reactions": post.reaction_count,  # API: num_reactions <-> Model: reaction_count
+                    # API: num_reactions <-> Model: reaction_count
+                    "num_reactions": post.reaction_count,
                 }
             finally:
                 session.close()
@@ -700,7 +701,8 @@ class SQLPostRepository(PostRepository):
 
                 session.commit()
                 self.logger.info(
-                    f"Initialized emotions table: {created_count}new emotions added, {len(emotions_data) - created_count}already existed"
+                    f"Initialized emotions table: {created_count}new emotions added, "
+                    f"{len(emotions_data) - created_count}already existed"
                 )
                 return True
             finally:
