@@ -81,7 +81,7 @@ def annotate_text(
 
             emotions = ray.get(llm_handle.extract_emotions.remote(text))
             annotations["emotions"] = emotions if emotions else []
-        except Exception as e:
+        except Exception:
             # If emotion extraction fails, return empty list
             annotations["emotions"] = []
     else:

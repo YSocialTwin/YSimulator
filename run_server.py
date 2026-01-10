@@ -20,25 +20,27 @@ from pathlib import Path
 import ray
 
 from YSimulator.common_utils import validate_config_directory
+from YSimulator.utils.init_db import database_exists, initialize_database
 from YSimulator.YServer.server import OrchestratorServer
-from YSimulator.utils.init_db import initialize_database, database_exists
 
 
 def compress_rotated_log(source, dest):
     """
     Compress a rotated log file using gzip.
-    
+
     Args:
         source: Path to the source log file
         dest: Path to the destination compressed file
     """
-    with open(source, 'rb') as f_in:
-        with gzip.open(dest, 'wb') as f_out:
+    with open(source, "rb") as f_in:
+        with gzip.open(dest, "wb") as f_out:
             shutil.copyfileobj(f_in, f_out)
     os.remove(source)
 
 
-def setup_logging(config_path: Path, server_name: str, logging_config: dict = None) -> logging.Logger:
+def setup_logging(
+    config_path: Path, server_name: str, logging_config: dict = None
+) -> logging.Logger:
     """
     Set up rotating JSON logging for the server with gzip compression.
 
@@ -55,10 +57,10 @@ def setup_logging(config_path: Path, server_name: str, logging_config: dict = No
     # Default logging configuration
     if logging_config is None:
         logging_config = {}
-    
+
     enable_server_log = logging_config.get("enable_server_log", True)
     enable_console_log = logging_config.get("enable_console_log", True)
-    
+
     log_dir = config_path / "logs"
     log_dir.mkdir(exist_ok=True)
 
@@ -70,7 +72,7 @@ def setup_logging(config_path: Path, server_name: str, logging_config: dict = No
     if enable_server_log:
         log_file = log_dir / f"{server_name}_server.log"
         handler = RotatingFileHandler(log_file, maxBytes=10 * 1024 * 1024, backupCount=5)  # 10MB
-        
+
         # Add compression for rotated files
         handler.rotator = compress_rotated_log
         handler.namer = lambda name: name + ".gz"
@@ -141,7 +143,7 @@ if __name__ == "__main__":
     port = config.get("port")
     min_to_start = config.get("min_to_start", 1)  # Minimum clients before simulation starts
     timeout_seconds = config.get("timeout_seconds", 60)  # Stale client timeout (default: 60s)
-    
+
     # Database configuration - make database unique per server instance
     db_config = config.get("database", {})
     # Support legacy database_file parameter for backward compatibility
@@ -149,7 +151,7 @@ if __name__ == "__main__":
         db_config = {"type": "sqlite", "sqlite": {"filename": config["database_file"]}}
     elif not db_config:
         db_config = {"type": "sqlite", "sqlite": {"filename": "simulation.db"}}
-    
+
     # Make database name unique per server instance
     # This ensures each server instance has its own database
     if db_config.get("type") == "sqlite":
@@ -169,10 +171,10 @@ if __name__ == "__main__":
         base_db_name = type_config.get("database", "ysimulator")
         unique_db_name = f"{base_db_name}_{server_name}"
         db_config[db_type]["database"] = unique_db_name
-    
+
     redis_config = config.get("redis")  # Redis configuration (optional)
     simulation_config = config.get("simulation", {})  # Simulation configuration (optional)
-    
+
     # Add posts configuration to simulation_config for consistency
     posts_config = config.get("posts", {})
     if posts_config:
@@ -183,7 +185,7 @@ if __name__ == "__main__":
     logger = setup_logging(config_dir, server_name, logging_config)
 
     load_time = (time.time() - start_time) * 1000
-    
+
     # Get database name for logging
     if db_config.get("type") == "sqlite":
         db_name = db_config["sqlite"]["filename"]
@@ -193,7 +195,7 @@ if __name__ == "__main__":
         db_name = db_config["mysql"]["database"]
     else:
         db_name = "unknown"
-    
+
     logger.info(
         "Server configuration loaded",
         extra={
@@ -206,30 +208,30 @@ if __name__ == "__main__":
             }
         },
     )
-    
+
     # Check if database exists, if not initialize it
     db_init_start = time.time()
     if not database_exists(db_config, config_dir):
         logger.info(
             f"Database does not exist. Initializing new database: {db_name}",
-            extra={"extra_data": {"db_type": db_config.get("type", "sqlite")}}
+            extra={"extra_data": {"db_type": db_config.get("type", "sqlite")}},
         )
         print(f"--- 🔧 Initializing new database: {db_name} ---")
-        
+
         if not initialize_database(db_config, config_dir, logger):
             logger.error("Failed to initialize database. Exiting.")
             sys.exit(1)
-        
+
         db_init_time = (time.time() - db_init_start) * 1000
         logger.info(
             "Database initialized successfully",
-            extra={"extra_data": {"db_name": db_name, "execution_time_ms": db_init_time}}
+            extra={"extra_data": {"db_name": db_name, "execution_time_ms": db_init_time}},
         )
         print(f"--- ✅ Database initialized: {db_name} ---")
     else:
         logger.info(
             f"Using existing database: {db_name}",
-            extra={"extra_data": {"db_type": db_config.get("type", "sqlite")}}
+            extra={"extra_data": {"db_type": db_config.get("type", "sqlite")}},
         )
         print(f"--- 💾 Using existing database: {db_name} ---")
 
@@ -270,7 +272,7 @@ if __name__ == "__main__":
     print(f"--- 📝 Namespace: {namespace} ---")
     print(f"--- 💾 Database Type: {db_config.get('type', 'sqlite').upper()} ---")
     print(f"--- 📋 Logs: {config_dir / 'logs'} ---")
-    print(f"--- 💾 Waiting for clients... ---")
+    print("--- 💾 Waiting for clients... ---")
 
     # Start orchestrator actor
     actor_start = time.time()

@@ -36,6 +36,9 @@
   "posts": {
     "visibility_rounds": 36
   },
+  "recommendations": {
+    "default_limit": 5
+  },
   "simulation": {
     "agent_archetypes": {
       "enabled": true,

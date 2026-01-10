@@ -307,6 +307,50 @@ def generate_llm_reply_to_mention_async(
     )
 
 
+def generate_llm_share_async(
+    llm_handle,
+    cluster_id: int,
+    post_content: str,
+    agent_attrs: dict = None,
+    author_name: str = "Someone",
+):
+    """
+    Initiate async LLM share commentary generation.
+
+    This function generates a commentary/perspective when an LLM agent reshares
+    a post. Unlike rule-based sharing (which just reshares without comment),
+    LLM agents add their own perspective based on their persona and opinions.
+
+    The LLM service will generate contextual commentary based on:
+    - Cluster ID (determines persona/behavior)
+    - Post content (what is being reshared)
+    - Agent attributes for dynamic persona building (including opinions if available)
+    - Author name (who wrote the original post)
+
+    Args:
+        llm_handle: Ray actor handle for the LLM service
+        cluster_id: Cluster/group the agent belongs to (determines persona)
+        post_content: Content of the post being reshared
+        agent_attrs: Dict with agent attributes (name, age, opinions, etc.)
+        author_name: Username of the original post author
+
+    Returns:
+        Ray ObjectRef: Future that will resolve to share commentary (str)
+
+    Usage:
+        # Scatter phase - fire off LLM call
+        attrs = {"name": agent.username, "post_topics": [...], "post_opinions": [...]}
+        future = generate_llm_share_async(llm, agent.cluster, post_content, attrs, author)
+
+        # Gather phase - wait for result
+        commentary = ray.get(future)
+        action = ActionDTO(agent_id, cluster_id, "SHARE", content=commentary, target_post_id=post_id)
+    """
+    return llm_handle.generate_share_commentary.remote(
+        cluster_id, post_content, agent_attrs, author_name
+    )
+
+
 @ray.remote
 def generate_llm_news_commentary(
     llm_service, cluster_id: int, article: dict, website_name: str = None
@@ -328,7 +372,7 @@ def generate_llm_news_commentary(
     try:
         commentary = ray.get(llm_service.generate_news_commentary.remote(article, website_name))
         return commentary
-    except Exception as e:
+    except Exception:
         # Fallback if LLM fails - truncate title if too long
         article_title = article.get("title", "News Article")
         title = article_title if len(article_title) <= 97 else article_title[:97] + "..."

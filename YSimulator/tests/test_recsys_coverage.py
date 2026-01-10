@@ -5,9 +5,9 @@ These tests cover content recommendation, follow recommendation,
 and interest tracking functionality.
 """
 
+from unittest.mock import Mock, patch
+
 import pytest
-from unittest.mock import Mock, patch, MagicMock
-from typing import List, Dict, Any
 
 
 class TestContentRecommendationSystem:
@@ -26,7 +26,7 @@ class TestContentRecommendationSystem:
         """Test content recommendation system initialization."""
         try:
             from YSimulator.YServer.recsys.content_recsys import ContentRecommendationSystem
-            
+
             recsys = ContentRecommendationSystem(max_recommendations=10)
             assert recsys is not None
         except ImportError:
@@ -36,15 +36,14 @@ class TestContentRecommendationSystem:
         """Test getting content recommendations."""
         try:
             from YSimulator.YServer.recsys.content_recsys import ContentRecommendationSystem
-            
+
             recsys = ContentRecommendationSystem(max_recommendations=5)
-            
-            with patch.object(recsys, 'db', mock_db_middleware):
+
+            with patch.object(recsys, "db", mock_db_middleware):
                 recommendations = recsys.get_recommendations(
-                    user_id="test-user-123",
-                    num_recommendations=3
+                    user_id="test-user-123", num_recommendations=3
                 )
-                
+
                 assert isinstance(recommendations, list)
                 assert len(recommendations) <= 3
         except (ImportError, AttributeError):
@@ -54,19 +53,19 @@ class TestContentRecommendationSystem:
         """Test filtering of already seen posts."""
         try:
             from YSimulator.YServer.recsys.content_recsys import ContentRecommendationSystem
-            
+
             recsys = ContentRecommendationSystem(max_recommendations=10)
-            
+
             all_posts = [
                 {"id": "post1", "content": "Test 1"},
                 {"id": "post2", "content": "Test 2"},
                 {"id": "post3", "content": "Test 3"},
             ]
-            
+
             seen_posts = {"post1", "post3"}
-            
+
             # Mock filtering method if available
-            if hasattr(recsys, 'filter_seen'):
+            if hasattr(recsys, "filter_seen"):
                 filtered = recsys.filter_seen(all_posts, seen_posts)
                 assert len(filtered) == 1
                 assert filtered[0]["id"] == "post2"
@@ -85,14 +84,14 @@ class TestFollowRecommendationSystem:
             "username": "test_user",
             "interests": ["technology", "science"],
             "followers": [],
-            "following": []
+            "following": [],
         }
 
     def test_follow_recsys_initialization(self):
         """Test follow recommendation system initialization."""
         try:
             from YSimulator.YServer.recsys.follow_recsys_db import FollowRecommendationSystem
-            
+
             recsys = FollowRecommendationSystem(db_path=":memory:")
             assert recsys is not None
         except ImportError:
@@ -102,14 +101,13 @@ class TestFollowRecommendationSystem:
         """Test getting follow recommendations."""
         try:
             from YSimulator.YServer.recsys.follow_recsys_db import FollowRecommendationSystem
-            
+
             recsys = FollowRecommendationSystem(db_path=":memory:")
-            
+
             recommendations = recsys.get_recommendations(
-                user_id=mock_user_data["id"],
-                num_recommendations=5
+                user_id=mock_user_data["id"], num_recommendations=5
             )
-            
+
             assert isinstance(recommendations, list)
             assert len(recommendations) <= 5
         except (ImportError, AttributeError) as e:
@@ -119,14 +117,14 @@ class TestFollowRecommendationSystem:
         """Test user similarity scoring for recommendations."""
         try:
             from YSimulator.YServer.recsys.follow_recsys_db import FollowRecommendationSystem
-            
+
             recsys = FollowRecommendationSystem(db_path=":memory:")
-            
+
             user1_interests = ["tech", "ai", "ml"]
             user2_interests = ["tech", "ai"]
-            
+
             # Mock similarity calculation if available
-            if hasattr(recsys, 'calculate_similarity'):
+            if hasattr(recsys, "calculate_similarity"):
                 similarity = recsys.calculate_similarity(user1_interests, user2_interests)
                 assert 0 <= similarity <= 1
                 assert similarity > 0  # Should have some similarity
@@ -140,14 +138,16 @@ class TestInterestManager:
     def test_interest_manager_initialization(self):
         """Test interest manager initialization."""
         try:
-            from YSimulator.YServer.interests_modeling.interest_manager import InterestManager
             from YSimulator.YServer.classes.db_middleware import DatabaseMiddleware
-            
+            from YSimulator.YServer.interests_modeling.interest_manager import InterestManager
+
             # Create mock db_middleware
             db_config = {"type": "sqlite", "sqlite": {"filename": ":memory:"}}
-            db_middleware = DatabaseMiddleware(db_config=db_config, config_path=".", redis_config=None)
-            
-            manager = InterestManager(db_middleware=db_middleware, attention_window=336)
+            db_middleware = DatabaseMiddleware(
+                db_config=db_config, config_path=".", redis_config=None
+            )
+
+            manager = InterestManager(db_service=db_middleware, attention_window=336)
             assert manager is not None
         except ImportError:
             pytest.skip("Interest manager module not available")
@@ -155,22 +155,24 @@ class TestInterestManager:
     def test_interest_manager_update_interests(self):
         """Test updating user interests."""
         try:
-            from YSimulator.YServer.interests_modeling.interest_manager import InterestManager
             from YSimulator.YServer.classes.db_middleware import DatabaseMiddleware
-            
+            from YSimulator.YServer.interests_modeling.interest_manager import InterestManager
+
             db_config = {"type": "sqlite", "sqlite": {"filename": ":memory:"}}
-            db_middleware = DatabaseMiddleware(db_config=db_config, config_path=".", redis_config=None)
-            
-            manager = InterestManager(db_middleware=db_middleware, attention_window=336)
-            
+            db_middleware = DatabaseMiddleware(
+                db_config=db_config, config_path=".", redis_config=None
+            )
+
+            manager = InterestManager(db_service=db_middleware, attention_window=336)
+
             user_id = "test-user-123"
             new_interests = ["technology", "science", "programming"]
-            
-            if hasattr(manager, 'update_interests'):
+
+            if hasattr(manager, "update_interests"):
                 manager.update_interests(user_id, new_interests)
-                
+
                 # Retrieve and verify
-                if hasattr(manager, 'get_interests'):
+                if hasattr(manager, "get_interests"):
                     interests = manager.get_interests(user_id)
                     assert isinstance(interests, list)
         except (ImportError, AttributeError):
@@ -179,21 +181,23 @@ class TestInterestManager:
     def test_interest_manager_track_interaction(self):
         """Test tracking interest-based interactions."""
         try:
-            from YSimulator.YServer.interests_modeling.interest_manager import InterestManager
             from YSimulator.YServer.classes.db_middleware import DatabaseMiddleware
-            
+            from YSimulator.YServer.interests_modeling.interest_manager import InterestManager
+
             db_config = {"type": "sqlite", "sqlite": {"filename": ":memory:"}}
-            db_middleware = DatabaseMiddleware(db_config=db_config, config_path=".", redis_config=None)
-            
-            manager = InterestManager(db_middleware=db_middleware, attention_window=336)
-            
+            db_middleware = DatabaseMiddleware(
+                db_config=db_config, config_path=".", redis_config=None
+            )
+
+            manager = InterestManager(db_service=db_middleware, attention_window=336)
+
             user_id = "test-user-123"
             topic = "technology"
             interaction_type = "read"
-            
-            if hasattr(manager, 'track_interaction'):
+
+            if hasattr(manager, "track_interaction"):
                 manager.track_interaction(user_id, topic, interaction_type)
-                
+
                 # Should update interest scores
                 interests = manager.get_interests(user_id)
                 assert isinstance(interests, (list, dict))
@@ -203,15 +207,17 @@ class TestInterestManager:
     def test_interest_manager_get_trending_topics(self):
         """Test getting trending topics."""
         try:
-            from YSimulator.YServer.interests_modeling.interest_manager import InterestManager
             from YSimulator.YServer.classes.db_middleware import DatabaseMiddleware
-            
+            from YSimulator.YServer.interests_modeling.interest_manager import InterestManager
+
             db_config = {"type": "sqlite", "sqlite": {"filename": ":memory:"}}
-            db_middleware = DatabaseMiddleware(db_config=db_config, config_path=".", redis_config=None)
-            
-            manager = InterestManager(db_middleware=db_middleware, attention_window=336)
-            
-            if hasattr(manager, 'get_trending_topics'):
+            db_middleware = DatabaseMiddleware(
+                db_config=db_config, config_path=".", redis_config=None
+            )
+
+            manager = InterestManager(db_service=db_middleware, attention_window=336)
+
+            if hasattr(manager, "get_trending_topics"):
                 trending = manager.get_trending_topics(limit=10)
                 assert isinstance(trending, list)
                 assert len(trending) <= 10
@@ -226,12 +232,12 @@ class TestRecommendationUtils:
         """Test similarity score calculation."""
         try:
             from YSimulator.YServer.recsys.utils import calculate_similarity
-            
+
             vec1 = [1, 0, 1, 0, 1]
             vec2 = [1, 1, 1, 0, 0]
-            
+
             similarity = calculate_similarity(vec1, vec2)
-            
+
             assert isinstance(similarity, float)
             assert 0 <= similarity <= 1
         except ImportError:
@@ -241,11 +247,11 @@ class TestRecommendationUtils:
         """Test score normalization."""
         try:
             from YSimulator.YServer.recsys.utils import normalize_scores
-            
+
             scores = [10, 20, 30, 40, 50]
-            
+
             normalized = normalize_scores(scores)
-            
+
             assert isinstance(normalized, list)
             assert len(normalized) == len(scores)
             assert all(0 <= score <= 1 for score in normalized)
@@ -256,7 +262,7 @@ class TestRecommendationUtils:
         """Test diversity filtering for recommendations."""
         try:
             from YSimulator.YServer.recsys.utils import apply_diversity_filter
-            
+
             recommendations = [
                 {"id": "post1", "topic": "tech"},
                 {"id": "post2", "topic": "tech"},
@@ -264,9 +270,9 @@ class TestRecommendationUtils:
                 {"id": "post4", "topic": "tech"},
                 {"id": "post5", "topic": "sports"},
             ]
-            
+
             filtered = apply_diversity_filter(recommendations, max_per_topic=2)
-            
+
             assert isinstance(filtered, list)
             # Should limit tech posts to 2
             tech_count = sum(1 for post in filtered if post["topic"] == "tech")
@@ -292,14 +298,14 @@ class TestRedisRecommendationCache:
         """Test Redis cache hit for content recommendations."""
         try:
             from YSimulator.YServer.recsys.content_recsys_redis import ContentRecsysRedis
-            
+
             recsys = ContentRecsysRedis(redis_client=mock_redis)
-            
+
             # Simulate cache hit
             mock_redis.get.return_value = '["post1", "post2", "post3"]'
-            
+
             cached = recsys.get_cached_recommendations("user123")
-            
+
             assert cached is not None
             mock_redis.get.assert_called_once()
         except ImportError:
@@ -309,14 +315,14 @@ class TestRedisRecommendationCache:
         """Test Redis cache miss for content recommendations."""
         try:
             from YSimulator.YServer.recsys.content_recsys_redis import ContentRecsysRedis
-            
+
             recsys = ContentRecsysRedis(redis_client=mock_redis)
-            
+
             # Simulate cache miss
             mock_redis.get.return_value = None
-            
+
             cached = recsys.get_cached_recommendations("user123")
-            
+
             assert cached is None
             mock_redis.get.assert_called_once()
         except ImportError:
@@ -326,13 +332,13 @@ class TestRedisRecommendationCache:
         """Test setting Redis cache for follow recommendations."""
         try:
             from YSimulator.YServer.recsys.follow_recsys_redis import FollowRecsysRedis
-            
+
             recsys = FollowRecsysRedis(redis_client=mock_redis)
-            
+
             recommendations = ["user1", "user2", "user3"]
-            
+
             recsys.cache_recommendations("user123", recommendations, ttl=3600)
-            
+
             mock_redis.set.assert_called_once()
             mock_redis.expire.assert_called_once()
         except ImportError:
@@ -342,11 +348,11 @@ class TestRedisRecommendationCache:
         """Test Redis cache invalidation."""
         try:
             from YSimulator.YServer.recsys.content_recsys_redis import ContentRecsysRedis
-            
+
             recsys = ContentRecsysRedis(redis_client=mock_redis)
-            
+
             recsys.invalidate_cache("user123")
-            
+
             mock_redis.delete.assert_called_once()
         except ImportError:
             pytest.skip("Redis recsys module not available")

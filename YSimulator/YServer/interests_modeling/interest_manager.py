@@ -6,7 +6,7 @@ for agent interest modeling in YSimulator.
 """
 
 import logging
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from sqlalchemy.orm import Session
 
@@ -25,15 +25,15 @@ class InterestManager:
     - Agent interest state management
     """
 
-    def __init__(self, db_middleware, attention_window: int = 336):
+    def __init__(self, db_service: Any, attention_window: int = 336):
         """
         Initialize the Interest Manager.
 
         Args:
-            db_middleware: Database middleware instance for database operations
+            db_service: Database service adapter or middleware instance for database operations
             attention_window: Number of rounds to consider for interest decay (default: 336 = 14 days)
         """
-        self.db = db_middleware
+        self.db = db_service
         self.attention_window = attention_window
         self.logger = logging.getLogger(__name__)
 
@@ -162,7 +162,7 @@ class InterestManager:
             agent_ids: List of agent IDs to recompute interests for
         """
         self.logger.info(
-            f"Recomputing interests for {len(agent_ids)} agents using attention window of {self.attention_window} rounds"
+            f"Recomputing interests for {len(agent_ids)}agents using attention window of {self.attention_window}rounds"
         )
 
         for agent_id in agent_ids:
@@ -172,7 +172,8 @@ class InterestManager:
         agents_with_interests = len(self.agent_interests)
         total_topics = sum(len(data["topics"]) for data in self.agent_interests.values())
         self.logger.info(
-            f"Interest recomputation complete: {agents_with_interests} agents have interests, {total_topics} total topics"
+            f"Interest recomputation complete: {agents_with_interests} agents have interests, "
+            f"{total_topics} total topics"
         )
 
     def get_agent_interests(self) -> Dict[str, Dict[str, list]]:

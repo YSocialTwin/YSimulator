@@ -4,14 +4,14 @@ Target: 80%+ coverage for text_support package.
 
 Tests cover:
 - Text cleaning (cleaning.py)
-- Text annotations (annotations.py) 
+- Text annotations (annotations.py)
 - Text annotator integration (text_annotator.py)
 """
 
-import pytest
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import MagicMock, patch
+
+from YSimulator.YClient.text_support.annotations import toxicity, vader_sentiment
 from YSimulator.YClient.text_support.cleaning import clean_text, extract_components
-from YSimulator.YClient.text_support.annotations import vader_sentiment, toxicity
 from YSimulator.YClient.text_support.text_annotator import (
     annotate_text,
     prepare_sentiment_data,
@@ -64,7 +64,7 @@ class TestTextCleaning:
 
     def test_clean_text_remove_quotes(self):
         """Test quote removal."""
-        result = clean_text("user", '"Hello" \'world\'')
+        result = clean_text("user", "\"Hello\" 'world'")
         assert result == "Hello world"
 
     def test_clean_text_strip_parentheses(self):
@@ -350,9 +350,7 @@ class TestAnnotateText:
         }
         mock_perspective.return_value = mock_api
 
-        result = annotate_text(
-            "Test text", enable_toxicity=True, perspective_api_key="test_key"
-        )
+        result = annotate_text("Test text", enable_toxicity=True, perspective_api_key="test_key")
         assert result["toxicity"] is not None
         assert "TOXICITY" in result["toxicity"]
 

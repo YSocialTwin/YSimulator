@@ -18,38 +18,45 @@ A distributed social media simulation system using Ray for orchestration and LLM
 
 ## Documentation
 
-**📚 [Complete Documentation Index](docs/INDEX.md)** - Navigate all documentation organized by topic and use case
+**📚 [Complete Documentation Index](docs/getting-started/INDEX.md)** - Navigate all documentation organized by topic and use case
+
+> **New in 2.1**: Documentation has been reorganized into thematic subdirectories for better navigation and discoverability.
 
 ### Quick Links
 
 **Getting Started:**
-- **[Configuration Guide](docs/CONFIG.md)** - Complete guide to all configuration options (1,550 lines)
-- **[Architecture Overview](docs/ARCHITECTURE.md)** - System design and components (800 lines)
+- **[Configuration Guide](docs/configuration/CONFIG.md)** - Complete guide to all configuration options (1,550 lines)
+- **[Architecture Overview](docs/architecture/ARCHITECTURE.md)** - System design and components (960+ lines)
 
 **Core Features:**
-- **[Recommendation Systems](docs/RECOMMENDATION_SYSTEMS.md)** - Content & follow recommendations with 15 algorithms (1,200 lines)
-- **[Opinion Dynamics](docs/OPINION_DYNAMICS.md)** - Bounded confidence and LLM evaluation models (1,200 lines)
-- **[Interests & Topics](docs/INTERESTS.md)** - Interest management with attention windows (300 lines)
+- **[Recommendation Systems](docs/features/RECOMMENDATION_SYSTEMS.md)** - Content & follow recommendations with 15 algorithms (1,200 lines)
+- **[Opinion Dynamics](docs/features/OPINION_DYNAMICS.md)** - Bounded confidence and LLM evaluation models (1,200 lines)
+- **[Interests & Topics](docs/features/INTERESTS.md)** - Interest management with attention windows (300 lines)
+
+**Agent System:**
+- **[Agent Actions](docs/agents/AGENT_ACTIONS.md)** - All available agent actions (700+ lines)
+- **[Agent Types](docs/agents/AGENT_TYPES.md)** - Agent types and archetypes (670+ lines)
+- **[Agent Temporal Activities](docs/agents/AGENT_TEMPORAL_ACTIVITIES.md)** - Temporal patterns and dynamics (990+ lines)
 
 **System & Performance:**
-- **[Database & Storage](docs/REDIS_DATABASE_ANALYSIS.md)** - Redis/SQL hybrid architecture, 89% Redis coverage (480 lines)
-- **[Redis Integration](docs/RECSYS_REDIS_SUPPORT.md)** - Caching strategies and implementation (870 lines)
+- **[Database & Storage](docs/data-storage/REDIS_DATABASE_ANALYSIS.md)** - Redis/SQL hybrid architecture, 89% Redis coverage (480 lines)
+- **[Redis Integration](docs/data-storage/RECSYS_REDIS_SUPPORT.md)** - Caching strategies and implementation (870 lines)
 
 **Development:**
-- **[Extension Guide](docs/EXTENDING.md)** - How to add new agent actions and features (950 lines)
-- **[System Diagrams](docs/DIAGRAMS.md)** - Visual architecture and interaction diagrams (800 lines)
-- **[Code Formatting](docs/FORMATTING.md)** - Development guidelines and tooling
+- **[Extension Guide](docs/development/EXTENDING.md)** - How to add new agent actions and features (1,210+ lines)
+- **[System Diagrams](docs/architecture/DIAGRAMS.md)** - Visual architecture and interaction diagrams (800 lines)
+- **[Code Formatting](docs/development/FORMATTING.md)** - Development guidelines and tooling
 
 **Monitoring:**
-- **[Logging Configuration](docs/LOGGING_CONFIG.md)** - Comprehensive logging setup (420 lines)
-- **[Server Logging](docs/SERVER_LOGGING.md)** - Server log analysis (380 lines)
-- **[Action Logging](docs/ACTION_LOGGING.md)** - Client action tracking (160 lines)
+- **[Logging Configuration](docs/logging/LOGGING_CONFIG.md)** - Comprehensive logging setup (420 lines)
+- **[Server Logging](docs/logging/SERVER_LOGGING.md)** - Server log analysis (380 lines)
+- **[Action Logging](docs/logging/ACTION_LOGGING.md)** - Client action tracking (160 lines)
 
-**Browse by Use Case**: See the [Documentation Index](docs/INDEX.md) for recommended reading paths by role (Researcher, Developer, Admin) and feature cross-references.
+**Browse by Use Case**: See the [Documentation Index](docs/getting-started/INDEX.md) for recommended reading paths by role (Researcher, Developer, Admin) and feature cross-references.
 
 ## Configuration
 
-The simulator uses JSON configuration files stored in a single directory. See [docs/CONFIG.md](docs/CONFIG.md) for detailed documentation.
+The simulator uses JSON configuration files stored in a single directory. See [docs/configuration/CONFIG.md](docs/configuration/CONFIG.md) for detailed documentation.
 
 ### Configuration Files
 
@@ -133,7 +140,7 @@ Edit the JSON configuration files to customize:
 - Agent personas and behaviors
 - Database location
 
-See [docs/CONFIG.md](docs/CONFIG.md) for full configuration options and examples.
+See [docs/configuration/CONFIG.md](docs/configuration/CONFIG.md) for full configuration options and examples.
 
 ## Architecture
 
@@ -144,7 +151,7 @@ YSimulator uses a distributed coordinator-worker pattern:
 - **Database Middleware**: Abstracts storage (SQL + optional Redis)
 - **Ray**: Enables distributed execution without manual networking
 
-For detailed architecture information, including component diagrams and data flow, see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and [docs/DIAGRAMS.md](docs/DIAGRAMS.md).
+For detailed architecture information, including component diagrams and data flow, see [docs/architecture/ARCHITECTURE.md](docs/architecture/ARCHITECTURE.md) and [docs/architecture/DIAGRAMS.md](docs/architecture/DIAGRAMS.md).
 
 ## Extending YSimulator
 
@@ -156,7 +163,7 @@ To add new agent actions or customize behavior:
 4. Implement client-side action logic
 5. Integrate into the action loop
 
-See [docs/EXTENDING.md](docs/EXTENDING.md) for step-by-step instructions and examples.
+See [docs/development/EXTENDING.md](docs/development/EXTENDING.md) for step-by-step instructions and examples.
 
 ## Project Structure
 
@@ -201,4 +208,18 @@ The `scripts/` directory contains utility scripts:
 
 ## Contributing
 
-Code contributions should follow the formatting guidelines in [docs/FORMATTING.md](docs/FORMATTING.md). Pre-commit hooks automatically enforce `black` and `isort` formatting.
+Code contributions should follow the formatting guidelines in [docs/development/FORMATTING.md](docs/development/FORMATTING.md).
+
+### Development Setup
+
+1. Install development dependencies:
+   ```bash
+   pip install -r requirements-dev.txt
+   ```
+
+2. Install pre-commit hooks:
+   ```bash
+   pre-commit install
+   ```
+
+The pre-commit hooks will automatically run `black`, `isort`, and `flake8` on every commit to ensure code quality and consistency.

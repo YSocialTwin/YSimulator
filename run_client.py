@@ -20,26 +20,28 @@ from pathlib import Path
 import ray
 
 from YSimulator.common_utils import validate_config_directory
+from YSimulator.YClient.client import SimulationClient
 from YSimulator.YClient.LLM_interactions.llm_service import LLMService
 from YSimulator.YClient.news_feeds.news_service import NewsFeedService
-from YSimulator.YClient.client import SimulationClient
 
 
 def compress_rotated_log(source, dest):
     """
     Compress a rotated log file using gzip.
-    
+
     Args:
         source: Path to the source log file
         dest: Path to the destination compressed file
     """
-    with open(source, 'rb') as f_in:
-        with gzip.open(dest, 'wb') as f_out:
+    with open(source, "rb") as f_in:
+        with gzip.open(dest, "wb") as f_out:
             shutil.copyfileobj(f_in, f_out)
     os.remove(source)
 
 
-def setup_logging(config_path: Path, client_name: str, logging_config: dict = None) -> logging.Logger:
+def setup_logging(
+    config_path: Path, client_name: str, logging_config: dict = None
+) -> logging.Logger:
     """
     Set up rotating JSON logging for the client with gzip compression.
 
@@ -56,10 +58,10 @@ def setup_logging(config_path: Path, client_name: str, logging_config: dict = No
     # Default logging configuration
     if logging_config is None:
         logging_config = {}
-    
+
     enable_execution_log = logging_config.get("enable_execution_log", True)
     enable_console_log = logging_config.get("enable_console_log", True)
-    
+
     log_dir = config_path / "logs"
     log_dir.mkdir(exist_ok=True)
 
@@ -70,10 +72,10 @@ def setup_logging(config_path: Path, client_name: str, logging_config: dict = No
     # Add file handler if enabled
     if enable_execution_log:
         log_file = log_dir / f"{client_name}_execution.log"
-        
+
         # Create rotating file handler (10MB per file, keep 5 backups)
         handler = RotatingFileHandler(log_file, maxBytes=10 * 1024 * 1024, backupCount=5)  # 10MB
-        
+
         # Add compression for rotated files
         handler.rotator = compress_rotated_log
         handler.namer = lambda name: name + ".gz"
@@ -149,7 +151,7 @@ if __name__ == "__main__":
         """Find client-specific config file or fall back to generic."""
         client_specific = config_dir / f"{client_name}_{base_name}"
         generic = config_dir / base_name
-        
+
         if client_specific.exists():
             print(f"Using client-specific config: {client_specific.name}")
             return client_specific
@@ -247,7 +249,7 @@ if __name__ == "__main__":
     llm_v_config = sim_config.get("llm_v")  # Get vision LLM config if available
     llm_service = LLMService.remote(sim_config["llm"], prompts_config, llm_v_config)
     llm_time = (time.time() - llm_start) * 1000
-    
+
     # Create News Feed service with configuration (optional)
     # Always create the service - page agents will register their feeds dynamically
     news_start = time.time()
@@ -255,7 +257,10 @@ if __name__ == "__main__":
     news_service = NewsFeedService.remote(news_feeds_config, llm_service)
     feed_count = len(news_feeds_config.get("feeds", []))
     if feed_count > 0:
-        logger.info("News feed service enabled with static feeds", extra={"extra_data": {"feeds": feed_count}})
+        logger.info(
+            "News feed service enabled with static feeds",
+            extra={"extra_data": {"feeds": feed_count}},
+        )
     else:
         logger.info("News feed service enabled for page agents (no static feeds)")
     news_time = (time.time() - news_start) * 1000
@@ -273,7 +278,7 @@ if __name__ == "__main__":
             "extra_data": {
                 "llm_creation_time_ms": llm_time,
                 "news_creation_time_ms": news_time,
-                "client_creation_time_ms": client_time
+                "client_creation_time_ms": client_time,
             }
         },
     )

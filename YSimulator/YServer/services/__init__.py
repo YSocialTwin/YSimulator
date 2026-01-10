@@ -6,12 +6,18 @@ for data access. Services coordinate between multiple repositories
 and implement complex business operations.
 """
 
-from .user_service import UserService
+from .article_service import ArticleService
+from .image_service import ImageService
+from .interest_service import InterestService
 from .post_service import PostService
 from .recommendation_service import RecommendationService
+from .user_service import UserService
 
 __all__ = [
     "UserService",
     "PostService",
     "RecommendationService",
+    "InterestService",
+    "ArticleService",
+    "ImageService",
 ]

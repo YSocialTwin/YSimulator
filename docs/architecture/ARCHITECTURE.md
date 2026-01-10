@@ -1,0 +1,1029 @@
+# YSimulator Architecture
+
+This document provides a comprehensive overview of the YSimulator system architecture, component organization, and interaction patterns.
+
+> **📢 Major Updates (January 2026)**: Both server and client architectures have been modernized through systematic refactoring. See [Server Refactoring Report](../refactoring/SERVER_REFACTORING_REPORT.md) and [Client Refactoring Report](../refactoring/CLIENT_REFACTORING_REPORT.md) for details.
+
+## Table of Contents
+- [System Overview](#system-overview)
+- [Refactoring Overview](#refactoring-overview)
+- [High-Level Architecture](#high-level-architecture)
+- [Component Details](#component-details)
+- [Data Flow](#data-flow)
+- [Coordination Mechanisms](#coordination-mechanisms)
+- [Technology Stack](#technology-stack)
+
+## Refactoring Overview
+
+### Server Refactoring (Completed)
+
+The server has undergone a comprehensive 5-phase modernization:
+
+1. **[Action Processor Framework](ACTION_PROCESSOR_FRAMEWORK.md)** (Phase 1)
+   - Extracted 476-line monolithic method into 6 specialized processors
+   - Strategy pattern with ActionRouter for extensibility
+   - 85% reduction in submit_actions() complexity
+
+2. **[Recommendation Engine](RECOMMENDATION_ENGINE.md)** (Phase 2)
+   - Separated content and follow recommendation logic
+   - 10+ content strategies, 5 follow algorithms
+   - 86% reduction in recommendation methods
+
+3. **[Opinion Dynamics Handler](OPINION_DYNAMICS_HANDLER.md)** (Phase 3)
+   - Centralized opinion management
+   - Profile-based initialization with LLM support
+   - 76% reduction in opinion methods
+
+4. **[Coordination Layer](COORDINATION_LAYER.md)** (Phase 4)
+   - Extracted client lifecycle, barrier sync, time advancement
+   - 4 specialized coordinators (Client, Barrier, Round, Archetype)
+   - 77-93% reduction in coordination methods
+
+5. **[Service Integration](SERVICE_INTEGRATION.md)** (Phase 5)
+   - Complete migration to Repository/Service pattern
+   - Eliminated all 46 direct database calls
+   - 100% service adoption
+
+**Server Impact**: server.py reduced 37% (3,114 → 1,966 lines), +50 tests, zero regressions.
+
+### Client Refactoring (Phases 1-2 Completed - January 2026)
+
+The client has completed Phases 1 and 2 of modernization:
+
+1. **Action Generator Framework** (Phase 1 - ✅ COMPLETED)
+   - Extracted 9 action handler methods into dedicated generator classes
+   - Created BaseActionGenerator with opinion dynamics helpers
+   - ActionGeneratorFactory for routing
+   - **NEW**: LLM SHARE with personalized commentary
+   - **FIXED**: Opinion dynamics cold_start preservation
+   - 49% code reduction (3,876 → 1,996 lines)
+   - +10 tests, 100% conformance, zero regressions
+   - Legacy code removed, single-path implementation
+
+2. **Simulation Orchestrator** (Phase 2 - ✅ COMPLETED)
+   - Extracted simulation orchestration into 5 dedicated modules
+   - Created Simulator, RoundExecutor, AgentScheduler, BatchProcessor, LifecycleManager
+   - Separated simulation flow from agent logic
+   - 7% additional reduction (1,996 → 2,161 lines after module extraction)
+   - +9 tests, 100% conformance, zero regressions
+   - Improved testability and maintainability
+
+**Client Impact**: 
+- Phase 1: client.py reduced 32% (2,924 → 1,996 lines), action_executor.py deleted (952 lines)
+- Phase 2: client.py refined to 2,161 lines with extracted orchestration (1,620 lines in simulation/)
+- Combined: +19 tests (10 action_generators + 9 simulation_orchestrator)
+- Total: 41/41 tests passing, zero regressions
+
+**Total Modernization**: Both server and client now follow clean architecture principles with modular, testable components.
+
+## System Overview
+
+YSimulator is a **distributed social media simulation framework** designed to model agent behavior across multiple concurrent clients coordinated by a central server. The system uses **Ray** for distributed computing, **SQLAlchemy** for database abstraction, and supports multiple storage backends (SQLite, PostgreSQL, MySQL, Redis).
+
+### Key Characteristics
+- **Distributed**: Multiple clients run simultaneously, each managing a subset of agents
+- **Coordinated**: Central server ensures temporal synchronization across all clients
+- **Scalable**: Ray actors enable horizontal scaling
+- **Flexible**: Pluggable storage backends and configurable parameters
+- **Observable**: Comprehensive JSON logging with performance metrics
+
+## High-Level Architecture
+
+```
+┌───────────────────────────────────────────────────────────────────┐
+│                         YSimulator System                          │
+├───────────────────────────────────────────────────────────────────┤
+│                                                                     │
+│  ┌──────────────┐         ┌──────────────┐                        │
+│  │   Client 1   │         │   Client 2   │    ... Client N        │
+│  │              │         │              │                         │
+│  │ ┌──────────┐ │         │ ┌──────────┐ │                        │
+│  │ │  Agent   │ │         │ │  Agent   │ │                        │
+│  │ │Population│ │         │ │Population│ │                        │
+│  │ └──────────┘ │         │ └──────────┘ │                        │
+│  │              │         │              │                         │
+│  │ ┌──────────┐ │         │ ┌──────────┐ │                        │
+│  │ │   LLM    │ │         │ │   LLM    │ │                        │
+│  │ │ Service  │ │         │ │ Service  │ │                        │
+│  │ └──────────┘ │         │ └──────────┘ │                        │
+│  └──────┬───────┘         └──────┬───────┘                        │
+│         │                        │                                 │
+│         │    Ray Remote Calls    │                                 │
+│         └────────────┬───────────┘                                 │
+│                      │                                              │
+│              ┌───────▼────────┐                                    │
+│              │                │                                     │
+│              │  Orchestrator  │                                     │
+│              │     Server     │                                     │
+│              │                │                                     │
+│              │  ┌──────────┐  │                                     │
+│              │  │  Barrier │  │                                     │
+│              │  │  Sync    │  │                                     │
+│              │  └──────────┘  │                                     │
+│              │                │                                     │
+│              │  ┌──────────┐  │  Modern Architecture (100%)        │
+│              │  │ Service  │  │  ══════════════════════════        │
+│              │  │  Layer   │  │  ┌────────────────────┐            │
+│              │  └────┬─────┘  │  │ UserService        │            │
+│              │       │        │  │ PostService        │            │
+│              │  ┌────▼─────┐  │  │ RecommendService   │            │
+│              │  │Repository│  │  └────────────────────┘            │
+│              │  │  Layer   │  │  ┌────────────────────┐            │
+│              │  └────┬─────┘  │  │ SQL Repositories   │            │
+│              │       │        │  │ Redis Repositories │            │
+│              │  ┌────▼─────┐  │  └────────────────────┘            │
+│              │  │ Database │  │                                     │
+│              │  │  Adapter │  │                                     │
+│              │  └──────────┘  │                                     │
+│              └───────┬────────┘                                    │
+│                      │                                              │
+│                      │                                              │
+│         ┌────────────┼────────────┐                                │
+│         │            │            │                                 │
+│    ┌────▼────┐  ┌───▼────┐  ┌───▼────┐                            │
+│    │  Redis  │  │ SQLite │  │Postgre │   MySQL                     │
+│    │  Cache  │  │        │  │  SQL   │                             │
+│    └─────────┘  └────────┘  └────────┘                            │
+│                                                                     │
+└───────────────────────────────────────────────────────────────────┘
+```
+
+### Layered Architecture (100% Modern)
+
+The system implements a **clean layered architecture** with complete separation of concerns:
+
+1. **Presentation Layer** (Ray Actors)
+   - YServer: HTTP API endpoints via Ray
+   - YClient: Agent simulation actors
+
+2. **Service Layer** (Business Logic)
+   - **UserService**: User management, registration, interests
+   - **PostService**: Post creation, reactions, thread context
+   - **RecommendationService**: Rounds, follows, agent opinions
+   - **InterestService**: Interest/topic tracking and management
+   - **MetadataService**: Emotions, sentiment, toxicity tracking
+   - **MentionService**: User mentions and reply tracking
+   
+3. **Repository Layer** (Data Access)
+   - **Abstract Interfaces**: Define contracts for data operations
+   - **SQL Repositories**: SQLAlchemy implementations
+   - **Redis Repositories**: High-performance caching implementations
+   
+4. **Data Layer**
+   - Database models (SQLAlchemy ORM)
+   - Database backends (PostgreSQL/MySQL/SQLite)
+   - Cache backend (Redis)
+
+**Benefits**:
+- **Testability**: Services can be tested with mocked repositories
+- **Flexibility**: Swap storage backends without changing business logic
+- **Maintainability**: Clear boundaries between layers
+- **Extensibility**: Easy to add new storage implementations
+
+## Component Details
+
+### 1. Client Components
+
+#### SimulationClient (Ray Actor)
+**Location**: `YClient/client.py`
+
+**Responsibilities**:
+- Manage agent population lifecycle
+- Execute simulation steps (day/slot iteration)
+- Coordinate agent actions
+- Maintain heartbeat with server
+- Track local simulation progress
+
+**Key Methods**:
+```python
+run()                          # Main simulation loop
+_execute_slot()                # Execute one time slot
+_perform_agent_actions()       # Trigger agent behaviors
+_send_heartbeat()              # Keep-alive signal to server
+complete_client()              # Notify server of completion
+```
+
+**State**:
+- `agents`: List of agent instances
+- `start_day`, `start_slot`: Entry point from server
+- `max_day`: Local calculation of when to stop
+- `llm_service`: Connection to LLM for content generation
+
+#### LLM Service
+**Location**: `LLM_interactions/llm_service.py`
+
+**Responsibilities**:
+- Generate agent content (posts, comments, replies)
+- Generate image descriptions using vision LLM (llm_v)
+- Generate image commentary for sharing actions
+- Manage prompt templates per agent cluster
+- Handle LLM API communication (text and vision models)
+- Apply temperature and model configuration
+
+**Key Methods**:
+```python
+generate_post()                # Create social media post
+generate_comment()             # Create comment on post
+describe_image()               # Vision LLM image description
+generate_image_commentary()    # Generate post about an image
+apply_persona()                # Tailor content to agent personality
+```
+
+**Configuration**:
+- LLM address and port (text model)
+- LLM_v address and port (vision model, optional)
+- Model selection (text and vision)
+- Temperature settings
+- Prompt templates per cluster
+
+**Features**:
+- **Dual LLM Support**: Separate text and vision model configurations
+- **Image Processing**: Extracts and describes images from RSS feeds using vision models
+- **Async Operations**: Non-blocking LLM calls for performance
+
+#### Agent Profiles
+**Location**: `classes/models.py` (AgentProfile dataclass)
+
+**Properties**:
+- **Identity**: id, username, email
+- **Personality**: Big Five traits (OE, CO, EX, AG, NE)
+- **Demographics**: age, gender, nationality, education, profession
+- **Behavior**: daily_activity_level, activity_profile, toxicity
+- **Social**: leaning, archetype, cluster
+- **Technical**: llm (boolean), owner
+- **Archetype Override**: agent_downcast configuration can force validators and explorers to use rule-based behavior
+
+### 2. Server Components
+
+#### OrchestratorServer (Ray Actor)
+**Location**: `YServer/server.py`
+
+**Responsibilities**:
+- Coordinate temporal progression (day/slot)
+- Manage client registration and lifecycle
+- Enforce barrier synchronization
+- Track heartbeats and detect stale clients
+- Distribute actions to storage
+- Trigger daily consolidation (if Redis enabled)
+- Delegate interest management to InterestManager
+
+**Key Methods**:
+```python
+register_client()              # Register new client
+get_instruction()              # Provide time coordination
+submit_action()                # Store client actions (posts, interactions)
+complete_client()              # Mark client as finished
+heartbeat()                    # Update client liveness
+advance_time()                 # Move to next time slot
+get_updated_agent_interests()  # Get current interests for persistence
+```
+
+**State**:
+- `current_day`, `current_slot`: Simulation time
+- `registered_clients`: Set of all clients
+- `completed_clients`: Set of finished clients
+- `last_heartbeat`: Dict mapping client_id to timestamp
+- `barrier`: Counter for synchronization
+- `interest_manager`: InterestManager instance for topic/interest operations
+
+#### InterestManager
+**Location**: `YServer/interests_modeling/interest_manager.py`
+
+**Responsibilities**:
+- Validate and extract agent interest data
+- Maintain in-memory agent interest state
+- Implement sliding window attention mechanism
+- Handle article topic extraction and storage
+- Map topic IDs to names
+- Recompute interests with forgetting mechanism
+
+**Key Methods**:
+```python
+validate_and_extract_interests()           # Validate interest format
+initialize_agent_interests()               # Setup during registration
+recompute_agent_interests_from_window()    # Single agent recomputation
+recompute_all_agent_interests()            # Batch recomputation (daily)
+get_agent_interests()                      # Get current state
+store_article_topics()                     # Persist article topics
+get_article_topics()                       # Retrieve article topics
+```
+
+**Features**:
+- **Sliding Window**: Queries user_interest entries within attention_window
+- **Forgetting Mechanism**: Topics with count 0 automatically removed
+- **Topic Mapping**: Efficient UUID-to-name lookups
+- **Article Topics**: LLM-extracted topics from news articles
+
+#### DatabaseServiceAdapter
+**Location**: `YServer/database_adapter.py`
+
+**Purpose**: Unified interface to the service layer for the orchestrator server
+
+**Responsibilities**:
+- Provide consistent API for all database operations
+- Coordinate between multiple services
+- Expose compatibility attributes (use_redis, engine)
+- Log all data operations
+
+**Architecture**:
+```
+DatabaseServiceAdapter
+├── UserService → UserRepository (SQL/Redis)
+├── PostService → PostRepository (SQL/Redis)
+├── FollowService → FollowRepository (SQL/Redis)
+├── InterestService → InterestRepository (SQL/Redis)
+├── ContentService → ArticleRepository + ImageRepository
+├── SimulationService → RecommendationRepository
+├── MetadataService → Emotions, Sentiment, Toxicity tracking
+└── MentionService → Mention tracking and replies
+```
+
+**Key Methods**:
+```python
+# User operations
+register_users_batch()                      # Batch user registration
+get_user()                                  # Retrieve user profile
+update_user_archetype()                     # Update user archetype
+
+# Post operations
+add_post()                                  # Store social media post
+add_interaction()                           # Store interaction (like, comment, etc.)
+get_recent_posts()                          # Query recent posts
+
+# Interest operations
+add_or_get_interest()                       # Store/retrieve topic
+add_user_interest()                         # Record user-topic interaction
+get_user_interests_in_window()              # Query interests in temporal window
+
+# Round operations
+get_or_create_round()                       # Get/create simulation round
+```
+
+**Benefits**:
+- **Clean Architecture**: Complete separation of concerns
+- **Testability**: Services can be tested in isolation
+- **Flexibility**: Easy to swap implementations (SQL ↔ Redis)
+- **Maintainability**: Single responsibility per service
+
+#### Repository Layer
+**Location**: `YServer/repositories/`
+
+**Purpose**: Abstract data access from business logic using the Repository Pattern
+
+**Components**:
+
+1. **Abstract Interfaces** (`base_repository.py`)
+   - Defines contracts for all repository types
+   - UserRepository, PostRepository, FollowRepository
+   - InterestRepository, RecommendationRepository
+   - ArticleRepository, ImageRepository
+
+2. **SQL Implementations** (`sql_repository.py`)
+   - SQLAlchemy-based implementations
+   - Automatic field name mapping (API ↔ Database)
+   - Transaction management with session cleanup
+   - Support for PostgreSQL, MySQL, SQLite
+
+3. **Redis Implementations** (`redis_repository.py`)
+   - High-performance caching layer
+   - Uses hashes, sets, and sorted sets
+   - Automatic byte string encoding/decoding
+   - Smart round_id handling (numeric and UUID)
+
+**Field Name Mappings**:
+| API Field | Database Field | Model |
+|-----------|----------------|-------|
+| `text` | `tweet` | Post |
+| `author` | `user_id` | Post |
+| `parent_post` | `comment_to` | Post |
+| `num_reactions` | `reaction_count` | Post |
+| `followee_id` | `user_id` | Follow |
+| `round_id` | `tid` | Agent_Opinion |
+
+**Example Usage**:
+```python
+from YSimulator.YServer.repositories import SQLPostRepository
+from YSimulator.YServer.services import PostService
+
+# Initialize repository
+post_repo = SQLPostRepository(engine, logger)
+
+# Create service with repository
+post_service = PostService(post_repo)
+
+# Use service for business operations
+post_id = post_service.create_post({
+    "id": "post1",
+    "author": "user1",  # Automatically mapped to user_id
+    "text": "Hello",    # Automatically mapped to tweet
+    "round": "round1"
+})
+```
+
+#### Service Layer
+**Location**: `YServer/services/`
+
+**Purpose**: Implement business logic coordinating multiple repositories
+
+**Components**:
+
+1. **UserService** (`user_service.py`)
+   - User registration (single and batch)
+   - User profile management
+   - User interest tracking
+   - Archetype management
+
+2. **PostService** (`post_service.py`)
+   - Post creation and retrieval
+   - Reaction and interaction management
+   - Thread context building
+   - Topic association and search
+
+3. **RecommendationService** (`recommendation_service.py`)
+   - Simulation round management
+   - Follow relationship management
+   - Agent opinion tracking
+   - Data cleanup and consolidation
+
+**Benefits**:
+- **Testability**: Easy to mock repositories for testing
+- **Flexibility**: Swap SQL/Redis without changing business logic
+- **Maintainability**: Clear separation of concerns
+- **Extensibility**: Easy to add new storage backends
+
+**Migration Status**:
+- **100% Complete**: All production code uses the service layer
+- **Clean Architecture**: No legacy middleware dependencies
+- **Modern Pattern**: Repository/Service throughout
+
+### 3. Data Models
+
+#### Database Models
+**Location**: `classes/models.py`
+
+**User_mgmt**: Agent profiles
+- Primary storage for agent identity and characteristics
+- Used by both server and analysis tools
+- Fields map to AgentProfile dataclass
+
+**PostModel**: Social media posts
+- UUID-based ID for distributed generation
+- Links to user via user_id foreign key
+- Includes temporal context (day, slot)
+- Stores content, likes, shares
+- reaction_count: Automatically incremented on reactions/comments
+- image_id: Optional reference to Image table
+
+**InteractionModel**: User interactions
+- UUID-based ID
+- Captures interaction type (like, comment, share, etc.)
+- Links to both user and target post
+- Includes temporal and spatial context
+- Automatically increments parent post reaction_count
+
+**Follow**: Social network relationships
+- Tracks follow/unfollow actions between users
+- follower_id: User who is following
+- user_id: User being followed
+- action: "follow" or "unfollow"
+- round: Temporal context (simulation round)
+- Supports dynamic network evolution
+- Used by follow recommendation algorithms
+
+**Article**: News articles from RSS feeds
+- id (UUID): Article identifier
+- title, url: Article metadata
+- website_id: Reference to source website
+- published: Publication timestamp
+- Extracted by page agents
+
+**Image**: Images from RSS feeds
+- id (UUID): Image identifier
+- url: Image URL from RSS feed
+- description: Vision LLM-generated description
+- article_id: Reference to source article
+- Used for image sharing action
+
+**Interest**: Topic definitions
+- iid (UUID): Unique interest identifier
+- interest (Text): Topic name
+- Deduplicated storage of all topics
+- Referenced by user_interest, post_topics, article_topics
+
+**UserInterest**: User-topic interactions
+- id (UUID): Record identifier
+- user_id (UUID): Agent who has this interest
+- interest_id (UUID): Reference to Interest table
+- round_id (UUID): When this interest was recorded
+- Supports temporal analysis and sliding window forgetting
+
+**PostTopic**: Post-topic associations
+- id (UUID): Record identifier
+- post_id (UUID): The post
+- topic_id (UUID): Reference to Interest table
+- Links posts to their topics for analysis
+
+**ArticleTopic**: Article-topic associations
+- id (UUID): Record identifier
+- article_id (UUID): The news article
+- topic_id (UUID): Reference to Interest table
+- Stores LLM-extracted topics from articles
+
+#### Ray Communication Models
+**Location**: `classes/ray_models.py`
+
+**SimulationInstruction**:
+```python
+@dataclass
+class SimulationInstruction:
+    status: str          # "WAIT" or "PROCEED"
+    day: int             # Current simulation day
+    slot: int            # Current time slot
+```
+
+**AgentProfile**: Lightweight dataclass for Ray message passing
+
+### 4. Configuration System
+
+#### Directory-Based Configuration
+**Location**: Configuration directory (default: current dir)
+
+**Files**:
+```
+config_dir/
+├── server_config.json         # Server parameters
+├── simulation_config.json     # Client parameters
+├── agent_population.json      # Agent definitions
+├── llm_prompts.json          # Prompt templates
+├── simulation.db             # Database (auto-created)
+├── ray_config.temp           # Ray temp file (auto-created)
+└── logs/                     # JSON logs (auto-created)
+    ├── {server_name}_server.log
+    ├── {server_name}_actor.log
+    ├── {client_name}_client.log
+    └── {client_name}_actor.log
+```
+
+**Common Utils**:
+**Location**: `common_utils.py`
+
+Provides `validate_config_directory()` for consistent validation across client and server.
+
+## Data Flow
+
+### 1. Initialization Flow
+
+```
+┌────────────┐
+│ run_server │
+└─────┬──────┘
+      │
+      ├─ Load server_config.json
+      ├─ Initialize database (SQLAlchemy + optional Redis)
+      ├─ Create Ray actor: OrchestratorServer
+      └─ Wait for min_to_start clients
+           │
+           │  ┌────────────┐
+           └──┤ run_client │
+              └─────┬──────┘
+                    │
+                    ├─ Load simulation_config.json
+                    ├─ Load agent_population.json
+                    ├─ Load llm_prompts.json
+                    ├─ Create Ray actor: SimulationClient
+                    ├─ Register with server
+                    │   └─→ Server returns start_day, start_slot
+                    ├─ Register agents in User_mgmt table
+                    └─ Begin simulation loop
+```
+
+### 2. Simulation Loop Flow
+
+```
+For each client (parallel):
+    │
+    ├─ Calculate: current_day >= max_day? → Exit
+    │
+    ├─ Get instruction from server
+    │   └─→ Server: Check barrier
+    │       ├─ All clients submitted? → PROCEED (advance time)
+    │       └─ Waiting for others? → WAIT
+    │
+    ├─ If WAIT: sleep and retry
+    │
+    ├─ If PROCEED:
+    │   ├─ Execute slot actions
+    │   │   ├─ For each agent:
+    │   │   │   ├─ Decide action type (post, read, comment, share, follow, etc.)
+    │   │   │   ├─ For FOLLOW action:
+    │   │   │   │   ├─ Request follow suggestions from server (based on agent's frecsys_type)
+    │   │   │   │   ├─ Server computes using recommendation algorithm
+    │   │   │   │   ├─ Select one candidate (LLM decision or random)
+    │   │   │   │   └─ Create FOLLOW action
+    │   │   │   ├─ For READ/COMMENT action:
+    │   │   │   │   ├─ Get recommended posts (based on recsys_type)
+    │   │   │   │   ├─ Select post and generate reaction/comment
+    │   │   │   │   └─ Secondary follow evaluation (with probability):
+    │   │   │   │       ├─ Check if following post author
+    │   │   │   │       ├─ Decide follow/unfollow/no_change
+    │   │   │   │       └─ Create FOLLOW/UNFOLLOW action if needed
+    │   │   │   ├─ Generate content (via LLM for LLM agents)
+    │   │   │   └─ Submit action to server
+    │   │   │       └─→ Server stores via Service Layer
+    │   │   └─ Complete
+    │   │
+    │   ├─ Submit completion to server (barrier counter++)
+    │   └─ Send heartbeat
+    │
+    └─ Loop to next iteration
+```
+
+### 3. Action Submission Flow
+
+```
+Agent decides to post
+    │
+    ├─ LLMService generates content
+    │   └─ Uses prompt template for agent's cluster
+    │
+    └─ Client calls server.submit_action()
+        │
+        └─→ Server (OrchestratorServer)
+            │
+            ├─ Add temporal context (day, slot)
+            ├─ Generate UUID for post
+            │
+            └─ DatabaseServiceAdapter.add_post()
+                │
+                ├─ If Redis enabled:
+                │   ├─ Store in Redis (fast cache)
+                │   └─ Index by day for consolidation
+                │
+                └─ Store in SQL (persistent)
+```
+
+### 4. Time Progression Flow
+
+```
+Server barrier check:
+    │
+    ├─ Check for stale clients (missing heartbeats)
+    │   └─ Remove stale → Update active_clients set
+    │
+    ├─ Count submissions this slot
+    │   └─ submitted_active_clients == active_clients?
+    │
+    └─ If all submitted:
+        │
+        ├─ Increment current_slot
+        │
+        ├─ If slot >= slots_per_day:
+        │   ├─ Increment current_day
+        │   ├─ Reset current_slot = 0
+        │   │
+        │   └─ If Redis enabled:
+        │       └─ consolidate_day()
+        │           ├─ Save all Redis data to SQL
+        │           ├─ Remove data older than sliding_window_days
+        │           └─ Log metrics
+        │
+        ├─ Reset barrier counter
+        │
+        └─ Return PROCEED to waiting clients
+```
+
+### 5. Heartbeat and Liveness Flow
+
+```
+Client (every heartbeat_interval seconds):
+    │
+    └─ server.heartbeat(client_id)
+        └─→ Server updates last_heartbeat[client_id] = now()
+
+Server (before each barrier check):
+    │
+    └─ _check_for_stale_clients()
+        │
+        ├─ For each registered client:
+        │   ├─ time_since_heartbeat = now() - last_heartbeat[client_id]
+        │   └─ If time_since_heartbeat > timeout_seconds:
+        │       ├─ Log warning
+        │       ├─ Remove from registered_clients
+        │       └─ Remove from last_heartbeat dict
+        │
+        └─ Update active_clients = registered - completed
+```
+
+### 6. Client Completion Flow
+
+```
+Client reaches max_day:
+    │
+    ├─ server.complete_client(client_id)
+    │   └─→ Server:
+    │       ├─ Add to completed_clients set
+    │       ├─ Update active_clients = registered - completed
+    │       └─ Log completion
+    │
+    ├─ Log final statistics
+    │
+    └─ Exit simulation loop
+```
+
+## Coordination Mechanisms
+
+### 1. Barrier Synchronization
+
+**Purpose**: Ensure all clients progress through time together
+
+**Implementation**:
+```python
+# Server maintains
+barrier_counter = 0          # Submissions this slot
+active_clients = registered - completed
+
+# Each client submits when done with slot
+barrier_counter += 1
+
+# Server checks before returning instruction
+if barrier_counter >= len(active_clients):
+    advance_time()
+    barrier_counter = 0
+    return PROCEED
+else:
+    return WAIT
+```
+
+**Benefits**:
+- Prevents time desynchronization
+- Enables causal consistency (actions happen in order)
+- Allows coordination of global events
+
+### 2. Heartbeat Mechanism
+
+**Purpose**: Detect crashed/disconnected clients without blocking healthy ones
+
+**Implementation**:
+```python
+# Client sends periodically
+every heartbeat_interval seconds:
+    server.heartbeat(client_id)
+
+# Server checks before barrier
+for client_id in registered_clients:
+    if now() - last_heartbeat[client_id] > timeout_seconds:
+        remove_client(client_id)
+```
+
+**Benefits**:
+- Decouples processing time from liveness
+- Prevents false positives on busy clients
+- Automatic recovery from client failures
+
+### 3. Client-Side Step Management
+
+**Purpose**: Simplify server logic by delegating day counting to clients
+
+**Implementation**:
+```python
+# Server provides starting point
+response = server.register_client(num_days=3)
+start_day = response["start_day"]      # e.g., 10
+
+# Client tracks locally
+max_day = start_day + num_days         # 13
+current_day = start_day                # From instructions
+
+# Client checks each iteration
+if current_day >= max_day:
+    exit()
+```
+
+**Benefits**:
+- Simpler server (no per-client state tracking)
+- Client autonomy (manages own timeline)
+- Clear separation of concerns
+
+## Recommendation Systems
+
+### 1. Content Recommendation System
+
+Agents discover posts to read and react to using configurable recommendation strategies.
+
+**Architecture**:
+```
+Agent → ContentRecSys → Server.get_recommended_posts() → Database Query → Post IDs
+```
+
+**Strategies**:
+- `random`: Random post ordering
+- `rchrono`: Reverse chronological (newest first)
+- `rchrono_popularity`: Chronological with popularity boost
+- `rchrono_followers`: Prioritizes posts from followed users
+- `rchrono_followers_popularity`: Combines followers and popularity
+- `rchrono_comments`: Prioritizes highly commented posts
+- `common_interests`: Posts with common topic interests
+- `common_user_interests`: Posts by users with common interests
+- `similar_users_react`: Posts from similar users (by reactions)
+- `similar_users_posts`: Posts from similar users (by posting)
+
+**Configuration**: Per-agent via `recsys_type` field
+
+### 2. Follow Recommendation System
+
+Agents discover users to follow using link prediction and network analysis algorithms.
+
+**Architecture**:
+```
+Agent → FollowRecSysRay → Server.get_follow_suggestions() → Query-Based Algorithm → User IDs
+```
+
+**Strategies**:
+
+1. **Random**: Random selection from non-following users
+   - SQL: Direct query with filtering
+   - Redis: SMEMBERS with filtering
+
+2. **Common Neighbors**: Friend-of-friend recommendations
+   - SQL: JOIN query to find users agent's friends follow
+   - Redis: Iterate through friend's follows
+   - Score: Count of mutual connections
+
+3. **Jaccard Similarity**: Similarity of follow sets
+   - SQL: Intersection/union via subqueries
+   - Redis: Set operations on follows
+   - Score: |intersection| / |union|
+
+4. **Adamic/Adar Index**: Weighted common neighbors
+   - SQL: Two-step approach:
+     1. Find common neighbors via JOIN
+     2. Batch query degrees for scoring
+   - Redis: Same two-step logic with key lookups
+   - Score: Σ(1/log(degree)) for each common neighbor
+   - Prefers connections through less-connected intermediaries
+
+5. **Preferential Attachment**: Popularity-based
+   - SQL: COUNT query for follower popularity
+   - Redis: Iterate and count followers
+   - Score: Number of followers (rich-get-richer)
+
+**Implementation Details**:
+- No NetworkX dependency (eliminated for scalability)
+- Query-based approaches for both SQL and Redis
+- Efficient batch operations
+- Graceful fallback to random if queries fail
+- Supports political leaning bias (homophily parameter)
+
+**Configuration**: Per-agent via `frecsys_type` field
+
+### 3. Secondary Follow Mechanism
+
+After content interactions (read/comment), agents evaluate relationship changes.
+
+**Architecture**:
+```
+Agent reads/comments → Track interaction → Evaluate with probability → Check status → FOLLOW/UNFOLLOW
+```
+
+**Process**:
+1. Track all read/comment interactions with post authors
+2. With probability `secondary_follow`, evaluate each interaction:
+   - Check if currently following author
+   - Rule-based: Random decision (follow/unfollow/no_change)
+   - LLM: Heuristic (30% follow if not following, 10% unfollow if following)
+3. Create FOLLOW or UNFOLLOW action in Follow table
+
+**Configuration**: Global via `probability_of_secondary_follow` in simulation_config.json
+
+**Use Case**: Model organic network growth through content discovery
+
+### 4. Daily Follow Evaluation
+
+At the end of each simulation day, active agents evaluate new follow relationships.
+
+**Architecture**:
+```
+Track active agents → End of day → Evaluate with probability → Get suggestions → Select candidate → FOLLOW
+```
+
+**Process**:
+1. Track all agents active during each simulation day
+2. At day end (last time slot), for each active agent:
+   - With probability `daily_follow`, evaluate new follows
+   - Request top-10 suggestions using agent's `frecsys_type`
+   - Randomly select one candidate from suggestions
+3. Create FOLLOW action in Follow table
+
+**Configuration**: Global via `probability_of_daily_follow` in simulation_config.json
+
+**Timing**: Evaluated when transitioning to next day (slot 23 → day+1)
+
+**Use Case**: Model gradual network growth independent of content interactions
+
+## Technology Stack
+
+### Core Technologies
+- **Ray**: Distributed computing framework
+- **SQLAlchemy**: Database ORM and abstraction
+- **Python 3.8+**: Implementation language
+- **JSON**: Configuration and logging format
+
+### Storage Backends
+- **SQLite**: Default file-based database
+- **PostgreSQL**: Production-grade RDBMS
+- **MySQL**: Production-grade RDBMS
+- **Redis**: Optional high-performance cache
+
+### External Services
+- **LLM API**: Content generation (configurable endpoint)
+
+### Development Tools
+- **Black**: Code formatting
+- **isort**: Import sorting
+- **Pre-commit**: Automatic formatting on commit
+
+## Component Responsibilities Summary
+
+### What the Server Does
+- ✅ Coordinate temporal progression (day/slot)
+- ✅ Manage client registration and lifecycle
+- ✅ Enforce barrier synchronization
+- ✅ Track heartbeats and detect failures
+- ✅ Store actions via Service Layer
+- ✅ Provide starting point to clients
+- ✅ Compute content recommendations (posts to read)
+- ✅ Compute follow recommendations (users to follow)
+- ✅ Execute follow recommendation algorithms (query-based)
+
+### What the Server Does NOT Do
+- ❌ Track per-client simulation progress
+- ❌ Decide when clients should stop
+- ❌ Manage agent behavior
+- ❌ Generate content
+
+### What the Client Does
+- ✅ Manage agent population
+- ✅ Execute simulation steps locally
+- ✅ Track own progress (day counting)
+- ✅ Decide when to exit (based on max_day)
+- ✅ Send heartbeats regularly
+- ✅ Submit actions to server
+- ✅ Generate content via LLM
+- ✅ Request content recommendations
+- ✅ Request follow recommendations
+- ✅ Evaluate secondary follow (after interactions)
+- ✅ Evaluate daily follows (at end of each day)
+- ✅ Track active agents per day
+- ✅ Select action types based on agent archetypes
+- ✅ Apply agent_downcast override to force rule-based behavior for validators and explorers
+
+### What the Client Does NOT Do
+- ❌ Coordinate with other clients directly
+- ❌ Manage simulation time (receives from server)
+- ❌ Store data (delegates to server)
+- ❌ Track other clients' state
+
+### What the Service Layer Does
+- ✅ Coordinate business logic across repositories
+- ✅ Implement user management operations
+- ✅ Implement post and interaction operations
+- ✅ Implement recommendation operations
+- ✅ Provide health check functionality
+- ✅ Abstract repository details from callers
+
+### What the Repository Layer Does
+- ✅ Define abstract interfaces for data operations
+- ✅ Implement SQL-based data access (SQLAlchemy)
+- ✅ Implement Redis-based caching
+- ✅ Handle field name mapping automatically
+- ✅ Manage transactions and session cleanup
+- ✅ Support multiple storage backends
+
+## Conclusion
+
+YSimulator's architecture follows a **coordinator-worker pattern** with **modern layered design**:
+- **Server** coordinates temporal progression and manages barriers
+- **Clients** independently execute simulations and manage local state
+- **Service Layer** implements business logic and coordination
+- **Repository Layer** abstracts storage for flexibility
+- **DatabaseServiceAdapter** provides unified interface to services
+- **Ray** enables distributed execution without manual networking code
+
+This design provides:
+- **Scalability**: Add clients without server changes
+- **Fault Tolerance**: Automatic stale client detection and removal
+- **Flexibility**: Pluggable storage backends via Repository Pattern
+- **Testability**: Easy mocking of repositories for testing
+- **Maintainability**: Clear separation of concerns across layers
+- **Observability**: Comprehensive logging at all layers
+- **Simplicity**: Clear separation of concerns
+- **Backward Compatibility**: Existing code continues to work
+
+For implementation details, see:
+- [Configuration Guide](../configuration/CONFIG.md)
+- [Opinion Dynamics](../features/OPINION_DYNAMICS.md)
+- [Extension Guide](../development/EXTENDING.md) - **Updated with repository examples**
+- [Repository Pattern Guide](REPOSITORY_PATTERN.md) - **NEW: Detailed pattern documentation**
+- [Redis Integration](../data-storage/RECSYS_REDIS_SUPPORT.md)
+- [Code Formatting](../development/FORMATTING.md)
+- [Codebase Analysis](../development/CODEBASE_ANALYSIS.md) - **Updated with current architecture**

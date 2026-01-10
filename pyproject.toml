@@ -41,16 +41,20 @@ markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
     "integration: marks tests as integration tests",
     "unit: marks tests as unit tests",
+    "serial: marks tests that must run serially (not in parallel)",
+    "xdist_group: marks tests to run in the same group when using pytest-xdist",
 ]
 
 [tool.coverage.run]
 branch = true
+relative_files = true
 source = ["YSimulator"]
 omit = [
     "*/tests/*",
     "*/test_*.py",
     "*/__pycache__/*",
     "*/site-packages/*",
+    "*/classes/db_middleware.py",
 ]
 
 [tool.coverage.report]

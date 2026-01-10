@@ -88,7 +88,10 @@
         "explorer": 0.34
       }
     },
-    "emotion_annotation": false
+    "enable_sentiment": true,
+    "emotion_annotation": true,
+    "enable_toxicity": false,
+    "perspective_api_key": null
   },
   "agents": {
     "reading_from_follower_ratio": 0.6,
@@ -96,6 +99,13 @@
     "attention_window": 336,
     "probability_of_daily_follow": 0.1,
     "probability_of_secondary_follow": 0.1,
+    "follow_action_decay": {
+      "enabled": false,
+      "decay_function": "exponential",
+      "half_life_rounds": 168,
+      "decay_rate": 0.01,
+      "min_probability_ratio": 0.1
+    },
     "churn": {
       "enabled": true,
       "churn_probability": 0.01,
@@ -112,7 +122,8 @@
     "enable_execution_log": true,
     "enable_actor_log": true,
     "enable_client_log": true,
-    "enable_console_log": true
+    "enable_console_log": true,
+    "enable_llm_usage_log": true
   },
   "opinion_dynamics": {
     "enabled": true,

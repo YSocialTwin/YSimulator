@@ -1,6 +1,6 @@
+import logging
 import random
 from typing import Any, Dict, List, Optional
-import logging
 
 import ray
 from langchain_core.output_parsers import StrOutputParser
@@ -57,6 +57,10 @@ class LLMService:
                     "system_template": "{persona} You searched for posts on a topic you're interested in and found relevant content. Decide how to engage with it.",
                     "user_template": 'You found this post on your topic of interest:\n\n"{post_content}"\n\nHow do you want to engage? Reply with ONLY ONE WORD from these options:\n- COMMENT (engage in discussion, share your thoughts)\n- SHARE (reshare with your followers)\n- LIKE (positive, agree)\n- LOVE (strongly positive)\n- LAUGH (funny, humorous)\n- ANGRY (negative, disagree)\n- SAD (disappointing, concerning)\n- IGNORE (not interested, skip)\n\nYour choice:',
                 },
+                "generate_share_commentary": {
+                    "system_template": "{persona} You are resharing someone's post with your own perspective. Generate {toxicity} confrontational language contents.",
+                    "user_template": '{author_name} posted this:\n\n"{post_content}"\n\nWrite a brief commentary explaining why you\'re resharing this (max 200 characters). Add your perspective based on your persona and opinions. Be authentic.',
+                },
             }
 
         # Store prompts configuration
@@ -111,7 +115,7 @@ class LLMService:
                     ne=agent_attrs.get("ne", "average in neuroticism"),
                 )
                 return persona
-            except KeyError as e:
+            except KeyError:
                 # If template formatting fails, fall back to cluster-based persona
                 pass
 
@@ -217,7 +221,7 @@ class LLMService:
                 commentary = commentary[:277] + "..."
 
             return commentary
-        except Exception as e:
+        except Exception:
             # Fallback if LLM fails - truncate title if too long
             title = article_title if len(article_title) <= 97 else article_title[:97] + "..."
             return f"Check out this article: {title}"
@@ -309,9 +313,89 @@ class LLMService:
                 comment = comment[:277] + "..."
 
             return comment
-        except Exception as e:
+        except Exception:
             # Fallback if LLM fails
             return "Interesting perspective!"
+
+    def generate_share_commentary(
+        self,
+        cluster_id: int,
+        post_content: str,
+        agent_attrs: dict = None,
+        author_name: str = "Someone",
+    ) -> str:
+        """
+        Generate commentary for sharing/resharing a post.
+
+        This method is called remotely via Ray actor for LLM-based share actions.
+        Unlike rule-based sharing (simple reshare), this generates personalized
+        commentary explaining why the agent is sharing the post.
+
+        Args:
+            cluster_id: Cluster/persona ID of the agent
+            post_content: Content of the post being reshared
+            agent_attrs: Dict with agent attributes (name, opinions on post topics, etc.)
+            author_name: Username of the original post author
+
+        Returns:
+            str: Generated share commentary text (max 200 characters)
+        """
+        # Build persona using attributes or fallback
+        persona = self._build_persona(cluster_id, agent_attrs)
+
+        # Get toxicity level (default to "no" if not provided)
+        toxicity = agent_attrs.get("toxicity", "no") if agent_attrs else "no"
+
+        # Get opinions on the post's topics if available
+        opinion_instruction = ""
+        if agent_attrs and "post_topics" in agent_attrs and agent_attrs["post_topics"]:
+            topics = agent_attrs["post_topics"]
+            opinions = agent_attrs.get("post_opinions", {})
+
+            if topics and opinions:
+                opinion_parts = []
+                for topic in topics:
+                    if topic in opinions:
+                        opinion_parts.append(f"{topic}: {opinions[topic]}")
+
+                if opinion_parts:
+                    opinion_str = ", ".join(opinion_parts)
+                    opinion_instruction = f" Your opinions on the discussed topics: {opinion_str}. Reflect your viewpoint in your commentary."
+
+        # Get prompt templates from configuration with fallback
+        if "generate_share_commentary" not in self.prompts_config:
+            # Fallback if prompt not configured
+            logger.warning("generate_share_commentary prompt not found in config, using fallback")
+            return "Sharing this!"
+
+        system_template = self.prompts_config["generate_share_commentary"]["system_template"]
+        user_template = self.prompts_config["generate_share_commentary"]["user_template"]
+
+        # Format templates
+        system_msg = system_template.format(persona=persona, toxicity=toxicity)
+        user_msg = user_template.format(
+            author_name=author_name,
+            post_content=post_content,
+        )
+
+        # Add opinion instruction if available
+        if opinion_instruction:
+            user_msg += opinion_instruction
+
+        prompt = ChatPromptTemplate.from_messages([("system", system_msg), ("user", user_msg)])
+
+        try:
+            chain = prompt | self.llm | StrOutputParser()
+            commentary = chain.invoke({}).strip()
+
+            # Ensure commentary doesn't exceed 200 characters as specified
+            if len(commentary) > 200:
+                commentary = commentary[:197] + "..."
+
+            return commentary
+        except Exception:
+            # Fallback if LLM fails
+            return "Sharing this!"
 
     def generate_read_reaction(
         self, cluster_id: int, post_content: str, agent_attrs: dict = None
@@ -384,7 +468,7 @@ class LLMService:
 
             # Default to fallback reaction if unclear
             return DEFAULT_FALLBACK_REACTION
-        except Exception as e:
+        except Exception:
             # Fallback if LLM fails
             return DEFAULT_FALLBACK_REACTION
 
@@ -498,7 +582,7 @@ class LLMService:
 
             # Default to fallback reaction if unclear
             return DEFAULT_FALLBACK_REACTION
-        except Exception as e:
+        except Exception:
             # Fallback if LLM fails
             return DEFAULT_FALLBACK_REACTION
 
@@ -585,7 +669,7 @@ class LLMService:
 
             # Return up to 2 single-word topics
             return single_word_topics[:2]
-        except Exception as e:
+        except Exception:
             # If extraction fails, return empty list
             return []
 
@@ -629,7 +713,7 @@ class LLMService:
             valid_emotions = emotion_list.split(", ")
             emotions = [e for e in emotions if e in valid_emotions]
             return emotions
-        except Exception as e:
+        except Exception:
             # If extraction fails, return empty list
             return []
 
@@ -648,7 +732,7 @@ class LLMService:
         """
         # Check if vision LLM is available
         if not self.llm_v:
-            logger.warning(f" Vision LLM (llm_v) not configured, cannot describe image")
+            logger.warning(" Vision LLM (llm_v) not configured, cannot describe image")
             return None
 
         # Get prompts from configuration with defaults
@@ -679,7 +763,7 @@ class LLMService:
                 logger.info(f" Vision LLM returned description ({len(result)} chars)")
                 return result
             else:
-                logger.warning(f" Vision LLM returned empty description")
+                logger.warning(" Vision LLM returned empty description")
                 return None
         except Exception as e:
             # If description fails, return None
@@ -763,7 +847,7 @@ class LLMService:
 
                 return random.random()
 
-        except Exception as e:
+        except Exception:
             # If extraction fails, return random value
             import random
 

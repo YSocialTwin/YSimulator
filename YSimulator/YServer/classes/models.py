@@ -5,16 +5,7 @@ This module defines all database models with proper relationships, foreign keys,
 and UUID-based primary keys where appropriate for distributed system compatibility.
 """
 
-from sqlalchemy import (
-    Column,
-    Float,
-    ForeignKey,
-    Index,
-    Integer,
-    String,
-    Text,
-    UniqueConstraint,
-)
+from sqlalchemy import Column, Float, ForeignKey, Index, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import declarative_base, relationship
 
 Base = declarative_base()

@@ -20,8 +20,8 @@
       "daily_activity_level": 4,
       "round_actions": 6,
       "is_page": 1,
-      "feed_url": "https://techcrunch.com/feed/",
-      "recsys_type": "random",
+      "feed_url": "https://moxie.foxnews.com/google-publisher/politics.xml",
+      "recsys_type": "rchrono",
       "frecsys_type": "random",
       "interests": [
         [
@@ -101,18 +101,34 @@
       "daily_activity_level": 1,
       "round_actions": 2,
       "is_page": 0,
-      "recsys_type": "random",
+      "recsys_type": "rchrono",
       "frecsys_type": "preferential_attachment",
       "interests": [
         [
           "Discovery",
           "Learning",
-          "Curiosity"
+          "Curiosity",
+          "democrat",
+          "ice",
+          "election",
+          "trump",
+          "dnc",
+          "supreme",
+          "us",
+          "covid-19"
         ],
         [
-          8,
+          9,
           5,
-          5
+          5,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1
         ]
       ],
       "opinions": {
@@ -221,18 +237,38 @@
       "daily_activity_level": 3,
       "round_actions": 4,
       "is_page": 0,
-      "recsys_type": "random",
+      "recsys_type": "rchrono",
       "frecsys_type": "random",
       "interests": [
         [
           "Analysis",
           "Facts",
-          "Verification"
+          "Verification",
+          "senate",
+          "immigration",
+          "no",
+          "one",
+          "us",
+          "tariff",
+          "transgender",
+          "catholic",
+          "military",
+          "us-venezuela"
         ],
         [
           7,
           5,
-          4
+          4,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          2,
+          2,
+          1,
+          1
         ]
       ],
       "opinions": {
@@ -341,18 +377,34 @@
       "daily_activity_level": 2,
       "round_actions": 5,
       "is_page": 0,
-      "recsys_type": "random",
+      "recsys_type": "rchrono",
       "frecsys_type": "common_neighbors",
       "interests": [
         [
           "Analysis",
           "Facts",
-          "Verification"
+          "Verification",
+          "stacey",
+          "2026",
+          "donald",
+          "california",
+          "us",
+          "payment",
+          "dnc",
+          "supreme"
         ],
         [
           7,
-          5,
-          4
+          6,
+          4,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1
         ]
       ],
       "opinions": {
@@ -467,12 +519,16 @@
         [
           "Discovery",
           "Learning",
-          "Curiosity"
+          "Curiosity",
+          "stacey",
+          "2026"
         ],
         [
           8,
           5,
-          5
+          5,
+          1,
+          1
         ]
       ],
       "opinions": {
@@ -587,12 +643,20 @@
         [
           "Education",
           "Learning",
-          "Teaching"
+          "Teaching",
+          "nationwide",
+          "immigration",
+          "transgender",
+          "catholic"
         ],
         [
           8,
-          6,
-          4
+          7,
+          4,
+          1,
+          1,
+          1,
+          1
         ]
       ],
       "opinions": {
@@ -661,7 +725,7 @@
       "daily_activity_level": 3,
       "round_actions": 3,
       "is_page": 0,
-      "recsys_type": "random",
+      "recsys_type": "rchrono",
       "frecsys_type": "jaccard",
       "interests": [
         [
@@ -707,12 +771,16 @@
         [
           "Discovery",
           "Learning",
-          "Curiosity"
+          "Curiosity",
+          "immigration",
+          "democratic"
         ],
         [
           8,
           5,
-          5
+          5,
+          1,
+          1
         ]
       ],
       "opinions": {
@@ -741,7 +809,7 @@
       "daily_activity_level": 1,
       "round_actions": 4,
       "is_page": 0,
-      "recsys_type": "random",
+      "recsys_type": "rchrono",
       "frecsys_type": "random",
       "interests": [
         [
@@ -821,7 +889,7 @@
       "daily_activity_level": 3,
       "round_actions": 5,
       "is_page": 0,
-      "recsys_type": "random",
+      "recsys_type": "rchrono",
       "frecsys_type": "random",
       "interests": [
         [
@@ -947,12 +1015,42 @@
         [
           "Learning",
           "Education",
-          "Technology"
+          "Technology",
+          "trump-kennedy",
+          "ratings",
+          "retirement",
+          "congress",
+          "president",
+          "melanias",
+          "ice",
+          "conservative",
+          "pennsylvania",
+          "house",
+          "republican",
+          "no",
+          "one",
+          "transgender",
+          "catholic"
         ],
         [
+          7,
           5,
-          5,
-          2
+          2,
+          1,
+          1,
+          1,
+          1,
+          2,
+          2,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1
         ]
       ],
       "opinions": {
@@ -1021,7 +1119,7 @@
       "daily_activity_level": 1,
       "round_actions": 2,
       "is_page": 0,
-      "recsys_type": "random",
+      "recsys_type": "rchrono",
       "frecsys_type": "random",
       "interests": [
         [
@@ -1067,12 +1165,16 @@
         [
           "Education",
           "Learning",
-          "Teaching"
+          "Teaching",
+          "donald",
+          "california"
         ],
         [
           8,
           6,
-          4
+          4,
+          1,
+          1
         ]
       ],
       "opinions": {
@@ -1101,7 +1203,7 @@
       "daily_activity_level": 1,
       "round_actions": 5,
       "is_page": 0,
-      "recsys_type": "random",
+      "recsys_type": "rchrono",
       "frecsys_type": "jaccard",
       "interests": [
         [
@@ -1187,12 +1289,24 @@
         [
           "Learning",
           "Education",
-          "Technology"
+          "Technology",
+          "us",
+          "potential",
+          "donald",
+          "california",
+          "dnc",
+          "supreme"
         ],
         [
           5,
           5,
-          2
+          2,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1
         ]
       ],
       "opinions": {
@@ -1221,7 +1335,7 @@
       "daily_activity_level": 3,
       "round_actions": 2,
       "is_page": 0,
-      "recsys_type": "random",
+      "recsys_type": "rchrono",
       "frecsys_type": "jaccard",
       "interests": [
         [
@@ -1421,7 +1535,7 @@
       "daily_activity_level": 1,
       "round_actions": 4,
       "is_page": 0,
-      "recsys_type": "random",
+      "recsys_type": "rchrono",
       "frecsys_type": "common_neighbors",
       "interests": [
         [
@@ -1461,7 +1575,7 @@
       "daily_activity_level": 2,
       "round_actions": 5,
       "is_page": 0,
-      "recsys_type": "random",
+      "recsys_type": "rchrono",
       "frecsys_type": "random",
       "interests": [
         [
@@ -1501,7 +1615,7 @@
       "daily_activity_level": 1,
       "round_actions": 5,
       "is_page": 0,
-      "recsys_type": "random",
+      "recsys_type": "rchrono",
       "frecsys_type": "common_neighbors",
       "interests": [
         [
@@ -1547,12 +1661,22 @@
         [
           "Analysis",
           "Facts",
-          "Verification"
+          "Verification",
+          "conservative",
+          "pennsylvania",
+          "News",
+          "stacey",
+          "2026"
         ],
         [
           7,
           5,
-          4
+          4,
+          1,
+          1,
+          1,
+          1,
+          1
         ]
       ],
       "opinions": {
@@ -1667,12 +1791,40 @@
         [
           "Discovery",
           "Learning",
-          "Curiosity"
+          "Curiosity",
+          "democrat",
+          "ice",
+          "conservative",
+          "pennsylvania",
+          "president",
+          "melanias",
+          "us",
+          "strategic",
+          "donald",
+          "california",
+          "north",
+          "truck",
+          "lawsuits",
+          "catholic"
         ],
         [
-          8,
+          10,
           5,
-          5
+          5,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          2,
+          1,
+          2,
+          4,
+          1,
+          1,
+          1,
+          1
         ]
       ],
       "opinions": {
@@ -1781,18 +1933,22 @@
       "daily_activity_level": 1,
       "round_actions": 2,
       "is_page": 0,
-      "recsys_type": "random",
+      "recsys_type": "rchrono",
       "frecsys_type": "jaccard",
       "interests": [
         [
           "Learning",
           "Education",
-          "Technology"
+          "Technology",
+          "us-venezuela",
+          "president"
         ],
         [
           5,
           5,
-          2
+          2,
+          1,
+          1
         ]
       ],
       "opinions": {
@@ -1907,12 +2063,20 @@
         [
           "Education",
           "Learning",
-          "Teaching"
+          "Teaching",
+          "donald",
+          "california",
+          "us",
+          "covid-19"
         ],
         [
           8,
           6,
-          4
+          4,
+          1,
+          1,
+          1,
+          1
         ]
       ],
       "opinions": {
@@ -1981,7 +2145,7 @@
       "daily_activity_level": 2,
       "round_actions": 3,
       "is_page": 0,
-      "recsys_type": "random",
+      "recsys_type": "rchrono",
       "frecsys_type": "jaccard",
       "interests": [
         [
@@ -2021,7 +2185,7 @@
       "daily_activity_level": 1,
       "round_actions": 3,
       "is_page": 0,
-      "recsys_type": "random",
+      "recsys_type": "rchrono",
       "frecsys_type": "adamic_adar",
       "interests": [
         [
@@ -2181,7 +2345,7 @@
       "daily_activity_level": 2,
       "round_actions": 3,
       "is_page": 0,
-      "recsys_type": "random",
+      "recsys_type": "rchrono",
       "frecsys_type": "adamic_adar",
       "interests": [
         [
@@ -2221,7 +2385,7 @@
       "daily_activity_level": 2,
       "round_actions": 4,
       "is_page": 0,
-      "recsys_type": "random",
+      "recsys_type": "rchrono",
       "frecsys_type": "jaccard",
       "interests": [
         [
@@ -2261,18 +2425,22 @@
       "daily_activity_level": 1,
       "round_actions": 2,
       "is_page": 0,
-      "recsys_type": "random",
+      "recsys_type": "rchrono",
       "frecsys_type": "common_neighbors",
       "interests": [
         [
           "Learning",
           "Education",
-          "Technology"
+          "Technology",
+          "Analysis",
+          "ice"
         ],
         [
           5,
           5,
-          2
+          2,
+          1,
+          1
         ]
       ],
       "opinions": {
@@ -2381,18 +2549,32 @@
       "daily_activity_level": 3,
       "round_actions": 4,
       "is_page": 0,
-      "recsys_type": "random",
+      "recsys_type": "rchrono",
       "frecsys_type": "jaccard",
       "interests": [
         [
           "Education",
           "Learning",
-          "Teaching"
+          "Teaching",
+          "us",
+          "ice",
+          "oil",
+          "senate",
+          "immigration",
+          "conservative",
+          "pennsylvania"
         ],
         [
-          8,
+          9,
           6,
-          4
+          4,
+          2,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1
         ]
       ],
       "opinions": {
@@ -2501,18 +2683,34 @@
       "daily_activity_level": 2,
       "round_actions": 5,
       "is_page": 0,
-      "recsys_type": "random",
+      "recsys_type": "rchrono",
       "frecsys_type": "adamic_adar",
       "interests": [
         [
           "News",
           "Trends",
-          "Engagement"
+          "Engagement",
+          "us",
+          "russia",
+          "conservative",
+          "pennsylvania",
+          "police",
+          "immigration",
+          "us-venezuela",
+          "venezuela"
         ],
         [
           8,
           6,
-          5
+          5,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1
         ]
       ],
       "opinions": {
@@ -2541,7 +2739,7 @@
       "daily_activity_level": 2,
       "round_actions": 4,
       "is_page": 0,
-      "recsys_type": "random",
+      "recsys_type": "rchrono",
       "frecsys_type": "preferential_attachment",
       "interests": [
         [
@@ -2661,7 +2859,7 @@
       "daily_activity_level": 3,
       "round_actions": 5,
       "is_page": 0,
-      "recsys_type": "random",
+      "recsys_type": "rchrono",
       "frecsys_type": "common_neighbors",
       "interests": [
         [
@@ -2701,7 +2899,7 @@
       "daily_activity_level": 1,
       "round_actions": 5,
       "is_page": 0,
-      "recsys_type": "random",
+      "recsys_type": "rchrono",
       "frecsys_type": "jaccard",
       "interests": [
         [
@@ -2781,7 +2979,7 @@
       "daily_activity_level": 2,
       "round_actions": 5,
       "is_page": 0,
-      "recsys_type": "random",
+      "recsys_type": "rchrono",
       "frecsys_type": "jaccard",
       "interests": [
         [
@@ -2821,7 +3019,7 @@
       "daily_activity_level": 2,
       "round_actions": 2,
       "is_page": 0,
-      "recsys_type": "random",
+      "recsys_type": "rchrono",
       "frecsys_type": "preferential_attachment",
       "interests": [
         [
@@ -2867,12 +3065,20 @@
         [
           "Discovery",
           "Learning",
-          "Curiosity"
+          "Curiosity",
+          "us",
+          "financial",
+          "north",
+          "illegal"
         ],
         [
-          8,
+          12,
           5,
-          5
+          5,
+          1,
+          1,
+          1,
+          1
         ]
       ],
       "opinions": {
@@ -2987,12 +3193,18 @@
         [
           "News",
           "Trends",
-          "Engagement"
+          "Engagement",
+          "Education",
+          "police",
+          "immigration"
         ],
         [
-          8,
+          9,
           6,
-          5
+          5,
+          1,
+          1,
+          1
         ]
       ],
       "opinions": {
@@ -3021,7 +3233,7 @@
       "daily_activity_level": 1,
       "round_actions": 3,
       "is_page": 0,
-      "recsys_type": "random",
+      "recsys_type": "rchrono",
       "frecsys_type": "random",
       "interests": [
         [
@@ -3101,18 +3313,22 @@
       "daily_activity_level": 1,
       "round_actions": 5,
       "is_page": 0,
-      "recsys_type": "random",
+      "recsys_type": "rchrono",
       "frecsys_type": "common_neighbors",
       "interests": [
         [
           "Education",
           "Learning",
-          "Teaching"
+          "Teaching",
+          "venezuela",
+          "us"
         ],
         [
           8,
           6,
-          4
+          4,
+          1,
+          1
         ]
       ],
       "opinions": {
@@ -3141,7 +3357,7 @@
       "daily_activity_level": 2,
       "round_actions": 2,
       "is_page": 0,
-      "recsys_type": "random",
+      "recsys_type": "rchrono",
       "frecsys_type": "preferential_attachment",
       "interests": [
         [
@@ -3181,7 +3397,7 @@
       "daily_activity_level": 2,
       "round_actions": 4,
       "is_page": 0,
-      "recsys_type": "random",
+      "recsys_type": "rchrono",
       "frecsys_type": "jaccard",
       "interests": [
         [
@@ -3227,12 +3443,20 @@
         [
           "News",
           "Trends",
-          "Engagement"
+          "Engagement",
+          "president",
+          "melanias",
+          "gop",
+          "national"
         ],
         [
           8,
           6,
-          5
+          5,
+          1,
+          1,
+          1,
+          1
         ]
       ],
       "opinions": {
@@ -3341,18 +3565,20 @@
       "daily_activity_level": 1,
       "round_actions": 4,
       "is_page": 0,
-      "recsys_type": "random",
+      "recsys_type": "rchrono",
       "frecsys_type": "random",
       "interests": [
         [
           "Discovery",
           "Learning",
-          "Curiosity"
+          "Curiosity",
+          "ice"
         ],
         [
           8,
           5,
-          5
+          5,
+          1
         ]
       ],
       "opinions": {
@@ -3467,12 +3693,18 @@
         [
           "Education",
           "Learning",
-          "Teaching"
+          "Teaching",
+          "us",
+          "strategic",
+          "senate"
         ],
         [
           8,
           6,
-          4
+          4,
+          1,
+          1,
+          1
         ]
       ],
       "opinions": {
@@ -3501,7 +3733,7 @@
       "daily_activity_level": 1,
       "round_actions": 3,
       "is_page": 0,
-      "recsys_type": "random",
+      "recsys_type": "rchrono",
       "frecsys_type": "jaccard",
       "interests": [
         [
@@ -3581,7 +3813,7 @@
       "daily_activity_level": 2,
       "round_actions": 2,
       "is_page": 0,
-      "recsys_type": "random",
+      "recsys_type": "rchrono",
       "frecsys_type": "adamic_adar",
       "interests": [
         [
@@ -3661,7 +3893,7 @@
       "daily_activity_level": 3,
       "round_actions": 4,
       "is_page": 0,
-      "recsys_type": "random",
+      "recsys_type": "rchrono",
       "frecsys_type": "random",
       "interests": [
         [
@@ -3707,12 +3939,20 @@
         [
           "Learning",
           "Education",
-          "Technology"
+          "Technology",
+          "president",
+          "melanias",
+          "transgender",
+          "catholic"
         ],
         [
           5,
           5,
-          2
+          2,
+          2,
+          2,
+          1,
+          1
         ]
       ],
       "opinions": {
@@ -3827,12 +4067,22 @@
         [
           "Discovery",
           "Learning",
-          "Curiosity"
+          "Curiosity",
+          "News",
+          "transgender",
+          "catholic",
+          "military",
+          "us-venezuela"
         ],
         [
           8,
           5,
-          5
+          5,
+          1,
+          2,
+          2,
+          1,
+          1
         ]
       ],
       "opinions": {
@@ -4021,7 +4271,7 @@
       "daily_activity_level": 3,
       "round_actions": 4,
       "is_page": 0,
-      "recsys_type": "random",
+      "recsys_type": "rchrono",
       "frecsys_type": "adamic_adar",
       "interests": [
         [
@@ -4065,7 +4315,7 @@
       "education_level": "college",
       "round_actions": 3,
       "is_page": 0,
-      "recsys_type": "random",
+      "recsys_type": "rchrono",
       "frecsys_type": "random"
     }
   }

@@ -128,5 +128,5 @@ Edit `simulation_config.json` to adjust:
 - [llm_population_100](../llm_population_100/) - 100 LLM agents with bounded confidence opinion model
 - [llm_population_1000](../llm_population_1000/) - 1000 LLM agents example
 - [mixed_population_100](../mixed_population_100/) - 50/50 mixed agents example
-- [Opinion Dynamics Documentation](../../docs/OPINION_DYNAMICS.md) - Full opinion dynamics guide
-- [YSimulator Documentation](../../docs/) - Full documentation
+- [Opinion Dynamics Documentation](../../docs/features/OPINION_DYNAMICS.md) - Full opinion dynamics guide
+- [YSimulator Documentation](../../docs/getting-started/INDEX.md) - Full documentation

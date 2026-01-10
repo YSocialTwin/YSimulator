@@ -1,0 +1,243 @@
+"""
+Unit tests for recommendation engines.
+
+Tests ContentRecommender and FollowRecommender classes with mocked backends.
+"""
+
+from unittest.mock import Mock, patch
+
+import pytest
+
+from YSimulator.YServer.recommendation.content_recommender import ContentRecommender
+from YSimulator.YServer.recommendation.follow_recommender import FollowRecommender
+
+
+@pytest.fixture
+def mock_db_adapter():
+    """Create mock database adapter for testing."""
+    db = Mock()
+    db.use_redis = False
+    db.engine = Mock()
+    db.redis_client = Mock()
+    db._redis_key = Mock(side_effect=lambda *args: ":".join(args))
+    return db
+
+
+@pytest.fixture
+def mock_db_adapter_redis():
+    """Create mock database adapter with Redis enabled."""
+    db = Mock()
+    db.use_redis = True
+    db.engine = Mock()
+    db.redis_client = Mock()
+    db._redis_key = Mock(side_effect=lambda *args: ":".join(args))
+
+    # Mock Redis responses
+    db.redis_client.lrange = Mock(return_value=["post1", "post2", "post3"])
+    db.redis_client.pipeline = Mock(
+        return_value=Mock(
+            hgetall=Mock(),
+            execute=Mock(
+                return_value=[
+                    {"user_id": "user2", "reaction_count": "5"},
+                    {"user_id": "user3", "reaction_count": "10"},
+                    {"user_id": "user4", "reaction_count": "2"},
+                ]
+            ),
+        )
+    )
+
+    return db
+
+
+class TestContentRecommender:
+    """Test ContentRecommender class."""
+
+    def test_init(self, mock_db_adapter):
+        """Test ContentRecommender initialization."""
+        recommender = ContentRecommender(mock_db_adapter, visibility_rounds=36)
+        assert recommender.db == mock_db_adapter
+        assert recommender.visibility_rounds == 36
+        assert recommender.logger is not None
+
+    @patch("YSimulator.YServer.recommendation.content_recommender.content_recsys_db")
+    def test_get_recommended_posts_sql(self, mock_recsys_db, mock_db_adapter):
+        """Test content recommendations using SQL backend."""
+        # Mock the recommendation function
+        mock_recsys_db.recommend_random = Mock(return_value=["post1", "post2", "post3"])
+
+        recommender = ContentRecommender(mock_db_adapter, visibility_rounds=36)
+        result = recommender.get_recommended_posts(
+            agent_id="agent1", mode="random", limit=3, day=1, slot=5
+        )
+
+        assert len(result) == 3
+        assert "post1" in result
+        mock_recsys_db.recommend_random.assert_called_once()
+
+    @patch("YSimulator.YServer.recommendation.content_recommender.content_recsys_redis")
+    def test_get_recommended_posts_redis(self, mock_recsys_redis, mock_db_adapter_redis):
+        """Test content recommendations using Redis backend."""
+        # Mock the recommendation function
+        mock_recsys_redis.recommend_random_redis = Mock(return_value=["post1", "post2"])
+
+        recommender = ContentRecommender(mock_db_adapter_redis, visibility_rounds=36)
+        result = recommender.get_recommended_posts(
+            agent_id="agent1", mode="random", limit=2, day=1, slot=5
+        )
+
+        assert len(result) == 2
+        mock_recsys_redis.recommend_random_redis.assert_called_once()
+
+    @patch("YSimulator.YServer.recommendation.content_recommender.content_recsys_db")
+    def test_different_recommendation_modes(self, mock_recsys_db, mock_db_adapter):
+        """Test different recommendation modes."""
+        recommender = ContentRecommender(mock_db_adapter, visibility_rounds=36)
+
+        # Test rchrono mode
+        mock_recsys_db.recommend_rchrono = Mock(return_value=["post1"])
+        _ = recommender.get_recommended_posts(agent_id="agent1", mode="rchrono", day=1, slot=5)
+        assert mock_recsys_db.recommend_rchrono.called
+
+        # Test rchrono_popularity mode
+        mock_recsys_db.recommend_rchrono_popularity = Mock(return_value=["post2"])
+        _ = recommender.get_recommended_posts(
+            agent_id="agent1", mode="rchrono_popularity", day=1, slot=5
+        )
+        assert mock_recsys_db.recommend_rchrono_popularity.called
+
+    def test_calculate_visibility_params(self, mock_db_adapter):
+        """Test visibility parameter calculation."""
+        recommender = ContentRecommender(mock_db_adapter, visibility_rounds=36)
+
+        # Test with day=2, slot=12, visibility_rounds=36
+        vis_day, vis_hour = recommender._calculate_visibility_params(2, 12, 36)
+
+        # Total slots = 2*24 + 12 = 60
+        # Visible slots = 60 - 36 = 24
+        # vis_day = 24 // 24 = 1
+        # vis_hour = 24 % 24 = 0
+        assert vis_day == 1
+        assert vis_hour == 0
+
+    def test_error_handling(self, mock_db_adapter):
+        """Test error handling in get_recommended_posts."""
+        mock_db_adapter.engine = None  # Force an error
+
+        recommender = ContentRecommender(mock_db_adapter, visibility_rounds=36)
+        result = recommender.get_recommended_posts(agent_id="agent1", mode="random", day=1, slot=5)
+
+        # Should return empty list on error
+        assert result == []
+
+
+class TestFollowRecommender:
+    """Test FollowRecommender class."""
+
+    def test_init(self, mock_db_adapter):
+        """Test FollowRecommender initialization."""
+        recommender = FollowRecommender(mock_db_adapter)
+        assert recommender.db == mock_db_adapter
+        assert recommender.logger is not None
+
+    @patch("YSimulator.YServer.recommendation.follow_recommender.follow_recsys_db")
+    def test_get_follow_suggestions_sql(self, mock_recsys_db, mock_db_adapter):
+        """Test follow suggestions using SQL backend."""
+        from unittest.mock import MagicMock
+
+        from sqlalchemy.orm import Session
+
+        # Mock session and query results
+        mock_session = MagicMock(spec=Session)
+        mock_session.__enter__ = Mock(return_value=mock_session)
+        mock_session.__exit__ = Mock(return_value=False)
+
+        # Mock User_mgmt query
+        mock_agent = Mock()
+        mock_agent.id = "agent1"
+        mock_session.query.return_value.filter_by.return_value.first.return_value = mock_agent
+
+        # Mock Follow query for following_ids
+        mock_session.query.return_value.filter.return_value.group_by.return_value.subquery.return_value = (
+            Mock()
+        )
+        mock_session.query.return_value.join.return_value.all.return_value = []
+
+        # Mock recommendation function
+        mock_recsys_db.recommend_random_follows = Mock(return_value=["user1", "user2"])
+        mock_recsys_db.apply_leaning_bias = Mock(side_effect=lambda sess, aid, sugg, bias, n: sugg)
+
+        with patch("sqlalchemy.orm.Session", return_value=mock_session):
+            recommender = FollowRecommender(mock_db_adapter)
+            result = recommender.get_follow_suggestions(
+                agent_id="agent1", mode="random", n_neighbors=2
+            )
+
+            assert len(result) == 2
+            assert "user1" in result
+
+    @patch("YSimulator.YServer.recommendation.follow_recommender.follow_recsys_redis")
+    def test_get_follow_suggestions_redis(self, mock_recsys_redis, mock_db_adapter_redis):
+        """Test follow suggestions using Redis backend."""
+        # Mock the recommendation function
+        mock_recsys_redis.recommend_random_follows_redis = Mock(return_value=["user1", "user2"])
+
+        recommender = FollowRecommender(mock_db_adapter_redis)
+        result = recommender.get_follow_suggestions(agent_id="agent1", mode="random", n_neighbors=2)
+
+        assert len(result) == 2
+        mock_recsys_redis.recommend_random_follows_redis.assert_called_once()
+
+    @patch("YSimulator.YServer.recommendation.follow_recommender.follow_recsys_redis")
+    def test_leaning_bias_applied(self, mock_recsys_redis, mock_db_adapter_redis):
+        """Test that leaning bias is applied when specified."""
+        mock_recsys_redis.recommend_random_follows_redis = Mock(return_value=["user1", "user2"])
+        mock_recsys_redis.apply_leaning_bias_redis = Mock(return_value=["user1"])
+
+        recommender = FollowRecommender(mock_db_adapter_redis)
+        _ = recommender.get_follow_suggestions(
+            agent_id="agent1", mode="random", n_neighbors=2, leaning_bias=1
+        )
+
+        # Bias should be applied
+        mock_recsys_redis.apply_leaning_bias_redis.assert_called_once()
+
+    def test_error_handling(self, mock_db_adapter):
+        """Test error handling in get_follow_suggestions."""
+        mock_db_adapter.engine = None  # Force an error
+
+        recommender = FollowRecommender(mock_db_adapter)
+        result = recommender.get_follow_suggestions(agent_id="agent1", mode="random", n_neighbors=2)
+
+        # Should return empty list on error
+        assert result == []
+
+    @patch("YSimulator.YServer.recommendation.follow_recommender.follow_recsys_redis")
+    def test_different_recommendation_modes(self, mock_recsys_redis, mock_db_adapter_redis):
+        """Test different recommendation modes."""
+        recommender = FollowRecommender(mock_db_adapter_redis)
+
+        # Test common_neighbors mode
+        mock_recsys_redis.recommend_common_neighbors_redis = Mock(return_value=["user1"])
+        _ = recommender.get_follow_suggestions(
+            agent_id="agent1", mode="common_neighbors", n_neighbors=1
+        )
+        assert mock_recsys_redis.recommend_common_neighbors_redis.called
+
+        # Test jaccard mode
+        mock_recsys_redis.recommend_jaccard_redis = Mock(return_value=["user2"])
+        _ = recommender.get_follow_suggestions(agent_id="agent1", mode="jaccard", n_neighbors=1)
+        assert mock_recsys_redis.recommend_jaccard_redis.called
+
+
+class TestRecommendationIntegration:
+    """Integration tests for recommendation engines."""
+
+    def test_content_and_follow_recommenders_together(self, mock_db_adapter):
+        """Test that both recommenders can be instantiated together."""
+        content_rec = ContentRecommender(mock_db_adapter, visibility_rounds=36)
+        follow_rec = FollowRecommender(mock_db_adapter)
+
+        assert content_rec is not None
+        assert follow_rec is not None
+        assert content_rec.db == follow_rec.db

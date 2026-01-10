@@ -18,7 +18,7 @@ except ImportError:
     REDIS_AVAILABLE = False
     redis = None
 
-from sqlalchemy import create_engine, func
+from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
 from YSimulator.YServer.classes.models import (
@@ -754,7 +754,7 @@ class DatabaseMiddleware:
                         user_id = post_dict.get("user_id")
                         username = DEFAULT_USERNAME
                         if user_id:
-                            user_key = self._redis_key("users", user_id)
+                            user_key = self._redis_key("user_mgmt", user_id)
                             user_data = self.redis_client.hgetall(user_key)
                             if user_data:
                                 username_bytes = user_data.get(b"username") or user_data.get(
@@ -1071,7 +1071,7 @@ class DatabaseMiddleware:
             visibility_hour = (visibility_slots - 1) % self.num_slots_per_day + 1
 
             self.logger.info(
-                f"Cleaning Redis posts older than visibility window",
+                "Cleaning Redis posts older than visibility window",
                 extra={
                     "extra_data": {
                         "current_day": current_day,
@@ -1142,7 +1142,7 @@ class DatabaseMiddleware:
                         self.redis_client.lpush(recent_posts_key, post_id)
 
                 self.logger.info(
-                    f"Redis cleanup complete",
+                    "Redis cleanup complete",
                     extra={
                         "extra_data": {
                             "removed_posts": removed_posts_count,
@@ -1206,7 +1206,7 @@ class DatabaseMiddleware:
                 session.commit()
 
                 self.logger.debug(
-                    f"Created new Round entry",
+                    "Created new Round entry",
                     extra={
                         "extra_data": {
                             "round_id": round_id,
@@ -2672,7 +2672,8 @@ class DatabaseMiddleware:
                 )
 
                 self.logger.info(
-                    f"Successfully created article_topic entry: id={article_topic_id}, article_id={article_id}, topic_id={topic_id}"
+                    f"Successfully created article_topic entry: id={article_topic_id}, "
+                    f"article_id={article_id}, topic_id={topic_id}"
                 )
                 return True
 
@@ -2719,7 +2720,8 @@ class DatabaseMiddleware:
                 session.add(article_topic)
                 session.commit()
                 self.logger.info(
-                    f"Successfully created article_topic entry: id={article_topic_id}, article_id={article_id}, topic_id={topic_id}"
+                    f"Successfully created article_topic entry: id={article_topic_id}, "
+                    f"article_id={article_id}, topic_id={topic_id}"
                 )
                 return True
 
@@ -3015,7 +3017,7 @@ class DatabaseMiddleware:
                 mention_ids = self.redis_client.smembers(user_mentions_key)
 
                 self.logger.debug(
-                    f"[REPLY_DB] Found {len(mention_ids) if mention_ids else 0} total mentions for user {user_id}"
+                    f"[REPLY_DB] Found {len(mention_ids) if mention_ids else 0}total mentions for user {user_id}"
                 )
 
                 if not mention_ids:
@@ -3048,7 +3050,7 @@ class DatabaseMiddleware:
                             unreplied_mentions.append(mention_dict)
 
                 self.logger.info(
-                    f"[REPLY_DB] Returning {len(unreplied_mentions)} unreplied mentions for user {user_id}"
+                    f"[REPLY_DB] Returning {len(unreplied_mentions)}unreplied mentions for user {user_id}"
                 )
                 return unreplied_mentions
             else:
@@ -3076,7 +3078,7 @@ class DatabaseMiddleware:
                         for m in mentions
                     ]
                     self.logger.info(
-                        f"[REPLY_DB] Returning {len(result)} unreplied mentions for user {user_id} (SQL)"
+                        f"[REPLY_DB] Returning {len(result)}unreplied mentions for user {user_id}(SQL)"
                     )
                     return result
                 finally:
@@ -3597,7 +3599,7 @@ class DatabaseMiddleware:
 
             session.commit()
             self.logger.info(
-                f"Initialized emotions table: {created_count} new emotions added, {len(emotions_data) - created_count} already existed"
+                f"Initialized emotions table: {created_count}new emotions added, {len(emotions_data) - created_count}already existed"
             )
             return True
 
@@ -3693,11 +3695,14 @@ class DatabaseMiddleware:
                         if days_inactive >= inactivity_threshold:
                             inactive_agents.append(agent_data.get("id"))
                             self.logger.debug(
-                                f"Agent {agent_data.get('id')} inactive: last_active={last_active}, days_inactive={days_inactive}"
+                                f"Agent {agent_data.get('id')} inactive: "
+                                f"last_active={last_active}, days_inactive={days_inactive}"
                             )
 
                 self.logger.info(
-                    f"Inactive agents check (Redis): total={total_agents}, churned={churned_agents}, with_last_active={agents_with_last_active}, inactive={len(inactive_agents)}"
+                    f"Inactive agents check (Redis): total={total_agents}, "
+                    f"churned={churned_agents}, with_last_active={agents_with_last_active}, "
+                    f"inactive={len(inactive_agents)}"
                 )
                 return inactive_agents
             else:
@@ -3715,7 +3720,8 @@ class DatabaseMiddleware:
                     )
 
                     self.logger.info(
-                        f"Database stats: total_agents={total_count}, churned={churned_count}, with_last_active={with_last_active}"
+                        f"Database stats: total_agents={total_count}, "
+                        f"churned={churned_count}, with_last_active={with_last_active}"
                     )
 
                     # Query for inactive agents
@@ -3730,7 +3736,7 @@ class DatabaseMiddleware:
                     )
 
                     self.logger.info(
-                        f"Found {len(inactive_agents)} inactive agents (threshold={inactivity_threshold})"
+                        f"Found {len(inactive_agents)}inactive agents (threshold={inactivity_threshold})"
                     )
 
                     return [agent.id for agent in inactive_agents]
