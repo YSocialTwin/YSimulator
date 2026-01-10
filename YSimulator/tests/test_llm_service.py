@@ -86,7 +86,10 @@ class TestBatchHandler(unittest.TestCase):
 
     def test_gather_futures_success(self):
         """Test successful future gathering."""
-        with patch("ray.get", return_value=["result1", "result2", "result3"]) as mock_ray_get:
+        with patch(
+            "YSimulator.YClient.llm_utils.batch_handler.ray.get",
+            return_value=["result1", "result2", "result3"],
+        ) as mock_ray_get:
             handler = BatchHandler(logger=self.mock_logger)
             futures = [Mock(), Mock(), Mock()]
 
@@ -104,7 +107,10 @@ class TestBatchHandler(unittest.TestCase):
 
     def test_gather_futures_error(self):
         """Test future gathering with error."""
-        with patch("ray.get", side_effect=Exception("Ray error")):
+        with patch(
+            "YSimulator.YClient.llm_utils.batch_handler.ray.get",
+            side_effect=Exception("Ray error"),
+        ):
             handler = BatchHandler(logger=self.mock_logger)
             futures = [Mock(), Mock()]
 
@@ -115,7 +121,10 @@ class TestBatchHandler(unittest.TestCase):
 
     def test_gather_with_metadata(self):
         """Test gathering with metadata preservation."""
-        with patch("ray.get", return_value=["result1", "result2"]):
+        with patch(
+            "YSimulator.YClient.llm_utils.batch_handler.ray.get",
+            return_value=["result1", "result2"],
+        ):
             handler = BatchHandler(logger=self.mock_logger)
             futures_with_meta = [
                 (Mock(), {"agent_id": "a1", "cluster": 1}),
