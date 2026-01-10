@@ -261,9 +261,19 @@ if __name__ == "__main__":
         try:
             llm_service = VLLMService.remote(llm_config, prompts_config, llm_v_config)
         except ImportError as e:
-            logger.error(f"Failed to initialize vLLM: {e}")
+            logger.error(f"Failed to import vLLM: {e}")
             print(f"❌ Error: vLLM not available: {e}")
             print("💡 Tip: vLLM requires Linux. On macOS, use 'ollama' backend instead.")
+            sys.exit(1)
+        except Exception as e:
+            logger.error(f"Failed to initialize vLLM service: {e}")
+            logger.error(f"Model: {llm_config.get('model', 'unknown')}")
+            print(f"❌ Error: vLLM initialization failed: {e}")
+            print("💡 Check the logs above for detailed error information.")
+            print("💡 Common issues:")
+            print("   - Insufficient GPU memory (try reducing gpu_memory_utilization)")
+            print("   - Model not found (check model path)")
+            print("   - GPU compatibility issues (check CUDA version)")
             sys.exit(1)
     else:
         # Default to Ollama backend

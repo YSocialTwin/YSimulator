@@ -119,9 +119,25 @@ class VLLMService:
 
             logger.info("[vLLM] vLLM text generation engine initialized successfully")
         except Exception as e:
-            logger.error(f"[vLLM] Failed to initialize vLLM text engine: {e}")
-            logger.error(f"[vLLM] Model: {model_name}, Tensor parallel size: {tensor_parallel_size}")
-            raise RuntimeError(f"vLLM text model initialization failed: {e}") from e
+            # Log detailed error information
+            logger.error(f"[vLLM] ========== vLLM Text Model Initialization Failed ==========")
+            logger.error(f"[vLLM] Error type: {type(e).__name__}")
+            logger.error(f"[vLLM] Error message: {str(e)}")
+            logger.error(f"[vLLM] Configuration:")
+            logger.error(f"[vLLM]   - Model: {model_name}")
+            logger.error(f"[vLLM]   - Tensor parallel size: {tensor_parallel_size}")
+            logger.error(f"[vLLM]   - GPU memory utilization: {gpu_memory_utilization}")
+            logger.error(f"[vLLM] ============================================================")
+            
+            # Log full traceback for debugging
+            import traceback
+            logger.error(f"[vLLM] Full traceback:\n{traceback.format_exc()}")
+            
+            # Re-raise with more context but preserve original exception
+            raise RuntimeError(
+                f"vLLM text model initialization failed. "
+                f"Model: {model_name}, Error: {type(e).__name__}: {str(e)}"
+            ) from e
 
         # Initialize vision LLM if config provided
         self.llm_v = None
