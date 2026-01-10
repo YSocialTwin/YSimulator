@@ -1322,6 +1322,9 @@ class SQLInterestRepository(InterestRepository):
         Returns:
             Dict mapping interest names to their IDs
         """
+        if not interest_names:
+            return {}
+
         try:
             import uuid
 
@@ -1353,8 +1356,12 @@ class SQLInterestRepository(InterestRepository):
                     session.commit()
 
                 return result
-            except Exception:
+            except Exception as e:
                 session.rollback()
+                self.logger.error(
+                    f"Error in batch interest creation: {e}",
+                    extra={"extra_data": {"error": str(e), "count": len(interest_names)}},
+                )
                 raise
             finally:
                 session.close()
@@ -1452,6 +1459,9 @@ class SQLInterestRepository(InterestRepository):
         Returns:
             int: Number of user interests successfully added
         """
+        if not user_interests_data:
+            return 0
+
         try:
             import uuid
 
@@ -1472,8 +1482,12 @@ class SQLInterestRepository(InterestRepository):
                     session.bulk_insert_mappings(UserInterest, batch)
                     session.commit()
                     total_added += len(batch)
-                except Exception:
+                except Exception as e:
                     session.rollback()
+                    self.logger.error(
+                        f"Error in batch user interest insertion: {e}",
+                        extra={"extra_data": {"error": str(e), "batch_size": len(batch)}},
+                    )
                     raise
                 finally:
                     session.close()
@@ -1510,6 +1524,9 @@ class SQLInterestRepository(InterestRepository):
         Returns:
             int: Number of agent opinions successfully added
         """
+        if not agent_opinions_data:
+            return 0
+
         try:
             import uuid
 
@@ -1530,8 +1547,12 @@ class SQLInterestRepository(InterestRepository):
                     session.bulk_insert_mappings(Agent_Opinion, batch)
                     session.commit()
                     total_added += len(batch)
-                except Exception:
+                except Exception as e:
                     session.rollback()
+                    self.logger.error(
+                        f"Error in batch agent opinion insertion: {e}",
+                        extra={"extra_data": {"error": str(e), "batch_size": len(batch)}},
+                    )
                     raise
                 finally:
                     session.close()
