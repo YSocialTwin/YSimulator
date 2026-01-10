@@ -141,6 +141,54 @@ class InterestService:
             self.logger.error(f"Error adding agent opinion: {e}")
             return False
 
+    def add_or_get_interests_batch(self, interest_names: List[str]) -> dict:
+        """
+        Add multiple interests or get existing ones' IDs in batch.
+
+        Args:
+            interest_names: List of interest/topic names
+
+        Returns:
+            Dict mapping interest names to their IDs
+        """
+        try:
+            return self.interest_repo.add_or_get_interests_batch(interest_names)
+        except Exception as e:
+            self.logger.error(f"Error batch adding/getting interests: {e}")
+            return {}
+
+    def add_user_interests_batch(self, user_interests_data: List[dict]) -> int:
+        """
+        Add multiple user interests in batch.
+
+        Args:
+            user_interests_data: List of dicts with user_id, interest_id, round_id
+
+        Returns:
+            Number of user interests successfully added
+        """
+        try:
+            return self.interest_repo.add_user_interests_batch(user_interests_data)
+        except Exception as e:
+            self.logger.error(f"Error batch adding user interests: {e}")
+            return 0
+
+    def add_agent_opinions_batch(self, agent_opinions_data: List[dict]) -> int:
+        """
+        Add multiple agent opinions in batch.
+
+        Args:
+            agent_opinions_data: List of dicts with agent_id, tid, topic_id, opinion, etc.
+
+        Returns:
+            Number of agent opinions successfully added
+        """
+        try:
+            return self.interest_repo.add_agent_opinions_batch(agent_opinions_data)
+        except Exception as e:
+            self.logger.error(f"Error batch adding agent opinions: {e}")
+            return 0
+
     def get_latest_agent_opinion(self, agent_id: str, topic_id: str) -> Optional[float]:
         """
         Get latest agent opinion on a topic.
