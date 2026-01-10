@@ -141,9 +141,7 @@ class TestBatchInterestOperations(unittest.TestCase):
             self.assertEqual(len(user_interests_db), 3)
 
             # Verify user1 has 2 interests
-            user1_interests = (
-                session.query(UserInterest).filter_by(user_id=user1_id).all()
-            )
+            user1_interests = session.query(UserInterest).filter_by(user_id=user1_id).all()
             self.assertEqual(len(user1_interests), 2)
 
     def test_add_agent_opinions_batch(self):
@@ -196,9 +194,7 @@ class TestBatchInterestOperations(unittest.TestCase):
             self.assertEqual(len(opinions_db), 3)
 
             # Verify agent1 has 2 opinions
-            agent1_opinions = (
-                session.query(Agent_Opinion).filter_by(agent_id=agent1_id).all()
-            )
+            agent1_opinions = session.query(Agent_Opinion).filter_by(agent_id=agent1_id).all()
             self.assertEqual(len(agent1_opinions), 2)
 
     def test_add_user_interests_batch_large_dataset(self):
@@ -219,18 +215,18 @@ class TestBatchInterestOperations(unittest.TestCase):
             # Each user gets entries_per_user interests
             for entry_idx in range(entries_per_user):
                 interest_name = f"Interest_{(user_idx + entry_idx) % num_interests}"
-                user_interests.append({
-                    "user_id": user_id,
-                    "interest_id": interest_map[interest_name],
-                    "round_id": self.round_id,
-                })
+                user_interests.append(
+                    {
+                        "user_id": user_id,
+                        "interest_id": interest_map[interest_name],
+                        "round_id": self.round_id,
+                    }
+                )
 
         total_entries = num_users * entries_per_user
 
         # Batch insert with smaller batch size
-        added_count = self.repository.add_user_interests_batch(
-            user_interests, batch_size=100
-        )
+        added_count = self.repository.add_user_interests_batch(user_interests, batch_size=100)
 
         # Verify count
         self.assertEqual(added_count, total_entries)
@@ -258,9 +254,7 @@ class TestBatchInterestOperations(unittest.TestCase):
         ]
 
         # Batch initialize
-        results = self.interest_manager.initialize_agent_interests_batch(
-            agents_data, self.round_id
-        )
+        results = self.interest_manager.initialize_agent_interests_batch(agents_data, self.round_id)
 
         # Verify results
         self.assertTrue(results[agent1_id])
@@ -277,12 +271,8 @@ class TestBatchInterestOperations(unittest.TestCase):
         # Agent1 should have 3 + 2 = 5 entries
         # Agent2 should have 5 + 1 = 6 entries
         with Session(self.db.engine) as session:
-            agent1_entries = (
-                session.query(UserInterest).filter_by(user_id=agent1_id).all()
-            )
-            agent2_entries = (
-                session.query(UserInterest).filter_by(user_id=agent2_id).all()
-            )
+            agent1_entries = session.query(UserInterest).filter_by(user_id=agent1_id).all()
+            agent2_entries = session.query(UserInterest).filter_by(user_id=agent2_id).all()
             self.assertEqual(len(agent1_entries), 5)
             self.assertEqual(len(agent2_entries), 6)
 
@@ -303,9 +293,7 @@ class TestBatchInterestOperations(unittest.TestCase):
         ]
 
         # Batch initialize
-        results = self.interest_manager.initialize_agent_interests_batch(
-            agents_data, self.round_id
-        )
+        results = self.interest_manager.initialize_agent_interests_batch(agents_data, self.round_id)
 
         # Verify results
         self.assertFalse(results[agent1_id])  # Should fail

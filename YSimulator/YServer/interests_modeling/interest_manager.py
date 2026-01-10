@@ -359,11 +359,13 @@ class InterestManager:
                     # Add multiple entries based on interaction count
                     count = counts[i] if i < len(counts) else 1
                     for _ in range(count):
-                        user_interests_data.append({
-                            "user_id": agent_id,
-                            "interest_id": interest_id,
-                            "round_id": round_id,
-                        })
+                        user_interests_data.append(
+                            {
+                                "user_id": agent_id,
+                                "interest_id": interest_id,
+                                "round_id": round_id,
+                            }
+                        )
 
         # Batch insert all user_interest entries
         if user_interests_data:

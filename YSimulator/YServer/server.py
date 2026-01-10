@@ -977,16 +977,20 @@ class OrchestratorServer:
                 agent_profile = agent_id_to_profile.get(agent_id)
                 if agent_profile:
                     if agent_profile.interests:
-                        agents_with_interests.append({
-                            "agent_id": agent_id,
-                            "interests": agent_profile.interests,
-                        })
+                        agents_with_interests.append(
+                            {
+                                "agent_id": agent_id,
+                                "interests": agent_profile.interests,
+                            }
+                        )
 
                     if agent_profile.opinions:
-                        agents_with_opinions.append({
-                            "agent_id": agent_id,
-                            "opinions": agent_profile.opinions,
-                        })
+                        agents_with_opinions.append(
+                            {
+                                "agent_id": agent_id,
+                                "opinions": agent_profile.opinions,
+                            }
+                        )
                         # Collect all unique topic names for batch lookup
                         all_opinion_topic_names.update(agent_profile.opinions.keys())
 
@@ -1017,14 +1021,16 @@ class OrchestratorServer:
                     for topic_name, opinion_value in opinions.items():
                         topic_id = topic_name_to_id.get(topic_name)
                         if topic_id:
-                            agent_opinions_data.append({
-                                "agent_id": agent_id,
-                                "tid": self.current_round_id,  # Note: model uses 'tid'
-                                "topic_id": topic_id,
-                                "opinion": opinion_value,
-                                "id_interacted_with": None,
-                                "id_post": None,
-                            })
+                            agent_opinions_data.append(
+                                {
+                                    "agent_id": agent_id,
+                                    "tid": self.current_round_id,  # Note: model uses 'tid'
+                                    "topic_id": topic_id,
+                                    "opinion": opinion_value,
+                                    "id_interacted_with": None,
+                                    "id_post": None,
+                                }
+                            )
 
                 # Batch insert all opinions
                 if agent_opinions_data:
