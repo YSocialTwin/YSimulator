@@ -7,7 +7,7 @@ A distributed social media simulation system using Ray for orchestration and LLM
 - **Distributed Architecture**: Server-client model using Ray for scalable simulation
 - **Multi-Database Support**: SQLite, PostgreSQL, MySQL backends with optional Redis caching
 - **Configurable Parameters**: JSON-based configuration for all simulation parameters
-- **LLM Integration**: Support for Ollama-based language models for realistic agent behaviors
+- **LLM Integration**: Support for Ollama and vLLM backends for realistic agent behaviors with batch inference
 - **Agent Profiles**: User_mgmt-based agent system with Big Five personality traits
 - **Opinion Dynamics**: Configurable models including bounded confidence and LLM-based evaluation for realistic opinion evolution and polarization
 - **Multi-Client Synchronization**: Robust barrier-based coordination with heartbeat liveness detection
@@ -15,6 +15,7 @@ A distributed social media simulation system using Ray for orchestration and LLM
 - **Flexible Simulation**: Configurable duration, agent population, and LLM parameters
 - **Structured Logging**: Rotating JSON logs with timestamps and execution times
 - **UUID-Based IDs**: Universal identifiers for distributed compatibility
+- **Performance Optimization**: vLLM backend support for 8-30x faster LLM inference through batch processing
 
 ## Documentation
 
@@ -39,8 +40,10 @@ A distributed social media simulation system using Ray for orchestration and LLM
 - **[Agent Temporal Activities](docs/agents/AGENT_TEMPORAL_ACTIVITIES.md)** - Temporal patterns and dynamics (990+ lines)
 
 **System & Performance:**
+- **[vLLM Integration Guide](docs/configuration/VLLM_INTEGRATION_GUIDE.md)** - High-performance LLM backend with batch inference (8x-30x speedup)
 - **[Database & Storage](docs/data-storage/REDIS_DATABASE_ANALYSIS.md)** - Redis/SQL hybrid architecture, 89% Redis coverage (480 lines)
 - **[Redis Integration](docs/data-storage/RECSYS_REDIS_SUPPORT.md)** - Caching strategies and implementation (870 lines)
+- **[Performance Optimization](docs/analysis/BOTTLENECK_ANALYSIS_SUMMARY.md)** - Bottleneck analysis and optimization strategies
 
 **Development:**
 - **[Extension Guide](docs/development/EXTENDING.md)** - How to add new agent actions and features (1,210+ lines)
