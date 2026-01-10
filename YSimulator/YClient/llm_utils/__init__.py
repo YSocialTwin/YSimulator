@@ -26,12 +26,22 @@ from YSimulator.YClient.llm_utils.response_parser import ResponseParser
 try:
     from YSimulator.YClient.llm_utils.batch_handler import BatchHandler
     from YSimulator.YClient.llm_utils.llm_manager import LLMManager
+    from YSimulator.YClient.llm_utils.load_balancer import (
+        LLMActorPool,
+        LLMLoadBalancer,
+        LoadBalancingStrategy,
+        create_llm_actors,
+    )
     from YSimulator.YClient.llm_utils.retry_handler import RetryHandler
 except ImportError:
     # Ray not available - these components won't work but others will
     BatchHandler = None
     LLMManager = None
     RetryHandler = None
+    LLMLoadBalancer = None
+    LLMActorPool = None
+    LoadBalancingStrategy = None
+    create_llm_actors = None
 
 __all__ = [
     "LLMManager",
@@ -39,4 +49,8 @@ __all__ = [
     "RetryHandler",
     "ResponseParser",
     "CostTracker",
+    "LLMLoadBalancer",
+    "LLMActorPool",
+    "LoadBalancingStrategy",
+    "create_llm_actors",
 ]

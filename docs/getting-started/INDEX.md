@@ -1,11 +1,13 @@
 # YSimulator Documentation Index
 
-**Version:** 3.0  
-**Last Updated:** January 8, 2026
+**Version:** 3.1  
+**Last Updated:** January 10, 2026
 
 Welcome to the YSimulator documentation! This comprehensive guide will help you understand, configure, extend, and optimize your social media simulations.
 
 > **📁 New Structure**: Documentation has been reorganized into thematic subdirectories for better navigation. See the [directory structure](#-documentation-directory-structure) below.
+> 
+> **✨ New in v3.1**: Added comprehensive performance optimization roadmap and bottleneck analysis (2,075 lines)
 > 
 > **✨ New in v3.0**: Added comprehensive YClient audit after Phase 1-6 refactoring (74% code reduction)
 
@@ -95,6 +97,8 @@ Step-by-step guides for extending YSimulator with new features:
 
 | Document | Description | Contents |
 |----------|-------------|----------|
+| **[Performance Optimization Roadmap](../analysis/PERFORMANCE_OPTIMIZATION_ROADMAP.md)** ✨ | Comprehensive performance analysis (1,685 lines) | 6 bottlenecks, 3-phase roadmap, 30x+ speedup potential, implementation strategies |
+| **[Bottleneck Analysis Summary](../analysis/BOTTLENECK_ANALYSIS_SUMMARY.md)** ✨ | Quick reference guide (390 lines) | TL;DR findings, step-by-step implementation, quick wins (4x speedup in 1-2 weeks) |
 | **[Critical Code Paths](../architecture/CRITICAL_CODE_PATHS.md)** | Performance-critical code (530+ lines) | Hot paths, optimization opportunities |
 | **[Test Coverage Report](../testing/TEST_COVERAGE_REPORT.md)** | Testing status and progress (v3.1 with Phase 6) | Coverage metrics, all phases tested, recommendations |
 
@@ -143,11 +147,13 @@ Step-by-step guides for extending YSimulator with new features:
 4. **[Redis Integration](../data-storage/RECSYS_REDIS_SUPPORT.md)** - Caching strategy
 
 #### Optimize Performance
-1. **[Database & Storage](../data-storage/REDIS_DATABASE_ANALYSIS.md)** - Redis coverage and performance
-2. **[Redis Integration](../data-storage/RECSYS_REDIS_SUPPORT.md)** - Caching best practices
-3. **[Recommendation Systems](../features/RECOMMENDATION_SYSTEMS.md)** - Performance benchmarks
-4. **[Agent Types](../agents/AGENT_TYPES.md)** - Agent downcast optimization
-5. **[Configuration Guide](../configuration/CONFIG.md)** - Agent archetypes and optimization
+1. **[Performance Optimization Roadmap](../analysis/PERFORMANCE_OPTIMIZATION_ROADMAP.md)** ✨ - Comprehensive performance analysis and optimization strategies
+2. **[Bottleneck Analysis Summary](../analysis/BOTTLENECK_ANALYSIS_SUMMARY.md)** ✨ - Quick wins and step-by-step implementation guide
+3. **[Database & Storage](../data-storage/REDIS_DATABASE_ANALYSIS.md)** - Redis coverage and performance
+4. **[Redis Integration](../data-storage/RECSYS_REDIS_SUPPORT.md)** - Caching best practices
+5. **[Recommendation Systems](../features/RECOMMENDATION_SYSTEMS.md)** - Performance benchmarks
+6. **[Agent Types](../agents/AGENT_TYPES.md)** - Agent downcast optimization
+7. **[Configuration Guide](../configuration/CONFIG.md)** - Agent archetypes and optimization
 
 #### Extend Functionality
 1. **[Extending YSimulator](../development/EXTENDING.md)** - Add new actions and behaviors
