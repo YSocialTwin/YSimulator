@@ -92,20 +92,36 @@ class VLLMService:
         model_name = llm_config.get("model", "meta-llama/Llama-3.2-3B")
         tensor_parallel_size = llm_config.get("tensor_parallel_size", 1)
         gpu_memory_utilization = llm_config.get("gpu_memory_utilization", 0.9)
+        
+        # Disable FlashAttention by default (requires compute capability >= 8.0)
+        # Can be enabled via config: "enable_flashattention": true
+        enable_flashattention = llm_config.get("enable_flashattention", False)
 
         logger.info(
             f"[vLLM] Initializing vLLM engine with text model={model_name}, "
             f"tensor_parallel_size={tensor_parallel_size}, "
-            f"gpu_memory_utilization={gpu_memory_utilization}"
+            f"gpu_memory_utilization={gpu_memory_utilization}, "
+            f"enable_flashattention={enable_flashattention}"
         )
 
         try:
-            self.llm = LLM(
-                model=model_name,
-                tensor_parallel_size=tensor_parallel_size,
-                gpu_memory_utilization=gpu_memory_utilization,
-                trust_remote_code=True,
-            )
+            # Build vLLM initialization parameters
+            vllm_params = {
+                "model": model_name,
+                "tensor_parallel_size": tensor_parallel_size,
+                "gpu_memory_utilization": gpu_memory_utilization,
+                "trust_remote_code": True,
+            }
+            
+            # Disable FlashAttention if not explicitly enabled
+            # This is required for GPUs with compute capability < 8.0 (e.g., RTX 2080 Ti)
+            if not enable_flashattention:
+                vllm_params["disable_custom_all_reduce"] = True
+                # Set environment variable to disable FlashAttention
+                import os
+                os.environ["VLLM_ATTENTION_BACKEND"] = "XFORMERS"
+            
+            self.llm = LLM(**vllm_params)
 
             # Set up sampling parameters for text generation
             temperature = llm_config.get("temperature", 0.7)
@@ -127,6 +143,7 @@ class VLLMService:
             logger.error(f"[vLLM]   - Model: {model_name}")
             logger.error(f"[vLLM]   - Tensor parallel size: {tensor_parallel_size}")
             logger.error(f"[vLLM]   - GPU memory utilization: {gpu_memory_utilization}")
+            logger.error(f"[vLLM]   - FlashAttention enabled: {enable_flashattention}")
             logger.error(f"[vLLM] ============================================================")
             
             # Log full traceback for debugging

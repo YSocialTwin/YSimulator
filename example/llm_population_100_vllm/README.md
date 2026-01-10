@@ -80,6 +80,10 @@ pip install vllm>=0.6.0
 - `max_tokens`: Maximum tokens to generate per prompt
 - `tensor_parallel_size`: Number of GPUs for tensor parallelism
 - `gpu_memory_utilization`: GPU memory utilization (0.0-1.0)
+- `enable_flashattention`: Enable FlashAttention 2 (default: `false`)
+  - **Note**: FlashAttention 2 requires GPU compute capability >= 8.0
+  - RTX 2080 Ti and older GPUs (compute capability < 8.0) should keep this `false`
+  - RTX 3090, A100, H100 and newer can set this to `true` for better performance
 
 #### Vision Model (`llm_v`, Optional)
 
@@ -161,6 +165,24 @@ If the model is not found:
 1. Check model path/name is correct
 2. Ensure the model is downloaded/cached
 3. vLLM will automatically download from HuggingFace if needed
+
+### FlashAttention Error
+
+If you see:
+```
+ERROR: Cannot use FA version 2 is not supported due to FA2 is only supported on devices with compute capability >= 8
+```
+
+**Solution**: This is expected for older GPUs (RTX 2080 Ti, V100, etc. with compute capability < 8.0). FlashAttention is disabled by default. No action needed.
+
+**To enable FlashAttention** (for newer GPUs like RTX 3090+, A100, H100):
+```json
+{
+  "llm": {
+    "enable_flashattention": true
+  }
+}
+```
 
 ## Related Examples
 

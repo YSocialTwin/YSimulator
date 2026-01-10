@@ -11,7 +11,9 @@
     "temperature": 0.9,
     "max_tokens": 256,
     "tensor_parallel_size": 1,
-    "gpu_memory_utilization": 0.9
+    "gpu_memory_utilization": 0.9,
+    "enable_flashattention": false,
+    "note": "FlashAttention disabled by default (requires GPU compute capability >= 8.0). Set to true to enable on compatible GPUs."
   },
   "llm_v": {
     "model": "openbmb/MiniCPM-V-2_6",
