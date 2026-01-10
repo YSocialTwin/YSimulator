@@ -84,7 +84,7 @@ pip install vllm>=0.6.0
   - **Note**: FlashAttention 2 requires GPU compute capability >= 8.0
   - RTX 2080 Ti and older GPUs (compute capability < 8.0) should keep this `false`
   - RTX 3090, A100, H100 and newer can set this to `true` for better performance
-  - When `false`, TORCH_SDPA backend is automatically registered and used instead
+  - When `false`, vLLM automatically selects a compatible attention backend
 
 #### Vision Model (`llm_v`, Optional)
 
