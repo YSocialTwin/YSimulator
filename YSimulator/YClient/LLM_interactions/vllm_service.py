@@ -94,29 +94,34 @@ class VLLMService:
         gpu_memory_utilization = llm_config.get("gpu_memory_utilization", 0.9)
 
         logger.info(
-            f"Initializing vLLM engine with text model={model_name}, "
+            f"[vLLM] Initializing vLLM engine with text model={model_name}, "
             f"tensor_parallel_size={tensor_parallel_size}, "
             f"gpu_memory_utilization={gpu_memory_utilization}"
         )
 
-        self.llm = LLM(
-            model=model_name,
-            tensor_parallel_size=tensor_parallel_size,
-            gpu_memory_utilization=gpu_memory_utilization,
-            trust_remote_code=True,
-        )
+        try:
+            self.llm = LLM(
+                model=model_name,
+                tensor_parallel_size=tensor_parallel_size,
+                gpu_memory_utilization=gpu_memory_utilization,
+                trust_remote_code=True,
+            )
 
-        # Set up sampling parameters for text generation
-        temperature = llm_config.get("temperature", 0.7)
-        max_tokens = llm_config.get("max_tokens", 256)
+            # Set up sampling parameters for text generation
+            temperature = llm_config.get("temperature", 0.7)
+            max_tokens = llm_config.get("max_tokens", 256)
 
-        self.sampling_params = SamplingParams(
-            temperature=temperature,
-            max_tokens=max_tokens,
-            top_p=0.95,
-        )
+            self.sampling_params = SamplingParams(
+                temperature=temperature,
+                max_tokens=max_tokens,
+                top_p=0.95,
+            )
 
-        logger.info("vLLM text generation engine initialized successfully")
+            logger.info("[vLLM] vLLM text generation engine initialized successfully")
+        except Exception as e:
+            logger.error(f"[vLLM] Failed to initialize vLLM text engine: {e}")
+            logger.error(f"[vLLM] Model: {model_name}, Tensor parallel size: {tensor_parallel_size}")
+            raise RuntimeError(f"vLLM text model initialization failed: {e}") from e
 
         # Initialize vision LLM if config provided
         self.llm_v = None
@@ -127,7 +132,7 @@ class VLLMService:
             vision_max_tokens = llm_v_config.get("max_tokens", 300)
             
             logger.info(
-                f"Initializing vLLM vision engine with model={vision_model}, "
+                f"[vLLM] Initializing vLLM vision engine with model={vision_model}, "
                 f"temperature={vision_temp}, max_tokens={vision_max_tokens}"
             )
             
@@ -150,13 +155,13 @@ class VLLMService:
                     top_p=0.95,
                 )
                 
-                logger.info("vLLM vision engine initialized successfully")
+                logger.info("[vLLM] vLLM vision engine initialized successfully")
             except Exception as e:
-                logger.error(f"Failed to initialize vLLM vision engine: {e}")
-                logger.warning("Vision model functionality will be disabled")
+                logger.error(f"[vLLM] Failed to initialize vLLM vision engine: {e}")
+                logger.error(f"[vLLM] Vision model: {vision_model}")
+                logger.warning("[vLLM] Vision model functionality will be disabled")
                 self.llm_v = None
                 self.sampling_params_v = None
-            logger.warning("Vision LLM (llm_v) not supported with vLLM backend")
 
     def _build_persona(self, cluster_id: int, agent_attrs: dict = None) -> str:
         """
@@ -211,42 +216,54 @@ class VLLMService:
 
     def generate_post(self, cluster_id: int, day: int, slot: int, agent_attrs: dict = None) -> str:
         """Generate content based on Persona."""
-        # Build persona using attributes or fallback
-        persona = self._build_persona(cluster_id, agent_attrs)
+        try:
+            # Build persona using attributes or fallback
+            persona = self._build_persona(cluster_id, agent_attrs)
 
-        # Get toxicity level (default to "no" if not provided)
-        toxicity = agent_attrs.get("toxicity", "no") if agent_attrs else "no"
+            # Get toxicity level (default to "no" if not provided)
+            toxicity = agent_attrs.get("toxicity", "no") if agent_attrs else "no"
 
-        # Get topic if available
-        topic = agent_attrs.get("topic") if agent_attrs else None
+            # Get topic if available
+            topic = agent_attrs.get("topic") if agent_attrs else None
 
-        # Get opinion on the topic if available
-        topic_opinion = agent_attrs.get("topic_opinion") if agent_attrs else None
+            # Get opinion on the topic if available
+            topic_opinion = agent_attrs.get("topic_opinion") if agent_attrs else None
 
-        # Get prompt templates from configuration
-        system_template = self.prompts_config["generate_post"]["system_template"]
-        user_template = self.prompts_config["generate_post"]["user_template"]
+            # Get prompt templates from configuration
+            system_template = self.prompts_config["generate_post"]["system_template"]
+            user_template = self.prompts_config["generate_post"]["user_template"]
 
-        # Format templates
-        system_msg = system_template.format(persona=persona, toxicity=toxicity)
+            # Format templates
+            system_msg = system_template.format(persona=persona, toxicity=toxicity)
 
-        # Build topic instruction with opinion if available
-        if topic and topic_opinion:
-            topic_instruction = f" Topic: {topic}. Your opinion on this topic is: {topic_opinion}. Express this viewpoint in your post."
-        elif topic:
-            topic_instruction = f" Topic: {topic}."
-        else:
-            topic_instruction = ""
+            # Build topic instruction with opinion if available
+            if topic and topic_opinion:
+                topic_instruction = f" Topic: {topic}. Your opinion on this topic is: {topic_opinion}. Express this viewpoint in your post."
+            elif topic:
+                topic_instruction = f" Topic: {topic}."
+            else:
+                topic_instruction = ""
 
-        # Format user message with topic instruction
-        user_msg = user_template.format(day=day, slot=slot, topic_instruction=topic_instruction)
+            # Format user message with topic instruction
+            user_msg = user_template.format(day=day, slot=slot, topic_instruction=topic_instruction)
 
-        # Create formatted prompt
-        prompt = self._format_prompt(system_msg, user_msg)
+            # Create formatted prompt
+            prompt = self._format_prompt(system_msg, user_msg)
 
-        # Generate using vLLM
-        outputs = self.llm.generate([prompt], self.sampling_params)
-        return outputs[0].outputs[0].text.strip()
+            # Generate using vLLM
+            logger.debug(f"[vLLM] Generating post for cluster_id={cluster_id}, day={day}, slot={slot}")
+            outputs = self.llm.generate([prompt], self.sampling_params)
+            result = outputs[0].outputs[0].text.strip()
+            logger.debug(f"[vLLM] Generated post successfully (length={len(result)})")
+            return result
+        except KeyError as e:
+            logger.error(f"[vLLM] Missing configuration key in generate_post: {e}")
+            logger.error(f"[vLLM] cluster_id={cluster_id}, day={day}, slot={slot}")
+            raise
+        except Exception as e:
+            logger.error(f"[vLLM] Failed to generate post: {e}")
+            logger.error(f"[vLLM] cluster_id={cluster_id}, day={day}, slot={slot}")
+            raise RuntimeError(f"vLLM post generation failed: {e}") from e
 
     def generate_post_batch(
         self, requests: List[Dict[str, Any]]
@@ -264,66 +281,92 @@ class VLLMService:
         Returns:
             List of generated post strings in the same order as requests
         """
-        prompts = []
-        for req in requests:
-            cluster_id = req["cluster_id"]
-            day = req["day"]
-            slot = req["slot"]
-            agent_attrs = req.get("agent_attrs")
+        try:
+            logger.debug(f"[vLLM] Starting batch post generation for {len(requests)} requests")
+            prompts = []
+            for idx, req in enumerate(requests):
+                try:
+                    cluster_id = req["cluster_id"]
+                    day = req["day"]
+                    slot = req["slot"]
+                    agent_attrs = req.get("agent_attrs")
 
-            # Build persona
-            persona = self._build_persona(cluster_id, agent_attrs)
-            toxicity = agent_attrs.get("toxicity", "no") if agent_attrs else "no"
-            topic = agent_attrs.get("topic") if agent_attrs else None
-            topic_opinion = agent_attrs.get("topic_opinion") if agent_attrs else None
+                    # Build persona
+                    persona = self._build_persona(cluster_id, agent_attrs)
+                    toxicity = agent_attrs.get("toxicity", "no") if agent_attrs else "no"
+                    topic = agent_attrs.get("topic") if agent_attrs else None
+                    topic_opinion = agent_attrs.get("topic_opinion") if agent_attrs else None
 
-            # Get prompt templates
-            system_template = self.prompts_config["generate_post"]["system_template"]
-            user_template = self.prompts_config["generate_post"]["user_template"]
+                    # Get prompt templates
+                    system_template = self.prompts_config["generate_post"]["system_template"]
+                    user_template = self.prompts_config["generate_post"]["user_template"]
 
-            # Format templates
-            system_msg = system_template.format(persona=persona, toxicity=toxicity)
+                    # Format templates
+                    system_msg = system_template.format(persona=persona, toxicity=toxicity)
 
-            # Build topic instruction
-            if topic and topic_opinion:
-                topic_instruction = f" Topic: {topic}. Your opinion on this topic is: {topic_opinion}. Express this viewpoint in your post."
-            elif topic:
-                topic_instruction = f" Topic: {topic}."
-            else:
-                topic_instruction = ""
+                    # Build topic instruction
+                    if topic and topic_opinion:
+                        topic_instruction = f" Topic: {topic}. Your opinion on this topic is: {topic_opinion}. Express this viewpoint in your post."
+                    elif topic:
+                        topic_instruction = f" Topic: {topic}."
+                    else:
+                        topic_instruction = ""
 
-            user_msg = user_template.format(day=day, slot=slot, topic_instruction=topic_instruction)
+                    user_msg = user_template.format(day=day, slot=slot, topic_instruction=topic_instruction)
 
-            # Create formatted prompt
-            prompt = self._format_prompt(system_msg, user_msg)
-            prompts.append(prompt)
+                    # Create formatted prompt
+                    prompt = self._format_prompt(system_msg, user_msg)
+                    prompts.append(prompt)
+                except Exception as e:
+                    logger.error(f"[vLLM] Failed to build prompt for batch request {idx}: {e}")
+                    logger.error(f"[vLLM] Request: {req}")
+                    raise
 
-        # Batch generate using vLLM
-        outputs = self.llm.generate(prompts, self.sampling_params)
-        return [output.outputs[0].text.strip() for output in outputs]
+            # Batch generate using vLLM
+            logger.debug(f"[vLLM] Executing batch inference for {len(prompts)} prompts")
+            outputs = self.llm.generate(prompts, self.sampling_params)
+            results = [output.outputs[0].text.strip() for output in outputs]
+            logger.debug(f"[vLLM] Batch generation completed successfully ({len(results)} results)")
+            return results
+        except Exception as e:
+            logger.error(f"[vLLM] Batch post generation failed: {e}")
+            logger.error(f"[vLLM] Number of requests: {len(requests)}")
+            raise RuntimeError(f"vLLM batch post generation failed: {e}") from e
 
     def decide_reaction(self, cluster_id: int, post_content: str) -> str:
         """Decide: LIKE, COMMENT, or IGNORE."""
-        # Get prompt templates from configuration
-        system_template = self.prompts_config["decide_reaction"]["system_template"]
-        user_template = self.prompts_config["decide_reaction"]["user_template"]
+        try:
+            # Get prompt templates from configuration
+            system_template = self.prompts_config["decide_reaction"]["system_template"]
+            user_template = self.prompts_config["decide_reaction"]["user_template"]
 
-        # Format templates
-        system_msg = system_template.format(cluster_id=cluster_id)
-        user_msg = user_template.format(post_content=post_content)
+            # Format templates
+            system_msg = system_template.format(cluster_id=cluster_id)
+            user_msg = user_template.format(post_content=post_content)
 
-        # Create formatted prompt
-        prompt = self._format_prompt(system_msg, user_msg)
+            # Create formatted prompt
+            prompt = self._format_prompt(system_msg, user_msg)
 
-        # Generate using vLLM
-        outputs = self.llm.generate([prompt], self.sampling_params)
-        result = outputs[0].outputs[0].text.strip().upper()
+            # Generate using vLLM
+            logger.debug(f"[vLLM] Deciding reaction for cluster_id={cluster_id}")
+            outputs = self.llm.generate([prompt], self.sampling_params)
+            result = outputs[0].outputs[0].text.strip().upper()
 
-        if "LIKE" in result:
-            return "LIKE"
-        if "COMMENT" in result:
-            return "COMMENT"
-        return "IGNORE"
+            if "LIKE" in result:
+                return "LIKE"
+            if "COMMENT" in result:
+                return "COMMENT"
+            return "IGNORE"
+        except KeyError as e:
+            logger.error(f"[vLLM] Missing configuration key in decide_reaction: {e}")
+            logger.error(f"[vLLM] cluster_id={cluster_id}")
+            raise
+        except Exception as e:
+            logger.error(f"[vLLM] Failed to decide reaction: {e}")
+            logger.error(f"[vLLM] cluster_id={cluster_id}, post_content_len={len(post_content) if post_content else 0}")
+            # Return default fallback to maintain YClient pattern
+            logger.warning(f"[vLLM] Returning fallback reaction: IGNORE")
+            return "IGNORE"
 
     def generate_comment(
         self,
@@ -403,6 +446,7 @@ class VLLMService:
 
         try:
             # Generate using vLLM
+            logger.debug(f"[vLLM] Generating comment for cluster_id={cluster_id}, author={author_name}")
             outputs = self.llm.generate([prompt], self.sampling_params)
             comment = outputs[0].outputs[0].text.strip()
 
@@ -410,9 +454,13 @@ class VLLMService:
             if len(comment) > 280:
                 comment = comment[:277] + "..."
 
+            logger.debug(f"[vLLM] Generated comment successfully (length={len(comment)})")
             return comment
-        except Exception:
+        except Exception as e:
             # Fallback if LLM fails
+            logger.error(f"[vLLM] Failed to generate comment: {e}")
+            logger.error(f"[vLLM] cluster_id={cluster_id}, author={author_name}, post_content_len={len(post_content) if post_content else 0}")
+            logger.warning("[vLLM] Returning fallback comment")
             return "Interesting perspective!"
 
     # Add placeholder methods for compatibility with LLMService interface
@@ -421,32 +469,41 @@ class VLLMService:
 
     def generate_news_commentary(self, article: dict, website_name: str = None) -> str:
         """Generate engaging social media commentary for a news article."""
-        article_title = article.get("title", "News Article")
-        article_text = article.get("summary", article.get("description", ""))
-
-        if len(article_text) > 500:
-            article_text = article_text[:500] + "..."
-
-        if not website_name:
-            website_name = "this website"
-
-        system_template = self.prompts_config["generate_news_commentary"]["system_template"]
-        user_template = self.prompts_config["generate_news_commentary"]["user_template"]
-
-        system_msg = system_template.format(website_name=website_name)
-        user_msg = user_template.format(article_title=article_title, article_text=article_text)
-
-        prompt = self._format_prompt(system_msg, user_msg)
-
         try:
+            article_title = article.get("title", "News Article")
+            article_text = article.get("summary", article.get("description", ""))
+
+            if len(article_text) > 500:
+                article_text = article_text[:500] + "..."
+
+            if not website_name:
+                website_name = "this website"
+
+            system_template = self.prompts_config["generate_news_commentary"]["system_template"]
+            user_template = self.prompts_config["generate_news_commentary"]["user_template"]
+
+            system_msg = system_template.format(website_name=website_name)
+            user_msg = user_template.format(article_title=article_title, article_text=article_text)
+
+            prompt = self._format_prompt(system_msg, user_msg)
+
+            logger.debug(f"[vLLM] Generating news commentary for article: {article_title[:50]}...")
             outputs = self.llm.generate([prompt], self.sampling_params)
             commentary = outputs[0].outputs[0].text.strip()
 
             if len(commentary) > 280:
                 commentary = commentary[:277] + "..."
 
+            logger.debug(f"[vLLM] Generated news commentary successfully (length={len(commentary)})")
             return commentary
-        except Exception:
+        except KeyError as e:
+            logger.error(f"[vLLM] Missing configuration key in generate_news_commentary: {e}")
+            title = article_title if len(article_title) <= 97 else article_title[:97] + "..."
+            return f"Check out this article: {title}"
+        except Exception as e:
+            logger.error(f"[vLLM] Failed to generate news commentary: {e}")
+            logger.error(f"[vLLM] Article title: {article.get('title', 'Unknown')[:50]}")
+            logger.warning("[vLLM] Returning fallback commentary")
             title = article_title if len(article_title) <= 97 else article_title[:97] + "..."
             return f"Check out this article: {title}"
 
@@ -732,49 +789,50 @@ class VLLMService:
         """
         # Check if vision LLM is available
         if not self.llm_v:
-            logger.warning("Vision LLM (llm_v) not configured, cannot describe image")
+            logger.warning("[vLLM] Vision LLM (llm_v) not configured, cannot describe image")
             return None
 
-        # Get prompts from configuration with defaults
-        describe_image_config = self.prompts_config.get(
-            "describe_image",
-            {
-                "system_template": "You are an image description assistant. Describe images accurately and concisely in English.",
-                "user_template": "Describe the following image. Write in english. <img {url}>",
-            },
-        )
-        system_template = describe_image_config.get(
-            "system_template",
-            "You are an image description assistant. Describe images accurately and concisely in English.",
-        )
-        user_template = describe_image_config.get(
-            "user_template", "Describe the following image. Write in english. <img {url}>"
-        )
-
-        # Format templates
-        system_msg = system_template
-        user_msg = user_template.format(url=image_url)
-
-        # For vision models, we need to format the prompt with image information
-        # vLLM vision models expect a specific format
-        prompt = f"{system_msg}\n\n{user_msg}"
-
         try:
-            logger.info(f"Calling vLLM vision model to describe image: {image_url[:80]}...")
+            # Get prompts from configuration with defaults
+            describe_image_config = self.prompts_config.get(
+                "describe_image",
+                {
+                    "system_template": "You are an image description assistant. Describe images accurately and concisely in English.",
+                    "user_template": "Describe the following image. Write in english. <img {url}>",
+                },
+            )
+            system_template = describe_image_config.get(
+                "system_template",
+                "You are an image description assistant. Describe images accurately and concisely in English.",
+            )
+            user_template = describe_image_config.get(
+                "user_template", "Describe the following image. Write in english. <img {url}>"
+            )
+
+            # Format templates
+            system_msg = system_template
+            user_msg = user_template.format(url=image_url)
+
+            # For vision models, we need to format the prompt with image information
+            # vLLM vision models expect a specific format
+            prompt = f"{system_msg}\n\n{user_msg}"
+
+            logger.info(f"[vLLM] Calling vLLM vision model to describe image: {image_url[:80]}...")
             
             # Generate description using vision model
             outputs = self.llm_v.generate([prompt], self.sampling_params_v)
             
             if outputs and len(outputs) > 0:
                 description = outputs[0].outputs[0].text.strip()
-                logger.info(f"vLLM vision model returned description ({len(description)} chars)")
+                logger.info(f"[vLLM] vLLM vision model returned description ({len(description)} chars)")
                 return description
             else:
-                logger.warning("vLLM vision model returned empty description")
+                logger.warning("[vLLM] vLLM vision model returned empty description")
                 return None
         except Exception as e:
             # If description fails, return None
-            logger.error(f"vLLM vision model failed to describe image: {e}")
+            logger.error(f"[vLLM] vLLM vision model failed to describe image: {e}")
+            logger.error(f"[vLLM] Image URL: {image_url[:100] if image_url else 'None'}")
             import traceback
 
             traceback.print_exc()
