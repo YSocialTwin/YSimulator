@@ -117,9 +117,9 @@ class VLLMService:
             # This is required for GPUs with compute capability < 8.0 (e.g., RTX 2080 Ti)
             if not enable_flashattention:
                 vllm_params["disable_custom_all_reduce"] = True
-                # Set environment variable to disable FlashAttention
+                # Use TORCH_SDPA backend instead of FlashAttention
                 import os
-                os.environ["VLLM_ATTENTION_BACKEND"] = "XFORMERS"
+                os.environ["VLLM_ATTENTION_BACKEND"] = "TORCH_SDPA"
             
             self.llm = LLM(**vllm_params)
 

@@ -173,7 +173,7 @@ If you see:
 ERROR: Cannot use FA version 2 is not supported due to FA2 is only supported on devices with compute capability >= 8
 ```
 
-**Solution**: This is expected for older GPUs (RTX 2080 Ti, V100, etc. with compute capability < 8.0). FlashAttention is disabled by default. No action needed.
+**Solution**: This is expected for older GPUs (RTX 2080 Ti, V100, etc. with compute capability < 8.0). FlashAttention is disabled by default, and vLLM will use TORCH_SDPA backend instead. No action needed.
 
 **To enable FlashAttention** (for newer GPUs like RTX 3090+, A100, H100):
 ```json
@@ -183,6 +183,15 @@ ERROR: Cannot use FA version 2 is not supported due to FA2 is only supported on 
   }
 }
 ```
+
+### Attention Backend Validation Error
+
+If you see:
+```
+ERROR: Invalid value 'XFORMERS' for VLLM_ATTENTION_BACKEND
+```
+
+**Solution**: This has been fixed. When FlashAttention is disabled (default), vLLM now uses the TORCH_SDPA backend which is compatible with all GPU compute capabilities.
 
 ## Related Examples
 
