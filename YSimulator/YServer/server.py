@@ -967,33 +967,72 @@ class OrchestratorServer:
 
             skipped_count = len(agents) - registered_count
 
-            # Initialize interests ONLY for newly registered agents
-            # This prevents duplicate interest entries for already-existing agents
+            # Initialize interests and opinions ONLY for newly registered agents in batch
+            # This prevents duplicate entries for already-existing agents
+            agents_with_interests = []
+            agents_with_opinions = []
+            all_opinion_topic_names = set()
+
             for agent_id in newly_registered_ids:
                 agent_profile = agent_id_to_profile.get(agent_id)
-                if agent_profile and agent_profile.interests:
-                    self.interest_manager.initialize_agent_interests(
-                        agent_id=agent_id,
-                        interests=agent_profile.interests,
-                        round_id=self.current_round_id,
-                    )
+                if agent_profile:
+                    if agent_profile.interests:
+                        agents_with_interests.append({
+                            "agent_id": agent_id,
+                            "interests": agent_profile.interests,
+                        })
 
-                # Initialize opinions for newly registered agents
-                if agent_profile and agent_profile.opinions:
-                    # Get interest IDs for the agent's topics
-                    for topic_name, opinion_value in agent_profile.opinions.items():
-                        # Get or create the interest/topic in the database
-                        topic_id = self.interest_service.add_or_get_interest(topic_name)
+                    if agent_profile.opinions:
+                        agents_with_opinions.append({
+                            "agent_id": agent_id,
+                            "opinions": agent_profile.opinions,
+                        })
+                        # Collect all unique topic names for batch lookup
+                        all_opinion_topic_names.update(agent_profile.opinions.keys())
+
+            # Batch initialize interests for all agents
+            if agents_with_interests:
+                interest_results = self.interest_manager.initialize_agent_interests_batch(
+                    agents_with_interests, self.current_round_id
+                )
+                success_count = sum(1 for success in interest_results.values() if success)
+                self.logger.info(
+                    f"Batch initialized interests for {success_count}/{len(agents_with_interests)} agents"
+                )
+
+            # Batch initialize opinions for all agents
+            if agents_with_opinions:
+                # First, batch get or create all opinion topics
+                topic_name_to_id = self.interest_service.add_or_get_interests_batch(
+                    list(all_opinion_topic_names)
+                )
+
+                # Prepare all agent opinions for batch insertion
+                agent_opinions_data = []
+                for agent_data in agents_with_opinions:
+                    agent_id = agent_data["agent_id"]
+                    opinions = agent_data["opinions"]
+
+                    for topic_name, opinion_value in opinions.items():
+                        topic_id = topic_name_to_id.get(topic_name)
                         if topic_id:
-                            # Store initial opinion with no interaction references
-                            self.interest_service.add_agent_opinion(
-                                agent_id=agent_id,
-                                round_id=self.current_round_id,
-                                topic_id=topic_id,
-                                opinion=opinion_value,
-                                id_interacted_with=None,
-                                id_post=None,
-                            )
+                            agent_opinions_data.append({
+                                "agent_id": agent_id,
+                                "tid": self.current_round_id,  # Note: model uses 'tid'
+                                "topic_id": topic_id,
+                                "opinion": opinion_value,
+                                "id_interacted_with": None,
+                                "id_post": None,
+                            })
+
+                # Batch insert all opinions
+                if agent_opinions_data:
+                    opinions_added = self.interest_service.add_agent_opinions_batch(
+                        agent_opinions_data
+                    )
+                    self.logger.info(
+                        f"Batch initialized {opinions_added} opinions for {len(agents_with_opinions)} agents"
+                    )
 
             # Batch register websites for page agents
             pages_registered = 0

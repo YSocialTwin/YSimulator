@@ -291,3 +291,85 @@ class InterestManager:
                     )
 
         return True
+
+    def initialize_agent_interests_batch(
+        self, agents_interests_data: List[Dict], round_id: str
+    ) -> Dict[str, bool]:
+        """
+        Initialize interests for multiple agents in batch for improved performance.
+
+        This method is optimized for bulk insertion during agent registration.
+        It processes all agents' interests together using batch database operations.
+
+        Args:
+            agents_interests_data: List of dicts with keys:
+                - agent_id: Agent UUID
+                - interests: Interest data in format [["Topic1", "Topic2"], [1, 2]]
+            round_id: Current round UUID
+
+        Returns:
+            Dict mapping agent_id to success status (True/False)
+        """
+        results = {}
+
+        # Validate and prepare data
+        valid_agents = []
+        for agent_data in agents_interests_data:
+            agent_id = agent_data.get("agent_id")
+            interests = agent_data.get("interests")
+
+            topics, counts = self.validate_and_extract_interests(interests)
+            if not topics or not counts:
+                results[agent_id] = False
+                continue
+
+            # Store in memory
+            self.set_agent_interests(agent_id, topics, counts)
+
+            valid_agents.append({"agent_id": agent_id, "topics": topics, "counts": counts})
+            results[agent_id] = True
+
+        if not valid_agents:
+            return results
+
+        # Collect all unique topic names
+        all_topic_names = set()
+        for agent_data in valid_agents:
+            all_topic_names.update(agent_data["topics"])
+
+        # Batch get or create all interests
+        topic_name_to_id = self.db.add_or_get_interests_batch(list(all_topic_names))
+
+        if not topic_name_to_id:
+            # If batch operation failed, mark all as failed
+            for agent_data in valid_agents:
+                results[agent_data["agent_id"]] = False
+            return results
+
+        # Prepare user_interest entries for all agents
+        user_interests_data = []
+        for agent_data in valid_agents:
+            agent_id = agent_data["agent_id"]
+            topics = agent_data["topics"]
+            counts = agent_data["counts"]
+
+            for i, topic in enumerate(topics):
+                interest_id = topic_name_to_id.get(topic)
+                if interest_id:
+                    # Add multiple entries based on interaction count
+                    count = counts[i] if i < len(counts) else 1
+                    for _ in range(count):
+                        user_interests_data.append({
+                            "user_id": agent_id,
+                            "interest_id": interest_id,
+                            "round_id": round_id,
+                        })
+
+        # Batch insert all user_interest entries
+        if user_interests_data:
+            added_count = self.db.add_user_interests_batch(user_interests_data)
+            self.logger.info(
+                f"Batch initialized {added_count} user interest entries for {len(valid_agents)} agents"
+            )
+
+        return results

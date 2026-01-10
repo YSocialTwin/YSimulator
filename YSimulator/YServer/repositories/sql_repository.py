@@ -1307,6 +1307,62 @@ class SQLInterestRepository(InterestRepository):
             )
             return None
 
+    def add_or_get_interests_batch(self, interest_names: List[str]) -> Dict[str, str]:
+        """
+        Add multiple interests or get existing ones' IDs in batch.
+
+        This method is optimized for bulk interest creation during agent registration.
+        It performs a single query to check existing interests and inserts only new ones.
+
+        Args:
+            interest_names: List of interest/topic names
+
+        Returns:
+            Dict mapping interest names to their IDs
+        """
+        try:
+            import uuid
+
+            result = {}
+            session = Session(self.engine)
+            try:
+                # Get all existing interests in one query
+                existing_interests = (
+                    session.query(Interest).filter(Interest.interest.in_(interest_names)).all()
+                )
+
+                # Map existing interests
+                existing_map = {interest.interest: interest.iid for interest in existing_interests}
+                result.update(existing_map)
+
+                # Find new interests that need to be created
+                new_interest_names = [name for name in interest_names if name not in existing_map]
+
+                if new_interest_names:
+                    # Create new interests with UUIDs
+                    new_interests = []
+                    for name in new_interest_names:
+                        interest_id = str(uuid.uuid4())
+                        new_interests.append({"iid": interest_id, "interest": name})
+                        result[name] = interest_id
+
+                    # Bulk insert new interests
+                    session.bulk_insert_mappings(Interest, new_interests)
+                    session.commit()
+
+                return result
+            except Exception:
+                session.rollback()
+                raise
+            finally:
+                session.close()
+        except Exception as e:
+            self.logger.error(
+                f"Error batch adding/getting interests: {e}",
+                extra={"extra_data": {"error": str(e), "count": len(interest_names)}},
+            )
+            return {}
+
     def add_user_interest(self, user_id: str, interest_id: str, round_id: str) -> bool:
         """Add a user interest."""
         try:
@@ -1372,6 +1428,119 @@ class SQLInterestRepository(InterestRepository):
                 f"Error adding agent opinion: {e}", extra={"extra_data": {"error": str(e)}}
             )
             return False
+
+    def add_user_interests_batch(
+        self, user_interests_data: List[Dict[str, str]], batch_size: int = 1000
+    ) -> int:
+        """
+        Add multiple user interests in batch.
+
+        This method is optimized for bulk insertion of user interests
+        during agent registration. It uses SQLAlchemy bulk_insert_mappings
+        for improved performance with large agent populations.
+
+        Args:
+            user_interests_data: List of dictionaries, each containing:
+                - id: UUID for the user_interest entry
+                - user_id: UUID of user
+                - interest_id: UUID of interest/topic
+                - round_id: UUID of round
+            batch_size: Number of records to insert per transaction (default: 1000)
+
+        Returns:
+            int: Number of user interests successfully added
+        """
+        try:
+            import uuid
+
+            total_added = 0
+
+            # Process in batches to avoid memory issues with large populations
+            for i in range(0, len(user_interests_data), batch_size):
+                batch = user_interests_data[i : i + batch_size]
+
+                session = Session(self.engine)
+                try:
+                    # Use bulk_insert_mappings for performance
+                    # Ensure all entries have UUIDs
+                    for entry in batch:
+                        if "id" not in entry or not entry["id"]:
+                            entry["id"] = str(uuid.uuid4())
+
+                    session.bulk_insert_mappings(UserInterest, batch)
+                    session.commit()
+                    total_added += len(batch)
+                except Exception:
+                    session.rollback()
+                    raise
+                finally:
+                    session.close()
+
+            return total_added
+        except Exception as e:
+            self.logger.error(
+                f"Error batch adding user interests: {e}",
+                extra={"extra_data": {"error": str(e), "batch_size": len(user_interests_data)}},
+            )
+            return total_added
+
+    def add_agent_opinions_batch(
+        self, agent_opinions_data: List[Dict[str, Any]], batch_size: int = 1000
+    ) -> int:
+        """
+        Add multiple agent opinions in batch.
+
+        This method is optimized for bulk insertion of agent opinions
+        during agent registration. It uses SQLAlchemy bulk_insert_mappings
+        for improved performance with large agent populations.
+
+        Args:
+            agent_opinions_data: List of dictionaries, each containing:
+                - id: UUID for the opinion entry
+                - agent_id: UUID of agent
+                - tid: UUID of round (note: model uses 'tid' not 'round_id')
+                - topic_id: UUID of topic
+                - opinion: Opinion value (float)
+                - id_interacted_with: Optional UUID of agent interacted with
+                - id_post: Optional UUID of post
+            batch_size: Number of records to insert per transaction (default: 1000)
+
+        Returns:
+            int: Number of agent opinions successfully added
+        """
+        try:
+            import uuid
+
+            total_added = 0
+
+            # Process in batches to avoid memory issues with large populations
+            for i in range(0, len(agent_opinions_data), batch_size):
+                batch = agent_opinions_data[i : i + batch_size]
+
+                session = Session(self.engine)
+                try:
+                    # Use bulk_insert_mappings for performance
+                    # Ensure all entries have UUIDs
+                    for entry in batch:
+                        if "id" not in entry or not entry["id"]:
+                            entry["id"] = str(uuid.uuid4())
+
+                    session.bulk_insert_mappings(Agent_Opinion, batch)
+                    session.commit()
+                    total_added += len(batch)
+                except Exception:
+                    session.rollback()
+                    raise
+                finally:
+                    session.close()
+
+            return total_added
+        except Exception as e:
+            self.logger.error(
+                f"Error batch adding agent opinions: {e}",
+                extra={"extra_data": {"error": str(e), "batch_size": len(agent_opinions_data)}},
+            )
+            return total_added
 
     def get_latest_agent_opinion(self, agent_id: str, topic_id: str) -> Optional[float]:
         """Get latest agent opinion on a topic."""
