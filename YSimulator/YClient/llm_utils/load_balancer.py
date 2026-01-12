@@ -72,10 +72,17 @@ class LLMLoadBalancer:
         self.current_idx = 0  # For round-robin
         self.backend = backend.lower()
 
+        # Get GPU allocation per actor (for vLLM)
+        # Supports fractional GPUs to allocate multiple actors per GPU
+        # E.g., gpu_per_actor=0.25 allows 4 actors on 1 GPU
+        gpu_per_actor = llm_config.get("gpu_per_actor", 1.0)
+
         # Create multiple LLM actors
         self.logger.info(
             f"Creating {num_actors} LLM actors for parallel inference using {self.backend} backend"
         )
+        if self.backend == "vllm":
+            self.logger.info(f"GPU allocation per actor: {gpu_per_actor}")
         self.actors = []
 
         # Import appropriate service based on backend
@@ -91,7 +98,7 @@ class LLMLoadBalancer:
         for i in range(num_actors):
             # Allocate GPU resources for vLLM actors
             if self.backend == "vllm":
-                actor = ServiceClass.options(num_gpus=1).remote(
+                actor = ServiceClass.options(num_gpus=gpu_per_actor).remote(
                     llm_config=llm_config,
                     prompts_config=prompts_config,
                     llm_v_config=llm_v_config,
@@ -352,13 +359,16 @@ def create_llm_actors(
     """
     backend_lower = backend.lower()
     
+    # Get GPU allocation per actor (for vLLM)
+    gpu_per_actor = llm_config.get("gpu_per_actor", 1.0)
+    
     if num_actors == 1:
         # Single actor - backwards compatible
         if backend_lower == "vllm":
             from YSimulator.YClient.LLM_interactions.vllm_service import VLLMService
 
             # Allocate GPU resources for vLLM
-            return VLLMService.options(num_gpus=1).remote(
+            return VLLMService.options(num_gpus=gpu_per_actor).remote(
                 llm_config=llm_config,
                 prompts_config=prompts_config,
                 llm_v_config=llm_v_config,

@@ -146,16 +146,27 @@ python run_client.py --config example/llm_population_10000_vllm
     "model": "meta-llama/Llama-3.2-3B",
     "max_model_len": 40000,
     "tensor_parallel_size": 1,
-    "gpu_memory_utilization": 0.9,
-    "enable_flashattention": false
+    "gpu_memory_utilization": 0.6,
+    "enable_flashattention": false,
+    "num_actors": 4,
+    "gpu_per_actor": 0.25
   }
 }
 ```
 
 **Key parameters**:
 - `max_model_len`: Maximum context length (40,000 tokens)
-- `gpu_memory_utilization`: GPU memory usage (0.9 = 90%)
+- `gpu_memory_utilization`: GPU memory usage per actor (0.6 = 60%)
 - `enable_flashattention`: Disabled by default (requires compute capability >= 8.0)
+- `num_actors`: Number of parallel vLLM instances (4 recommended for 10K agents)
+- `gpu_per_actor`: GPU allocation per actor (0.25 = 4 actors on 1 GPU, default: 1.0)
+
+**GPU Allocation Examples**:
+- `gpu_per_actor: 1.0` (default): Each actor uses 1 full GPU (requires 4 GPUs for 4 actors)
+- `gpu_per_actor: 0.5`: 2 actors per GPU (requires 2 GPUs for 4 actors)
+- `gpu_per_actor: 0.25`: 4 actors on 1 GPU (requires 1 GPU for 4 actors)
+
+**Important**: When using fractional GPU allocation (`gpu_per_actor < 1.0`), reduce `gpu_memory_utilization` accordingly. For 4 actors on 1 GPU, use `gpu_memory_utilization: 0.2` to avoid OOM errors.
 
 ### Opinion Dynamics Settings
 
