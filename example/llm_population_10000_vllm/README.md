@@ -168,6 +168,39 @@ python run_client.py --config example/llm_population_10000_vllm
 
 **Important**: When using fractional GPU allocation (`gpu_per_actor < 1.0`), reduce `gpu_memory_utilization` accordingly. For 4 actors on 1 GPU, use `gpu_memory_utilization: 0.2` to avoid OOM errors.
 
+### Reusing vLLM Instances Across Clients
+
+You can share vLLM instances across multiple clients on the same machine to save GPU memory and initialization time:
+
+```json
+{
+  "llm": {
+    "backend": "vllm",
+    "num_actors": 4,
+    "reuse_actors": true,
+    "actor_name_prefix": "ysim_llm"
+  }
+}
+```
+
+**How it works**:
+- **First client**: Creates vLLM actors and runs simulation
+- **Subsequent clients**: Discover and reuse existing actors automatically
+- **Lifecycle**: Actors persist until all clients disconnect
+- **Opt-in**: Set `reuse_actors: true` to enable (default: false)
+
+**Benefits**:
+- Save GPU memory (no duplicate models)
+- Faster client startup (skip model loading)
+- Share expensive GPU resources efficiently
+
+**Use cases**:
+- Running multiple simulations with different agent populations
+- A/B testing different simulation parameters
+- Development and testing workflows
+
+**Note**: All clients using shared actors must use the same model configuration (model, max_model_len, etc.).
+
 ### Opinion Dynamics Settings
 
 ```json

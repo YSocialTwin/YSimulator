@@ -258,9 +258,16 @@ if __name__ == "__main__":
     # Get number of LLM actors (default: 1 for backward compatibility)
     num_llm_actors = llm_config.get("num_actors", 1)
     
+    # Get reuse_actors flag (default: False for backward compatibility)
+    reuse_actors = llm_config.get("reuse_actors", False)
+    
+    # Get actor name prefix (default: ysim_llm)
+    actor_name_prefix = llm_config.get("actor_name_prefix", "ysim_llm")
+    
     if llm_backend == "vllm":
         logger.info(f"Using vLLM backend with {num_llm_actors} actor(s) for LLM inference")
-        print(f"--- Using vLLM backend ({num_llm_actors} actor(s) for parallel processing) ---")
+        reuse_msg = " (reusing existing if available)" if reuse_actors else ""
+        print(f"--- Using vLLM backend ({num_llm_actors} actor(s) for parallel processing{reuse_msg}) ---")
         try:
             from YSimulator.YClient.llm_utils import create_llm_actors
             
@@ -275,6 +282,8 @@ if __name__ == "__main__":
                 enable_monitoring=False,
                 llm_v_config=llm_v_config,
                 logger=logger,
+                reuse_actors=reuse_actors,
+                actor_name_prefix=actor_name_prefix,
             )
         except ImportError as e:
             logger.error(f"Failed to import vLLM: {e}")
@@ -296,7 +305,8 @@ if __name__ == "__main__":
         # Default to Ollama backend
         if num_llm_actors > 1:
             logger.info(f"Using Ollama backend with {num_llm_actors} actors for parallel inference")
-            print(f"--- Using Ollama backend ({num_llm_actors} actors for parallel processing) ---")
+            reuse_msg = " (reusing existing if available)" if reuse_actors else ""
+            print(f"--- Using Ollama backend ({num_llm_actors} actors for parallel processing{reuse_msg}) ---")
             try:
                 from YSimulator.YClient.llm_utils import create_llm_actors
                 
@@ -309,6 +319,8 @@ if __name__ == "__main__":
                     enable_monitoring=False,
                     llm_v_config=llm_v_config,
                     logger=logger,
+                    reuse_actors=reuse_actors,
+                    actor_name_prefix=actor_name_prefix,
                 )
             except Exception as e:
                 logger.error(f"Failed to initialize Ollama service: {e}")
@@ -317,7 +329,22 @@ if __name__ == "__main__":
         else:
             logger.info("Using Ollama backend for LLM inference")
             print("--- Using Ollama backend ---")
-            llm_service = LLMService.remote(llm_config, prompts_config, llm_v_config)
+            
+            # Support actor reuse even for single actor
+            if reuse_actors:
+                from YSimulator.YClient.llm_utils import create_llm_actors
+                llm_service = create_llm_actors(
+                    llm_config=llm_config,
+                    prompts_config=prompts_config,
+                    num_actors=1,
+                    backend="ollama",
+                    llm_v_config=llm_v_config,
+                    logger=logger,
+                    reuse_actors=reuse_actors,
+                    actor_name_prefix=actor_name_prefix,
+                )
+            else:
+                llm_service = LLMService.remote(llm_config, prompts_config, llm_v_config)
     
     llm_time = (time.time() - llm_start) * 1000
 
