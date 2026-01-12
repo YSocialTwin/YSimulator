@@ -103,7 +103,7 @@ class SecondaryFollowProcessor:
             if is_llm_agent:
                 # LLM-based: Ask LLM whether to follow/unfollow based on post content
                 future = self.llm_manager.generate_secondary_follow_decision(
-                    cluster_id, post_content, is_following
+                    cluster_id, post_content, is_following, agent_id
                 )
                 pending_secondary_follow_llm.append(
                     (agent_id, cluster_id, author_id, is_following, future)

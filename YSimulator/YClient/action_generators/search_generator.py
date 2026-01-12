@@ -123,7 +123,7 @@ class SearchGenerator(BaseActionGenerator):
                 agent_attrs["post_opinion_values"] = opinion_info["opinion_values"]
 
             future = generate_llm_search_action_async(
-                self.context.llm, agent.cluster, post_content, agent_attrs
+                self.context.llm, agent.cluster, post_content, agent_attrs, agent.id
             )
             # Store: (agent_id, cluster_id, target_post_id, future)
             result.pending_llm_calls.append((agent.id, agent.cluster, target_post, future))

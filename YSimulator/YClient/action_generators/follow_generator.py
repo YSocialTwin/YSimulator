@@ -85,7 +85,7 @@ class FollowGenerator(BaseActionGenerator):
 
         if agent_type == "llm":
             # LLM: Ask to decide which user to follow
-            future = generate_llm_follow_async(self.context.llm, agent.cluster, suggested_users)
+            future = generate_llm_follow_async(self.context.llm, agent.cluster, suggested_users, agent.id)
             # Store pending call: (agent_id, cluster_id, future)
             result.pending_llm_calls.append((agent.id, agent.cluster, future))
         else:

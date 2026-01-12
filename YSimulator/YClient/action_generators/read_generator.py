@@ -110,7 +110,7 @@ class ReadGenerator(BaseActionGenerator):
 
                 # Fire off async LLM call to decide reaction
                 future = generate_llm_read_async(
-                    self.context.llm, agent.cluster, post_content, agent_attrs
+                    self.context.llm, agent.cluster, post_content, agent_attrs, agent.id
                 )
                 # Store: (agent_id, cluster_id, target_post_id, future)
                 result.pending_llm_calls.append((agent.id, agent.cluster, target_post, future))

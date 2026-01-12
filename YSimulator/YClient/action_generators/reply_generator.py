@@ -146,6 +146,7 @@ class ReplyGenerator(BaseActionGenerator):
                     agent_attrs,
                     author_username,
                     thread_context,
+                    agent.id,
                 )
                 # Store the mention_id with the pending reaction so we can mark it as replied later
                 # Format: (agent_id, cluster_id, post_id, future, mention_id)

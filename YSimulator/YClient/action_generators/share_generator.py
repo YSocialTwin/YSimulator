@@ -80,7 +80,7 @@ class ShareGenerator(BaseActionGenerator):
 
             # Fire off async LLM call to generate share commentary
             future = generate_llm_share_async(
-                self.context.llm, agent.cluster, post_content, agent_attrs, author_name
+                self.context.llm, agent.cluster, post_content, agent_attrs, author_name, agent.id
             )
             # Store with action_type indicator: (agent_id, cluster_id, target_post_id,
             # future, action_type)

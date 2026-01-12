@@ -46,6 +46,7 @@ class PostGenerator(BaseActionGenerator):
                 self.context.day,
                 self.context.slot,
                 agent_attrs,
+                agent.id,
             )
             # Store pending call: (agent_id, cluster_id, future, selected_topic)
             result.pending_llm_calls.append((agent.id, agent.cluster, future, selected_topic))
