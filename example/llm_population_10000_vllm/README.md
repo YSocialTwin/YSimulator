@@ -24,16 +24,42 @@ This example demonstrates YSimulator running a **large-scale simulation** with:
 
 This example uses vLLM instead of Ollama, providing essential performance for large-scale simulations:
 
-- **Batch Processing**: Multiple prompts processed in parallel
+- **Parallel Processing**: Multiple vLLM actors process requests simultaneously
 - **GPU Acceleration**: Efficient tensor operations on GPU
-- **30x Faster**: Compared to sequential Ollama processing
+- **Configurable Actors**: Set `num_actors` in config to control parallelism
+- **30x Faster**: With 4 actors compared to sequential Ollama processing
 - **Memory Efficient**: Both text and vision models in same instance
 
 **Performance Comparison** (estimated for 10,000 agents):
 - Ollama sequential: ~1500-2000s per round (impractical)
 - Ollama (4 actors): ~400-500s per round
 - **vLLM (single actor): ~190-250s per round** (8-10x speedup)
-- **vLLM (4 actors): ~50-70s per round** (30x speedup, **recommended**)
+- **vLLM (4 actors): ~50-70s per round** (30x speedup, **recommended**, default in this example)
+
+**Configuring Number of vLLM Actors**:
+
+The `num_actors` parameter in `simulation_config.json` controls how many vLLM instances to start:
+
+```json
+"llm": {
+  "backend": "vllm",
+  "num_actors": 4,
+  ...
+}
+```
+
+- **num_actors: 1** - Single vLLM instance, ~8-10x speedup vs Ollama
+- **num_actors: 2** - Two parallel instances, ~15-20x speedup
+- **num_actors: 4** - Four parallel instances, ~30x speedup (default)
+- **num_actors: 8** - Eight parallel instances (requires GPU with 32GB+ VRAM)
+
+Each actor requires GPU resources. Ensure your GPU has sufficient memory:
+- **1 actor**: ~6-8GB VRAM
+- **2 actors**: ~12-14GB VRAM  
+- **4 actors**: ~20-24GB VRAM
+- **8 actors**: ~32GB+ VRAM
+
+**Note**: The actors share the same GPU and process requests in parallel using hash-based load balancing for agent affinity.
 
 ### Opinion Dynamics with LLM Evaluation
 

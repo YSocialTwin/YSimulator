@@ -51,6 +51,7 @@ class LLMLoadBalancer:
         num_actors: int = 4,
         strategy: str = "hash",
         backend: str = "ollama",
+        llm_v_config: Optional[dict] = None,
         logger: Optional[logging.Logger] = None,
     ):
         """
@@ -62,6 +63,7 @@ class LLMLoadBalancer:
             num_actors: Number of LLM actor instances to create
             strategy: Load balancing strategy ('hash', 'round_robin')
             backend: LLM backend to use ('ollama' or 'vllm')
+            llm_v_config: Optional configuration for vision LLM (vLLM only)
             logger: Optional logger instance
         """
         self.logger = logger or logging.getLogger(__name__)
@@ -92,11 +94,13 @@ class LLMLoadBalancer:
                 actor = ServiceClass.options(num_gpus=1).remote(
                     llm_config=llm_config,
                     prompts_config=prompts_config,
+                    llm_v_config=llm_v_config,
                 )
             else:
                 actor = ServiceClass.remote(
                     llm_config=llm_config,
                     prompts_config=prompts_config,
+                    llm_v_config=llm_v_config,
                 )
             self.actors.append(actor)
             self.logger.info(f"Created LLM actor {i+1}/{num_actors} ({self.backend})")
@@ -194,6 +198,7 @@ class LLMActorPool:
         strategy: str = "hash",
         backend: str = "ollama",
         enable_monitoring: bool = True,
+        llm_v_config: Optional[dict] = None,
         logger: Optional[logging.Logger] = None,
     ):
         """
@@ -206,6 +211,7 @@ class LLMActorPool:
             strategy: Load balancing strategy ('hash', 'round_robin')
             backend: LLM backend to use ('ollama' or 'vllm')
             enable_monitoring: Whether to track per-actor statistics
+            llm_v_config: Optional configuration for vision LLM (vLLM only)
             logger: Optional logger instance
         """
         self.logger = logger or logging.getLogger(__name__)
@@ -215,6 +221,7 @@ class LLMActorPool:
             num_actors=num_actors,
             strategy=strategy,
             backend=backend,
+            llm_v_config=llm_v_config,
             logger=logger,
         )
         self.enable_monitoring = enable_monitoring
@@ -320,6 +327,7 @@ def create_llm_actors(
     strategy: str = "hash",
     backend: str = "ollama",
     enable_monitoring: bool = False,
+    llm_v_config: Optional[dict] = None,
     logger: Optional[logging.Logger] = None,
 ) -> Any:
     """
@@ -334,6 +342,7 @@ def create_llm_actors(
         strategy: Load balancing strategy if num_actors > 1
         backend: LLM backend to use ('ollama' or 'vllm')
         enable_monitoring: Whether to enable per-actor monitoring
+        llm_v_config: Optional configuration for vision LLM (vLLM only)
         logger: Optional logger instance
 
     Returns:
@@ -349,11 +358,19 @@ def create_llm_actors(
             from YSimulator.YClient.LLM_interactions.vllm_service import VLLMService
 
             # Allocate GPU resources for vLLM
-            return VLLMService.options(num_gpus=1).remote(llm_config=llm_config, prompts_config=prompts_config)
+            return VLLMService.options(num_gpus=1).remote(
+                llm_config=llm_config,
+                prompts_config=prompts_config,
+                llm_v_config=llm_v_config,
+            )
         else:
             from YSimulator.YClient.LLM_interactions.llm_service import LLMService
 
-            return LLMService.remote(llm_config=llm_config, prompts_config=prompts_config)
+            return LLMService.remote(
+                llm_config=llm_config,
+                prompts_config=prompts_config,
+                llm_v_config=llm_v_config,
+            )
 
     # Multiple actors - use load balancing
     if enable_monitoring:
@@ -364,6 +381,7 @@ def create_llm_actors(
             strategy=strategy,
             backend=backend,
             enable_monitoring=True,
+            llm_v_config=llm_v_config,
             logger=logger,
         )
     else:
@@ -373,5 +391,6 @@ def create_llm_actors(
             num_actors=num_actors,
             strategy=strategy,
             backend=backend,
+            llm_v_config=llm_v_config,
             logger=logger,
         )

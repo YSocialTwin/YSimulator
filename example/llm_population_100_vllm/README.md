@@ -17,18 +17,20 @@ This example demonstrates YSimulator running with **vLLM backend** for efficient
 
 This example uses vLLM instead of Ollama for LLM inference, providing:
 
-- **Batch Processing**: Multiple prompts processed in parallel
+- **Parallel Processing**: Multiple vLLM actors process requests simultaneously
 - **GPU Acceleration**: Efficient tensor operations on GPU
 - **Higher Throughput**: Significantly faster than sequential Ollama processing
 - **Unified Model Management**: Both text and vision models loaded in same vLLM instance
+- **Configurable Parallelism**: Set `num_actors` to control number of parallel instances
 
 ### Performance Benefits
 
 According to the bottleneck analysis, vLLM provides:
 
-- **8-10x speedup** over sequential Ollama processing
+- **8-10x speedup** over sequential Ollama processing (single actor)
+- **30x speedup** with 4 parallel actors and load balancing
 - **Batch inference** reduces the LLM bottleneck from 70-80% to ~10-15% of total time
-- **Scalable**: Performance scales with batch size and GPU capacity
+- **Scalable**: Performance scales with number of actors and GPU capacity
 
 ## Requirements
 
@@ -85,6 +87,10 @@ pip install vllm>=0.6.0
   - Controls the maximum context window size
   - Set based on model capabilities and memory constraints
   - Default of 40000 provides good balance for most models
+- `num_actors`: Number of vLLM instances for parallel processing (default: 1)
+  - **1**: Single instance, ~8-10x speedup vs Ollama
+  - **2-4**: Multiple instances for higher throughput (recommended for 100+ agents)
+  - Each actor requires GPU resources (~6-8GB VRAM per actor)
 - `tensor_parallel_size`: Number of GPUs for tensor parallelism
 - `gpu_memory_utilization`: GPU memory utilization (0.0-1.0)
 - `enable_flashattention`: Enable FlashAttention 2 (default: `false`)

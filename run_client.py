@@ -255,13 +255,27 @@ if __name__ == "__main__":
     # Default to "ollama" for backward compatibility and macOS support
     llm_backend = llm_config.get("backend", "ollama").lower()
     
+    # Get number of LLM actors (default: 1 for backward compatibility)
+    num_llm_actors = llm_config.get("num_actors", 1)
+    
     if llm_backend == "vllm":
-        logger.info("Using vLLM backend for LLM inference")
-        print("--- Using vLLM backend (batch inference) ---")
+        logger.info(f"Using vLLM backend with {num_llm_actors} actor(s) for LLM inference")
+        print(f"--- Using vLLM backend ({num_llm_actors} actor(s) for parallel processing) ---")
         try:
-            # Allocate GPU resources to the Ray actor for vLLM
-            # This ensures CUDA GPUs are visible to the vLLM engine
-            llm_service = VLLMService.options(num_gpus=1).remote(llm_config, prompts_config, llm_v_config)
+            from YSimulator.YClient.llm_utils import create_llm_actors
+            
+            # Create LLM service with configured number of actors
+            # Allocates GPU resources for each vLLM actor
+            llm_service = create_llm_actors(
+                llm_config=llm_config,
+                prompts_config=prompts_config,
+                num_actors=num_llm_actors,
+                strategy="hash",  # Hash-based load balancing for agent affinity
+                backend="vllm",
+                enable_monitoring=False,
+                llm_v_config=llm_v_config,
+                logger=logger,
+            )
         except ImportError as e:
             logger.error(f"Failed to import vLLM: {e}")
             print(f"❌ Error: vLLM not available: {e}")
@@ -273,16 +287,37 @@ if __name__ == "__main__":
             print(f"❌ Error: vLLM initialization failed: {e}")
             print("💡 Check the logs above for detailed error information.")
             print("💡 Common issues:")
-            print("   - Insufficient GPU memory (try reducing gpu_memory_utilization)")
+            print("   - Insufficient GPU memory (try reducing gpu_memory_utilization or num_actors)")
             print("   - Model not found (check model path)")
             print("   - GPU compatibility issues (check CUDA version)")
-            print("   - No GPU allocated to Ray actor (ensure Ray has GPU resources)")
+            print("   - Insufficient GPU resources (ensure Ray has enough GPUs for num_actors)")
             sys.exit(1)
     else:
         # Default to Ollama backend
-        logger.info("Using Ollama backend for LLM inference")
-        print("--- Using Ollama backend ---")
-        llm_service = LLMService.remote(llm_config, prompts_config, llm_v_config)
+        if num_llm_actors > 1:
+            logger.info(f"Using Ollama backend with {num_llm_actors} actors for parallel inference")
+            print(f"--- Using Ollama backend ({num_llm_actors} actors for parallel processing) ---")
+            try:
+                from YSimulator.YClient.llm_utils import create_llm_actors
+                
+                llm_service = create_llm_actors(
+                    llm_config=llm_config,
+                    prompts_config=prompts_config,
+                    num_actors=num_llm_actors,
+                    strategy="hash",
+                    backend="ollama",
+                    enable_monitoring=False,
+                    llm_v_config=llm_v_config,
+                    logger=logger,
+                )
+            except Exception as e:
+                logger.error(f"Failed to initialize Ollama service: {e}")
+                print(f"❌ Error: Ollama initialization failed: {e}")
+                sys.exit(1)
+        else:
+            logger.info("Using Ollama backend for LLM inference")
+            print("--- Using Ollama backend ---")
+            llm_service = LLMService.remote(llm_config, prompts_config, llm_v_config)
     
     llm_time = (time.time() - llm_start) * 1000
 
