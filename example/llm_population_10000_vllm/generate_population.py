@@ -8,11 +8,15 @@ sentiment annotation, and emotion annotation enabled.
 """
 
 import json
+import os
 import random
 import uuid
 
 # Set seed for reproducibility
 random.seed(42)
+
+# Get the directory where this script is located
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
 
 def generate_agent_population():
@@ -172,20 +176,25 @@ def main():
     print("Generating 10001 agents (10000 LLM + 1 page)...")
     population = generate_agent_population()
     
-    with open("agent_population.json", "w") as f:
+    # Write files to the same directory as this script
+    population_file = os.path.join(SCRIPT_DIR, "agent_population.json")
+    network_file = os.path.join(SCRIPT_DIR, "network.csv")
+    
+    with open(population_file, "w") as f:
         json.dump(population, f, indent=2)
-    print(f"✓ Created agent_population.json ({len(population['agents'])} agents)")
+    print(f"✓ Created {population_file} ({len(population['agents'])} agents)")
     
     print("\nGenerating social network...")
     edges = generate_social_network(population['agents'], avg_degree=10)
     
-    with open("network.csv", "w") as f:
+    with open(network_file, "w") as f:
         f.write("source,target\n")
         for source_id, target_id in edges:
             f.write(f"{source_id},{target_id}\n")
-    print(f"✓ Created network.csv ({len(edges)} edges)")
+    print(f"✓ Created {network_file} ({len(edges)} edges)")
     
     print("\n✓ Generation complete!")
+    print(f"\nFiles created in: {SCRIPT_DIR}")
     print("\nNext steps:")
     print("1. Start server: python run_server.py --config example/llm_population_10000_vllm")
     print("2. Start client: python run_client.py --config example/llm_population_10000_vllm")
