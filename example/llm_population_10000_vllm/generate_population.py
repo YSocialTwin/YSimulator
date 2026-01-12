@@ -142,21 +142,27 @@ def generate_agent_population():
     return {"agents": agents}
 
 
-def generate_social_network(num_agents, avg_degree=10):
-    """Generate a random social network using Erdős–Rényi model."""
-    # Total agents including 1 page
-    total_agents = num_agents + 1
+def generate_social_network(agents, avg_degree=10):
+    """Generate a random social network using Erdős–Rényi model.
     
+    Args:
+        agents: List of agent dictionaries with 'id' field
+        avg_degree: Target average degree for the network
+    
+    Returns:
+        List of tuples (source_id, target_id)
+    """
     # Calculate edge probability for desired average degree
-    p = avg_degree / (total_agents - 1)
+    num_agents = len(agents)
+    p = avg_degree / (num_agents - 1)
     
     edges = []
     
-    # Generate random edges
-    for i in range(total_agents):
-        for j in range(total_agents):
+    # Generate random edges using agent IDs
+    for i, agent_i in enumerate(agents):
+        for j, agent_j in enumerate(agents):
             if i != j and random.random() < p:
-                edges.append((i, j))
+                edges.append((agent_i['id'], agent_j['id']))
     
     return edges
 
@@ -171,12 +177,12 @@ def main():
     print(f"✓ Created agent_population.json ({len(population['agents'])} agents)")
     
     print("\nGenerating social network...")
-    edges = generate_social_network(10000, avg_degree=10)
+    edges = generate_social_network(population['agents'], avg_degree=10)
     
     with open("network.csv", "w") as f:
         f.write("source,target\n")
-        for source, target in edges:
-            f.write(f"{source},{target}\n")
+        for source_id, target_id in edges:
+            f.write(f"{source_id},{target_id}\n")
     print(f"✓ Created network.csv ({len(edges)} edges)")
     
     print("\n✓ Generation complete!")
