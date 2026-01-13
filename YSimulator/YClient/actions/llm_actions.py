@@ -242,6 +242,12 @@ def generate_llm_read_async(
                 actions.append(ActionDTO(agent_id, cluster_id, reaction_type, target_post_id=target))
     """
     llm_actor = _get_llm_actor(llm_handle, agent_id)
+    
+    # For vLLM batching: Don't create individual futures, return None as placeholder
+    if _should_use_vllm_batching(llm_handle):
+        return None  # Placeholder - batch processor will handle this
+    
+    # For Ollama/standard: Create individual future
     return llm_actor.generate_read_reaction.remote(cluster_id, content, agent_attrs)
 
 

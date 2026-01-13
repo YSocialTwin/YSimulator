@@ -466,6 +466,99 @@ class VLLMService:
             logger.error(f"[vLLM] Number of requests: {len(requests)}")
             raise RuntimeError(f"vLLM batch reaction decision failed: {e}") from e
 
+    def generate_read_reaction_batch(
+        self, requests: List[Dict[str, Any]]
+    ) -> List[str]:
+        """
+        Decide read reactions for multiple posts in a single batch with agent attributes support.
+        
+        Similar to decide_reaction_batch but supports agent_attrs including opinions.
+
+        Args:
+            requests: List of request dicts, each with keys:
+                - cluster_id: Agent cluster ID
+                - post_content: Content of the post to react to
+                - agent_attrs: Optional dict with agent attributes (opinions, etc.)
+
+        Returns:
+            List of reaction strings (LIKE, COMMENT, IGNORE, etc.) in the same order as requests
+        """
+        try:
+            logger.debug(f"[vLLM] Starting batch read reaction decision for {len(requests)} requests")
+            prompts = []
+            for idx, req in enumerate(requests):
+                try:
+                    cluster_id = req["cluster_id"]
+                    post_content = req["post_content"]
+                    agent_attrs = req.get("agent_attrs")
+                    
+                    # Build persona with agent attributes
+                    persona = self._build_persona(cluster_id, agent_attrs)
+                    
+                    # Build opinion instruction if available
+                    opinion_instruction = ""
+                    if agent_attrs and "post_topics" in agent_attrs and agent_attrs["post_topics"]:
+                        topics = agent_attrs["post_topics"]
+                        opinions = agent_attrs.get("post_opinions", {})
+
+                        if topics and opinions:
+                            opinion_parts = []
+                            for topic in topics:
+                                if topic in opinions:
+                                    opinion_parts.append(f"{topic}: {opinions[topic]}")
+
+                            if opinion_parts:
+                                opinion_str = ", ".join(opinion_parts)
+                                opinion_instruction = (
+                                    f" Your opinions on the discussed topics: {opinion_str}. React accordingly."
+                                )
+
+                    # Get prompt templates (use decide_reaction templates as base)
+                    system_template = self.prompts_config["decide_reaction"]["system_template"]
+                    user_template = self.prompts_config["decide_reaction"]["user_template"]
+
+                    # Format templates with opinion instruction
+                    system_msg = system_template.format(cluster_id=cluster_id)
+                    user_msg = user_template.format(post_content=post_content) + opinion_instruction
+
+                    # Create formatted prompt
+                    prompt = self._format_prompt(system_msg, user_msg)
+                    prompts.append(prompt)
+                except Exception as e:
+                    logger.error(f"[vLLM] Failed to build prompt for batch read reaction request {idx}: {e}")
+                    logger.error(f"[vLLM] Request: {req}")
+                    raise
+
+            # Batch generate using vLLM
+            logger.debug(f"[vLLM] Executing batch inference for {len(prompts)} read reaction prompts")
+            outputs = self.llm.generate(prompts, self.sampling_params)
+            results = []
+            for output in outputs:
+                result = output.outputs[0].text.strip().upper()
+                # Parse reaction type from result
+                if "LIKE" in result:
+                    results.append("LIKE")
+                elif "LOVE" in result:
+                    results.append("LOVE")
+                elif "LAUGH" in result:
+                    results.append("LAUGH")
+                elif "ANGRY" in result:
+                    results.append("ANGRY")
+                elif "SAD" in result:
+                    results.append("SAD")
+                elif "COMMENT" in result:
+                    results.append("COMMENT")
+                elif "SHARE" in result:
+                    results.append("SHARE")
+                else:
+                    results.append("IGNORE")
+            logger.debug(f"[vLLM] Batch read reaction decision completed successfully ({len(results)} results)")
+            return results
+        except Exception as e:
+            logger.error(f"[vLLM] Batch read reaction decision failed: {e}")
+            logger.error(f"[vLLM] Number of requests: {len(requests)}")
+            raise RuntimeError(f"vLLM batch read reaction decision failed: {e}") from e
+
     def generate_comment(
         self,
         cluster_id: int,

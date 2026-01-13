@@ -679,6 +679,7 @@ class BatchProcessor:
         # Separate into batchable and non-batchable
         batchable_comments = []
         batchable_shares = []
+        batchable_reads = []
         non_batchable = []
         
         for reaction_tuple in pending_llm_reactions:
@@ -689,6 +690,8 @@ class BatchProcessor:
                     batchable_comments.append(reaction_tuple)
                 elif metadata.get("type") == "share":
                     batchable_shares.append(reaction_tuple)
+                elif metadata.get("type") == "read":
+                    batchable_reads.append(reaction_tuple)
                 else:
                     non_batchable.append(reaction_tuple)
             else:
@@ -708,6 +711,14 @@ class BatchProcessor:
             self.logger.info(f"Processing {len(batchable_shares)} shares with vLLM batch inference")
             candidates = self._process_vllm_share_batch(
                 batchable_shares, actions, calculate_opinion_updates_fn
+            )
+            secondary_follow_candidates.extend(candidates)
+        
+        # Process batchable reads (reaction decisions) with vLLM batch inference
+        if batchable_reads:
+            self.logger.info(f"Processing {len(batchable_reads)} read reactions with vLLM batch inference")
+            candidates = self._process_vllm_read_batch(
+                batchable_reads, actions, calculate_opinion_updates_fn
             )
             secondary_follow_candidates.extend(candidates)
         
@@ -920,6 +931,144 @@ class BatchProcessor:
                 secondary_follow_candidates.append(
                     (agent_id, cluster_id, post_data.get("user_id"), post_data.get("tweet", ""), True)
                 )
+        
+        return secondary_follow_candidates
+
+    def _process_vllm_read_batch(
+        self,
+        batchable_reads: List[Tuple],
+        actions: List[ActionDTO],
+        calculate_opinion_updates_fn,
+    ) -> List[Tuple]:
+        """
+        Process read reactions (LIKE, LOVE, etc.) using vLLM's decide_reaction_batch method.
+        
+        Args:
+            batchable_reads: List of tuples with format (agent_id, cluster_id, target_post_id, future, metadata_dict)
+            actions: List to append resolved actions to
+            calculate_opinion_updates_fn: Function to calculate opinion updates
+            
+        Returns:
+            List of secondary follow candidates
+        """
+        secondary_follow_candidates = []
+        
+        # Build batch requests from metadata
+        batch_requests = []
+        for item in batchable_reads:
+            agent_id, cluster_id, target_post, future, metadata = item
+            batch_requests.append({
+                "cluster_id": cluster_id,
+                "post_content": metadata.get("post_content", ""),
+                "agent_attrs": metadata.get("agent_attrs"),
+            })
+        
+        # Get LLM actor for batch call (using YClient pattern)
+        llm_actor = self._get_llm_actor()
+        
+        # Call generate_read_reaction_batch (supports agent_attrs including opinions)
+        self.logger.info(f"Calling generate_read_reaction_batch for {len(batch_requests)} read requests")
+        try:
+            batch_future = llm_actor.generate_read_reaction_batch.remote(batch_requests)
+            results = self.retry_handler.retry_with_backoff(
+                lambda f: ray.get(f),
+                batch_future,
+                error_message="vLLM batch read reaction generation"
+            )
+        except Exception as e:
+            self.logger.error(f"vLLM batch read generation failed: {e}, falling back to standard gather")
+            return self._gather_reactions_standard(batchable_reads, actions, calculate_opinion_updates_fn)
+        
+        # Process results
+        for i, reaction_type in enumerate(results):
+            item = batchable_reads[i]
+            agent_id = item[0]
+            cluster_id = item[1]
+            target_post = item[2]
+            
+            # Track LLM usage
+            if self.cost_tracker:
+                if reaction_type.upper() in REACTION_TYPES or reaction_type.upper() == "SHARE":
+                    output_tokens = REACTION_OUTPUT_TOKENS
+                else:
+                    # Comment text
+                    output_tokens = len(reaction_type) // CHARS_PER_TOKEN
+                self.cost_tracker.record_call("generate_read_reaction", PROMPT_TOKENS_COMMENT, output_tokens)
+            
+            # Validate response
+            reaction_type = self.response_parser.parse_text_response(reaction_type, default="IGNORE")
+            
+            # Handle different reaction types
+            if reaction_type and reaction_type.upper() not in REACTION_TYPES:
+                # This is comment text from LLM - treat as COMMENT action
+                self.logger.debug(f"[READ] LLM generated comment for agent {agent_id}: '{reaction_type[:50]}...'")
+                
+                # Annotate the comment text
+                annotations = annotate_text(
+                    reaction_type,
+                    enable_sentiment=self.enable_sentiment,
+                    enable_toxicity=self.enable_toxicity,
+                    perspective_api_key=self.perspective_api_key,
+                    enable_emotions=self.enable_emotions,
+                    llm_handle=self.llm,
+                )
+                
+                # Calculate opinion updates
+                post_data = ray.get(self.server.get_post.remote(target_post, client_id=self.client_id))
+                updated_opinions = None
+                if post_data:
+                    updated_opinions = calculate_opinion_updates_fn(agent_id, target_post, post_data)
+                
+                action = ActionDTO(
+                    agent_id,
+                    cluster_id,
+                    "COMMENT",
+                    content=reaction_type,
+                    target_post_id=target_post,
+                    annotations=annotations,
+                    updated_opinions=updated_opinions,
+                )
+                actions.append(action)
+                
+                # Track for secondary follow
+                if post_data:
+                    secondary_follow_candidates.append(
+                        (agent_id, cluster_id, post_data.get("user_id"), post_data.get("tweet", ""), True)
+                    )
+            elif reaction_type.upper() == "SHARE":
+                # SHARE reaction - would need share commentary, but for now just note it
+                # This is handled separately by share_generator typically
+                self.logger.debug(f"[READ] LLM decided to SHARE for agent {agent_id}")
+                # Note: Real share implementation would call generate_share_commentary
+                # For now, skip or create simple share
+                pass
+            elif reaction_type.upper() in REACTION_TYPES and reaction_type.upper() != "IGNORE":
+                # Simple reaction (LIKE, LOVE, etc.)
+                self.logger.debug(f"[READ] LLM generated reaction for agent {agent_id}: {reaction_type}")
+                
+                # Calculate opinion updates for the reaction
+                post_data = ray.get(self.server.get_post.remote(target_post, client_id=self.client_id))
+                updated_opinions = None
+                if post_data:
+                    updated_opinions = calculate_opinion_updates_fn(agent_id, target_post, post_data)
+                
+                action = ActionDTO(
+                    agent_id,
+                    cluster_id,
+                    reaction_type.upper(),
+                    target_post_id=target_post,
+                    updated_opinions=updated_opinions,
+                )
+                actions.append(action)
+                
+                # Track for secondary follow (simple reaction)
+                if post_data:
+                    secondary_follow_candidates.append(
+                        (agent_id, cluster_id, post_data.get("user_id"), post_data.get("tweet", ""), True)
+                    )
+            else:
+                # IGNORE or unrecognized - skip
+                self.logger.debug(f"[READ] Agent {agent_id} chose to IGNORE")
         
         return secondary_follow_candidates
 
