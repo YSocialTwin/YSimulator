@@ -492,9 +492,6 @@ class VLLMService:
                     post_content = req["post_content"]
                     agent_attrs = req.get("agent_attrs")
                     
-                    # Build persona with agent attributes
-                    persona = self._build_persona(cluster_id, agent_attrs)
-                    
                     # Build opinion instruction if available
                     opinion_instruction = ""
                     if agent_attrs and "post_topics" in agent_attrs and agent_attrs["post_topics"]:
@@ -517,7 +514,7 @@ class VLLMService:
                     system_template = self.prompts_config["decide_reaction"]["system_template"]
                     user_template = self.prompts_config["decide_reaction"]["user_template"]
 
-                    # Format templates with opinion instruction
+                    # Format templates with opinion instruction appended to user message
                     system_msg = system_template.format(cluster_id=cluster_id)
                     user_msg = user_template.format(post_content=post_content) + opinion_instruction
 
