@@ -107,15 +107,48 @@ If `backend` is omitted, Ollama is used by default for backward compatibility.
 - 100 agents, 50% LLM-based
 - Round time: ~19s
 - Throughput: ~3.2 rounds/min
-- **8x speedup**
+- **8x speedup** (includes automatic batch inference)
 
 ### With vLLM + Load Balancing (4 Actors)
 - 100 agents, 50% LLM-based
 - Round time: ~5s
 - Throughput: ~12 rounds/min
-- **30x speedup**
+- **30x speedup** (batch inference + parallelization)
 
 *Note: Performance depends on hardware, model size, and batch size.*
+
+## Batch Inference
+
+When vLLM backend is enabled, **batch inference is automatically used** for post generation. The system:
+
+1. **Detects vLLM backend** by checking for `generate_post_batch` method
+2. **Collects post requests** during the scatter phase
+3. **Processes in batch** using `generate_post_batch()` during the gather phase
+4. **Falls back gracefully** to standard processing if batch metadata is unavailable
+
+This provides significant performance improvements without requiring code changes. For Ollama (default), the standard scatter/gather pattern is used.
+
+### How It Works
+
+```
+POST Generation Flow:
+┌─────────────────────────────────────┐
+│ 1. Scatter Phase                    │
+│    - Generate requests for agents   │
+│    - Store (agent, cluster, future, │
+│      topic, day, slot, agent_attrs) │
+└─────────────────────────────────────┘
+              ↓
+┌─────────────────────────────────────┐
+│ 2. Gather Phase                     │
+│    - Detect vLLM backend            │
+│    - Extract batch requests         │
+│    - Call generate_post_batch()     │
+│    - Process results                │
+└─────────────────────────────────────┘
+```
+
+**Backward Compatibility**: Old tuple format (4 elements) is still supported and processed via standard gather.
 
 ## Architecture
 
@@ -357,4 +390,4 @@ All methods maintain compatibility with `LLMService`:
 
 ---
 
-**Last Updated**: January 10, 2026
+**Last Updated**: January 13, 2026
