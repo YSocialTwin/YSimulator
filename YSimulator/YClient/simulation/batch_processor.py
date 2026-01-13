@@ -855,8 +855,18 @@ class BatchProcessor:
                 output_tokens = len(share_text) // CHARS_PER_TOKEN
                 self.cost_tracker.record_call("generate_share_commentary", PROMPT_TOKENS_COMMENT, output_tokens)
             
-            # Annotate the share text (shares don't need annotations, but we do it for consistency)
-            # Actually shares typically don't get annotated, but we keep it for future use
+            # Annotate the share commentary text (same as comments/posts)
+            annotations = annotate_text(
+                share_text,
+                enable_sentiment=self.enable_sentiment,
+                enable_toxicity=self.enable_toxicity,
+                perspective_api_key=self.perspective_api_key,
+                enable_emotions=self.enable_emotions,
+                llm_handle=self.llm,
+            )
+            self.logger.info(
+                f"vLLM batch share annotated for agent {agent_id}: has_sentiment={bool(annotations.get('sentiment'))}, has_toxicity={bool(annotations.get('toxicity'))}, has_emotions={bool(annotations.get('emotions'))}"
+            )
             
             # Calculate opinion updates
             post_data = ray.get(self.server.get_post.remote(target_post, client_id=self.client_id))
@@ -871,6 +881,7 @@ class BatchProcessor:
                 "SHARE",
                 content=share_text,
                 target_post_id=target_post,
+                annotations=annotations,
                 updated_opinions=updated_opinions,
             )
             actions.append(action)
