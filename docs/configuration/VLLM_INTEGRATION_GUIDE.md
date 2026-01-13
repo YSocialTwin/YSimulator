@@ -119,36 +119,56 @@ If `backend` is omitted, Ollama is used by default for backward compatibility.
 
 ## Batch Inference
 
-When vLLM backend is enabled, **batch inference is automatically used** for post generation. The system:
+When vLLM backend is enabled, **batch inference is automatically used** for multiple LLM operations. The system:
 
-1. **Detects vLLM backend** by checking for `generate_post_batch` method
-2. **Collects post requests** during the scatter phase
-3. **Processes in batch** using `generate_post_batch()` during the gather phase
+1. **Detects vLLM backend** by checking for `generate_*_batch` methods
+2. **Collects requests** during the scatter phase with metadata
+3. **Processes in batch** using batch methods during the gather phase
 4. **Falls back gracefully** to standard processing if batch metadata is unavailable
 
-This provides significant performance improvements without requiring code changes. For Ollama (default), the standard scatter/gather pattern is used.
+This provides 10-50x performance improvements without requiring code changes. For Ollama (default), the standard scatter/gather pattern is used.
+
+### Batched Operations
+
+| Operation | Batch Method | Generators | Performance Gain |
+|-----------|--------------|------------|------------------|
+| Posts | `generate_post_batch()` | post, cast | 8-30x |
+| Comments | `generate_comment_batch()` | comment | 5-20x |
+| Replies | `generate_comment_batch()` | reply | 5-20x |
+| Shares | `generate_comment_batch()` | share | 5-20x |
+| Reactions | `decide_reaction_batch()` | read | 5-20x (ready) |
 
 ### How It Works
 
 ```
-POST Generation Flow:
+Batch Processing Flow:
 ┌─────────────────────────────────────┐
 │ 1. Scatter Phase                    │
 │    - Generate requests for agents   │
-│    - Store (agent, cluster, future, │
-│      topic, day, slot, agent_attrs) │
+│    - Store metadata for batching    │
+│    - Create individual futures      │
 └─────────────────────────────────────┘
               ↓
 ┌─────────────────────────────────────┐
-│ 2. Gather Phase                     │
-│    - Detect vLLM backend            │
-│    - Extract batch requests         │
-│    - Call generate_post_batch()     │
-│    - Process results                │
+│ 2. Backend Detection                │
+│    - Check for generate_*_batch()   │
+│    - Route to batch or standard     │
+└─────────────────────────────────────┘
+              ↓
+┌─────────────────────────────────────┐
+│ 3. Batch Processing (vLLM)          │
+│    - Separate by type               │
+│    - Build batch requests           │
+│    - Call generate_*_batch()        │
+│    - Process all results            │
+│    - Apply annotations              │
+│    - Calculate opinions             │
 └─────────────────────────────────────┘
 ```
 
-**Backward Compatibility**: Old tuple format (4 elements) is still supported and processed via standard gather.
+**Cascade Operations**: All dependent operations (sentiment analysis, toxicity detection, emotion extraction, opinion updates, mention marking, secondary follows) are applied AFTER batch generation, ensuring correctness.
+
+**Backward Compatibility**: Old tuple formats are still supported and processed via standard gather.
 
 ## Architecture
 
@@ -181,8 +201,10 @@ POST Generation Flow:
 │  │  Methods:                          │   │
 │  │  - generate_post()                 │   │
 │  │  - generate_post_batch()          │   │
-│  │  - decide_reaction()               │   │
 │  │  - generate_comment()              │   │
+│  │  - generate_comment_batch()       │   │
+│  │  - decide_reaction()               │   │
+│  │  - decide_reaction_batch()        │   │
 │  │  - ...                             │   │
 │  └────────────────────────────────────┘   │
 │                                             │
@@ -359,12 +381,19 @@ Ray actor providing vLLM-based LLM inference with batch processing.
 
 All methods maintain compatibility with `LLMService`:
 
+**Standard Methods:**
 - `generate_post(cluster_id, day, slot, agent_attrs)`: Generate a post
-- `generate_post_batch(requests)`: **New** - Batch generate posts
 - `decide_reaction(cluster_id, post_content)`: Decide reaction
-- `generate_comment(...)`: Generate comment
-- `generate_share_commentary(...)`: Generate share commentary
+- `generate_comment(cluster_id, post_content, agent_attrs, ...)`: Generate comment
+- `generate_share_commentary(cluster_id, post_content, ...)`: Generate share commentary
 - And all other LLMService methods
+
+**Batch Methods (vLLM-specific):**
+- `generate_post_batch(requests)`: Batch generate posts (8-30x faster)
+- `generate_comment_batch(requests)`: Batch generate comments (5-20x faster)
+- `decide_reaction_batch(requests)`: Batch decide reactions (5-20x faster)
+
+Batch methods accept a list of request dictionaries and return a list of results in the same order.
 
 ### Configuration Schema
 
