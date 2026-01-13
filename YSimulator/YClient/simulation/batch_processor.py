@@ -643,6 +643,7 @@ class BatchProcessor:
         
         # Separate into batchable and non-batchable
         batchable_comments = []
+        batchable_shares = []
         non_batchable = []
         
         for reaction_tuple in pending_llm_reactions:
@@ -651,6 +652,8 @@ class BatchProcessor:
                 metadata = reaction_tuple[4]
                 if metadata.get("type") == "comment":
                     batchable_comments.append(reaction_tuple)
+                elif metadata.get("type") == "share":
+                    batchable_shares.append(reaction_tuple)
                 else:
                     non_batchable.append(reaction_tuple)
             else:
@@ -662,6 +665,14 @@ class BatchProcessor:
             self.logger.info(f"Processing {len(batchable_comments)} comments with vLLM batch inference")
             candidates = self._process_vllm_comment_batch(
                 batchable_comments, actions, calculate_opinion_updates_fn
+            )
+            secondary_follow_candidates.extend(candidates)
+        
+        # Process batchable shares with vLLM batch inference
+        if batchable_shares:
+            self.logger.info(f"Processing {len(batchable_shares)} shares with vLLM batch inference")
+            candidates = self._process_vllm_share_batch(
+                batchable_shares, actions, calculate_opinion_updates_fn
             )
             secondary_follow_candidates.extend(candidates)
         
@@ -753,6 +764,14 @@ class BatchProcessor:
             if post_data:
                 updated_opinions = calculate_opinion_updates_fn(agent_id, target_post, post_data)
             
+            # Check if this was a reply to a mention (has mention_id in metadata)
+            metadata = item[4]
+            mention_id = metadata.get("mention_id")
+            if mention_id:
+                self.logger.info(f"[REPLY] Marking mention {mention_id} as replied for agent {agent_id}")
+                ray.get(self.server.mark_mention_replied.remote(mention_id))
+                self.logger.info(f"[REPLY] Successfully marked mention {mention_id} as replied (vLLM batch)")
+            
             # Create action
             action = ActionDTO(
                 agent_id,
@@ -761,6 +780,97 @@ class BatchProcessor:
                 content=comment_text,
                 target_post_id=target_post,
                 annotations=annotations,
+                updated_opinions=updated_opinions,
+            )
+            actions.append(action)
+            
+            # Track for secondary follow
+            if post_data:
+                secondary_follow_candidates.append(
+                    (agent_id, cluster_id, post_data.get("user_id"), post_data.get("tweet", ""), True)
+                )
+        
+        return secondary_follow_candidates
+
+    def _process_vllm_share_batch(
+        self,
+        batchable_shares: List[Tuple],
+        actions: List[ActionDTO],
+        calculate_opinion_updates_fn,
+    ) -> List[Tuple]:
+        """
+        Process shares using vLLM's generate_share_commentary batch method.
+        
+        Args:
+            batchable_shares: List of tuples with format (agent_id, cluster_id, target_post_id, future, metadata_dict)
+            actions: List to append resolved actions to
+            calculate_opinion_updates_fn: Function to calculate opinion updates
+            
+        Returns:
+            List of secondary follow candidates
+        """
+        secondary_follow_candidates = []
+        
+        # Build batch requests from metadata (shares use similar format to comments)
+        batch_requests = []
+        for item in batchable_shares:
+            agent_id, cluster_id, target_post, future, metadata = item
+            batch_requests.append({
+                "cluster_id": cluster_id,
+                "post_content": metadata.get("post_content", ""),
+                "agent_attrs": metadata.get("agent_attrs"),
+                "author_name": metadata.get("author_name", "Someone"),
+            })
+        
+        # Get LLM actor for batch call
+        if hasattr(self.llm, 'get_all_actors'):
+            llm_actor = self.llm.get_all_actors()[0]
+        else:
+            llm_actor = self.llm
+        
+        # For shares, we can use generate_comment_batch since the format is similar
+        # Or call a dedicated generate_share_commentary_batch if it exists
+        # For now, let's use comment batch as they have similar structure
+        self.logger.info(f"Calling generate_comment_batch for {len(batch_requests)} share requests")
+        try:
+            batch_future = llm_actor.generate_comment_batch.remote(batch_requests)
+            results = self.retry_handler.retry_with_backoff(
+                lambda f: ray.get(f),
+                batch_future,
+                error_message="vLLM batch share commentary generation"
+            )
+        except Exception as e:
+            self.logger.error(f"vLLM batch share generation failed: {e}, falling back to standard gather")
+            return self._gather_reactions_standard(batchable_shares, actions, calculate_opinion_updates_fn)
+        
+        # Process results
+        for i, share_text in enumerate(results):
+            item = batchable_shares[i]
+            agent_id = item[0]
+            cluster_id = item[1]
+            target_post = item[2]
+            
+            # Track LLM usage
+            if self.cost_tracker:
+                output_tokens = len(share_text) // CHARS_PER_TOKEN
+                self.cost_tracker.record_call("generate_share_commentary", PROMPT_TOKENS_COMMENT, output_tokens)
+            
+            # Annotate the share text (shares don't need annotations, but we do it for consistency)
+            # Actually shares typically don't get annotated, but we keep it for future use
+            
+            # Calculate opinion updates
+            post_data = ray.get(self.server.get_post.remote(target_post, client_id=self.client_id))
+            updated_opinions = None
+            if post_data:
+                updated_opinions = calculate_opinion_updates_fn(agent_id, target_post, post_data)
+            
+            # Create SHARE action
+            action = ActionDTO(
+                agent_id,
+                cluster_id,
+                "SHARE",
+                content=share_text,
+                target_post_id=target_post,
                 updated_opinions=updated_opinions,
             )
             actions.append(action)
