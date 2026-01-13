@@ -39,6 +39,29 @@ def _get_llm_actor(llm_handle: Any, agent_id: Optional[str] = None) -> Any:
     return llm_handle
 
 
+def _should_use_vllm_batching(llm_handle: Any) -> bool:
+    """
+    Check if vLLM batching should be used for this LLM handle.
+    
+    vLLM batching defers individual .remote() calls and instead collects
+    request parameters to make a single batch call during the gather phase.
+    
+    Args:
+        llm_handle: LLM handle (actor or load balancer)
+        
+    Returns:
+        bool: True if vLLM batching should be used, False for standard scatter/gather
+    """
+    try:
+        # Get an actor to check capabilities
+        actor = _get_llm_actor(llm_handle)
+        # Check if actor has batch methods (indicates vLLM backend)
+        return hasattr(actor, 'generate_post_batch')
+    except Exception:
+        # Default to standard scatter/gather on error
+        return False
+
+
 def generate_llm_post_async(
     llm_handle: Any,
     cluster_id: int,
@@ -88,6 +111,13 @@ def generate_llm_post_async(
             actions.append(ActionDTO(agent_id, cluster_id, "POST", content=content))
     """
     llm_actor = _get_llm_actor(llm_handle, agent_id)
+    
+    # For vLLM batching: Don't create individual futures, return None as placeholder
+    # The batch processor will create a single batch call instead
+    if _should_use_vllm_batching(llm_handle):
+        return None  # Placeholder - batch processor will handle this
+    
+    # For Ollama/standard: Create individual future (standard scatter/gather)
     return llm_actor.generate_post.remote(cluster_id, day, slot, agent_attrs)
 
 
@@ -341,6 +371,12 @@ def generate_llm_reply_to_mention_async(
         action = ActionDTO(agent_id, cluster_id, "COMMENT", content=comment_text, target_post_id=post_id)
     """
     llm_actor = _get_llm_actor(llm_handle, agent_id)
+    
+    # For vLLM batching: Don't create individual futures, return None as placeholder
+    if _should_use_vllm_batching(llm_handle):
+        return None  # Placeholder - batch processor will handle this
+    
+    # For Ollama/standard: Create individual future
     return llm_actor.generate_comment.remote(
         cluster_id, post_content, agent_attrs, author_name, thread_context
     )
@@ -388,6 +424,12 @@ def generate_llm_share_async(
         action = ActionDTO(agent_id, cluster_id, "SHARE", content=commentary, target_post_id=post_id)
     """
     llm_actor = _get_llm_actor(llm_handle, agent_id)
+    
+    # For vLLM batching: Don't create individual futures, return None as placeholder
+    if _should_use_vllm_batching(llm_handle):
+        return None  # Placeholder - batch processor will handle this
+    
+    # For Ollama/standard: Create individual future
     return llm_actor.generate_share_commentary.remote(
         cluster_id, post_content, agent_attrs, author_name
     )

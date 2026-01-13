@@ -135,11 +135,18 @@ class CommentGenerator(BaseActionGenerator):
                     agent_attrs["post_opinion_values"] = opinion_info["opinion_values"]
 
                 # Fire off async LLM call to generate comment
-                from YSimulator.YClient.actions.llm_actions import _get_llm_actor
+                from YSimulator.YClient.actions.llm_actions import _get_llm_actor, _should_use_vllm_batching
                 llm_actor = _get_llm_actor(self.context.llm, agent.id)
-                future = llm_actor.generate_comment.remote(
-                    agent.cluster, post_content, agent_attrs, author_name, thread_context
-                )
+                
+                # For vLLM batching: Don't create future, use None as placeholder
+                if _should_use_vllm_batching(self.context.llm):
+                    future = None  # Batch processor will create batch call
+                else:
+                    # For Ollama: Create individual future (standard scatter/gather)
+                    future = llm_actor.generate_comment.remote(
+                        agent.cluster, post_content, agent_attrs, author_name, thread_context
+                    )
+                
                 # Store: (agent_id, cluster_id, target_post_id, future, metadata_dict)
                 # Extended tuple for vLLM batching support - metadata includes parameters for batch inference
                 metadata = {

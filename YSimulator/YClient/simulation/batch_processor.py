@@ -180,13 +180,29 @@ class BatchProcessor:
             actions: List to append resolved post actions to
         """
         # Phase 3: Use batch_handler with retry logic for robustness
-        futures = [p[2] for p in pending_llm_posts]
+        # Filter out None futures (used for vLLM batching placeholders)
+        futures = [p[2] for p in pending_llm_posts if p[2] is not None]
+        
+        if not futures:
+            # All futures are None - shouldn't happen in standard path
+            self.logger.warning("No valid futures in standard gather, skipping")
+            return
+        
         results = self.retry_handler.retry_with_backoff(
             self.batch_handler.gather_futures, futures, error_message="Gathering LLM post futures"
         )  # Blocks once for ALL posts with automatic retries
+        
+        # Create mapping from non-None futures back to pending items
+        future_to_index = {}
+        result_index = 0
+        for i, pending_item in enumerate(pending_llm_posts):
+            if pending_item[2] is not None:
+                future_to_index[result_index] = i
+                result_index += 1
 
-        for i, res_txt in enumerate(results):
-            pending_item = pending_llm_posts[i]
+        for result_idx, res_txt in enumerate(results):
+            pending_idx = future_to_index[result_idx]
+            pending_item = pending_llm_posts[pending_idx]
             a_id = pending_item[0]
             cid = pending_item[1]
 
@@ -457,14 +473,30 @@ class BatchProcessor:
             self.logger.info(f"[REPLY] {mention_replies} of these are mention replies")
 
         # Phase 3: Use batch_handler with retry logic for robustness
-        futures = [r[3] for r in pending_llm_reactions]
+        # Filter out None futures (used for vLLM batching placeholders)
+        futures = [r[3] for r in pending_llm_reactions if r[3] is not None]
+        
+        if not futures:
+            # All futures are None - shouldn't happen in standard path
+            self.logger.warning("No valid futures in standard reaction gather, skipping")
+            return secondary_follow_candidates
+        
         results = self.retry_handler.retry_with_backoff(
             self.batch_handler.gather_futures,
             futures,
             error_message="Gathering LLM reaction futures",
         )  # Blocks once for ALL reactions/comments with automatic retries
+        
+        # Create mapping from non-None futures back to pending items
+        future_to_index = {}
+        result_index = 0
+        for i, reaction_tuple in enumerate(pending_llm_reactions):
+            if reaction_tuple[3] is not None:
+                future_to_index[result_index] = i
+                result_index += 1
 
-        for i, res_act in enumerate(results):
+        for result_idx, res_act in enumerate(results):
+            i = future_to_index[result_idx]
             # Phase 3: Track LLM usage
             if self.cost_tracker and res_act:
                 # Estimate tokens based on response type
