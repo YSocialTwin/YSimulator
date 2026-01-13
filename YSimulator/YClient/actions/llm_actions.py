@@ -17,20 +17,20 @@ import ray
 def _get_llm_actor(llm_handle: Any, agent_id: Optional[str] = None) -> Any:
     """
     Get the appropriate LLM actor from handle.
-    
+
     If llm_handle is a LLMLoadBalancer, uses agent_id to route to the correct actor.
     Otherwise returns llm_handle directly (single actor case).
-    
+
     Args:
         llm_handle: Either a Ray actor handle or a LLMLoadBalancer instance
         agent_id: Optional agent ID for load balancing
-        
+
     Returns:
         Ray actor handle for LLM service
     """
     # Check if llm_handle is a load balancer by checking its class name
     # This avoids issues with Mock objects that auto-create attributes
-    if llm_handle.__class__.__name__ in ('LLMLoadBalancer', 'LLMActorPool'):
+    if llm_handle.__class__.__name__ in ("LLMLoadBalancer", "LLMActorPool"):
         if agent_id is None:
             # Fallback to first actor if no agent_id provided
             return llm_handle.get_all_actors()[0]
@@ -42,13 +42,13 @@ def _get_llm_actor(llm_handle: Any, agent_id: Optional[str] = None) -> Any:
 def _should_use_vllm_batching(llm_handle: Any) -> bool:
     """
     Check if vLLM batching should be used for this LLM handle.
-    
+
     vLLM batching defers individual .remote() calls and instead collects
     request parameters to make a single batch call during the gather phase.
-    
+
     Args:
         llm_handle: LLM handle (actor or load balancer)
-        
+
     Returns:
         bool: True if vLLM batching should be used, False for standard scatter/gather
     """
@@ -56,7 +56,7 @@ def _should_use_vllm_batching(llm_handle: Any) -> bool:
         # Get an actor to check capabilities
         actor = _get_llm_actor(llm_handle)
         # Check if actor has batch methods (indicates vLLM backend)
-        return hasattr(actor, 'generate_post_batch')
+        return hasattr(actor, "generate_post_batch")
     except Exception:
         # Default to standard scatter/gather on error
         return False
@@ -111,17 +111,19 @@ def generate_llm_post_async(
             actions.append(ActionDTO(agent_id, cluster_id, "POST", content=content))
     """
     llm_actor = _get_llm_actor(llm_handle, agent_id)
-    
+
     # For vLLM batching: Don't create individual futures, return None as placeholder
     # The batch processor will create a single batch call instead
     if _should_use_vllm_batching(llm_handle):
         return None  # Placeholder - batch processor will handle this
-    
+
     # For Ollama/standard: Create individual future (standard scatter/gather)
     return llm_actor.generate_post.remote(cluster_id, day, slot, agent_attrs)
 
 
-def generate_llm_reaction_async(llm_handle: Any, cluster_id: int, content: str, agent_id: Optional[str] = None) -> ray.ObjectRef:
+def generate_llm_reaction_async(
+    llm_handle: Any, cluster_id: int, content: str, agent_id: Optional[str] = None
+) -> ray.ObjectRef:
     """
     Initiate async LLM reaction decision.
 
@@ -203,7 +205,11 @@ def generate_news_post_async(
 
 
 def generate_llm_read_async(
-    llm_handle: Any, cluster_id: int, content: str, agent_attrs: Optional[Dict[str, Any]] = None, agent_id: Optional[str] = None
+    llm_handle: Any,
+    cluster_id: int,
+    content: str,
+    agent_attrs: Optional[Dict[str, Any]] = None,
+    agent_id: Optional[str] = None,
 ) -> ray.ObjectRef:
     """
     Initiate async LLM read reaction decision.
@@ -242,17 +248,20 @@ def generate_llm_read_async(
                 actions.append(ActionDTO(agent_id, cluster_id, reaction_type, target_post_id=target))
     """
     llm_actor = _get_llm_actor(llm_handle, agent_id)
-    
+
     # For vLLM batching: Don't create individual futures, return None as placeholder
     if _should_use_vllm_batching(llm_handle):
         return None  # Placeholder - batch processor will handle this
-    
+
     # For Ollama/standard: Create individual future
     return llm_actor.generate_read_reaction.remote(cluster_id, content, agent_attrs)
 
 
 def generate_llm_follow_async(
-    llm_handle: Any, cluster_id: int, candidate_users: List[Dict[str, Any]], agent_id: Optional[str] = None
+    llm_handle: Any,
+    cluster_id: int,
+    candidate_users: List[Dict[str, Any]],
+    agent_id: Optional[str] = None,
 ) -> ray.ObjectRef:
     """
     Initiate async LLM follow decision.
@@ -285,7 +294,11 @@ def generate_llm_follow_async(
 
 
 def generate_llm_search_action_async(
-    llm_handle, cluster_id: int, content: str, agent_attrs: dict = None, agent_id: Optional[str] = None
+    llm_handle,
+    cluster_id: int,
+    content: str,
+    agent_attrs: dict = None,
+    agent_id: Optional[str] = None,
 ):
     """
     Initiate async LLM search action decision.
@@ -377,11 +390,11 @@ def generate_llm_reply_to_mention_async(
         action = ActionDTO(agent_id, cluster_id, "COMMENT", content=comment_text, target_post_id=post_id)
     """
     llm_actor = _get_llm_actor(llm_handle, agent_id)
-    
+
     # For vLLM batching: Don't create individual futures, return None as placeholder
     if _should_use_vllm_batching(llm_handle):
         return None  # Placeholder - batch processor will handle this
-    
+
     # For Ollama/standard: Create individual future
     return llm_actor.generate_comment.remote(
         cluster_id, post_content, agent_attrs, author_name, thread_context
@@ -430,11 +443,11 @@ def generate_llm_share_async(
         action = ActionDTO(agent_id, cluster_id, "SHARE", content=commentary, target_post_id=post_id)
     """
     llm_actor = _get_llm_actor(llm_handle, agent_id)
-    
+
     # For vLLM batching: Don't create individual futures, return None as placeholder
     if _should_use_vllm_batching(llm_handle):
         return None  # Placeholder - batch processor will handle this
-    
+
     # For Ollama/standard: Create individual future
     return llm_actor.generate_share_commentary.remote(
         cluster_id, post_content, agent_attrs, author_name

@@ -126,17 +126,19 @@ class SearchGenerator(BaseActionGenerator):
             # Check if vLLM batching should be used
             if _should_use_vllm_batching(self.context.llm):
                 # vLLM batching: Return None future and include metadata for batch processing
-                result.pending_llm_calls.append((
-                    agent.id,
-                    agent.cluster,
-                    target_post,
-                    None,  # No individual future
-                    {
-                        "post_content": post_content,
-                        "agent_attrs": agent_attrs,
-                        "post_data": post_data,
-                    }
-                ))
+                result.pending_llm_calls.append(
+                    (
+                        agent.id,
+                        agent.cluster,
+                        target_post,
+                        None,  # No individual future
+                        {
+                            "post_content": post_content,
+                            "agent_attrs": agent_attrs,
+                            "post_data": post_data,
+                        },
+                    )
+                )
             else:
                 # Standard: Create individual future
                 future = generate_llm_search_action_async(

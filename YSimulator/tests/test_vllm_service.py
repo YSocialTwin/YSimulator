@@ -3,7 +3,7 @@ Unit tests for vLLM Service.
 
 Tests cover:
 - VLLMService initialization
-- Batch inference capabilities  
+- Batch inference capabilities
 - Compatibility with LLMService interface
 - Configuration validation
 
@@ -69,9 +69,9 @@ class TestVLLMServiceConfiguration(unittest.TestCase):
 
     def test_batch_method_exists(self):
         """Test that VLLMService has batch processing method."""
-        from YSimulator.YClient.LLM_interactions import vllm_service
-
         import inspect
+
+        from YSimulator.YClient.LLM_interactions import vllm_service
 
         source = inspect.getsource(vllm_service)
 
@@ -88,9 +88,9 @@ class TestVLLMServiceWithLoadBalancer(unittest.TestCase):
     def test_load_balancer_supports_backend_parameter(self):
         """Test that load balancer accepts backend parameter."""
         try:
-            from YSimulator.YClient.llm_utils import load_balancer
-
             import inspect
+
+            from YSimulator.YClient.llm_utils import load_balancer
 
             # Check create_llm_actors signature
             sig = inspect.signature(load_balancer.create_llm_actors)
@@ -108,10 +108,10 @@ class TestVLLMServiceWithLoadBalancer(unittest.TestCase):
 
     def test_load_balancer_imports_vllm_service(self):
         """Test that load balancer can reference VLLMService."""
-        from YSimulator.YClient.llm_utils import load_balancer
-
         # Verify the load_balancer module references VLLMService
         import inspect
+
+        from YSimulator.YClient.llm_utils import load_balancer
 
         source = inspect.getsource(load_balancer.LLMLoadBalancer.__init__)
         self.assertIn(
@@ -169,18 +169,14 @@ class TestConfigurationExample(unittest.TestCase):
         import json
         import os
 
-        config_file = (
-            "/home/runner/work/YSimulator/YSimulator/example/llm_population_100_vllm/simulation_config.json"
-        )
+        config_file = "/home/runner/work/YSimulator/YSimulator/example/llm_population_100_vllm/simulation_config.json"
 
         if os.path.isfile(config_file):
             with open(config_file, "r") as f:
                 config = json.load(f)
 
             self.assertIn("llm", config, "Configuration missing llm section")
-            self.assertIn(
-                "backend", config["llm"], "LLM configuration missing backend field"
-            )
+            self.assertIn("backend", config["llm"], "LLM configuration missing backend field")
             self.assertEqual(
                 config["llm"]["backend"],
                 "vllm",
@@ -190,4 +186,3 @@ class TestConfigurationExample(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

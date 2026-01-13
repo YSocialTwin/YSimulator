@@ -12,20 +12,20 @@ from typing import Any, Optional
 def _get_llm_actor_for_manager(llm_handle: Any, agent_id: Optional[str] = None) -> Any:
     """
     Get the appropriate LLM actor from handle.
-    
+
     If llm_handle is a LLMLoadBalancer, uses agent_id to route to the correct actor.
     Otherwise returns llm_handle directly (single actor case).
-    
+
     Args:
         llm_handle: Either a Ray actor handle or a LLMLoadBalancer instance
         agent_id: Optional agent ID for load balancing
-        
+
     Returns:
         Ray actor handle for LLM service
     """
     # Check if llm_handle is a load balancer by checking its class name
     # This avoids issues with Mock objects that auto-create attributes
-    if llm_handle.__class__.__name__ in ('LLMLoadBalancer', 'LLMActorPool'):
+    if llm_handle.__class__.__name__ in ("LLMLoadBalancer", "LLMActorPool"):
         if agent_id is None:
             # Fallback to first actor if no agent_id provided
             return llm_handle.get_all_actors()[0]
@@ -53,7 +53,9 @@ class LLMManager:
         self.llm = llm_handle
         self.logger = logger or logging.getLogger(__name__)
 
-    def generate_post(self, cluster_id: int, agent_attrs: dict, topic: str, agent_id: Optional[str] = None) -> Any:
+    def generate_post(
+        self, cluster_id: int, agent_attrs: dict, topic: str, agent_id: Optional[str] = None
+    ) -> Any:
         """
         Generate a post using the LLM.
 
@@ -71,7 +73,12 @@ class LLMManager:
         return llm_actor.generate_post.remote(cluster_id, agent_attrs, topic)
 
     def generate_news_post(
-        self, cluster_id: int, agent_attrs: dict, article_title: str, article_summary: str, agent_id: Optional[str] = None
+        self,
+        cluster_id: int,
+        agent_attrs: dict,
+        article_title: str,
+        article_summary: str,
+        agent_id: Optional[str] = None,
     ) -> Any:
         """
         Generate a news-based post using the LLM.
@@ -95,7 +102,12 @@ class LLMManager:
         )
 
     def generate_image_post(
-        self, cluster_id: int, agent_attrs: dict, topic: str, image_id: str, agent_id: Optional[str] = None
+        self,
+        cluster_id: int,
+        agent_attrs: dict,
+        topic: str,
+        image_id: str,
+        agent_id: Optional[str] = None,
     ) -> Any:
         """
         Generate an image post caption using the LLM.
@@ -148,7 +160,12 @@ class LLMManager:
         )
 
     def generate_share_comment(
-        self, cluster_id: int, agent_attrs: dict, post_content: str, author_name: str, agent_id: Optional[str] = None
+        self,
+        cluster_id: int,
+        agent_attrs: dict,
+        post_content: str,
+        author_name: str,
+        agent_id: Optional[str] = None,
     ) -> Any:
         """
         Generate a personalized comment for sharing a post.
@@ -172,7 +189,12 @@ class LLMManager:
         )
 
     def decide_follow(
-        self, cluster_id: int, agent_attrs: dict, target_user: dict, recent_posts: list, agent_id: Optional[str] = None
+        self,
+        cluster_id: int,
+        agent_attrs: dict,
+        target_user: dict,
+        recent_posts: list,
+        agent_id: Optional[str] = None,
     ) -> Any:
         """
         Decide whether to follow a user using the LLM.
@@ -193,7 +215,9 @@ class LLMManager:
         llm_actor = _get_llm_actor_for_manager(self.llm, agent_id)
         return llm_actor.decide_follow.remote(cluster_id, agent_attrs, target_user, recent_posts)
 
-    def extract_topics_from_article(self, title: str, summary: str, agent_id: Optional[str] = None) -> Any:
+    def extract_topics_from_article(
+        self, title: str, summary: str, agent_id: Optional[str] = None
+    ) -> Any:
         """
         Extract topics from a news article using the LLM.
 
@@ -234,7 +258,11 @@ class LLMManager:
         return self.llm is not None
 
     def infer_article_opinion(
-        self, article_content: str, topic_name: str, opinion_groups: dict, agent_id: Optional[str] = None
+        self,
+        article_content: str,
+        topic_name: str,
+        opinion_groups: dict,
+        agent_id: Optional[str] = None,
     ) -> Any:
         """
         Infer agent's opinion on an article topic using the LLM.
@@ -255,7 +283,11 @@ class LLMManager:
         return llm_actor.infer_article_opinion.remote(article_content, topic_name, opinion_groups)
 
     def generate_secondary_follow_decision(
-        self, cluster_id: int, post_content: str, is_currently_following: bool, agent_id: Optional[str] = None
+        self,
+        cluster_id: int,
+        post_content: str,
+        is_currently_following: bool,
+        agent_id: Optional[str] = None,
     ) -> Any:
         """
         Decide whether to follow/unfollow post author as secondary follow using the LLM.

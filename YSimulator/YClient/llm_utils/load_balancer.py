@@ -139,23 +139,20 @@ class LLMLoadBalancer:
 
         for i in range(num_actors):
             actor_name = f"{actor_name_prefix}_{self.backend}_{i}"
-            
+
             # Allocate GPU resources for vLLM actors
             if self.backend == "vllm":
                 actor = ServiceClass.options(
                     name=actor_name,
                     num_gpus=gpu_per_actor,
-                    lifetime="detached"  # Persist beyond client lifetime
+                    lifetime="detached",  # Persist beyond client lifetime
                 ).remote(
                     llm_config=llm_config,
                     prompts_config=prompts_config,
                     llm_v_config=llm_v_config,
                 )
             else:
-                actor = ServiceClass.options(
-                    name=actor_name,
-                    lifetime="detached"
-                ).remote(
+                actor = ServiceClass.options(name=actor_name, lifetime="detached").remote(
                     llm_config=llm_config,
                     prompts_config=prompts_config,
                     llm_v_config=llm_v_config,
@@ -421,10 +418,10 @@ def create_llm_actors(
         - If num_actors > 1 and not enable_monitoring: LLMLoadBalancer instance
     """
     backend_lower = backend.lower()
-    
+
     # Get GPU allocation per actor (for vLLM)
     gpu_per_actor = llm_config.get("gpu_per_actor", 1.0)
-    
+
     if num_actors == 1:
         # Single actor - check if we should reuse
         if reuse_actors:
@@ -438,7 +435,7 @@ def create_llm_actors(
                 # Actor doesn't exist, create new one
                 if logger:
                     logger.debug(f"Actor {actor_name} not found, creating new one")
-        
+
         # Create new single actor
         if backend_lower == "vllm":
             from YSimulator.YClient.LLM_interactions.vllm_service import VLLMService
@@ -447,7 +444,7 @@ def create_llm_actors(
             options = {"num_gpus": gpu_per_actor, "lifetime": "detached"}
             if actor_name:
                 options["name"] = actor_name
-            
+
             return VLLMService.options(**options).remote(
                 llm_config=llm_config,
                 prompts_config=prompts_config,
@@ -460,7 +457,7 @@ def create_llm_actors(
             options = {"lifetime": "detached"} if reuse_actors else {}
             if actor_name:
                 options["name"] = actor_name
-            
+
             return LLMService.options(**options).remote(
                 llm_config=llm_config,
                 prompts_config=prompts_config,

@@ -88,9 +88,11 @@ class ShareGenerator(BaseActionGenerator):
                 "post_content": post_content,
                 "agent_attrs": agent_attrs,
                 "author_name": author_name,
-                "action_type": "SHARE"  # Mark this as a SHARE action
+                "action_type": "SHARE",  # Mark this as a SHARE action
             }
-            result.pending_llm_calls.append((agent.id, agent.cluster, target_post, future, metadata))
+            result.pending_llm_calls.append(
+                (agent.id, agent.cluster, target_post, future, metadata)
+            )
             result.metadata["author_name"] = author_name
         else:
             # Rule-based: Simple reshare without commentary

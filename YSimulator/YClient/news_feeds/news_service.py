@@ -22,18 +22,18 @@ import ray
 def _get_llm_actor(llm_handle: Any) -> Any:
     """
     Get the appropriate LLM actor from handle.
-    
+
     If llm_handle is a LLMLoadBalancer, uses the first actor.
     Otherwise returns llm_handle directly (single actor case).
-    
+
     Args:
         llm_handle: Either a Ray actor handle or a LLMLoadBalancer instance
-        
+
     Returns:
         Ray actor handle for LLM service
     """
     # Check if llm_handle is a load balancer by checking its class name
-    if llm_handle.__class__.__name__ in ('LLMLoadBalancer', 'LLMActorPool'):
+    if llm_handle.__class__.__name__ in ("LLMLoadBalancer", "LLMActorPool"):
         # Use first actor for image descriptions (not agent-specific)
         return llm_handle.get_all_actors()[0]
     # Direct actor handle (including Ray actors)

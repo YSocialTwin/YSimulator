@@ -96,7 +96,7 @@ class VLLMService:
         tensor_parallel_size = llm_config.get("tensor_parallel_size", 1)
         gpu_memory_utilization = llm_config.get("gpu_memory_utilization", 0.9)
         max_model_len = llm_config.get("max_model_len", 40000)
-        
+
         # Disable FlashAttention by default (requires compute capability >= 8.0)
         # Can be enabled via config: "enable_flashattention": true
         enable_flashattention = llm_config.get("enable_flashattention", False)
@@ -118,15 +118,17 @@ class VLLMService:
                 "max_model_len": max_model_len,
                 "trust_remote_code": True,
             }
-            
+
             # Disable FlashAttention if not explicitly enabled
             # This is required for GPUs with compute capability < 8.0 (e.g., RTX 2080 Ti)
             # vLLM will automatically fall back to a compatible attention implementation
             if not enable_flashattention:
                 vllm_params["disable_custom_all_reduce"] = True
                 # Don't set VLLM_ATTENTION_BACKEND - let vLLM auto-select compatible backend
-                logger.info("[vLLM] FlashAttention disabled, vLLM will auto-select compatible attention backend")
-            
+                logger.info(
+                    "[vLLM] FlashAttention disabled, vLLM will auto-select compatible attention backend"
+                )
+
             self.llm = LLM(**vllm_params)
 
             # Set up sampling parameters for text generation
@@ -152,11 +154,12 @@ class VLLMService:
             logger.error(f"[vLLM]   - Max model length: {max_model_len}")
             logger.error(f"[vLLM]   - FlashAttention enabled: {enable_flashattention}")
             logger.error(f"[vLLM] ============================================================")
-            
+
             # Log full traceback for debugging
             import traceback
+
             logger.error(f"[vLLM] Full traceback:\n{traceback.format_exc()}")
-            
+
             # Re-raise with more context but preserve original exception
             raise RuntimeError(
                 f"vLLM text model initialization failed. "
@@ -171,13 +174,13 @@ class VLLMService:
             vision_temp = llm_v_config.get("temperature", 0.5)
             vision_max_tokens = llm_v_config.get("max_tokens", 300)
             vision_max_model_len = llm_v_config.get("max_model_len", 40000)
-            
+
             logger.info(
                 f"[vLLM] Initializing vLLM vision engine with model={vision_model}, "
                 f"temperature={vision_temp}, max_tokens={vision_max_tokens}, "
                 f"max_model_len={vision_max_model_len}"
             )
-            
+
             try:
                 # Initialize vision model with vLLM
                 # Note: Vision models in vLLM require trust_remote_code=True
@@ -188,14 +191,14 @@ class VLLMService:
                     max_model_len=vision_max_model_len,
                     trust_remote_code=True,
                 )
-                
+
                 # Set up sampling parameters for vision model
                 self.sampling_params_v = SamplingParams(
                     temperature=vision_temp,
                     max_tokens=vision_max_tokens,
                     top_p=0.95,
                 )
-                
+
                 logger.info("[vLLM] vLLM vision engine initialized successfully")
             except Exception as e:
                 logger.error(f"[vLLM] Failed to initialize vLLM vision engine: {e}")
@@ -292,7 +295,9 @@ class VLLMService:
             prompt = self._format_prompt(system_msg, user_msg)
 
             # Generate using vLLM
-            logger.debug(f"[vLLM] Generating post for cluster_id={cluster_id}, day={day}, slot={slot}")
+            logger.debug(
+                f"[vLLM] Generating post for cluster_id={cluster_id}, day={day}, slot={slot}"
+            )
             outputs = self.llm.generate([prompt], self.sampling_params)
             result = outputs[0].outputs[0].text.strip()
             logger.debug(f"[vLLM] Generated post successfully (length={len(result)})")
@@ -306,9 +311,7 @@ class VLLMService:
             logger.error(f"[vLLM] cluster_id={cluster_id}, day={day}, slot={slot}")
             raise RuntimeError(f"vLLM post generation failed: {e}") from e
 
-    def generate_post_batch(
-        self, requests: List[Dict[str, Any]]
-    ) -> List[str]:
+    def generate_post_batch(self, requests: List[Dict[str, Any]]) -> List[str]:
         """
         Generate multiple posts in a single batch for improved performance.
 
@@ -353,7 +356,9 @@ class VLLMService:
                     else:
                         topic_instruction = ""
 
-                    user_msg = user_template.format(day=day, slot=slot, topic_instruction=topic_instruction)
+                    user_msg = user_template.format(
+                        day=day, slot=slot, topic_instruction=topic_instruction
+                    )
 
                     # Create formatted prompt
                     prompt = self._format_prompt(system_msg, user_msg)
@@ -404,14 +409,14 @@ class VLLMService:
             raise
         except Exception as e:
             logger.error(f"[vLLM] Failed to decide reaction: {e}")
-            logger.error(f"[vLLM] cluster_id={cluster_id}, post_content_len={len(post_content) if post_content else 0}")
+            logger.error(
+                f"[vLLM] cluster_id={cluster_id}, post_content_len={len(post_content) if post_content else 0}"
+            )
             # Return default fallback to maintain YClient pattern
             logger.warning(f"[vLLM] Returning fallback reaction: IGNORE")
             return "IGNORE"
 
-    def decide_reaction_batch(
-        self, requests: List[Dict[str, Any]]
-    ) -> List[str]:
+    def decide_reaction_batch(self, requests: List[Dict[str, Any]]) -> List[str]:
         """
         Decide reactions for multiple posts in a single batch for improved performance.
 
@@ -443,7 +448,9 @@ class VLLMService:
                     prompt = self._format_prompt(system_msg, user_msg)
                     prompts.append(prompt)
                 except Exception as e:
-                    logger.error(f"[vLLM] Failed to build prompt for batch reaction request {idx}: {e}")
+                    logger.error(
+                        f"[vLLM] Failed to build prompt for batch reaction request {idx}: {e}"
+                    )
                     logger.error(f"[vLLM] Request: {req}")
                     raise
 
@@ -459,19 +466,19 @@ class VLLMService:
                     results.append("COMMENT")
                 else:
                     results.append("IGNORE")
-            logger.debug(f"[vLLM] Batch reaction decision completed successfully ({len(results)} results)")
+            logger.debug(
+                f"[vLLM] Batch reaction decision completed successfully ({len(results)} results)"
+            )
             return results
         except Exception as e:
             logger.error(f"[vLLM] Batch reaction decision failed: {e}")
             logger.error(f"[vLLM] Number of requests: {len(requests)}")
             raise RuntimeError(f"vLLM batch reaction decision failed: {e}") from e
 
-    def generate_read_reaction_batch(
-        self, requests: List[Dict[str, Any]]
-    ) -> List[str]:
+    def generate_read_reaction_batch(self, requests: List[Dict[str, Any]]) -> List[str]:
         """
         Decide read reactions for multiple posts in a single batch with agent attributes support.
-        
+
         Similar to decide_reaction_batch but supports agent_attrs including opinions.
 
         Args:
@@ -484,17 +491,19 @@ class VLLMService:
             List of reaction strings (LIKE, COMMENT, IGNORE, etc.) in the same order as requests
         """
         try:
-            logger.debug(f"[vLLM] Starting batch read reaction decision for {len(requests)} requests")
+            logger.debug(
+                f"[vLLM] Starting batch read reaction decision for {len(requests)} requests"
+            )
             prompts = []
             for idx, req in enumerate(requests):
                 try:
                     cluster_id = req["cluster_id"]
                     post_content = req["post_content"]
                     agent_attrs = req.get("agent_attrs")
-                    
+
                     # Build persona using attributes or fallback
                     persona = self._build_persona(cluster_id, agent_attrs)
-                    
+
                     # Build opinion instruction if available
                     opinion_instruction = ""
                     if agent_attrs and "post_topics" in agent_attrs and agent_attrs["post_topics"]:
@@ -509,9 +518,7 @@ class VLLMService:
 
                             if opinion_parts:
                                 opinion_str = ", ".join(opinion_parts)
-                                opinion_instruction = (
-                                    f" Your opinions on the discussed topics: {opinion_str}. React accordingly."
-                                )
+                                opinion_instruction = f" Your opinions on the discussed topics: {opinion_str}. React accordingly."
 
                     # Get prompt templates (use decide_reaction templates as base)
                     system_template = self.prompts_config["decide_reaction"]["system_template"]
@@ -525,12 +532,16 @@ class VLLMService:
                     prompt = self._format_prompt(system_msg, user_msg)
                     prompts.append(prompt)
                 except Exception as e:
-                    logger.error(f"[vLLM] Failed to build prompt for batch read reaction request {idx}: {e}")
+                    logger.error(
+                        f"[vLLM] Failed to build prompt for batch read reaction request {idx}: {e}"
+                    )
                     logger.error(f"[vLLM] Request: {req}")
                     raise
 
             # Batch generate using vLLM
-            logger.debug(f"[vLLM] Executing batch inference for {len(prompts)} read reaction prompts")
+            logger.debug(
+                f"[vLLM] Executing batch inference for {len(prompts)} read reaction prompts"
+            )
             outputs = self.llm.generate(prompts, self.sampling_params)
             results = []
             for output in outputs:
@@ -552,7 +563,9 @@ class VLLMService:
                     results.append("SHARE")
                 else:
                     results.append("IGNORE")
-            logger.debug(f"[vLLM] Batch read reaction decision completed successfully ({len(results)} results)")
+            logger.debug(
+                f"[vLLM] Batch read reaction decision completed successfully ({len(results)} results)"
+            )
             return results
         except Exception as e:
             logger.error(f"[vLLM] Batch read reaction decision failed: {e}")
@@ -637,7 +650,9 @@ class VLLMService:
 
         try:
             # Generate using vLLM
-            logger.debug(f"[vLLM] Generating comment for cluster_id={cluster_id}, author={author_name}")
+            logger.debug(
+                f"[vLLM] Generating comment for cluster_id={cluster_id}, author={author_name}"
+            )
             outputs = self.llm.generate([prompt], self.sampling_params)
             comment = outputs[0].outputs[0].text.strip()
 
@@ -650,13 +665,13 @@ class VLLMService:
         except Exception as e:
             # Fallback if LLM fails
             logger.error(f"[vLLM] Failed to generate comment: {e}")
-            logger.error(f"[vLLM] cluster_id={cluster_id}, author={author_name}, post_content_len={len(post_content) if post_content else 0}")
+            logger.error(
+                f"[vLLM] cluster_id={cluster_id}, author={author_name}, post_content_len={len(post_content) if post_content else 0}"
+            )
             logger.warning("[vLLM] Returning fallback comment")
             return "Interesting perspective!"
 
-    def generate_comment_batch(
-        self, requests: List[Dict[str, Any]]
-    ) -> List[str]:
+    def generate_comment_batch(self, requests: List[Dict[str, Any]]) -> List[str]:
         """
         Generate multiple comments in a single batch for improved performance.
 
@@ -736,7 +751,9 @@ class VLLMService:
                     prompt = self._format_prompt(system_msg, user_msg)
                     prompts.append(prompt)
                 except Exception as e:
-                    logger.error(f"[vLLM] Failed to build prompt for batch comment request {idx}: {e}")
+                    logger.error(
+                        f"[vLLM] Failed to build prompt for batch comment request {idx}: {e}"
+                    )
                     logger.error(f"[vLLM] Request: {req}")
                     raise
 
@@ -750,7 +767,9 @@ class VLLMService:
                 if len(comment) > 280:
                     comment = comment[:277] + "..."
                 results.append(comment)
-            logger.debug(f"[vLLM] Batch comment generation completed successfully ({len(results)} results)")
+            logger.debug(
+                f"[vLLM] Batch comment generation completed successfully ({len(results)} results)"
+            )
             return results
         except Exception as e:
             logger.error(f"[vLLM] Batch comment generation failed: {e}")
@@ -788,7 +807,9 @@ class VLLMService:
             if len(commentary) > 280:
                 commentary = commentary[:277] + "..."
 
-            logger.debug(f"[vLLM] Generated news commentary successfully (length={len(commentary)})")
+            logger.debug(
+                f"[vLLM] Generated news commentary successfully (length={len(commentary)})"
+            )
             return commentary
         except KeyError as e:
             logger.error(f"[vLLM] Missing configuration key in generate_news_commentary: {e}")
@@ -1041,9 +1062,7 @@ class VLLMService:
         except Exception:
             return []
 
-    def extract_topics_from_article_batch(
-        self, articles: List[Dict[str, str]]
-    ) -> List[list]:
+    def extract_topics_from_article_batch(self, articles: List[Dict[str, str]]) -> List[list]:
         """
         Extract topics from multiple articles in a single batch for improved performance.
 
@@ -1058,9 +1077,7 @@ class VLLMService:
                 f"[vLLM] Starting batch article topic extraction for {len(articles)} articles"
             )
 
-            system_template = self.prompts_config["extract_article_topics"][
-                "system_template"
-            ]
+            system_template = self.prompts_config["extract_article_topics"]["system_template"]
             user_template = self.prompts_config["extract_article_topics"]["user_template"]
 
             # Build prompts for all articles
@@ -1151,7 +1168,7 @@ class VLLMService:
         """
         try:
             logger.debug(f"[vLLM] Starting batch emotion extraction for {len(texts)} texts")
-            
+
             system_template = self.prompts_config.get("extract_emotions", {}).get(
                 "system_template",
                 "You are an emotion classification assistant. Identify which emotions from the GoEmotions taxonomy the given text elicits.",
@@ -1171,9 +1188,11 @@ class VLLMService:
                 prompts.append(prompt)
 
             # Batch generate using vLLM
-            logger.debug(f"[vLLM] Executing batch inference for {len(prompts)} emotion extraction prompts")
+            logger.debug(
+                f"[vLLM] Executing batch inference for {len(prompts)} emotion extraction prompts"
+            )
             outputs = self.llm.generate(prompts, self.sampling_params)
-            
+
             # Parse results
             results = []
             valid_emotions = emotion_list.split(", ")
@@ -1182,8 +1201,10 @@ class VLLMService:
                 emotions = [e.strip().lower() for e in response.split(",") if e.strip()]
                 emotions = [e for e in emotions if e in valid_emotions]
                 results.append(emotions)
-            
-            logger.debug(f"[vLLM] Batch emotion extraction completed successfully ({len(results)} results)")
+
+            logger.debug(
+                f"[vLLM] Batch emotion extraction completed successfully ({len(results)} results)"
+            )
             return results
         except Exception as e:
             logger.error(f"[vLLM] Batch emotion extraction failed: {e}")
@@ -1195,7 +1216,7 @@ class VLLMService:
         """
         Generate a description of an image using the vision LLM.
 
-        This method uses the llm_v (vision) model loaded in vLLM to analyze and 
+        This method uses the llm_v (vision) model loaded in vLLM to analyze and
         describe an image from a given URL.
 
         Args:
@@ -1235,13 +1256,15 @@ class VLLMService:
             prompt = f"{system_msg}\n\n{user_msg}"
 
             logger.info(f"[vLLM] Calling vLLM vision model to describe image: {image_url[:80]}...")
-            
+
             # Generate description using vision model
             outputs = self.llm_v.generate([prompt], self.sampling_params_v)
-            
+
             if outputs and len(outputs) > 0:
                 description = outputs[0].outputs[0].text.strip()
-                logger.info(f"[vLLM] vLLM vision model returned description ({len(description)} chars)")
+                logger.info(
+                    f"[vLLM] vLLM vision model returned description ({len(description)} chars)"
+                )
                 return description
             else:
                 logger.warning("[vLLM] vLLM vision model returned empty description")
@@ -1402,9 +1425,7 @@ class VLLMService:
             logger.error(f"Failed to evaluate opinion: {e}")
             return "NEUTRAL"
 
-    def evaluate_opinion_batch(
-        self, requests: List[Dict[str, Any]]
-    ) -> List[str]:
+    def evaluate_opinion_batch(self, requests: List[Dict[str, Any]]) -> List[str]:
         """
         Evaluate multiple opinion changes in a single batch for improved performance.
 
@@ -1420,9 +1441,7 @@ class VLLMService:
             List of evaluation results ("AGREE"|"DISAGREE"|"NEUTRAL") in same order as inputs
         """
         try:
-            logger.debug(
-                f"[vLLM] Starting batch opinion evaluation for {len(requests)} requests"
-            )
+            logger.debug(f"[vLLM] Starting batch opinion evaluation for {len(requests)} requests")
 
             system_template = self.prompts_config.get("evaluate_opinion", {}).get(
                 "system_template",
@@ -1453,9 +1472,7 @@ class VLLMService:
                 prompts.append(prompt)
 
             # Batch generate using vLLM
-            logger.debug(
-                f"[vLLM] Executing batch inference for {len(prompts)} opinion evaluations"
-            )
+            logger.debug(f"[vLLM] Executing batch inference for {len(prompts)} opinion evaluations")
             outputs = self.llm.generate(prompts, self.sampling_params)
 
             # Parse results
@@ -1481,9 +1498,7 @@ class VLLMService:
             # Return NEUTRAL for all evaluations on error
             return ["NEUTRAL" for _ in requests]
 
-    def generate_search_action_batch(
-        self, requests: List[Dict[str, Any]]
-    ) -> List[str]:
+    def generate_search_action_batch(self, requests: List[Dict[str, Any]]) -> List[str]:
         """
         Generate batch search action decisions for multiple agents in a single call.
 

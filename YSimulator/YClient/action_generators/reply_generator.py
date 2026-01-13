@@ -156,7 +156,7 @@ class ReplyGenerator(BaseActionGenerator):
                     "agent_attrs": agent_attrs,
                     "author_name": author_username,
                     "thread_context": thread_context,
-                    "mention_id": mention_id  # Keep mention_id for marking as replied
+                    "mention_id": mention_id,  # Keep mention_id for marking as replied
                 }
                 result.pending_llm_calls.append(
                     (agent.id, agent.cluster, post_id, future, metadata)

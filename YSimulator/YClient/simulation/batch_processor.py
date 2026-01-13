@@ -99,18 +99,18 @@ class BatchProcessor:
     def _get_llm_actor(self, agent_id: Optional[str] = None):
         """
         Get LLM actor handle, following YClient patterns.
-        
+
         Handles both single actor and load balancer cases safely.
         Follows the pattern from llm_manager._get_llm_actor_for_manager.
-        
+
         Args:
             agent_id: Optional agent ID for load balancing
-            
+
         Returns:
             LLM actor handle
         """
         # Check class name to avoid issues with Mock objects (YClient pattern)
-        if self.llm.__class__.__name__ in ('LLMLoadBalancer', 'LLMActorPool'):
+        if self.llm.__class__.__name__ in ("LLMLoadBalancer", "LLMActorPool"):
             if agent_id is None:
                 # Fallback to first actor if no agent_id provided
                 return self.llm.get_all_actors()[0]
@@ -121,30 +121,33 @@ class BatchProcessor:
     def _is_vllm_backend(self) -> bool:
         """
         Check if the LLM backend is vLLM by checking for generate_post_batch method.
-        
+
         Follows YClient pattern of checking class capabilities safely.
-        
+
         Returns:
             bool: True if using vLLM backend, False otherwise (Ollama)
         """
         try:
             # Get an LLM actor to check its capabilities (using YClient pattern)
             test_actor = self._get_llm_actor()
-            
+
             # Check if the actor has generate_post_batch method
             # Use hasattr on the actor class to avoid remote calls
-            return hasattr(test_actor, 'generate_post_batch')
+            return hasattr(test_actor, "generate_post_batch")
         except Exception as e:
             self.logger.debug(f"Could not determine LLM backend type: {e}, defaulting to Ollama")
             return False
 
     def gather_pending_llm_posts(
-        self, pending_llm_posts: List[Tuple], actions: List[ActionDTO], 
-        day: Optional[int] = None, slot: Optional[int] = None
+        self,
+        pending_llm_posts: List[Tuple],
+        actions: List[ActionDTO],
+        day: Optional[int] = None,
+        slot: Optional[int] = None,
     ) -> None:
         """
         Gather and resolve all pending LLM post generation calls.
-        
+
         When vLLM backend is detected, uses batch inference for improved performance.
         Otherwise, falls back to standard scatter/gather pattern (Ollama).
 
@@ -161,12 +164,14 @@ class BatchProcessor:
 
         # Check if using vLLM backend for batch inference
         use_vllm_batching = self._is_vllm_backend()
-        
+
         if use_vllm_batching:
             self.logger.info(f"Using vLLM batch inference for {len(pending_llm_posts)} posts")
             self._gather_posts_with_vllm_batch(pending_llm_posts, actions, day, slot)
         else:
-            self.logger.debug(f"Using standard scatter/gather for {len(pending_llm_posts)} posts (Ollama)")
+            self.logger.debug(
+                f"Using standard scatter/gather for {len(pending_llm_posts)} posts (Ollama)"
+            )
             self._gather_posts_standard(pending_llm_posts, actions)
 
     def _gather_posts_standard(
@@ -174,7 +179,7 @@ class BatchProcessor:
     ) -> None:
         """
         Standard scatter/gather pattern for Ollama backend (default).
-        
+
         Args:
             pending_llm_posts: List of pending post tuples (supports both old and new formats)
             actions: List to append resolved post actions to
@@ -182,16 +187,16 @@ class BatchProcessor:
         # Phase 3: Use batch_handler with retry logic for robustness
         # Filter out None futures (used for vLLM batching placeholders)
         futures = [p[2] for p in pending_llm_posts if p[2] is not None]
-        
+
         if not futures:
             # All futures are None - shouldn't happen in standard path
             self.logger.warning("No valid futures in standard gather, skipping")
             return
-        
+
         results = self.retry_handler.retry_with_backoff(
             self.batch_handler.gather_futures, futures, error_message="Gathering LLM post futures"
         )  # Blocks once for ALL posts with automatic retries
-        
+
         # Create mapping from non-None futures back to pending items
         future_to_index = {}
         result_index = 0
@@ -271,16 +276,19 @@ class BatchProcessor:
             actions.append(action)
 
     def _gather_posts_with_vllm_batch(
-        self, pending_llm_posts: List[Tuple], actions: List[ActionDTO],
-        day: Optional[int] = None, slot: Optional[int] = None
+        self,
+        pending_llm_posts: List[Tuple],
+        actions: List[ActionDTO],
+        day: Optional[int] = None,
+        slot: Optional[int] = None,
     ) -> None:
         """
         vLLM batch inference pattern for improved performance.
-        
+
         Collects all post generation requests and processes them in a single batch
         call to vLLM's generate_post_batch method, which is significantly faster
         than individual calls.
-        
+
         Args:
             pending_llm_posts: List of pending post tuples
             actions: List to append resolved post actions to
@@ -290,7 +298,7 @@ class BatchProcessor:
         # Separate posts into batchable (with agent_attrs) and non-batchable
         batchable_posts = []
         non_batchable_posts = []
-        
+
         for pending_item in pending_llm_posts:
             # New format: (agent_id, cluster_id, future, topic, day, slot, agent_attrs)
             # Old format: (agent_id, cluster_id, future, topic) or image posts with 6 elements
@@ -300,23 +308,23 @@ class BatchProcessor:
             else:
                 # Missing agent_attrs or other info, fall back to standard gather for these
                 non_batchable_posts.append(pending_item)
-        
+
         # Process batchable posts with vLLM batch inference
         if batchable_posts:
             self.logger.info(f"Processing {len(batchable_posts)} posts with vLLM batch inference")
             self._process_vllm_batch(batchable_posts, actions)
-        
+
         # Process non-batchable posts with standard gather
         if non_batchable_posts:
-            self.logger.info(f"Processing {len(non_batchable_posts)} posts with standard gather (missing metadata)")
+            self.logger.info(
+                f"Processing {len(non_batchable_posts)} posts with standard gather (missing metadata)"
+            )
             self._gather_posts_standard(non_batchable_posts, actions)
-    
-    def _process_vllm_batch(
-        self, batchable_posts: List[Tuple], actions: List[ActionDTO]
-    ) -> None:
+
+    def _process_vllm_batch(self, batchable_posts: List[Tuple], actions: List[ActionDTO]) -> None:
         """
         Process posts using vLLM's generate_post_batch method.
-        
+
         Args:
             batchable_posts: List of tuples with format (agent_id, cluster_id, future, topic, day, slot, agent_attrs)
             actions: List to append resolved post actions to
@@ -325,55 +333,57 @@ class BatchProcessor:
         batch_requests = []
         for item in batchable_posts:
             agent_id, cluster_id, future, topic, item_day, item_slot, agent_attrs = item
-            batch_requests.append({
-                "cluster_id": cluster_id,
-                "day": item_day,
-                "slot": item_slot,
-                "agent_attrs": agent_attrs
-            })
-        
+            batch_requests.append(
+                {
+                    "cluster_id": cluster_id,
+                    "day": item_day,
+                    "slot": item_slot,
+                    "agent_attrs": agent_attrs,
+                }
+            )
+
         # Get LLM actor for batch call (using YClient pattern)
         llm_actor = self._get_llm_actor()
-        
+
         # Call generate_post_batch with retry logic
         self.logger.info(f"Calling generate_post_batch for {len(batch_requests)} requests")
         try:
             batch_future = llm_actor.generate_post_batch.remote(batch_requests)
             results = self.retry_handler.retry_with_backoff(
-                lambda f: ray.get(f),
-                batch_future,
-                error_message="vLLM batch post generation"
+                lambda f: ray.get(f), batch_future, error_message="vLLM batch post generation"
             )
         except Exception as e:
             self.logger.error(f"vLLM batch generation failed: {e}, falling back to standard gather")
             self._gather_posts_standard(batchable_posts, actions)
             return
-        
+
         # Process results
         # Collect texts for batch emotion extraction
         texts_for_emotions = []
         action_start_idx = len(actions)
-        
+
         for i, res_txt in enumerate(results):
             pending_item = batchable_posts[i]
             agent_id = pending_item[0]
             cluster_id = pending_item[1]
             topic = pending_item[3]  # topic_or_article_id
-            
+
             # Validate response
             res_txt = self.response_parser.parse_text_response(res_txt, default="")
             if not res_txt:
-                self.logger.warning(f"Empty vLLM batch post response for agent {agent_id}, skipping")
+                self.logger.warning(
+                    f"Empty vLLM batch post response for agent {agent_id}, skipping"
+                )
                 continue
-            
+
             # Track LLM usage
             if self.cost_tracker:
                 output_tokens = len(res_txt) // CHARS_PER_TOKEN
                 self.cost_tracker.record_call("generate_post", PROMPT_TOKENS_POST, output_tokens)
-            
+
             # Create action (same logic as standard gather)
             action = ActionDTO(agent_id, cluster_id, "POST", content=res_txt)
-            
+
             # Handle topic/article assignment
             if topic:
                 try:
@@ -391,7 +401,7 @@ class BatchProcessor:
                 self.logger.info(
                     f"vLLM batch post for agent {agent_id}: NO article_id/topic, content_len={len(res_txt)}"
                 )
-            
+
             # Annotate the post text (without emotions for now if vLLM)
             annotations = annotate_text(
                 res_txt,
@@ -401,20 +411,20 @@ class BatchProcessor:
                 enable_emotions=False,  # Disable for now, will batch extract later
                 llm_handle=self.llm,
             )
-            
+
             # Collect text for batch emotion extraction if needed
             if self.enable_emotions:
                 texts_for_emotions.append(res_txt)
             else:
                 annotations["emotions"] = None
-            
+
             action.annotations = annotations
             self.logger.info(
                 f"vLLM batch post annotated for agent {agent_id}: has_sentiment={bool(annotations.get('sentiment'))}, has_toxicity={bool(annotations.get('toxicity'))}"
             )
-            
+
             actions.append(action)
-        
+
         # Batch extract emotions if any texts collected
         if texts_for_emotions:
             self._batch_extract_and_update_emotions(texts_for_emotions, action_start_idx, actions)
@@ -451,7 +461,7 @@ class BatchProcessor:
 
         # Check if using vLLM backend for batch inference
         use_vllm_batching = self._is_vllm_backend()
-        
+
         if use_vllm_batching:
             self.logger.info(f"Using vLLM batch inference for reactions/comments")
             return self._gather_reactions_with_vllm_batch(
@@ -471,12 +481,12 @@ class BatchProcessor:
     ) -> List[Tuple]:
         """
         Standard scatter/gather pattern for Ollama backend (default).
-        
+
         Args:
             pending_llm_reactions: List of pending reaction tuples
             actions: List to append resolved reaction/comment/share actions to
             calculate_opinion_updates_fn: Function to calculate opinion updates
-            
+
         Returns:
             List of secondary follow candidates
         """
@@ -490,18 +500,18 @@ class BatchProcessor:
         # Phase 3: Use batch_handler with retry logic for robustness
         # Filter out None futures (used for vLLM batching placeholders)
         futures = [r[3] for r in pending_llm_reactions if r[3] is not None]
-        
+
         if not futures:
             # All futures are None - shouldn't happen in standard path
             self.logger.warning("No valid futures in standard reaction gather, skipping")
             return secondary_follow_candidates
-        
+
         results = self.retry_handler.retry_with_backoff(
             self.batch_handler.gather_futures,
             futures,
             error_message="Gathering LLM reaction futures",
         )  # Blocks once for ALL reactions/comments with automatic retries
-        
+
         # Create mapping from non-None futures back to pending items
         future_to_index = {}
         result_index = 0
@@ -677,27 +687,27 @@ class BatchProcessor:
     ) -> List[Tuple]:
         """
         vLLM batch inference pattern for reactions/comments.
-        
+
         Separates reactions into batchable (with metadata) and non-batchable,
         then processes them accordingly.
-        
+
         Args:
             pending_llm_reactions: List of pending reaction tuples
             actions: List to append resolved actions to
             calculate_opinion_updates_fn: Function to calculate opinion updates
-            
+
         Returns:
             List of secondary follow candidates
         """
         secondary_follow_candidates = []
-        
+
         # Separate into batchable and non-batchable
         batchable_comments = []
         batchable_shares = []
         batchable_reads = []
         batchable_searches = []
         non_batchable = []
-        
+
         for reaction_tuple in pending_llm_reactions:
             # New format with metadata: (agent_id, cluster_id, target_post_id, future, metadata_dict)
             if len(reaction_tuple) >= 5 and isinstance(reaction_tuple[4], dict):
@@ -716,15 +726,17 @@ class BatchProcessor:
             else:
                 # Old format - use standard gather
                 non_batchable.append(reaction_tuple)
-        
+
         # Process batchable comments with vLLM batch inference
         if batchable_comments:
-            self.logger.info(f"Processing {len(batchable_comments)} comments with vLLM batch inference")
+            self.logger.info(
+                f"Processing {len(batchable_comments)} comments with vLLM batch inference"
+            )
             candidates = self._process_vllm_comment_batch(
                 batchable_comments, actions, calculate_opinion_updates_fn
             )
             secondary_follow_candidates.extend(candidates)
-        
+
         # Process batchable shares with vLLM batch inference
         if batchable_shares:
             self.logger.info(f"Processing {len(batchable_shares)} shares with vLLM batch inference")
@@ -732,33 +744,39 @@ class BatchProcessor:
                 batchable_shares, actions, calculate_opinion_updates_fn
             )
             secondary_follow_candidates.extend(candidates)
-        
+
         # Process batchable reads (reaction decisions) with vLLM batch inference
         if batchable_reads:
-            self.logger.info(f"Processing {len(batchable_reads)} read reactions with vLLM batch inference")
+            self.logger.info(
+                f"Processing {len(batchable_reads)} read reactions with vLLM batch inference"
+            )
             candidates = self._process_vllm_read_batch(
                 batchable_reads, actions, calculate_opinion_updates_fn
             )
             secondary_follow_candidates.extend(candidates)
-        
+
         # Process batchable searches (search action decisions) with vLLM batch inference
         if batchable_searches:
-            self.logger.info(f"Processing {len(batchable_searches)} search actions with vLLM batch inference")
+            self.logger.info(
+                f"Processing {len(batchable_searches)} search actions with vLLM batch inference"
+            )
             candidates = self._process_vllm_search_batch(
                 batchable_searches, actions, calculate_opinion_updates_fn
             )
             secondary_follow_candidates.extend(candidates)
-        
+
         # Process non-batchable with standard gather
         if non_batchable:
-            self.logger.info(f"Processing {len(non_batchable)} reactions with standard gather (no metadata)")
+            self.logger.info(
+                f"Processing {len(non_batchable)} reactions with standard gather (no metadata)"
+            )
             candidates = self._gather_reactions_standard(
                 non_batchable, actions, calculate_opinion_updates_fn
             )
             secondary_follow_candidates.extend(candidates)
-        
+
         return secondary_follow_candidates
-    
+
     def _process_vllm_comment_batch(
         self,
         batchable_comments: List[Tuple],
@@ -767,64 +785,70 @@ class BatchProcessor:
     ) -> List[Tuple]:
         """
         Process comments using vLLM's generate_comment_batch method.
-        
+
         Args:
             batchable_comments: List of tuples with format (agent_id, cluster_id, target_post_id, future, metadata_dict)
             actions: List to append resolved actions to
             calculate_opinion_updates_fn: Function to calculate opinion updates
-            
+
         Returns:
             List of secondary follow candidates
         """
         secondary_follow_candidates = []
-        
+
         # Build batch requests from metadata
         batch_requests = []
         for item in batchable_comments:
             agent_id, cluster_id, target_post, future, metadata = item
-            batch_requests.append({
-                "cluster_id": cluster_id,
-                "post_content": metadata.get("post_content", ""),
-                "agent_attrs": metadata.get("agent_attrs"),
-                "author_name": metadata.get("author_name", "Someone"),
-                "thread_context": metadata.get("thread_context")
-            })
-        
+            batch_requests.append(
+                {
+                    "cluster_id": cluster_id,
+                    "post_content": metadata.get("post_content", ""),
+                    "agent_attrs": metadata.get("agent_attrs"),
+                    "author_name": metadata.get("author_name", "Someone"),
+                    "thread_context": metadata.get("thread_context"),
+                }
+            )
+
         # Get LLM actor for batch call (using YClient pattern)
         llm_actor = self._get_llm_actor()
-        
+
         # Call generate_comment_batch with retry logic
         self.logger.info(f"Calling generate_comment_batch for {len(batch_requests)} requests")
         try:
             batch_future = llm_actor.generate_comment_batch.remote(batch_requests)
             results = self.retry_handler.retry_with_backoff(
-                lambda f: ray.get(f),
-                batch_future,
-                error_message="vLLM batch comment generation"
+                lambda f: ray.get(f), batch_future, error_message="vLLM batch comment generation"
             )
         except Exception as e:
-            self.logger.error(f"vLLM batch comment generation failed: {e}, falling back to standard gather")
-            return self._gather_reactions_standard(batchable_comments, actions, calculate_opinion_updates_fn)
-        
+            self.logger.error(
+                f"vLLM batch comment generation failed: {e}, falling back to standard gather"
+            )
+            return self._gather_reactions_standard(
+                batchable_comments, actions, calculate_opinion_updates_fn
+            )
+
         # Process results
         # Collect texts for batch emotion extraction
         texts_for_emotions = []
         action_start_idx = len(actions)  # Track where new actions start
-        
+
         # Collect opinion evaluation requests for batch processing
         opinion_requests = []
-        
+
         for i, comment_text in enumerate(results):
             item = batchable_comments[i]
             agent_id = item[0]
             cluster_id = item[1]
             target_post = item[2]
-            
+
             # Track LLM usage
             if self.cost_tracker:
                 output_tokens = len(comment_text) // CHARS_PER_TOKEN
-                self.cost_tracker.record_call("generate_comment", PROMPT_TOKENS_COMMENT, output_tokens)
-            
+                self.cost_tracker.record_call(
+                    "generate_comment", PROMPT_TOKENS_COMMENT, output_tokens
+                )
+
             # Annotate the comment text (without emotions for now if vLLM)
             annotations = annotate_text(
                 comment_text,
@@ -834,34 +858,40 @@ class BatchProcessor:
                 enable_emotions=False,  # Disable for now, will batch extract later
                 llm_handle=self.llm,
             )
-            
+
             # Collect text for batch emotion extraction if needed
             if self.enable_emotions:
                 texts_for_emotions.append(comment_text)
             else:
                 annotations["emotions"] = None
-            
+
             # Defer opinion updates for batch processing (store post data for later)
             post_data = ray.get(self.server.get_post.remote(target_post, client_id=self.client_id))
             updated_opinions = None
             if post_data:
                 # Check if we should defer opinion evaluation for batching
                 # Store parameters for batch evaluation instead of calling now
-                opinion_requests.append({
-                    "agent_id": agent_id,
-                    "target_post": target_post,
-                    "post_data": post_data,
-                    "action_index": len(actions),  # Track which action this belongs to
-                })
-            
+                opinion_requests.append(
+                    {
+                        "agent_id": agent_id,
+                        "target_post": target_post,
+                        "post_data": post_data,
+                        "action_index": len(actions),  # Track which action this belongs to
+                    }
+                )
+
             # Check if this was a reply to a mention (has mention_id in metadata)
             metadata = item[4]
             mention_id = metadata.get("mention_id")
             if mention_id:
-                self.logger.info(f"[REPLY] Marking mention {mention_id} as replied for agent {agent_id}")
+                self.logger.info(
+                    f"[REPLY] Marking mention {mention_id} as replied for agent {agent_id}"
+                )
                 ray.get(self.server.mark_mention_replied.remote(mention_id))
-                self.logger.info(f"[REPLY] Successfully marked mention {mention_id} as replied (vLLM batch)")
-            
+                self.logger.info(
+                    f"[REPLY] Successfully marked mention {mention_id} as replied (vLLM batch)"
+                )
+
             # Create action (opinions will be added later via batch processing)
             action = ActionDTO(
                 agent_id,
@@ -873,21 +903,29 @@ class BatchProcessor:
                 updated_opinions=None,  # Will be updated by batch processing
             )
             actions.append(action)
-            
+
             # Track for secondary follow
             if post_data:
                 secondary_follow_candidates.append(
-                    (agent_id, cluster_id, post_data.get("user_id"), post_data.get("tweet", ""), True)
+                    (
+                        agent_id,
+                        cluster_id,
+                        post_data.get("user_id"),
+                        post_data.get("tweet", ""),
+                        True,
+                    )
                 )
-        
+
         # Batch extract emotions if any texts collected
         if texts_for_emotions:
             self._batch_extract_and_update_emotions(texts_for_emotions, action_start_idx, actions)
-        
+
         # Batch evaluate opinions if any requests collected
         if opinion_requests:
-            self._batch_evaluate_and_update_opinions(opinion_requests, actions, calculate_opinion_updates_fn)
-        
+            self._batch_evaluate_and_update_opinions(
+                opinion_requests, actions, calculate_opinion_updates_fn
+            )
+
         return secondary_follow_candidates
 
     def _process_vllm_share_batch(
@@ -898,31 +936,33 @@ class BatchProcessor:
     ) -> List[Tuple]:
         """
         Process shares using vLLM's generate_share_commentary batch method.
-        
+
         Args:
             batchable_shares: List of tuples with format (agent_id, cluster_id, target_post_id, future, metadata_dict)
             actions: List to append resolved actions to
             calculate_opinion_updates_fn: Function to calculate opinion updates
-            
+
         Returns:
             List of secondary follow candidates
         """
         secondary_follow_candidates = []
-        
+
         # Build batch requests from metadata (shares use similar format to comments)
         batch_requests = []
         for item in batchable_shares:
             agent_id, cluster_id, target_post, future, metadata = item
-            batch_requests.append({
-                "cluster_id": cluster_id,
-                "post_content": metadata.get("post_content", ""),
-                "agent_attrs": metadata.get("agent_attrs"),
-                "author_name": metadata.get("author_name", "Someone"),
-            })
-        
+            batch_requests.append(
+                {
+                    "cluster_id": cluster_id,
+                    "post_content": metadata.get("post_content", ""),
+                    "agent_attrs": metadata.get("agent_attrs"),
+                    "author_name": metadata.get("author_name", "Someone"),
+                }
+            )
+
         # Get LLM actor for batch call (using YClient pattern)
         llm_actor = self._get_llm_actor()
-        
+
         # For shares, we can use generate_comment_batch since the format is similar
         # Or call a dedicated generate_share_commentary_batch if it exists
         # For now, let's use comment batch as they have similar structure
@@ -932,31 +972,37 @@ class BatchProcessor:
             results = self.retry_handler.retry_with_backoff(
                 lambda f: ray.get(f),
                 batch_future,
-                error_message="vLLM batch share commentary generation"
+                error_message="vLLM batch share commentary generation",
             )
         except Exception as e:
-            self.logger.error(f"vLLM batch share generation failed: {e}, falling back to standard gather")
-            return self._gather_reactions_standard(batchable_shares, actions, calculate_opinion_updates_fn)
-        
+            self.logger.error(
+                f"vLLM batch share generation failed: {e}, falling back to standard gather"
+            )
+            return self._gather_reactions_standard(
+                batchable_shares, actions, calculate_opinion_updates_fn
+            )
+
         # Process results
         # Collect texts for batch emotion extraction
         texts_for_emotions = []
         action_start_idx = len(actions)
-        
+
         # Collect opinion evaluation requests for batch processing
         opinion_requests = []
-        
+
         for i, share_text in enumerate(results):
             item = batchable_shares[i]
             agent_id = item[0]
             cluster_id = item[1]
             target_post = item[2]
-            
+
             # Track LLM usage
             if self.cost_tracker:
                 output_tokens = len(share_text) // CHARS_PER_TOKEN
-                self.cost_tracker.record_call("generate_share_commentary", PROMPT_TOKENS_COMMENT, output_tokens)
-            
+                self.cost_tracker.record_call(
+                    "generate_share_commentary", PROMPT_TOKENS_COMMENT, output_tokens
+                )
+
             # Annotate the share commentary text (without emotions for now if vLLM)
             annotations = annotate_text(
                 share_text,
@@ -966,29 +1012,31 @@ class BatchProcessor:
                 enable_emotions=False,  # Disable for now, will batch extract later
                 llm_handle=self.llm,
             )
-            
+
             # Collect text for batch emotion extraction if needed
             if self.enable_emotions:
                 texts_for_emotions.append(share_text)
             else:
                 annotations["emotions"] = None
-            
+
             self.logger.info(
                 f"vLLM batch share annotated for agent {agent_id}: has_sentiment={bool(annotations.get('sentiment'))}, has_toxicity={bool(annotations.get('toxicity'))}"
             )
-            
+
             # Defer opinion updates for batch processing
             post_data = ray.get(self.server.get_post.remote(target_post, client_id=self.client_id))
             updated_opinions = None
             if post_data:
                 # Store parameters for batch evaluation
-                opinion_requests.append({
-                    "agent_id": agent_id,
-                    "target_post": target_post,
-                    "post_data": post_data,
-                    "action_index": len(actions),
-                })
-            
+                opinion_requests.append(
+                    {
+                        "agent_id": agent_id,
+                        "target_post": target_post,
+                        "post_data": post_data,
+                        "action_index": len(actions),
+                    }
+                )
+
             # Create SHARE action (opinions will be added later via batch processing)
             action = ActionDTO(
                 agent_id,
@@ -1000,21 +1048,29 @@ class BatchProcessor:
                 updated_opinions=None,  # Will be updated by batch processing
             )
             actions.append(action)
-            
+
             # Track for secondary follow
             if post_data:
                 secondary_follow_candidates.append(
-                    (agent_id, cluster_id, post_data.get("user_id"), post_data.get("tweet", ""), True)
+                    (
+                        agent_id,
+                        cluster_id,
+                        post_data.get("user_id"),
+                        post_data.get("tweet", ""),
+                        True,
+                    )
                 )
-        
+
         # Batch extract emotions if any texts collected
         if texts_for_emotions:
             self._batch_extract_and_update_emotions(texts_for_emotions, action_start_idx, actions)
-        
+
         # Batch evaluate opinions if any requests collected
         if opinion_requests:
-            self._batch_evaluate_and_update_opinions(opinion_requests, actions, calculate_opinion_updates_fn)
-        
+            self._batch_evaluate_and_update_opinions(
+                opinion_requests, actions, calculate_opinion_updates_fn
+            )
+
         return secondary_follow_candidates
 
     def _process_vllm_read_batch(
@@ -1025,57 +1081,65 @@ class BatchProcessor:
     ) -> List[Tuple]:
         """
         Process read reactions (LIKE, LOVE, etc.) using vLLM's decide_reaction_batch method.
-        
+
         Args:
             batchable_reads: List of tuples with format (agent_id, cluster_id, target_post_id, future, metadata_dict)
             actions: List to append resolved actions to
             calculate_opinion_updates_fn: Function to calculate opinion updates
-            
+
         Returns:
             List of secondary follow candidates
         """
         secondary_follow_candidates = []
-        
+
         # Build batch requests from metadata
         batch_requests = []
         for item in batchable_reads:
             agent_id, cluster_id, target_post, future, metadata = item
-            batch_requests.append({
-                "cluster_id": cluster_id,
-                "post_content": metadata.get("post_content", ""),
-                "agent_attrs": metadata.get("agent_attrs"),
-            })
-        
+            batch_requests.append(
+                {
+                    "cluster_id": cluster_id,
+                    "post_content": metadata.get("post_content", ""),
+                    "agent_attrs": metadata.get("agent_attrs"),
+                }
+            )
+
         # Get LLM actor for batch call (using YClient pattern)
         llm_actor = self._get_llm_actor()
-        
+
         # Call generate_read_reaction_batch (supports agent_attrs including opinions)
-        self.logger.info(f"Calling generate_read_reaction_batch for {len(batch_requests)} read requests")
+        self.logger.info(
+            f"Calling generate_read_reaction_batch for {len(batch_requests)} read requests"
+        )
         try:
             batch_future = llm_actor.generate_read_reaction_batch.remote(batch_requests)
             results = self.retry_handler.retry_with_backoff(
                 lambda f: ray.get(f),
                 batch_future,
-                error_message="vLLM batch read reaction generation"
+                error_message="vLLM batch read reaction generation",
             )
         except Exception as e:
-            self.logger.error(f"vLLM batch read generation failed: {e}, falling back to standard gather")
-            return self._gather_reactions_standard(batchable_reads, actions, calculate_opinion_updates_fn)
-        
+            self.logger.error(
+                f"vLLM batch read generation failed: {e}, falling back to standard gather"
+            )
+            return self._gather_reactions_standard(
+                batchable_reads, actions, calculate_opinion_updates_fn
+            )
+
         # Process results
         # Collect texts for batch emotion extraction (only for comments generated by reads)
         texts_for_emotions = []
         comment_action_indices = []  # Track which actions are comments that need emotions
-        
+
         # Collect opinion evaluation requests for batch processing
         opinion_requests = []
-        
+
         for i, reaction_type in enumerate(results):
             item = batchable_reads[i]
             agent_id = item[0]
             cluster_id = item[1]
             target_post = item[2]
-            
+
             # Track LLM usage
             if self.cost_tracker:
                 if reaction_type.upper() in REACTION_TYPES or reaction_type.upper() == "SHARE":
@@ -1083,16 +1147,22 @@ class BatchProcessor:
                 else:
                     # Comment text
                     output_tokens = len(reaction_type) // CHARS_PER_TOKEN
-                self.cost_tracker.record_call("generate_read_reaction", PROMPT_TOKENS_COMMENT, output_tokens)
-            
+                self.cost_tracker.record_call(
+                    "generate_read_reaction", PROMPT_TOKENS_COMMENT, output_tokens
+                )
+
             # Validate response
-            reaction_type = self.response_parser.parse_text_response(reaction_type, default="IGNORE")
-            
+            reaction_type = self.response_parser.parse_text_response(
+                reaction_type, default="IGNORE"
+            )
+
             # Handle different reaction types
             if reaction_type and reaction_type.upper() not in REACTION_TYPES:
                 # This is comment text from LLM - treat as COMMENT action
-                self.logger.debug(f"[READ] LLM generated comment for agent {agent_id}: '{reaction_type[:50]}...'")
-                
+                self.logger.debug(
+                    f"[READ] LLM generated comment for agent {agent_id}: '{reaction_type[:50]}...'"
+                )
+
                 # Annotate the comment text (without emotions for now if vLLM)
                 annotations = annotate_text(
                     reaction_type,
@@ -1102,26 +1172,30 @@ class BatchProcessor:
                     enable_emotions=False,  # Disable for now, will batch extract later
                     llm_handle=self.llm,
                 )
-                
+
                 # Collect text for batch emotion extraction if needed
                 if self.enable_emotions:
                     texts_for_emotions.append(reaction_type)
                     comment_action_indices.append(len(actions))  # Track action index
                 else:
                     annotations["emotions"] = None
-                
+
                 # Defer opinion updates for batch processing
-                post_data = ray.get(self.server.get_post.remote(target_post, client_id=self.client_id))
+                post_data = ray.get(
+                    self.server.get_post.remote(target_post, client_id=self.client_id)
+                )
                 updated_opinions = None
                 if post_data:
                     # Store parameters for batch evaluation
-                    opinion_requests.append({
-                        "agent_id": agent_id,
-                        "target_post": target_post,
-                        "post_data": post_data,
-                        "action_index": len(actions),
-                    })
-                
+                    opinion_requests.append(
+                        {
+                            "agent_id": agent_id,
+                            "target_post": target_post,
+                            "post_data": post_data,
+                            "action_index": len(actions),
+                        }
+                    )
+
                 action = ActionDTO(
                     agent_id,
                     cluster_id,
@@ -1132,11 +1206,17 @@ class BatchProcessor:
                     updated_opinions=None,  # Will be updated by batch processing
                 )
                 actions.append(action)
-                
+
                 # Track for secondary follow
                 if post_data:
                     secondary_follow_candidates.append(
-                        (agent_id, cluster_id, post_data.get("user_id"), post_data.get("tweet", ""), True)
+                        (
+                            agent_id,
+                            cluster_id,
+                            post_data.get("user_id"),
+                            post_data.get("tweet", ""),
+                            True,
+                        )
                     )
             elif reaction_type.upper() == "SHARE":
                 # SHARE reaction - would need share commentary, but for now just note it
@@ -1147,20 +1227,26 @@ class BatchProcessor:
                 pass
             elif reaction_type.upper() in REACTION_TYPES and reaction_type.upper() != "IGNORE":
                 # Simple reaction (LIKE, LOVE, etc.)
-                self.logger.debug(f"[READ] LLM generated reaction for agent {agent_id}: {reaction_type}")
-                
+                self.logger.debug(
+                    f"[READ] LLM generated reaction for agent {agent_id}: {reaction_type}"
+                )
+
                 # Defer opinion updates for batch processing
-                post_data = ray.get(self.server.get_post.remote(target_post, client_id=self.client_id))
+                post_data = ray.get(
+                    self.server.get_post.remote(target_post, client_id=self.client_id)
+                )
                 updated_opinions = None
                 if post_data:
                     # Store parameters for batch evaluation
-                    opinion_requests.append({
-                        "agent_id": agent_id,
-                        "target_post": target_post,
-                        "post_data": post_data,
-                        "action_index": len(actions),
-                    })
-                
+                    opinion_requests.append(
+                        {
+                            "agent_id": agent_id,
+                            "target_post": target_post,
+                            "post_data": post_data,
+                            "action_index": len(actions),
+                        }
+                    )
+
                 action = ActionDTO(
                     agent_id,
                     cluster_id,
@@ -1169,52 +1255,70 @@ class BatchProcessor:
                     updated_opinions=None,  # Will be updated by batch processing
                 )
                 actions.append(action)
-                
+
                 # Track for secondary follow (simple reaction)
                 if post_data:
                     secondary_follow_candidates.append(
-                        (agent_id, cluster_id, post_data.get("user_id"), post_data.get("tweet", ""), True)
+                        (
+                            agent_id,
+                            cluster_id,
+                            post_data.get("user_id"),
+                            post_data.get("tweet", ""),
+                            True,
+                        )
                     )
             else:
                 # IGNORE or unrecognized - skip
                 self.logger.debug(f"[READ] Agent {agent_id} chose to IGNORE")
-        
+
         # Batch extract emotions if any texts collected (only for comments)
         if texts_for_emotions:
             # Call batch extraction with specific action indices
             try:
                 llm_actor = self._get_llm_actor()
-                if hasattr(llm_actor, 'extract_emotions_batch'):
-                    self.logger.info(f"Batch extracting emotions for {len(texts_for_emotions)} read comment texts")
+                if hasattr(llm_actor, "extract_emotions_batch"):
+                    self.logger.info(
+                        f"Batch extracting emotions for {len(texts_for_emotions)} read comment texts"
+                    )
                     batch_future = llm_actor.extract_emotions_batch.remote(texts_for_emotions)
                     results = self.retry_handler.retry_with_backoff(
                         lambda f: ray.get(f),
                         batch_future,
-                        error_message="vLLM batch emotion extraction for read comments"
+                        error_message="vLLM batch emotion extraction for read comments",
                     )
                     # Update actions with extracted emotions
                     for i, emotions in enumerate(results):
                         action_idx = comment_action_indices[i]
-                        if action_idx < len(actions) and hasattr(actions[action_idx], 'annotations'):
-                            actions[action_idx].annotations["emotions"] = emotions if emotions else []
+                        if action_idx < len(actions) and hasattr(
+                            actions[action_idx], "annotations"
+                        ):
+                            actions[action_idx].annotations["emotions"] = (
+                                emotions if emotions else []
+                            )
                 else:
                     # Fallback to individual extraction
                     for i, text in enumerate(texts_for_emotions):
                         emotion_future = llm_actor.extract_emotions.remote(text)
                         emotions = ray.get(emotion_future)
                         action_idx = comment_action_indices[i]
-                        if action_idx < len(actions) and hasattr(actions[action_idx], 'annotations'):
-                            actions[action_idx].annotations["emotions"] = emotions if emotions else []
+                        if action_idx < len(actions) and hasattr(
+                            actions[action_idx], "annotations"
+                        ):
+                            actions[action_idx].annotations["emotions"] = (
+                                emotions if emotions else []
+                            )
             except Exception as e:
                 self.logger.error(f"Failed to batch extract emotions for read comments: {e}")
                 for action_idx in comment_action_indices:
-                    if action_idx < len(actions) and hasattr(actions[action_idx], 'annotations'):
+                    if action_idx < len(actions) and hasattr(actions[action_idx], "annotations"):
                         actions[action_idx].annotations["emotions"] = []
-        
+
         # Batch evaluate opinions if any requests collected
         if opinion_requests:
-            self._batch_evaluate_and_update_opinions(opinion_requests, actions, calculate_opinion_updates_fn)
-        
+            self._batch_evaluate_and_update_opinions(
+                opinion_requests, actions, calculate_opinion_updates_fn
+            )
+
         return secondary_follow_candidates
 
     def _process_vllm_search_batch(
@@ -1225,53 +1329,61 @@ class BatchProcessor:
     ) -> List[Tuple]:
         """
         Process search action decisions using vLLM's generate_search_action_batch method.
-        
+
         Converts LLM decisions (COMMENT/SHARE/LIKE/etc) into appropriate ActionDTOs.
-        
+
         Args:
             batchable_searches: List of tuples with format (agent_id, cluster_id, target_post_id, future, metadata_dict)
             actions: List to append resolved actions to
             calculate_opinion_updates_fn: Function to calculate opinion updates
-            
+
         Returns:
             List of secondary follow candidates
         """
         secondary_follow_candidates = []
-        
+
         # Build batch requests from metadata
         batch_requests = []
         for item in batchable_searches:
             agent_id, cluster_id, target_post, future, metadata = item
-            batch_requests.append({
-                "cluster_id": cluster_id,
-                "post_content": metadata.get("post_content", ""),
-                "agent_attrs": metadata.get("agent_attrs"),
-            })
-        
+            batch_requests.append(
+                {
+                    "cluster_id": cluster_id,
+                    "post_content": metadata.get("post_content", ""),
+                    "agent_attrs": metadata.get("agent_attrs"),
+                }
+            )
+
         # Get LLM actor for batch call
         llm_actor = self._get_llm_actor()
-        
+
         # Call generate_search_action_batch
-        self.logger.info(f"Calling generate_search_action_batch for {len(batch_requests)} search requests")
+        self.logger.info(
+            f"Calling generate_search_action_batch for {len(batch_requests)} search requests"
+        )
         try:
             batch_future = llm_actor.generate_search_action_batch.remote(batch_requests)
             results = self.retry_handler.retry_with_backoff(
                 lambda f: ray.get(f),
                 batch_future,
-                error_message="vLLM batch search action decision"
+                error_message="vLLM batch search action decision",
             )
         except Exception as e:
-            self.logger.error(f"vLLM batch search action failed: {e}, falling back to standard gather")
-            return self._gather_reactions_standard(batchable_searches, actions, calculate_opinion_updates_fn)
-        
+            self.logger.error(
+                f"vLLM batch search action failed: {e}, falling back to standard gather"
+            )
+            return self._gather_reactions_standard(
+                batchable_searches, actions, calculate_opinion_updates_fn
+            )
+
         # Process results - convert action decisions to ActionDTOs
         # Collect texts for batch emotion extraction (only for comments/shares)
         texts_for_emotions = []
         action_indices_for_emotions = []
-        
+
         # Collect opinion evaluation requests for batch processing
         opinion_requests = []
-        
+
         for i, action_decision in enumerate(results):
             item = batchable_searches[i]
             agent_id = item[0]
@@ -1279,14 +1391,14 @@ class BatchProcessor:
             target_post = item[2]
             metadata = item[4]
             post_data = metadata.get("post_data")
-            
+
             action_decision = action_decision.upper()
-            
+
             if action_decision == "COMMENT":
                 # Generate comment using rule-based or simple approach
                 # For search, we can use a simple comment template
                 comment_text = f"Interesting post about {metadata.get('agent_attrs', {}).get('topic', 'this topic')}."
-                
+
                 # Annotate the comment
                 annotations = annotate_text(
                     comment_text,
@@ -1296,23 +1408,25 @@ class BatchProcessor:
                     enable_emotions=False,  # Will batch extract later
                     llm_handle=self.llm,
                 )
-                
+
                 # Collect for batch emotion extraction
                 if self.enable_emotions:
                     texts_for_emotions.append(comment_text)
                     action_indices_for_emotions.append(len(actions))
                 else:
                     annotations["emotions"] = None
-                
+
                 # Store for batch opinion processing
                 if post_data:
-                    opinion_requests.append({
-                        "agent_id": agent_id,
-                        "target_post": target_post,
-                        "post_data": post_data,
-                        "action_index": len(actions),
-                    })
-                
+                    opinion_requests.append(
+                        {
+                            "agent_id": agent_id,
+                            "target_post": target_post,
+                            "post_data": post_data,
+                            "action_index": len(actions),
+                        }
+                    )
+
                 action = ActionDTO(
                     agent_id,
                     cluster_id,
@@ -1323,17 +1437,23 @@ class BatchProcessor:
                     updated_opinions=None,
                 )
                 actions.append(action)
-                
+
                 # Track for secondary follow
                 if post_data:
                     secondary_follow_candidates.append(
-                        (agent_id, cluster_id, post_data.get("user_id"), post_data.get("tweet", ""), True)
+                        (
+                            agent_id,
+                            cluster_id,
+                            post_data.get("user_id"),
+                            post_data.get("tweet", ""),
+                            True,
+                        )
                     )
-                    
+
             elif action_decision == "SHARE":
                 # Generate share with simple commentary
                 share_text = f"Check out this post about {metadata.get('agent_attrs', {}).get('topic', 'this')}!"
-                
+
                 # Annotate the share commentary
                 annotations = annotate_text(
                     share_text,
@@ -1343,23 +1463,25 @@ class BatchProcessor:
                     enable_emotions=False,  # Will batch extract later
                     llm_handle=self.llm,
                 )
-                
+
                 # Collect for batch emotion extraction
                 if self.enable_emotions:
                     texts_for_emotions.append(share_text)
                     action_indices_for_emotions.append(len(actions))
                 else:
                     annotations["emotions"] = None
-                
+
                 # Store for batch opinion processing
                 if post_data:
-                    opinion_requests.append({
-                        "agent_id": agent_id,
-                        "target_post": target_post,
-                        "post_data": post_data,
-                        "action_index": len(actions),
-                    })
-                
+                    opinion_requests.append(
+                        {
+                            "agent_id": agent_id,
+                            "target_post": target_post,
+                            "post_data": post_data,
+                            "action_index": len(actions),
+                        }
+                    )
+
                 action = ActionDTO(
                     agent_id,
                     cluster_id,
@@ -1370,24 +1492,32 @@ class BatchProcessor:
                     updated_opinions=None,
                 )
                 actions.append(action)
-                
+
                 # Track for secondary follow
                 if post_data:
                     secondary_follow_candidates.append(
-                        (agent_id, cluster_id, post_data.get("user_id"), post_data.get("tweet", ""), True)
+                        (
+                            agent_id,
+                            cluster_id,
+                            post_data.get("user_id"),
+                            post_data.get("tweet", ""),
+                            True,
+                        )
                     )
-                    
+
             elif action_decision in ["LIKE", "LOVE", "LAUGH", "ANGRY", "SAD"]:
                 # Simple reaction
                 # Store for batch opinion processing
                 if post_data:
-                    opinion_requests.append({
-                        "agent_id": agent_id,
-                        "target_post": target_post,
-                        "post_data": post_data,
-                        "action_index": len(actions),
-                    })
-                
+                    opinion_requests.append(
+                        {
+                            "agent_id": agent_id,
+                            "target_post": target_post,
+                            "post_data": post_data,
+                            "action_index": len(actions),
+                        }
+                    )
+
                 action = ActionDTO(
                     agent_id,
                     cluster_id,
@@ -1396,24 +1526,34 @@ class BatchProcessor:
                     updated_opinions=None,
                 )
                 actions.append(action)
-                
+
                 # Track for secondary follow
                 if post_data:
                     secondary_follow_candidates.append(
-                        (agent_id, cluster_id, post_data.get("user_id"), post_data.get("tweet", ""), True)
+                        (
+                            agent_id,
+                            cluster_id,
+                            post_data.get("user_id"),
+                            post_data.get("tweet", ""),
+                            True,
+                        )
                     )
             else:
                 # IGNORE or unrecognized - skip
                 self.logger.debug(f"[SEARCH] Agent {agent_id} chose to {action_decision}")
-        
+
         # Batch extract emotions if any texts collected
         if texts_for_emotions:
-            self._batch_extract_and_update_emotions(texts_for_emotions, action_indices_for_emotions, actions)
-        
+            self._batch_extract_and_update_emotions(
+                texts_for_emotions, action_indices_for_emotions, actions
+            )
+
         # Batch evaluate opinions if any requests collected
         if opinion_requests:
-            self._batch_evaluate_and_update_opinions(opinion_requests, actions, calculate_opinion_updates_fn)
-        
+            self._batch_evaluate_and_update_opinions(
+                opinion_requests, actions, calculate_opinion_updates_fn
+            )
+
         return secondary_follow_candidates
 
     def gather_pending_llm_follows(
@@ -1459,9 +1599,9 @@ class BatchProcessor:
     ) -> None:
         """
         Batch extract emotions and update actions.
-        
+
         Only used with vLLM batching to extract emotions for multiple texts at once.
-        
+
         Args:
             texts: List of text strings to extract emotions from
             action_indices: Either an int (start index for consecutive actions) or List[int] (specific indices)
@@ -1469,31 +1609,35 @@ class BatchProcessor:
         """
         if not texts:
             return
-        
+
         try:
             # Check if vLLM backend supports batch emotion extraction
             llm_actor = self._get_llm_actor()
-            if hasattr(llm_actor, 'extract_emotions_batch'):
-                self.logger.info(f"Batch extracting emotions for {len(texts)} texts using extract_emotions_batch")
-                
+            if hasattr(llm_actor, "extract_emotions_batch"):
+                self.logger.info(
+                    f"Batch extracting emotions for {len(texts)} texts using extract_emotions_batch"
+                )
+
                 # Call batch emotion extraction
                 batch_future = llm_actor.extract_emotions_batch.remote(texts)
                 results = self.retry_handler.retry_with_backoff(
                     lambda f: ray.get(f),
                     batch_future,
-                    error_message="vLLM batch emotion extraction"
+                    error_message="vLLM batch emotion extraction",
                 )
-                
+
                 self.logger.info(f"Successfully batch extracted emotions for {len(results)} texts")
             else:
                 # Fallback to individual extraction for Ollama
-                self.logger.info(f"Extracting emotions individually for {len(texts)} texts (no batch support)")
+                self.logger.info(
+                    f"Extracting emotions individually for {len(texts)} texts (no batch support)"
+                )
                 results = []
                 for text in texts:
                     emotion_future = llm_actor.extract_emotions.remote(text)
                     emotions = ray.get(emotion_future)
                     results.append(emotions if emotions else [])
-            
+
             # Update actions with extracted emotions
             for i, emotions in enumerate(results):
                 # Handle both int (consecutive) and list (specific indices)
@@ -1501,10 +1645,10 @@ class BatchProcessor:
                     action_idx = action_indices + i
                 else:
                     action_idx = action_indices[i]
-                    
-                if action_idx < len(actions) and hasattr(actions[action_idx], 'annotations'):
+
+                if action_idx < len(actions) and hasattr(actions[action_idx], "annotations"):
                     actions[action_idx].annotations["emotions"] = emotions if emotions else []
-                    
+
         except Exception as e:
             self.logger.error(f"Failed to batch extract emotions: {e}")
             # Set empty emotions on error
@@ -1514,10 +1658,10 @@ class BatchProcessor:
                     action_idx = action_indices + i
                 else:
                     action_idx = action_indices[i]
-                    
-                if action_idx < len(actions) and hasattr(actions[action_idx], 'annotations'):
+
+                if action_idx < len(actions) and hasattr(actions[action_idx], "annotations"):
                     actions[action_idx].annotations["emotions"] = []
-    
+
     def _batch_evaluate_and_update_opinions(
         self,
         opinion_requests: List[Dict],
@@ -1526,10 +1670,10 @@ class BatchProcessor:
     ) -> None:
         """
         Batch evaluate opinions and update actions.
-        
+
         Only used with vLLM batching when LLM-based opinion dynamics is enabled.
         Provides parallel batching path that doesn't modify core opinion pipeline.
-        
+
         Args:
             opinion_requests: List of dicts with agent_id, target_post, post_data, action_index
             actions: List of actions to update with evaluated opinions
@@ -1537,25 +1681,27 @@ class BatchProcessor:
         """
         if not opinion_requests:
             return
-        
+
         try:
             # For now, use standard opinion calculation (parallel path approach)
             # Future optimization: detect LLM evaluation and batch those calls
-            self.logger.info(f"Calculating opinions for {len(opinion_requests)} interactions (standard path)")
-            
+            self.logger.info(
+                f"Calculating opinions for {len(opinion_requests)} interactions (standard path)"
+            )
+
             for req in opinion_requests:
                 agent_id = req["agent_id"]
                 target_post = req["target_post"]
                 post_data = req["post_data"]
                 action_idx = req["action_index"]
-                
+
                 # Call standard opinion calculation
                 updated_opinions = calculate_opinion_updates_fn(agent_id, target_post, post_data)
-                
+
                 # Update action with calculated opinions
                 if action_idx < len(actions):
                     actions[action_idx].updated_opinions = updated_opinions
-                    
+
         except Exception as e:
             self.logger.error(f"Failed to batch evaluate opinions: {e}")
             # Opinions remain None on error (non-critical)

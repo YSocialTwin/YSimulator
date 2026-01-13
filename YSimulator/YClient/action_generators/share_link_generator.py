@@ -180,6 +180,7 @@ class ShareLinkGenerator(BaseActionGenerator):
                     f"Extracting topics for article {article_id}: {article.get( 'title', '')[ :50]}..."
                 )
                 from YSimulator.YClient.actions.llm_actions import _get_llm_actor
+
                 llm_actor = _get_llm_actor(self.context.llm, agent.id)
                 topics_future = llm_actor.extract_topics_from_article.remote(
                     article.get("title", ""), article.get("summary", "")

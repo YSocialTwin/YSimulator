@@ -108,7 +108,9 @@ class OpinionInferencer:
 
         # Call LLM service to infer opinion
         opinion_value = ray.get(
-            self.llm_manager.infer_article_opinion(article_content, topic_name, opinion_groups, agent_id)
+            self.llm_manager.infer_article_opinion(
+                article_content, topic_name, opinion_groups, agent_id
+            )
         )
 
         self.logger.info(
