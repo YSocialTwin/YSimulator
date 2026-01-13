@@ -556,7 +556,6 @@ config_dir/
 ├── agent_population.json      # Agent definitions
 ├── llm_prompts.json          # Prompt templates
 ├── simulation.db             # Database (auto-created)
-├── ray_config.temp           # Ray temp file (auto-created)
 └── logs/                     # JSON logs (auto-created)
     ├── {server_name}_server.log
     ├── {server_name}_actor.log

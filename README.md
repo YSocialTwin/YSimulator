@@ -132,7 +132,6 @@ All output files are created in the configuration directory:
 
 - `simulation.db` - SQLite database with simulation data
 - `logs/` - Rotating JSON logs for server and client
-- `ray_config.temp` - Temporary Ray cluster address file
 
 ## Customization
 
