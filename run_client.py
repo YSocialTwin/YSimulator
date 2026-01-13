@@ -121,22 +121,63 @@ if __name__ == "__main__":
         "--config",
         type=str,
         default=".",
-        help="Path to configuration directory containing simulation_config.json (default: current directory)",
+        help="Path to configuration directory or simulation_config.json file (default: current directory)",
+    )
+    parser.add_argument(
+        "--agents",
+        type=str,
+        default=None,
+        help="Path to agent_population.json file (optional, overrides config directory)",
+    )
+    parser.add_argument(
+        "--prompts",
+        type=str,
+        default=None,
+        help="Path to prompts.json file (optional, overrides config directory)",
     )
     args = parser.parse_args()
 
-    # Validate config directory and check for required files
-    config_dir = validate_config_directory(
-        args.config,
-        required_files=[
-            "simulation_config.json",
-            "agent_population.json",
-            "prompts.json",
-        ],
-    )
+    # Determine configuration directory and files
+    config_path = Path(args.config)
+
+    if config_path.is_file():
+        # If --config points to a file, use its parent directory as config_dir
+        config_dir = config_path.parent
+        sim_config_file = config_path
+    else:
+        # If --config points to a directory, validate it
+        config_dir = validate_config_directory(
+            args.config,
+            required_files=(
+                ["simulation_config.json"] if not args.agents and not args.prompts else None
+            ),
+        )
+        sim_config_file = config_dir / "simulation_config.json"
+
+    # Determine agent population and prompts files
+    if args.agents:
+        agent_population_file = Path(args.agents)
+        if not agent_population_file.exists():
+            print(f"❌ Error: Agent population file '{agent_population_file}' not found.")
+            sys.exit(1)
+    else:
+        agent_population_file = config_dir / "agent_population.json"
+        if not agent_population_file.exists():
+            print(f"❌ Error: Required file '{agent_population_file}' not found.")
+            sys.exit(1)
+
+    if args.prompts:
+        prompts_file = Path(args.prompts)
+        if not prompts_file.exists():
+            print(f"❌ Error: Prompts file '{prompts_file}' not found.")
+            sys.exit(1)
+    else:
+        prompts_file = config_dir / "prompts.json"
+        if not prompts_file.exists():
+            print(f"❌ Error: Required file '{prompts_file}' not found.")
+            sys.exit(1)
 
     # Load simulation config first to get client name
-    sim_config_file = config_dir / "simulation_config.json"
     try:
         with open(sim_config_file, "r") as f:
             sim_config = json.load(f)
@@ -148,8 +189,11 @@ if __name__ == "__main__":
     client_name = sim_config.get("client_name", "client_1")
 
     # Helper function to find client-specific or generic config file
-    def find_config_file(base_name: str) -> Path:
+    def find_config_file(base_name: str, override_file: Path = None) -> Path:
         """Find client-specific config file or fall back to generic."""
+        if override_file:
+            return override_file
+
         client_specific = config_dir / f"{client_name}_{base_name}"
         generic = config_dir / base_name
 
@@ -160,8 +204,8 @@ if __name__ == "__main__":
             return generic
 
     # Use client-specific file names with fallback to conventional names
-    agent_config_file = find_config_file("agent_population.json")
-    prompts_config_file = find_config_file("prompts.json")
+    agent_config_file = find_config_file("agent_population.json", agent_population_file)
+    prompts_config_file = find_config_file("prompts.json", prompts_file)
 
     # Load configuration files
     start_time = time.time()
