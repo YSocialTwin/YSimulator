@@ -1013,7 +1013,7 @@ class BatchProcessor:
         
         # Batch evaluate opinions if any requests collected
         if opinion_requests:
-            self._batch_evaluate_and_update_emotions(opinion_requests, actions, calculate_opinion_updates_fn)
+            self._batch_evaluate_and_update_opinions(opinion_requests, actions, calculate_opinion_updates_fn)
         
         return secondary_follow_candidates
 
