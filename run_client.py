@@ -146,10 +146,11 @@ if __name__ == "__main__":
         sim_config_file = config_path
     else:
         # If --config points to a directory, validate it
+        # Only require simulation_config.json if we're relying on directory structure
         config_dir = validate_config_directory(
             args.config,
             required_files=(
-                ["simulation_config.json"] if not args.agents and not args.prompts else None
+                ["simulation_config.json"] if not (args.agents and args.prompts) else None
             ),
         )
         sim_config_file = config_dir / "simulation_config.json"
