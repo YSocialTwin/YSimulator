@@ -96,34 +96,43 @@ class BatchProcessor:
         self.response_parser = ResponseParser(logger=logger)
         self.cost_tracker = cost_tracker  # Optional cost tracking
 
+    def _get_llm_actor(self, agent_id: Optional[str] = None):
+        """
+        Get LLM actor handle, following YClient patterns.
+        
+        Handles both single actor and load balancer cases safely.
+        Follows the pattern from llm_manager._get_llm_actor_for_manager.
+        
+        Args:
+            agent_id: Optional agent ID for load balancing
+            
+        Returns:
+            LLM actor handle
+        """
+        # Check class name to avoid issues with Mock objects (YClient pattern)
+        if self.llm.__class__.__name__ in ('LLMLoadBalancer', 'LLMActorPool'):
+            if agent_id is None:
+                # Fallback to first actor if no agent_id provided
+                return self.llm.get_all_actors()[0]
+            return self.llm.get_actor_for_agent(agent_id)
+        # Direct actor handle (including Ray actors)
+        return self.llm
+
     def _is_vllm_backend(self) -> bool:
         """
         Check if the LLM backend is vLLM by checking for generate_post_batch method.
+        
+        Follows YClient pattern of checking class capabilities safely.
         
         Returns:
             bool: True if using vLLM backend, False otherwise (Ollama)
         """
         try:
-            # Get an LLM actor to check its capabilities
-            # Handle both single actor and load balancer cases
-            if hasattr(self.llm, 'get_all_actors'):
-                # Load balancer case - get first actor
-                actors = self.llm.get_all_actors()
-                if actors and len(actors) > 0:
-                    test_actor = actors[0]
-                else:
-                    return False
-            else:
-                # Single actor case
-                test_actor = self.llm
+            # Get an LLM actor to check its capabilities (using YClient pattern)
+            test_actor = self._get_llm_actor()
             
             # Check if the actor has generate_post_batch method
             # Use hasattr on the actor class to avoid remote calls
-            if hasattr(test_actor, 'generate_post_batch'):
-                return True
-            
-            # For Ray actors, we need to check the remote class
-            # Ray actors expose their methods as attributes
             return hasattr(test_actor, 'generate_post_batch')
         except Exception as e:
             self.logger.debug(f"Could not determine LLM backend type: {e}, defaulting to Ollama")
@@ -307,14 +316,8 @@ class BatchProcessor:
                 "agent_attrs": agent_attrs
             })
         
-        # Get LLM actor for batch call
-        # Handle both single actor and load balancer cases
-        if hasattr(self.llm, 'get_all_actors'):
-            # Load balancer - use first actor for batch call
-            llm_actor = self.llm.get_all_actors()[0]
-        else:
-            # Single actor
-            llm_actor = self.llm
+        # Get LLM actor for batch call (using YClient pattern)
+        llm_actor = self._get_llm_actor()
         
         # Call generate_post_batch with retry logic
         self.logger.info(f"Calling generate_post_batch for {len(batch_requests)} requests")
@@ -717,11 +720,8 @@ class BatchProcessor:
                 "thread_context": metadata.get("thread_context")
             })
         
-        # Get LLM actor for batch call
-        if hasattr(self.llm, 'get_all_actors'):
-            llm_actor = self.llm.get_all_actors()[0]
-        else:
-            llm_actor = self.llm
+        # Get LLM actor for batch call (using YClient pattern)
+        llm_actor = self._get_llm_actor()
         
         # Call generate_comment_batch with retry logic
         self.logger.info(f"Calling generate_comment_batch for {len(batch_requests)} requests")
@@ -822,11 +822,8 @@ class BatchProcessor:
                 "author_name": metadata.get("author_name", "Someone"),
             })
         
-        # Get LLM actor for batch call
-        if hasattr(self.llm, 'get_all_actors'):
-            llm_actor = self.llm.get_all_actors()[0]
-        else:
-            llm_actor = self.llm
+        # Get LLM actor for batch call (using YClient pattern)
+        llm_actor = self._get_llm_actor()
         
         # For shares, we can use generate_comment_batch since the format is similar
         # Or call a dedicated generate_share_commentary_batch if it exists
