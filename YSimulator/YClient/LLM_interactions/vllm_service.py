@@ -409,6 +409,156 @@ class VLLMService:
             logger.warning(f"[vLLM] Returning fallback reaction: IGNORE")
             return "IGNORE"
 
+    def decide_reaction_batch(
+        self, requests: List[Dict[str, Any]]
+    ) -> List[str]:
+        """
+        Decide reactions for multiple posts in a single batch for improved performance.
+
+        Args:
+            requests: List of request dicts, each with keys:
+                - cluster_id: Agent cluster ID
+                - post_content: Content of the post to react to
+
+        Returns:
+            List of reaction strings (LIKE, COMMENT, IGNORE) in the same order as requests
+        """
+        try:
+            logger.debug(f"[vLLM] Starting batch reaction decision for {len(requests)} requests")
+            prompts = []
+            for idx, req in enumerate(requests):
+                try:
+                    cluster_id = req["cluster_id"]
+                    post_content = req["post_content"]
+
+                    # Get prompt templates
+                    system_template = self.prompts_config["decide_reaction"]["system_template"]
+                    user_template = self.prompts_config["decide_reaction"]["user_template"]
+
+                    # Format templates
+                    system_msg = system_template.format(cluster_id=cluster_id)
+                    user_msg = user_template.format(post_content=post_content)
+
+                    # Create formatted prompt
+                    prompt = self._format_prompt(system_msg, user_msg)
+                    prompts.append(prompt)
+                except Exception as e:
+                    logger.error(f"[vLLM] Failed to build prompt for batch reaction request {idx}: {e}")
+                    logger.error(f"[vLLM] Request: {req}")
+                    raise
+
+            # Batch generate using vLLM
+            logger.debug(f"[vLLM] Executing batch inference for {len(prompts)} reaction prompts")
+            outputs = self.llm.generate(prompts, self.sampling_params)
+            results = []
+            for output in outputs:
+                result = output.outputs[0].text.strip().upper()
+                if "LIKE" in result:
+                    results.append("LIKE")
+                elif "COMMENT" in result:
+                    results.append("COMMENT")
+                else:
+                    results.append("IGNORE")
+            logger.debug(f"[vLLM] Batch reaction decision completed successfully ({len(results)} results)")
+            return results
+        except Exception as e:
+            logger.error(f"[vLLM] Batch reaction decision failed: {e}")
+            logger.error(f"[vLLM] Number of requests: {len(requests)}")
+            raise RuntimeError(f"vLLM batch reaction decision failed: {e}") from e
+
+    def generate_read_reaction_batch(
+        self, requests: List[Dict[str, Any]]
+    ) -> List[str]:
+        """
+        Decide read reactions for multiple posts in a single batch with agent attributes support.
+        
+        Similar to decide_reaction_batch but supports agent_attrs including opinions.
+
+        Args:
+            requests: List of request dicts, each with keys:
+                - cluster_id: Agent cluster ID
+                - post_content: Content of the post to react to
+                - agent_attrs: Optional dict with agent attributes (opinions, etc.)
+
+        Returns:
+            List of reaction strings (LIKE, COMMENT, IGNORE, etc.) in the same order as requests
+        """
+        try:
+            logger.debug(f"[vLLM] Starting batch read reaction decision for {len(requests)} requests")
+            prompts = []
+            for idx, req in enumerate(requests):
+                try:
+                    cluster_id = req["cluster_id"]
+                    post_content = req["post_content"]
+                    agent_attrs = req.get("agent_attrs")
+                    
+                    # Build persona using attributes or fallback
+                    persona = self._build_persona(cluster_id, agent_attrs)
+                    
+                    # Build opinion instruction if available
+                    opinion_instruction = ""
+                    if agent_attrs and "post_topics" in agent_attrs and agent_attrs["post_topics"]:
+                        topics = agent_attrs["post_topics"]
+                        opinions = agent_attrs.get("post_opinions", {})
+
+                        if topics and opinions:
+                            opinion_parts = []
+                            for topic in topics:
+                                if topic in opinions:
+                                    opinion_parts.append(f"{topic}: {opinions[topic]}")
+
+                            if opinion_parts:
+                                opinion_str = ", ".join(opinion_parts)
+                                opinion_instruction = (
+                                    f" Your opinions on the discussed topics: {opinion_str}. React accordingly."
+                                )
+
+                    # Get prompt templates (use decide_reaction templates as base)
+                    system_template = self.prompts_config["decide_reaction"]["system_template"]
+                    user_template = self.prompts_config["decide_reaction"]["user_template"]
+
+                    # Format templates with persona and opinion instruction
+                    system_msg = system_template.format(cluster_id=cluster_id, persona=persona)
+                    user_msg = user_template.format(post_content=post_content) + opinion_instruction
+
+                    # Create formatted prompt
+                    prompt = self._format_prompt(system_msg, user_msg)
+                    prompts.append(prompt)
+                except Exception as e:
+                    logger.error(f"[vLLM] Failed to build prompt for batch read reaction request {idx}: {e}")
+                    logger.error(f"[vLLM] Request: {req}")
+                    raise
+
+            # Batch generate using vLLM
+            logger.debug(f"[vLLM] Executing batch inference for {len(prompts)} read reaction prompts")
+            outputs = self.llm.generate(prompts, self.sampling_params)
+            results = []
+            for output in outputs:
+                result = output.outputs[0].text.strip().upper()
+                # Parse reaction type from result
+                if "LIKE" in result:
+                    results.append("LIKE")
+                elif "LOVE" in result:
+                    results.append("LOVE")
+                elif "LAUGH" in result:
+                    results.append("LAUGH")
+                elif "ANGRY" in result:
+                    results.append("ANGRY")
+                elif "SAD" in result:
+                    results.append("SAD")
+                elif "COMMENT" in result:
+                    results.append("COMMENT")
+                elif "SHARE" in result:
+                    results.append("SHARE")
+                else:
+                    results.append("IGNORE")
+            logger.debug(f"[vLLM] Batch read reaction decision completed successfully ({len(results)} results)")
+            return results
+        except Exception as e:
+            logger.error(f"[vLLM] Batch read reaction decision failed: {e}")
+            logger.error(f"[vLLM] Number of requests: {len(requests)}")
+            raise RuntimeError(f"vLLM batch read reaction decision failed: {e}") from e
+
     def generate_comment(
         self,
         cluster_id: int,
@@ -503,6 +653,109 @@ class VLLMService:
             logger.error(f"[vLLM] cluster_id={cluster_id}, author={author_name}, post_content_len={len(post_content) if post_content else 0}")
             logger.warning("[vLLM] Returning fallback comment")
             return "Interesting perspective!"
+
+    def generate_comment_batch(
+        self, requests: List[Dict[str, Any]]
+    ) -> List[str]:
+        """
+        Generate multiple comments in a single batch for improved performance.
+
+        Args:
+            requests: List of request dicts, each with keys:
+                - cluster_id: Agent cluster ID
+                - post_content: Content of the post to comment on
+                - agent_attrs: Agent attributes dict (optional)
+                - author_name: Username of the post author (optional, default: "Someone")
+                - thread_context: List of thread context (optional)
+
+        Returns:
+            List of generated comment strings in the same order as requests
+        """
+        try:
+            logger.debug(f"[vLLM] Starting batch comment generation for {len(requests)} requests")
+            prompts = []
+            for idx, req in enumerate(requests):
+                try:
+                    cluster_id = req["cluster_id"]
+                    post_content = req["post_content"]
+                    agent_attrs = req.get("agent_attrs")
+                    author_name = req.get("author_name", "Someone")
+                    thread_context = req.get("thread_context")
+
+                    # Build persona
+                    persona = self._build_persona(cluster_id, agent_attrs)
+                    toxicity = agent_attrs.get("toxicity", "no") if agent_attrs else "no"
+
+                    # Get opinions on the post's topics if available
+                    opinion_instruction = ""
+                    if agent_attrs and "post_topics" in agent_attrs and agent_attrs["post_topics"]:
+                        topics = agent_attrs["post_topics"]
+                        opinions = agent_attrs.get("post_opinions", {})
+
+                        if topics and opinions:
+                            opinion_parts = []
+                            for topic in topics:
+                                if topic in opinions:
+                                    opinion_parts.append(f"{topic}: {opinions[topic]}")
+
+                            if opinion_parts:
+                                opinion_str = ", ".join(opinion_parts)
+                                opinion_instruction = f" Your opinions on the discussed topics: {opinion_str}. Express your viewpoint accordingly."
+
+                    # Get prompt templates
+                    system_template = self.prompts_config["generate_comment"]["system_template"]
+                    user_template = self.prompts_config["generate_comment"]["user_template"]
+
+                    # Format thread context if provided
+                    thread_context_str = ""
+                    thread_context_instruction = ""
+                    if thread_context and len(thread_context) > 0:
+                        thread_context_lines = []
+                        for ctx in thread_context:
+                            username = ctx.get("username", "Someone")
+                            tweet = ctx.get("tweet", "")
+                            thread_context_lines.append(f"{username}: {tweet}")
+                        thread_context_str = "\n".join(thread_context_lines)
+                        thread_context_instruction = (
+                            f"Previous discussion in this thread:\n{thread_context_str}\n\n"
+                        )
+
+                    # Format templates
+                    system_msg = system_template.format(persona=persona, toxicity=toxicity)
+                    user_msg = user_template.format(
+                        author_name=author_name,
+                        post_content=post_content,
+                        thread_context_instruction=thread_context_instruction,
+                    )
+
+                    # Add opinion instruction if available
+                    if opinion_instruction:
+                        user_msg += opinion_instruction
+
+                    # Create formatted prompt
+                    prompt = self._format_prompt(system_msg, user_msg)
+                    prompts.append(prompt)
+                except Exception as e:
+                    logger.error(f"[vLLM] Failed to build prompt for batch comment request {idx}: {e}")
+                    logger.error(f"[vLLM] Request: {req}")
+                    raise
+
+            # Batch generate using vLLM
+            logger.debug(f"[vLLM] Executing batch inference for {len(prompts)} comment prompts")
+            outputs = self.llm.generate(prompts, self.sampling_params)
+            results = []
+            for output in outputs:
+                comment = output.outputs[0].text.strip()
+                # Ensure comment doesn't exceed length
+                if len(comment) > 280:
+                    comment = comment[:277] + "..."
+                results.append(comment)
+            logger.debug(f"[vLLM] Batch comment generation completed successfully ({len(results)} results)")
+            return results
+        except Exception as e:
+            logger.error(f"[vLLM] Batch comment generation failed: {e}")
+            logger.error(f"[vLLM] Number of requests: {len(requests)}")
+            raise RuntimeError(f"vLLM batch comment generation failed: {e}") from e
 
     # Add placeholder methods for compatibility with LLMService interface
     # These methods maintain the same signature but may need full implementation
@@ -788,6 +1041,77 @@ class VLLMService:
         except Exception:
             return []
 
+    def extract_topics_from_article_batch(
+        self, articles: List[Dict[str, str]]
+    ) -> List[list]:
+        """
+        Extract topics from multiple articles in a single batch for improved performance.
+
+        Args:
+            articles: List of dicts with keys 'title' and 'summary'
+
+        Returns:
+            List of topic lists (up to 2 topics per article) in same order as inputs
+        """
+        try:
+            logger.debug(
+                f"[vLLM] Starting batch article topic extraction for {len(articles)} articles"
+            )
+
+            system_template = self.prompts_config["extract_article_topics"][
+                "system_template"
+            ]
+            user_template = self.prompts_config["extract_article_topics"]["user_template"]
+
+            # Build prompts for all articles
+            prompts = []
+            for article in articles:
+                article_text = (
+                    f"Title: {article['title']}\n\nSummary: {article['summary']}"
+                    if article.get("summary")
+                    else f"Title: {article['title']}"
+                )
+                prompt = self._format_prompt(system_template, user_template)
+                prompt = prompt.replace("{article_text}", article_text)
+                prompts.append(prompt)
+
+            # Batch generate using vLLM
+            logger.debug(
+                f"[vLLM] Executing batch inference for {len(prompts)} article topic extractions"
+            )
+            outputs = self.llm.generate(prompts, self.sampling_params)
+
+            # Parse results
+            results = []
+            for output in outputs:
+                response = output.outputs[0].text.strip()
+                topics = [t.strip() for t in response.split(",") if t.strip()]
+
+                single_word_topics = []
+                for topic in topics:
+                    words = topic.split()
+                    if words:
+                        single_word = words[0].lower()
+                        single_word = "".join(
+                            char
+                            for char in single_word
+                            if char.isalnum() or char == "-" or char == "_"
+                        )
+                        if single_word:
+                            single_word_topics.append(single_word)
+
+                results.append(single_word_topics[:2])
+
+            logger.debug(
+                f"[vLLM] Batch article topic extraction completed successfully ({len(results)} results)"
+            )
+            return results
+        except Exception as e:
+            logger.error(f"[vLLM] Batch article topic extraction failed: {e}")
+            logger.error(f"[vLLM] Number of articles: {len(articles)}")
+            # Return empty lists for all articles on error
+            return [[] for _ in articles]
+
     def extract_emotions(self, text: str) -> list:
         """Extract emotions from text using LLM based on GoEmotions taxonomy."""
         system_template = self.prompts_config.get("extract_emotions", {}).get(
@@ -814,6 +1138,58 @@ class VLLMService:
             return emotions
         except Exception:
             return []
+
+    def extract_emotions_batch(self, texts: List[str]) -> List[list]:
+        """
+        Extract emotions from multiple texts in a single batch for improved performance.
+
+        Args:
+            texts: List of text strings to extract emotions from
+
+        Returns:
+            List of emotion lists (one per input text) in the same order as inputs
+        """
+        try:
+            logger.debug(f"[vLLM] Starting batch emotion extraction for {len(texts)} texts")
+            
+            system_template = self.prompts_config.get("extract_emotions", {}).get(
+                "system_template",
+                "You are an emotion classification assistant. Identify which emotions from the GoEmotions taxonomy the given text elicits.",
+            )
+            user_template = self.prompts_config.get("extract_emotions", {}).get(
+                "user_template",
+                'Identify emotions from this text. Choose ONLY from: {emotion_list}\n\nText: "{text}"\n\nReturn emotions as comma-separated list:',
+            )
+
+            emotion_list = "admiration, amusement, anger, annoyance, approval, caring, confusion, curiosity, desire, disappointment, disapproval, disgust, embarrassment, excitement, fear, gratitude, grief, joy, love, nervousness, optimism, pride, realization, relief, remorse, sadness, surprise, trust"
+
+            # Build prompts for all texts
+            prompts = []
+            for text in texts:
+                prompt = self._format_prompt(system_template, user_template)
+                prompt = prompt.replace("{text}", text).replace("{emotion_list}", emotion_list)
+                prompts.append(prompt)
+
+            # Batch generate using vLLM
+            logger.debug(f"[vLLM] Executing batch inference for {len(prompts)} emotion extraction prompts")
+            outputs = self.llm.generate(prompts, self.sampling_params)
+            
+            # Parse results
+            results = []
+            valid_emotions = emotion_list.split(", ")
+            for output in outputs:
+                response = output.outputs[0].text.strip()
+                emotions = [e.strip().lower() for e in response.split(",") if e.strip()]
+                emotions = [e for e in emotions if e in valid_emotions]
+                results.append(emotions)
+            
+            logger.debug(f"[vLLM] Batch emotion extraction completed successfully ({len(results)} results)")
+            return results
+        except Exception as e:
+            logger.error(f"[vLLM] Batch emotion extraction failed: {e}")
+            logger.error(f"[vLLM] Number of texts: {len(texts)}")
+            # Return empty lists for all texts on error
+            return [[] for _ in texts]
 
     def describe_image(self, image_url: str) -> Optional[str]:
         """
@@ -1025,3 +1401,174 @@ class VLLMService:
         except Exception as e:
             logger.error(f"Failed to evaluate opinion: {e}")
             return "NEUTRAL"
+
+    def evaluate_opinion_batch(
+        self, requests: List[Dict[str, Any]]
+    ) -> List[str]:
+        """
+        Evaluate multiple opinion changes in a single batch for improved performance.
+
+        Args:
+            requests: List of dicts with keys:
+                - agent_opinion: Agent's current opinion label
+                - author_opinion: Author's opinion label
+                - post_text: Content of the post
+                - topic: Topic name
+                - peers_opinions: Optional list of (opinion_label, count) tuples
+
+        Returns:
+            List of evaluation results ("AGREE"|"DISAGREE"|"NEUTRAL") in same order as inputs
+        """
+        try:
+            logger.debug(
+                f"[vLLM] Starting batch opinion evaluation for {len(requests)} requests"
+            )
+
+            system_template = self.prompts_config.get("evaluate_opinion", {}).get(
+                "system_template",
+                "You are evaluating opinions on various topics. Consider the content and opinions presented.",
+            )
+
+            # Build prompts for all evaluations
+            prompts = []
+            for req in requests:
+                prompt_text = (
+                    f"Read the following text on the topic '{req['topic'].upper()}': '{req['post_text']}'.\n"
+                    f"The author has opinion '{req['author_opinion']}' on the topic.\n"
+                    f"Your initial opinion is '{req['agent_opinion']}'"
+                )
+
+                peers_opinions = req.get("peers_opinions")
+                if peers_opinions and len(peers_opinions) > 0:
+                    prompt_text += "\n\nThe following are the opinions of your friends:\n"
+                    for op, count in peers_opinions:
+                        prompt_text += f"Opinion: '{op}' ({count})\n"
+
+                prompt_text += (
+                    "\nWhat do you think about the expressed opinion? "
+                    "Answer with a single word among the options: AGREE|DISAGREE|NEUTRAL."
+                )
+
+                prompt = self._format_prompt(system_template, prompt_text)
+                prompts.append(prompt)
+
+            # Batch generate using vLLM
+            logger.debug(
+                f"[vLLM] Executing batch inference for {len(prompts)} opinion evaluations"
+            )
+            outputs = self.llm.generate(prompts, self.sampling_params)
+
+            # Parse results
+            results = []
+            for output in outputs:
+                response = output.outputs[0].text.strip().upper()
+                if "AGREE" in response:
+                    results.append("AGREE")
+                elif "DISAGREE" in response:
+                    results.append("DISAGREE")
+                elif "NEUTRAL" in response:
+                    results.append("NEUTRAL")
+                else:
+                    results.append("NEUTRAL")
+
+            logger.debug(
+                f"[vLLM] Batch opinion evaluation completed successfully ({len(results)} results)"
+            )
+            return results
+        except Exception as e:
+            logger.error(f"[vLLM] Batch opinion evaluation failed: {e}")
+            logger.error(f"[vLLM] Number of requests: {len(requests)}")
+            # Return NEUTRAL for all evaluations on error
+            return ["NEUTRAL" for _ in requests]
+
+    def generate_search_action_batch(
+        self, requests: List[Dict[str, Any]]
+    ) -> List[str]:
+        """
+        Generate batch search action decisions for multiple agents in a single call.
+
+        This method processes multiple search action decisions in parallel,
+        significantly reducing latency compared to individual calls.
+
+        Args:
+            requests: List of dicts with keys:
+                - cluster_id: Agent's cluster ID for persona
+                - post_content: Content of the post agent found via search
+                - agent_attrs: Optional dict with agent attributes for dynamic persona
+
+        Returns:
+            List of action decisions ("COMMENT"|"SHARE"|"LIKE"|"LOVE"|"LAUGH"|"ANGRY"|"SAD"|"IGNORE")
+            in same order as input requests
+        """
+        try:
+            logger.debug(
+                f"[vLLM] Starting batch search action decision for {len(requests)} requests"
+            )
+
+            system_template = self.prompts_config.get("generate_search_action", {}).get(
+                "system_template",
+                "You are deciding how to engage with a post found via search.",
+            )
+
+            # Build prompts for all search decisions
+            prompts = []
+            for i, req in enumerate(requests):
+                try:
+                    cluster_id = req["cluster_id"]
+                    post_content = req["post_content"]
+                    agent_attrs = req.get("agent_attrs", {})
+
+                    # Build persona (same as individual search action)
+                    persona = self._build_persona(cluster_id, agent_attrs)
+
+                    # Get user template
+                    user_template = self.prompts_config.get("generate_search_action", {}).get(
+                        "user_template",
+                        "Post content: {post_content}\n\nHow should you engage? Reply with COMMENT, SHARE, LIKE, LOVE, LAUGH, ANGRY, SAD, or IGNORE.",
+                    )
+
+                    # Format the user message
+                    prompt_text = user_template.format(
+                        persona=persona,
+                        post_content=post_content,
+                    )
+
+                    prompt = self._format_prompt(system_template, prompt_text)
+                    prompts.append(prompt)
+
+                except Exception as e:
+                    logger.error(
+                        f"[vLLM] Failed to build prompt for batch search action request {i}: {e}"
+                    )
+                    logger.error(f"[vLLM] Request: {req}")
+                    # Add empty prompt as placeholder
+                    prompts.append(self._format_prompt(system_template, "IGNORE"))
+
+            # Batch generate using vLLM
+            logger.debug(
+                f"[vLLM] Executing batch inference for {len(prompts)} search action prompts"
+            )
+            outputs = self.llm.generate(prompts, self.sampling_params)
+
+            # Parse results
+            results = []
+            valid_actions = {"COMMENT", "SHARE", "LIKE", "LOVE", "LAUGH", "ANGRY", "SAD", "IGNORE"}
+            for output in outputs:
+                response = output.outputs[0].text.strip().upper()
+                # Extract first valid action from response
+                action = "IGNORE"  # default
+                for valid_action in valid_actions:
+                    if valid_action in response:
+                        action = valid_action
+                        break
+                results.append(action)
+
+            logger.debug(
+                f"[vLLM] Batch search action decision completed successfully ({len(results)} results)"
+            )
+            return results
+
+        except Exception as e:
+            logger.error(f"[vLLM] Batch search action decision failed: {e}")
+            logger.error(f"[vLLM] Number of requests: {len(requests)}")
+            raise RuntimeError(f"vLLM batch search action decision failed: {e}") from e

@@ -18,6 +18,7 @@ from YSimulator.YClient.actions import (
     generate_rule_based_comment,
     generate_rule_based_share,
 )
+from YSimulator.YClient.actions.llm_actions import _should_use_vllm_batching
 from YSimulator.YClient.classes.ray_models import ActionDTO, AgentProfile
 
 # Basic reactions for rule-based agents
@@ -122,11 +123,27 @@ class SearchGenerator(BaseActionGenerator):
                 agent_attrs["post_opinions"] = opinion_info["opinions"]
                 agent_attrs["post_opinion_values"] = opinion_info["opinion_values"]
 
-            future = generate_llm_search_action_async(
-                self.context.llm, agent.cluster, post_content, agent_attrs, agent.id
-            )
-            # Store: (agent_id, cluster_id, target_post_id, future)
-            result.pending_llm_calls.append((agent.id, agent.cluster, target_post, future))
+            # Check if vLLM batching should be used
+            if _should_use_vllm_batching(self.context.llm):
+                # vLLM batching: Return None future and include metadata for batch processing
+                result.pending_llm_calls.append((
+                    agent.id,
+                    agent.cluster,
+                    target_post,
+                    None,  # No individual future
+                    {
+                        "post_content": post_content,
+                        "agent_attrs": agent_attrs,
+                        "post_data": post_data,
+                    }
+                ))
+            else:
+                # Standard: Create individual future
+                future = generate_llm_search_action_async(
+                    self.context.llm, agent.cluster, post_content, agent_attrs, agent.id
+                )
+                # Store: (agent_id, cluster_id, target_post_id, future)
+                result.pending_llm_calls.append((agent.id, agent.cluster, target_post, future))
         else:
             # Rule-based: Randomly select action among comment, share, or react
             possible_actions = ["comment", "share", "react"]
