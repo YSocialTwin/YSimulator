@@ -494,11 +494,20 @@ future = self.llm.generate_post.remote(cluster_id, day, slot, agent_attrs)
 
 ## References
 
-- [vLLM Batch Inference Implementation](docs/features/VLLM_BATCH_INFERENCE.md)
-- [vLLM Integration Guide](docs/configuration/VLLM_INTEGRATION_GUIDE.md)
+### Related Documentation
+
+- **[vLLM Integration Guide](../configuration/VLLM_INTEGRATION_GUIDE.md)** - Quick start and configuration guide
+- **[vLLM Batch Inference Implementation](VLLM_BATCH_INFERENCE.md)** - Comprehensive batch inference details
+- **[vLLM Final Report](VLLM_FINAL_REPORT.md)** - Implementation report with dual-model support
+- **[Configuration Guide](../configuration/CONFIG.md)** - Complete configuration reference
+- **[Bottleneck Analysis Summary](../analysis/BOTTLENECK_ANALYSIS_SUMMARY.md)** - Performance analysis and quick wins
+- **[Performance Optimization Roadmap](../analysis/PERFORMANCE_OPTIMIZATION_ROADMAP.md)** - System-wide optimization strategies
+- **[Architecture Overview](../architecture/ARCHITECTURE.md)** - System design and components
+
+### External Resources
+
 - [vLLM Documentation](https://docs.vllm.ai/)
-- [Bottleneck Analysis Summary](docs/analysis/BOTTLENECK_ANALYSIS_SUMMARY.md)
-- [Performance Optimization Roadmap](docs/analysis/PERFORMANCE_OPTIMIZATION_ROADMAP.md)
+- [vLLM GitHub Repository](https://github.com/vllm-project/vllm)
 
 ---
 

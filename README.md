@@ -41,6 +41,7 @@ A distributed social media simulation system using Ray for orchestration and LLM
 
 **System & Performance:**
 - **[vLLM Integration Guide](docs/configuration/VLLM_INTEGRATION_GUIDE.md)** - High-performance LLM backend with batch inference (8x-30x speedup)
+- **[vLLM Batch Inference](docs/features/VLLM_BATCH_INFERENCE.md)** - Comprehensive batch inference implementation (10x-50x speedup)
 - **[Database & Storage](docs/data-storage/REDIS_DATABASE_ANALYSIS.md)** - Redis/SQL hybrid architecture, 89% Redis coverage (480 lines)
 - **[Redis Integration](docs/data-storage/RECSYS_REDIS_SUPPORT.md)** - Caching strategies and implementation (870 lines)
 - **[Performance Optimization](docs/analysis/BOTTLENECK_ANALYSIS_SUMMARY.md)** - Bottleneck analysis and optimization strategies

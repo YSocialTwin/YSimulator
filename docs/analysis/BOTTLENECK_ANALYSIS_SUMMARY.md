@@ -373,11 +373,23 @@ CACHE_CONFIG = {
 
 ## Additional Resources
 
-- **Architecture**: [ARCHITECTURE.md](../architecture/ARCHITECTURE.md)
-- **LLM Utilities**: [LLM_UTILITIES_LAYER.md](../architecture/LLM_UTILITIES_LAYER.md)
-- **Simulation Orchestrator**: [SIMULATION_ORCHESTRATOR.md](../architecture/SIMULATION_ORCHESTRATOR.md)
-- **Redis Caching**: [REDIS_COVERAGE_ANALYSIS.md](../data-storage/REDIS_COVERAGE_ANALYSIS.md)
-- **Batch Operations**: [AGENT_POPULATION_OPTIMIZATION.md](../AGENT_POPULATION_OPTIMIZATION.md)
+### Performance & Optimization
+
+- **[vLLM Integration Guide](../configuration/VLLM_INTEGRATION_GUIDE.md)** - Quick start for vLLM backend (8-30x speedup)
+- **[vLLM Batch Inference](../features/VLLM_BATCH_INFERENCE.md)** - Comprehensive batch inference implementation (10-50x speedup)
+- **[vLLM Integration Summary](../features/VLLM_INTEGRATION_SUMMARY.md)** - Complete implementation summary
+- **[Performance Optimization Roadmap](./PERFORMANCE_OPTIMIZATION_ROADMAP.md)** - Detailed optimization strategies
+
+### Architecture & Design
+
+- **[Architecture](../architecture/ARCHITECTURE.md)** - System design overview
+- **[LLM Utilities](../architecture/LLM_UTILITIES_LAYER.md)** - LLM integration layer
+- **[Simulation Orchestrator](../architecture/SIMULATION_ORCHESTRATOR.md)** - Orchestration patterns
+
+### Data & Caching
+
+- **[Redis Caching](../data-storage/REDIS_COVERAGE_ANALYSIS.md)** - Redis integration and coverage
+- **[Batch Operations](../AGENT_POPULATION_OPTIMIZATION.md)** - Population optimization
 
 ---
 

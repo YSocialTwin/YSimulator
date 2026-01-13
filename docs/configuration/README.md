@@ -13,6 +13,13 @@ This directory contains comprehensive configuration documentation for YSimulator
   - Recommendation systems configuration
   - Logging configuration
 
+- **[VLLM_INTEGRATION_GUIDE.md](VLLM_INTEGRATION_GUIDE.md)** - vLLM backend setup and configuration (450+ lines)
+  - Backend selection and installation
+  - Configuration options for vLLM and Ollama
+  - Performance comparison and benchmarks
+  - Batch inference capabilities
+  - Troubleshooting and best practices
+
 ## Quick Links
 
 - [Back to Documentation Index](../getting-started/INDEX.md)
