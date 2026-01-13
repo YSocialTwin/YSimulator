@@ -1480,3 +1480,95 @@ class VLLMService:
             logger.error(f"[vLLM] Number of requests: {len(requests)}")
             # Return NEUTRAL for all evaluations on error
             return ["NEUTRAL" for _ in requests]
+
+    def generate_search_action_batch(
+        self, requests: List[Dict[str, Any]]
+    ) -> List[str]:
+        """
+        Generate batch search action decisions for multiple agents in a single call.
+
+        This method processes multiple search action decisions in parallel,
+        significantly reducing latency compared to individual calls.
+
+        Args:
+            requests: List of dicts with keys:
+                - cluster_id: Agent's cluster ID for persona
+                - post_content: Content of the post agent found via search
+                - agent_attrs: Optional dict with agent attributes for dynamic persona
+
+        Returns:
+            List of action decisions ("COMMENT"|"SHARE"|"LIKE"|"LOVE"|"LAUGH"|"ANGRY"|"SAD"|"IGNORE")
+            in same order as input requests
+        """
+        try:
+            logger.debug(
+                f"[vLLM] Starting batch search action decision for {len(requests)} requests"
+            )
+
+            system_template = self.prompts_config.get("generate_search_action", {}).get(
+                "system_template",
+                "You are deciding how to engage with a post found via search.",
+            )
+
+            # Build prompts for all search decisions
+            prompts = []
+            for i, req in enumerate(requests):
+                try:
+                    cluster_id = req["cluster_id"]
+                    post_content = req["post_content"]
+                    agent_attrs = req.get("agent_attrs", {})
+
+                    # Build persona (same as individual search action)
+                    persona = self._build_persona(cluster_id, agent_attrs)
+
+                    # Get user template
+                    user_template = self.prompts_config.get("generate_search_action", {}).get(
+                        "user_template",
+                        "Post content: {post_content}\n\nHow should you engage? Reply with COMMENT, SHARE, LIKE, LOVE, LAUGH, ANGRY, SAD, or IGNORE.",
+                    )
+
+                    # Format the user message
+                    prompt_text = user_template.format(
+                        persona=persona,
+                        post_content=post_content,
+                    )
+
+                    prompt = self._format_prompt(system_template, prompt_text)
+                    prompts.append(prompt)
+
+                except Exception as e:
+                    logger.error(
+                        f"[vLLM] Failed to build prompt for batch search action request {i}: {e}"
+                    )
+                    logger.error(f"[vLLM] Request: {req}")
+                    # Add empty prompt as placeholder
+                    prompts.append(self._format_prompt(system_template, "IGNORE"))
+
+            # Batch generate using vLLM
+            logger.debug(
+                f"[vLLM] Executing batch inference for {len(prompts)} search action prompts"
+            )
+            outputs = self.llm.generate(prompts, self.sampling_params)
+
+            # Parse results
+            results = []
+            valid_actions = {"COMMENT", "SHARE", "LIKE", "LOVE", "LAUGH", "ANGRY", "SAD", "IGNORE"}
+            for output in outputs:
+                response = output.outputs[0].text.strip().upper()
+                # Extract first valid action from response
+                action = "IGNORE"  # default
+                for valid_action in valid_actions:
+                    if valid_action in response:
+                        action = valid_action
+                        break
+                results.append(action)
+
+            logger.debug(
+                f"[vLLM] Batch search action decision completed successfully ({len(results)} results)"
+            )
+            return results
+
+        except Exception as e:
+            logger.error(f"[vLLM] Batch search action decision failed: {e}")
+            logger.error(f"[vLLM] Number of requests: {len(requests)}")
+            raise RuntimeError(f"vLLM batch search action decision failed: {e}") from e

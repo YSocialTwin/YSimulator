@@ -695,6 +695,7 @@ class BatchProcessor:
         batchable_comments = []
         batchable_shares = []
         batchable_reads = []
+        batchable_searches = []
         non_batchable = []
         
         for reaction_tuple in pending_llm_reactions:
@@ -707,6 +708,9 @@ class BatchProcessor:
                     batchable_shares.append(reaction_tuple)
                 elif metadata.get("type") == "read":
                     batchable_reads.append(reaction_tuple)
+                elif "post_content" in metadata and "agent_attrs" in metadata:
+                    # Search action (has post_content and agent_attrs but no type field)
+                    batchable_searches.append(reaction_tuple)
                 else:
                     non_batchable.append(reaction_tuple)
             else:
@@ -734,6 +738,14 @@ class BatchProcessor:
             self.logger.info(f"Processing {len(batchable_reads)} read reactions with vLLM batch inference")
             candidates = self._process_vllm_read_batch(
                 batchable_reads, actions, calculate_opinion_updates_fn
+            )
+            secondary_follow_candidates.extend(candidates)
+        
+        # Process batchable searches (search action decisions) with vLLM batch inference
+        if batchable_searches:
+            self.logger.info(f"Processing {len(batchable_searches)} search actions with vLLM batch inference")
+            candidates = self._process_vllm_search_batch(
+                batchable_searches, actions, calculate_opinion_updates_fn
             )
             secondary_follow_candidates.extend(candidates)
         
@@ -1198,6 +1210,205 @@ class BatchProcessor:
                 for action_idx in comment_action_indices:
                     if action_idx < len(actions) and hasattr(actions[action_idx], 'annotations'):
                         actions[action_idx].annotations["emotions"] = []
+        
+        # Batch evaluate opinions if any requests collected
+        if opinion_requests:
+            self._batch_evaluate_and_update_opinions(opinion_requests, actions, calculate_opinion_updates_fn)
+        
+        return secondary_follow_candidates
+
+    def _process_vllm_search_batch(
+        self,
+        batchable_searches: List[Tuple],
+        actions: List[ActionDTO],
+        calculate_opinion_updates_fn,
+    ) -> List[Tuple]:
+        """
+        Process search action decisions using vLLM's generate_search_action_batch method.
+        
+        Converts LLM decisions (COMMENT/SHARE/LIKE/etc) into appropriate ActionDTOs.
+        
+        Args:
+            batchable_searches: List of tuples with format (agent_id, cluster_id, target_post_id, future, metadata_dict)
+            actions: List to append resolved actions to
+            calculate_opinion_updates_fn: Function to calculate opinion updates
+            
+        Returns:
+            List of secondary follow candidates
+        """
+        secondary_follow_candidates = []
+        
+        # Build batch requests from metadata
+        batch_requests = []
+        for item in batchable_searches:
+            agent_id, cluster_id, target_post, future, metadata = item
+            batch_requests.append({
+                "cluster_id": cluster_id,
+                "post_content": metadata.get("post_content", ""),
+                "agent_attrs": metadata.get("agent_attrs"),
+            })
+        
+        # Get LLM actor for batch call
+        llm_actor = self._get_llm_actor()
+        
+        # Call generate_search_action_batch
+        self.logger.info(f"Calling generate_search_action_batch for {len(batch_requests)} search requests")
+        try:
+            batch_future = llm_actor.generate_search_action_batch.remote(batch_requests)
+            results = self.retry_handler.retry_with_backoff(
+                lambda f: ray.get(f),
+                batch_future,
+                error_message="vLLM batch search action decision"
+            )
+        except Exception as e:
+            self.logger.error(f"vLLM batch search action failed: {e}, falling back to standard gather")
+            return self._gather_reactions_standard(batchable_searches, actions, calculate_opinion_updates_fn)
+        
+        # Process results - convert action decisions to ActionDTOs
+        # Collect texts for batch emotion extraction (only for comments/shares)
+        texts_for_emotions = []
+        action_indices_for_emotions = []
+        
+        # Collect opinion evaluation requests for batch processing
+        opinion_requests = []
+        
+        for i, action_decision in enumerate(results):
+            item = batchable_searches[i]
+            agent_id = item[0]
+            cluster_id = item[1]
+            target_post = item[2]
+            metadata = item[4]
+            post_data = metadata.get("post_data")
+            
+            action_decision = action_decision.upper()
+            
+            if action_decision == "COMMENT":
+                # Generate comment using rule-based or simple approach
+                # For search, we can use a simple comment template
+                comment_text = f"Interesting post about {metadata.get('agent_attrs', {}).get('topic', 'this topic')}."
+                
+                # Annotate the comment
+                annotations = annotate_text(
+                    comment_text,
+                    enable_sentiment=self.enable_sentiment,
+                    enable_toxicity=self.enable_toxicity,
+                    perspective_api_key=self.perspective_api_key,
+                    enable_emotions=False,  # Will batch extract later
+                    llm_handle=self.llm,
+                )
+                
+                # Collect for batch emotion extraction
+                if self.enable_emotions:
+                    texts_for_emotions.append(comment_text)
+                    action_indices_for_emotions.append(len(actions))
+                else:
+                    annotations["emotions"] = None
+                
+                # Store for batch opinion processing
+                if post_data:
+                    opinion_requests.append({
+                        "agent_id": agent_id,
+                        "target_post": target_post,
+                        "post_data": post_data,
+                        "action_index": len(actions),
+                    })
+                
+                action = ActionDTO(
+                    agent_id,
+                    cluster_id,
+                    "COMMENT",
+                    content=comment_text,
+                    target_post_id=target_post,
+                    annotations=annotations,
+                    updated_opinions=None,
+                )
+                actions.append(action)
+                
+                # Track for secondary follow
+                if post_data:
+                    secondary_follow_candidates.append(
+                        (agent_id, cluster_id, post_data.get("user_id"), post_data.get("tweet", ""), True)
+                    )
+                    
+            elif action_decision == "SHARE":
+                # Generate share with simple commentary
+                share_text = f"Check out this post about {metadata.get('agent_attrs', {}).get('topic', 'this')}!"
+                
+                # Annotate the share commentary
+                annotations = annotate_text(
+                    share_text,
+                    enable_sentiment=self.enable_sentiment,
+                    enable_toxicity=self.enable_toxicity,
+                    perspective_api_key=self.perspective_api_key,
+                    enable_emotions=False,  # Will batch extract later
+                    llm_handle=self.llm,
+                )
+                
+                # Collect for batch emotion extraction
+                if self.enable_emotions:
+                    texts_for_emotions.append(share_text)
+                    action_indices_for_emotions.append(len(actions))
+                else:
+                    annotations["emotions"] = None
+                
+                # Store for batch opinion processing
+                if post_data:
+                    opinion_requests.append({
+                        "agent_id": agent_id,
+                        "target_post": target_post,
+                        "post_data": post_data,
+                        "action_index": len(actions),
+                    })
+                
+                action = ActionDTO(
+                    agent_id,
+                    cluster_id,
+                    "SHARE",
+                    content=share_text,
+                    target_post_id=target_post,
+                    annotations=annotations,
+                    updated_opinions=None,
+                )
+                actions.append(action)
+                
+                # Track for secondary follow
+                if post_data:
+                    secondary_follow_candidates.append(
+                        (agent_id, cluster_id, post_data.get("user_id"), post_data.get("tweet", ""), True)
+                    )
+                    
+            elif action_decision in ["LIKE", "LOVE", "LAUGH", "ANGRY", "SAD"]:
+                # Simple reaction
+                # Store for batch opinion processing
+                if post_data:
+                    opinion_requests.append({
+                        "agent_id": agent_id,
+                        "target_post": target_post,
+                        "post_data": post_data,
+                        "action_index": len(actions),
+                    })
+                
+                action = ActionDTO(
+                    agent_id,
+                    cluster_id,
+                    action_decision,
+                    target_post_id=target_post,
+                    updated_opinions=None,
+                )
+                actions.append(action)
+                
+                # Track for secondary follow
+                if post_data:
+                    secondary_follow_candidates.append(
+                        (agent_id, cluster_id, post_data.get("user_id"), post_data.get("tweet", ""), True)
+                    )
+            else:
+                # IGNORE or unrecognized - skip
+                self.logger.debug(f"[SEARCH] Agent {agent_id} chose to {action_decision}")
+        
+        # Batch extract emotions if any texts collected
+        if texts_for_emotions:
+            self._batch_extract_and_update_emotions(texts_for_emotions, action_indices_for_emotions, actions)
         
         # Batch evaluate opinions if any requests collected
         if opinion_requests:
