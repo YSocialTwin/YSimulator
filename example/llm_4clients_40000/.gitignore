@@ -1,0 +1,14 @@
+# Generated configuration files (run generate_population.py to create these)
+client_*_agent_population.json
+client_*_simulation_config.json
+network.csv
+server_config.json
+
+# Database files
+*.db
+*.db-journal
+
+# Log files
+logs/
+*.log
+*.log.gz
