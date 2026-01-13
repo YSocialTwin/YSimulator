@@ -14,11 +14,11 @@ from YSimulator.YClient.action_generators.base_generator import (
     BaseActionGenerator,
 )
 from YSimulator.YClient.actions import (
-    _should_use_vllm_batching,
     generate_llm_search_action_async,
     generate_rule_based_comment,
     generate_rule_based_share,
 )
+from YSimulator.YClient.actions.llm_actions import _should_use_vllm_batching
 from YSimulator.YClient.classes.ray_models import ActionDTO, AgentProfile
 
 # Basic reactions for rule-based agents
