@@ -14,7 +14,7 @@ Updated in Phase 3 to use LLM service layer.
 
 import logging
 import uuid
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, Union
 
 import ray
 
@@ -1454,8 +1454,8 @@ class BatchProcessor:
     def _batch_extract_and_update_emotions(
         self,
         texts: List[str],
+        action_indices: Union[int, List[int]],
         actions: List[ActionDTO],
-        action_start_idx: int,
     ) -> None:
         """
         Batch extract emotions and update actions.
@@ -1464,8 +1464,8 @@ class BatchProcessor:
         
         Args:
             texts: List of text strings to extract emotions from
+            action_indices: Either an int (start index for consecutive actions) or List[int] (specific indices)
             actions: List of actions to update
-            action_start_idx: Starting index in actions list for texts
         """
         if not texts:
             return
@@ -1496,7 +1496,12 @@ class BatchProcessor:
             
             # Update actions with extracted emotions
             for i, emotions in enumerate(results):
-                action_idx = action_start_idx + i
+                # Handle both int (consecutive) and list (specific indices)
+                if isinstance(action_indices, int):
+                    action_idx = action_indices + i
+                else:
+                    action_idx = action_indices[i]
+                    
                 if action_idx < len(actions) and hasattr(actions[action_idx], 'annotations'):
                     actions[action_idx].annotations["emotions"] = emotions if emotions else []
                     
@@ -1504,7 +1509,12 @@ class BatchProcessor:
             self.logger.error(f"Failed to batch extract emotions: {e}")
             # Set empty emotions on error
             for i in range(len(texts)):
-                action_idx = action_start_idx + i
+                # Handle both int (consecutive) and list (specific indices)
+                if isinstance(action_indices, int):
+                    action_idx = action_indices + i
+                else:
+                    action_idx = action_indices[i]
+                    
                 if action_idx < len(actions) and hasattr(actions[action_idx], 'annotations'):
                     actions[action_idx].annotations["emotions"] = []
     
