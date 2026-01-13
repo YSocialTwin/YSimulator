@@ -14,7 +14,7 @@ Updated in Phase 3 to use LLM service layer.
 
 import logging
 import uuid
-from typing import List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import ray
 
