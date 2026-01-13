@@ -799,6 +799,9 @@ class BatchProcessor:
         texts_for_emotions = []
         action_start_idx = len(actions)  # Track where new actions start
         
+        # Collect opinion evaluation requests for batch processing
+        opinion_requests = []
+        
         for i, comment_text in enumerate(results):
             item = batchable_comments[i]
             agent_id = item[0]
@@ -826,11 +829,18 @@ class BatchProcessor:
             else:
                 annotations["emotions"] = None
             
-            # Calculate opinion updates
+            # Defer opinion updates for batch processing (store post data for later)
             post_data = ray.get(self.server.get_post.remote(target_post, client_id=self.client_id))
             updated_opinions = None
             if post_data:
-                updated_opinions = calculate_opinion_updates_fn(agent_id, target_post, post_data)
+                # Check if we should defer opinion evaluation for batching
+                # Store parameters for batch evaluation instead of calling now
+                opinion_requests.append({
+                    "agent_id": agent_id,
+                    "target_post": target_post,
+                    "post_data": post_data,
+                    "action_index": len(actions),  # Track which action this belongs to
+                })
             
             # Check if this was a reply to a mention (has mention_id in metadata)
             metadata = item[4]
@@ -840,7 +850,7 @@ class BatchProcessor:
                 ray.get(self.server.mark_mention_replied.remote(mention_id))
                 self.logger.info(f"[REPLY] Successfully marked mention {mention_id} as replied (vLLM batch)")
             
-            # Create action
+            # Create action (opinions will be added later via batch processing)
             action = ActionDTO(
                 agent_id,
                 cluster_id,
@@ -848,7 +858,7 @@ class BatchProcessor:
                 content=comment_text,
                 target_post_id=target_post,
                 annotations=annotations,
-                updated_opinions=updated_opinions,
+                updated_opinions=None,  # Will be updated by batch processing
             )
             actions.append(action)
             
@@ -861,6 +871,10 @@ class BatchProcessor:
         # Batch extract emotions if any texts collected
         if texts_for_emotions:
             self._batch_extract_and_update_emotions(texts_for_emotions, actions, action_start_idx)
+        
+        # Batch evaluate opinions if any requests collected
+        if opinion_requests:
+            self._batch_evaluate_and_update_opinions(opinion_requests, actions, calculate_opinion_updates_fn)
         
         return secondary_follow_candidates
 
@@ -917,6 +931,9 @@ class BatchProcessor:
         texts_for_emotions = []
         action_start_idx = len(actions)
         
+        # Collect opinion evaluation requests for batch processing
+        opinion_requests = []
+        
         for i, share_text in enumerate(results):
             item = batchable_shares[i]
             agent_id = item[0]
@@ -948,13 +965,19 @@ class BatchProcessor:
                 f"vLLM batch share annotated for agent {agent_id}: has_sentiment={bool(annotations.get('sentiment'))}, has_toxicity={bool(annotations.get('toxicity'))}"
             )
             
-            # Calculate opinion updates
+            # Defer opinion updates for batch processing
             post_data = ray.get(self.server.get_post.remote(target_post, client_id=self.client_id))
             updated_opinions = None
             if post_data:
-                updated_opinions = calculate_opinion_updates_fn(agent_id, target_post, post_data)
+                # Store parameters for batch evaluation
+                opinion_requests.append({
+                    "agent_id": agent_id,
+                    "target_post": target_post,
+                    "post_data": post_data,
+                    "action_index": len(actions),
+                })
             
-            # Create SHARE action
+            # Create SHARE action (opinions will be added later via batch processing)
             action = ActionDTO(
                 agent_id,
                 cluster_id,
@@ -962,7 +985,7 @@ class BatchProcessor:
                 content=share_text,
                 target_post_id=target_post,
                 annotations=annotations,
-                updated_opinions=updated_opinions,
+                updated_opinions=None,  # Will be updated by batch processing
             )
             actions.append(action)
             
@@ -975,6 +998,10 @@ class BatchProcessor:
         # Batch extract emotions if any texts collected
         if texts_for_emotions:
             self._batch_extract_and_update_emotions(texts_for_emotions, actions, action_start_idx)
+        
+        # Batch evaluate opinions if any requests collected
+        if opinion_requests:
+            self._batch_evaluate_and_update_opinions(opinion_requests, actions, calculate_opinion_updates_fn)
         
         return secondary_follow_candidates
 
@@ -1028,6 +1055,9 @@ class BatchProcessor:
         texts_for_emotions = []
         comment_action_indices = []  # Track which actions are comments that need emotions
         
+        # Collect opinion evaluation requests for batch processing
+        opinion_requests = []
+        
         for i, reaction_type in enumerate(results):
             item = batchable_reads[i]
             agent_id = item[0]
@@ -1068,11 +1098,17 @@ class BatchProcessor:
                 else:
                     annotations["emotions"] = None
                 
-                # Calculate opinion updates
+                # Defer opinion updates for batch processing
                 post_data = ray.get(self.server.get_post.remote(target_post, client_id=self.client_id))
                 updated_opinions = None
                 if post_data:
-                    updated_opinions = calculate_opinion_updates_fn(agent_id, target_post, post_data)
+                    # Store parameters for batch evaluation
+                    opinion_requests.append({
+                        "agent_id": agent_id,
+                        "target_post": target_post,
+                        "post_data": post_data,
+                        "action_index": len(actions),
+                    })
                 
                 action = ActionDTO(
                     agent_id,
@@ -1081,7 +1117,7 @@ class BatchProcessor:
                     content=reaction_type,
                     target_post_id=target_post,
                     annotations=annotations,
-                    updated_opinions=updated_opinions,
+                    updated_opinions=None,  # Will be updated by batch processing
                 )
                 actions.append(action)
                 
@@ -1101,18 +1137,24 @@ class BatchProcessor:
                 # Simple reaction (LIKE, LOVE, etc.)
                 self.logger.debug(f"[READ] LLM generated reaction for agent {agent_id}: {reaction_type}")
                 
-                # Calculate opinion updates for the reaction
+                # Defer opinion updates for batch processing
                 post_data = ray.get(self.server.get_post.remote(target_post, client_id=self.client_id))
                 updated_opinions = None
                 if post_data:
-                    updated_opinions = calculate_opinion_updates_fn(agent_id, target_post, post_data)
+                    # Store parameters for batch evaluation
+                    opinion_requests.append({
+                        "agent_id": agent_id,
+                        "target_post": target_post,
+                        "post_data": post_data,
+                        "action_index": len(actions),
+                    })
                 
                 action = ActionDTO(
                     agent_id,
                     cluster_id,
                     reaction_type.upper(),
                     target_post_id=target_post,
-                    updated_opinions=updated_opinions,
+                    updated_opinions=None,  # Will be updated by batch processing
                 )
                 actions.append(action)
                 
@@ -1127,12 +1169,6 @@ class BatchProcessor:
         
         # Batch extract emotions if any texts collected (only for comments)
         if texts_for_emotions:
-            # Update specific actions that are comments
-            for idx, action_idx in enumerate(comment_action_indices):
-                if action_idx < len(actions):
-                    # Placeholder - will be updated by batch extraction
-                    pass
-            
             # Call batch extraction with specific action indices
             try:
                 llm_actor = self._get_llm_actor()
@@ -1162,6 +1198,10 @@ class BatchProcessor:
                 for action_idx in comment_action_indices:
                     if action_idx < len(actions) and hasattr(actions[action_idx], 'annotations'):
                         actions[action_idx].annotations["emotions"] = []
+        
+        # Batch evaluate opinions if any requests collected
+        if opinion_requests:
+            self._batch_evaluate_and_update_opinions(opinion_requests, actions, calculate_opinion_updates_fn)
         
         return secondary_follow_candidates
 
@@ -1256,3 +1296,45 @@ class BatchProcessor:
                 action_idx = action_start_idx + i
                 if action_idx < len(actions) and hasattr(actions[action_idx], 'annotations'):
                     actions[action_idx].annotations["emotions"] = []
+    
+    def _batch_evaluate_and_update_opinions(
+        self,
+        opinion_requests: List[Dict],
+        actions: List[ActionDTO],
+        calculate_opinion_updates_fn,
+    ) -> None:
+        """
+        Batch evaluate opinions and update actions.
+        
+        Only used with vLLM batching when LLM-based opinion dynamics is enabled.
+        Provides parallel batching path that doesn't modify core opinion pipeline.
+        
+        Args:
+            opinion_requests: List of dicts with agent_id, target_post, post_data, action_index
+            actions: List of actions to update with evaluated opinions
+            calculate_opinion_updates_fn: Function to calculate opinion updates
+        """
+        if not opinion_requests:
+            return
+        
+        try:
+            # For now, use standard opinion calculation (parallel path approach)
+            # Future optimization: detect LLM evaluation and batch those calls
+            self.logger.info(f"Calculating opinions for {len(opinion_requests)} interactions (standard path)")
+            
+            for req in opinion_requests:
+                agent_id = req["agent_id"]
+                target_post = req["target_post"]
+                post_data = req["post_data"]
+                action_idx = req["action_index"]
+                
+                # Call standard opinion calculation
+                updated_opinions = calculate_opinion_updates_fn(agent_id, target_post, post_data)
+                
+                # Update action with calculated opinions
+                if action_idx < len(actions):
+                    actions[action_idx].updated_opinions = updated_opinions
+                    
+        except Exception as e:
+            self.logger.error(f"Failed to batch evaluate opinions: {e}")
+            # Opinions remain None on error (non-critical)
