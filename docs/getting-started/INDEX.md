@@ -41,6 +41,15 @@ Welcome to the YSimulator documentation! This comprehensive guide will help you 
 | **[Interests & Topics](../features/INTERESTS.md)** | Interest management system (320+ lines) | Attention windows, sliding windows, topic extraction |
 | **[Annotations](../features/ANNOTATION_IMPLEMENTATION.md)** | Emotion annotation system (200+ lines) | GoEmotions taxonomy, 28 emotions, sentiment analysis |
 
+### 🚀 Performance & LLM Backends
+
+| Document | Description | Key Topics |
+|----------|-------------|------------|
+| **[vLLM Integration Guide](../configuration/VLLM_INTEGRATION_GUIDE.md)** | Complete vLLM setup and configuration (450+ lines) | Backend selection, installation, configuration, troubleshooting, 8-30x speedup |
+| **[vLLM Batch Inference](../features/VLLM_BATCH_INFERENCE.md)** | Comprehensive batch inference implementation (500+ lines) | Architecture, batching coverage, performance optimization, 10-50x speedup |
+| **[vLLM Integration Summary](../features/VLLM_INTEGRATION_SUMMARY.md)** | Implementation summary and overview (500+ lines) | Phase 1 & 2 implementation, technical design, benchmarks, testing |
+| **[vLLM Final Report](../features/VLLM_FINAL_REPORT.md)** | Complete implementation report (315+ lines) | Dual-model support, configuration schema, performance results, deployment guide |
+
 ### 🗄️ Data & Storage
 
 | Document | Description | Focus Areas |
@@ -128,10 +137,11 @@ Step-by-step guides for extending YSimulator with new features:
    - Client configuration (LLM, agents, behavior)
    - Agent archetypes and population dynamics
    - Multi-client setups
-2. **[Agent Types](../agents/AGENT_TYPES.md)** - Configure agent types and archetypes
-3. **[Agent Temporal Activities](../agents/AGENT_TEMPORAL_ACTIVITIES.md)** - Configure temporal patterns and population dynamics
-4. **[Opinion Dynamics](../features/OPINION_DYNAMICS.md)** - Configure opinion models
-5. **[Recommendation Systems](../features/RECOMMENDATION_SYSTEMS.md)** - Configure recommendation strategies
+2. **[vLLM Integration Guide](../configuration/VLLM_INTEGRATION_GUIDE.md)** - Configure vLLM backend for high-performance LLM inference
+3. **[Agent Types](../agents/AGENT_TYPES.md)** - Configure agent types and archetypes
+4. **[Agent Temporal Activities](../agents/AGENT_TEMPORAL_ACTIVITIES.md)** - Configure temporal patterns and population dynamics
+5. **[Opinion Dynamics](../features/OPINION_DYNAMICS.md)** - Configure opinion models
+6. **[Recommendation Systems](../features/RECOMMENDATION_SYSTEMS.md)** - Configure recommendation strategies
 
 #### Understand Agent Behavior
 1. **[Agent Actions](../agents/AGENT_ACTIONS.md)** - Available actions and how they work
@@ -147,13 +157,15 @@ Step-by-step guides for extending YSimulator with new features:
 4. **[Redis Integration](../data-storage/RECSYS_REDIS_SUPPORT.md)** - Caching strategy
 
 #### Optimize Performance
-1. **[Performance Optimization Roadmap](../analysis/PERFORMANCE_OPTIMIZATION_ROADMAP.md)** ✨ - Comprehensive performance analysis and optimization strategies
-2. **[Bottleneck Analysis Summary](../analysis/BOTTLENECK_ANALYSIS_SUMMARY.md)** ✨ - Quick wins and step-by-step implementation guide
-3. **[Database & Storage](../data-storage/REDIS_DATABASE_ANALYSIS.md)** - Redis coverage and performance
-4. **[Redis Integration](../data-storage/RECSYS_REDIS_SUPPORT.md)** - Caching best practices
-5. **[Recommendation Systems](../features/RECOMMENDATION_SYSTEMS.md)** - Performance benchmarks
-6. **[Agent Types](../agents/AGENT_TYPES.md)** - Agent downcast optimization
-7. **[Configuration Guide](../configuration/CONFIG.md)** - Agent archetypes and optimization
+1. **[vLLM Integration Guide](../configuration/VLLM_INTEGRATION_GUIDE.md)** - High-performance LLM backend (8-30x speedup)
+2. **[vLLM Batch Inference](../features/VLLM_BATCH_INFERENCE.md)** - Comprehensive batch inference (10-50x speedup)
+3. **[Performance Optimization Roadmap](../analysis/PERFORMANCE_OPTIMIZATION_ROADMAP.md)** ✨ - Comprehensive performance analysis and optimization strategies
+4. **[Bottleneck Analysis Summary](../analysis/BOTTLENECK_ANALYSIS_SUMMARY.md)** ✨ - Quick wins and step-by-step implementation guide
+5. **[Database & Storage](../data-storage/REDIS_DATABASE_ANALYSIS.md)** - Redis coverage and performance
+6. **[Redis Integration](../data-storage/RECSYS_REDIS_SUPPORT.md)** - Caching best practices
+7. **[Recommendation Systems](../features/RECOMMENDATION_SYSTEMS.md)** - Performance benchmarks
+8. **[Agent Types](../agents/AGENT_TYPES.md)** - Agent downcast optimization
+9. **[Configuration Guide](../configuration/CONFIG.md)** - Agent archetypes and optimization
 
 #### Extend Functionality
 1. **[Extending YSimulator](../development/EXTENDING.md)** - Add new actions and behaviors
@@ -173,6 +185,7 @@ Step-by-step guides for extending YSimulator with new features:
 - **Opinions**: [Opinion Dynamics](../features/OPINION_DYNAMICS.md) → [Configuration Guide](../configuration/CONFIG.md)
 - **Interests**: [Interests & Topics](../features/INTERESTS.md) → [Database & Storage](../data-storage/REDIS_DATABASE_ANALYSIS.md)
 - **Annotations**: [Annotations](../features/ANNOTATION_IMPLEMENTATION.md) → [Database & Storage](../data-storage/REDIS_DATABASE_ANALYSIS.md)
+- **vLLM Backend**: [vLLM Integration Guide](../configuration/VLLM_INTEGRATION_GUIDE.md) → [vLLM Batch Inference](../features/VLLM_BATCH_INFERENCE.md) → [vLLM Integration Summary](../features/VLLM_INTEGRATION_SUMMARY.md) → [vLLM Final Report](../features/VLLM_FINAL_REPORT.md)
 
 ---
 
@@ -284,6 +297,15 @@ Logging System
 - **Primary**: [Configuration Guide](../configuration/CONFIG.md#multi-client-synchronization)
 - **Architecture**: [Architecture Overview](../architecture/ARCHITECTURE.md#coordination-mechanisms)
 - **Diagrams**: [System Diagrams](../architecture/DIAGRAMS.md#multi-client-coordination)
+
+### vLLM Backend Integration
+- **Quick Start**: [vLLM Integration Guide](../configuration/VLLM_INTEGRATION_GUIDE.md)
+- **Batch Inference**: [vLLM Batch Inference](../features/VLLM_BATCH_INFERENCE.md)
+- **Implementation Summary**: [vLLM Integration Summary](../features/VLLM_INTEGRATION_SUMMARY.md)
+- **Final Report**: [vLLM Final Report](../features/VLLM_FINAL_REPORT.md)
+- **Configuration**: [Configuration Guide](../configuration/CONFIG.md#llm-configuration)
+- **Performance**: [Bottleneck Analysis Summary](../analysis/BOTTLENECK_ANALYSIS_SUMMARY.md)
+- **Example**: `example/llm_population_100_vllm/`
 
 ### Logging & Monitoring
 - **Configuration**: [Logging Configuration](../logging/LOGGING_CONFIG.md)

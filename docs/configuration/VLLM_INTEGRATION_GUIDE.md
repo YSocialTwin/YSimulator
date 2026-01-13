@@ -412,10 +412,19 @@ Batch methods accept a list of request dictionaries and return a list of results
 
 ## Additional Resources
 
+### Related Documentation
+
+- **[vLLM Batch Inference](../features/VLLM_BATCH_INFERENCE.md)** - Comprehensive batch inference implementation details
+- **[vLLM Integration Summary](../features/VLLM_INTEGRATION_SUMMARY.md)** - Complete implementation summary and technical design
+- **[vLLM Final Report](../features/VLLM_FINAL_REPORT.md)** - Implementation report with dual-model support details
+- **[Performance Optimization Roadmap](../analysis/PERFORMANCE_OPTIMIZATION_ROADMAP.md)** - System-wide performance optimization strategies
+- **[Bottleneck Analysis Summary](../analysis/BOTTLENECK_ANALYSIS_SUMMARY.md)** - Quick wins and implementation guide
+- **[Example Configuration](../../example/llm_population_100_vllm/)** - Working vLLM configuration example
+
+### External Resources
+
 - [vLLM Documentation](https://docs.vllm.ai/)
-- [Performance Optimization Roadmap](../analysis/PERFORMANCE_OPTIMIZATION_ROADMAP.md)
-- [Bottleneck Analysis Summary](../analysis/BOTTLENECK_ANALYSIS_SUMMARY.md)
-- [Example Configuration](../../example/llm_population_100_vllm/)
+- [vLLM GitHub Repository](https://github.com/vllm-project/vllm)
 
 ## Batch Inference Implementation
 

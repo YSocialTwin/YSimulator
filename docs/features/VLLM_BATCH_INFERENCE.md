@@ -488,11 +488,25 @@ def _process_my_operation_batch(self, requests):
 
 ## References
 
-- [vLLM Integration Guide](VLLM_INTEGRATION_GUIDE.md)
-- [vLLM Documentation](https://docs.vllm.ai/)
+### Related Documentation
+
+- **[vLLM Integration Guide](../configuration/VLLM_INTEGRATION_GUIDE.md)** - Quick start and configuration guide
+- **[vLLM Integration Summary](VLLM_INTEGRATION_SUMMARY.md)** - Complete implementation summary
+- **[vLLM Final Report](VLLM_FINAL_REPORT.md)** - Implementation report with dual-model details
+- **[Configuration Guide](../configuration/CONFIG.md)** - Complete configuration reference
+- **[Performance Optimization Roadmap](../analysis/PERFORMANCE_OPTIMIZATION_ROADMAP.md)** - System-wide optimization
+- **[Bottleneck Analysis Summary](../analysis/BOTTLENECK_ANALYSIS_SUMMARY.md)** - Performance analysis
+
+### Implementation References
+
 - [Batch Processor Implementation](../../YSimulator/YClient/simulation/batch_processor.py)
 - [VLLMService Implementation](../../YSimulator/YClient/LLM_interactions/vllm_service.py)
 - [Test Suite](../../YSimulator/tests/test_vllm_batching.py)
+
+### External Resources
+
+- [vLLM Documentation](https://docs.vllm.ai/)
+- [vLLM GitHub Repository](https://github.com/vllm-project/vllm)
 
 ---
 

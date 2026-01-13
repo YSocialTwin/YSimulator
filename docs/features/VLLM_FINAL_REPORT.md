@@ -305,6 +305,22 @@ The vLLM integration successfully:
 
 The implementation is production-ready, fully tested, and documented.
 
+## Related Documentation
+
+For comprehensive information about vLLM integration, see:
+
+- **[vLLM Integration Guide](../configuration/VLLM_INTEGRATION_GUIDE.md)** - Quick start, configuration, and troubleshooting
+- **[vLLM Batch Inference](VLLM_BATCH_INFERENCE.md)** - Detailed batch inference implementation (10-50x speedup)
+- **[vLLM Integration Summary](VLLM_INTEGRATION_SUMMARY.md)** - Complete implementation summary and technical design
+- **[Configuration Guide](../configuration/CONFIG.md)** - Complete configuration reference
+- **[Performance Optimization Roadmap](../analysis/PERFORMANCE_OPTIMIZATION_ROADMAP.md)** - System-wide optimization
+- **[Architecture Overview](../architecture/ARCHITECTURE.md)** - System design and components
+
+### External Resources
+
+- [vLLM Documentation](https://docs.vllm.ai/)
+- [vLLM GitHub Repository](https://github.com/vllm-project/vllm)
+
 ---
 
 **Implementation Completed**: January 10, 2026  
