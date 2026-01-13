@@ -96,21 +96,80 @@ class BatchProcessor:
         self.response_parser = ResponseParser(logger=logger)
         self.cost_tracker = cost_tracker  # Optional cost tracking
 
+    def _is_vllm_backend(self) -> bool:
+        """
+        Check if the LLM backend is vLLM by checking for generate_post_batch method.
+        
+        Returns:
+            bool: True if using vLLM backend, False otherwise (Ollama)
+        """
+        try:
+            # Get an LLM actor to check its capabilities
+            # Handle both single actor and load balancer cases
+            if hasattr(self.llm, 'get_all_actors'):
+                # Load balancer case - get first actor
+                actors = self.llm.get_all_actors()
+                if actors and len(actors) > 0:
+                    test_actor = actors[0]
+                else:
+                    return False
+            else:
+                # Single actor case
+                test_actor = self.llm
+            
+            # Check if the actor has generate_post_batch method
+            # Use hasattr on the actor class to avoid remote calls
+            if hasattr(test_actor, 'generate_post_batch'):
+                return True
+            
+            # For Ray actors, we need to check the remote class
+            # Ray actors expose their methods as attributes
+            return hasattr(test_actor, 'generate_post_batch')
+        except Exception as e:
+            self.logger.debug(f"Could not determine LLM backend type: {e}, defaulting to Ollama")
+            return False
+
     def gather_pending_llm_posts(
-        self, pending_llm_posts: List[Tuple], actions: List[ActionDTO]
+        self, pending_llm_posts: List[Tuple], actions: List[ActionDTO], 
+        day: Optional[int] = None, slot: Optional[int] = None
     ) -> None:
         """
         Gather and resolve all pending LLM post generation calls.
+        
+        When vLLM backend is detected, uses batch inference for improved performance.
+        Otherwise, falls back to standard scatter/gather pattern (Ollama).
 
         Args:
             pending_llm_posts: List of tuples:
                 - (agent_id, cluster_id, future, topic_or_article_id) for regular/news posts
                 - (agent_id, cluster_id, future, None, image_id, topic_ids) for image posts
             actions: List to append resolved post actions to
+            day: Current simulation day (optional, needed for vLLM batching)
+            slot: Current time slot (optional, needed for vLLM batching)
         """
         if not pending_llm_posts:
             return
 
+        # Check if using vLLM backend for batch inference
+        use_vllm_batching = self._is_vllm_backend()
+        
+        if use_vllm_batching:
+            self.logger.info(f"Using vLLM batch inference for {len(pending_llm_posts)} posts")
+            self._gather_posts_with_vllm_batch(pending_llm_posts, actions, day, slot)
+        else:
+            self.logger.debug(f"Using standard scatter/gather for {len(pending_llm_posts)} posts (Ollama)")
+            self._gather_posts_standard(pending_llm_posts, actions)
+
+    def _gather_posts_standard(
+        self, pending_llm_posts: List[Tuple], actions: List[ActionDTO]
+    ) -> None:
+        """
+        Standard scatter/gather pattern for Ollama backend (default).
+        
+        Args:
+            pending_llm_posts: List of pending post tuples (supports both old and new formats)
+            actions: List to append resolved post actions to
+        """
         # Phase 3: Use batch_handler with retry logic for robustness
         futures = [p[2] for p in pending_llm_posts]
         results = self.retry_handler.retry_with_backoff(
@@ -144,7 +203,9 @@ class BatchProcessor:
                     f"LLM image post for agent {a_id}: image_id={image_id}, has_image_id_attr={hasattr( action, 'image_id')}, topics={len(topic_ids)}, content_len={len(res_txt)}"
                 )
             else:
-                # Regular/news post: (agent_id, cluster_id, future, topic_or_article_id)
+                # Regular/news post: Old format (agent_id, cluster_id, future, topic_or_article_id)
+                # Or new format: (agent_id, cluster_id, future, topic, day, slot, agent_attrs)
+                # Extract topic from position 3 in both cases
                 topic_or_article = pending_item[3] if len(pending_item) > 3 else None
                 action = ActionDTO(a_id, cid, "POST", content=res_txt)
 
@@ -182,6 +243,146 @@ class BatchProcessor:
                 f"LLM post annotated for agent {a_id}: has_sentiment={bool( annotations.get('sentiment'))}, has_toxicity={bool( annotations.get('toxicity'))}, has_emotions={bool( annotations.get('emotions'))}, hashtags={len( annotations.get( 'hashtags', []))}, mentions={len( annotations.get( 'mentions', []))}"
             )
 
+            actions.append(action)
+
+    def _gather_posts_with_vllm_batch(
+        self, pending_llm_posts: List[Tuple], actions: List[ActionDTO],
+        day: Optional[int] = None, slot: Optional[int] = None
+    ) -> None:
+        """
+        vLLM batch inference pattern for improved performance.
+        
+        Collects all post generation requests and processes them in a single batch
+        call to vLLM's generate_post_batch method, which is significantly faster
+        than individual calls.
+        
+        Args:
+            pending_llm_posts: List of pending post tuples
+            actions: List to append resolved post actions to
+            day: Current simulation day (fallback if not in tuple)
+            slot: Current time slot (fallback if not in tuple)
+        """
+        # Separate posts into batchable (with agent_attrs) and non-batchable
+        batchable_posts = []
+        non_batchable_posts = []
+        
+        for pending_item in pending_llm_posts:
+            # New format: (agent_id, cluster_id, future, topic, day, slot, agent_attrs)
+            # Old format: (agent_id, cluster_id, future, topic) or image posts with 6 elements
+            if len(pending_item) >= 7:
+                # Has all info needed for batching
+                batchable_posts.append(pending_item)
+            else:
+                # Missing agent_attrs or other info, fall back to standard gather for these
+                non_batchable_posts.append(pending_item)
+        
+        # Process batchable posts with vLLM batch inference
+        if batchable_posts:
+            self.logger.info(f"Processing {len(batchable_posts)} posts with vLLM batch inference")
+            self._process_vllm_batch(batchable_posts, actions)
+        
+        # Process non-batchable posts with standard gather
+        if non_batchable_posts:
+            self.logger.info(f"Processing {len(non_batchable_posts)} posts with standard gather (missing metadata)")
+            self._gather_posts_standard(non_batchable_posts, actions)
+    
+    def _process_vllm_batch(
+        self, batchable_posts: List[Tuple], actions: List[ActionDTO]
+    ) -> None:
+        """
+        Process posts using vLLM's generate_post_batch method.
+        
+        Args:
+            batchable_posts: List of tuples with format (agent_id, cluster_id, future, topic, day, slot, agent_attrs)
+            actions: List to append resolved post actions to
+        """
+        # Build batch requests
+        batch_requests = []
+        for item in batchable_posts:
+            agent_id, cluster_id, future, topic, item_day, item_slot, agent_attrs = item
+            batch_requests.append({
+                "cluster_id": cluster_id,
+                "day": item_day,
+                "slot": item_slot,
+                "agent_attrs": agent_attrs
+            })
+        
+        # Get LLM actor for batch call
+        # Handle both single actor and load balancer cases
+        if hasattr(self.llm, 'get_all_actors'):
+            # Load balancer - use first actor for batch call
+            llm_actor = self.llm.get_all_actors()[0]
+        else:
+            # Single actor
+            llm_actor = self.llm
+        
+        # Call generate_post_batch with retry logic
+        self.logger.info(f"Calling generate_post_batch for {len(batch_requests)} requests")
+        try:
+            batch_future = llm_actor.generate_post_batch.remote(batch_requests)
+            results = self.retry_handler.retry_with_backoff(
+                lambda f: ray.get(f),
+                batch_future,
+                error_message="vLLM batch post generation"
+            )
+        except Exception as e:
+            self.logger.error(f"vLLM batch generation failed: {e}, falling back to standard gather")
+            self._gather_posts_standard(batchable_posts, actions)
+            return
+        
+        # Process results
+        for i, res_txt in enumerate(results):
+            pending_item = batchable_posts[i]
+            agent_id = pending_item[0]
+            cluster_id = pending_item[1]
+            topic = pending_item[3]  # topic_or_article_id
+            
+            # Validate response
+            res_txt = self.response_parser.parse_text_response(res_txt, default="")
+            if not res_txt:
+                self.logger.warning(f"Empty vLLM batch post response for agent {agent_id}, skipping")
+                continue
+            
+            # Track LLM usage
+            if self.cost_tracker:
+                output_tokens = len(res_txt) // CHARS_PER_TOKEN
+                self.cost_tracker.record_call("generate_post", PROMPT_TOKENS_POST, output_tokens)
+            
+            # Create action (same logic as standard gather)
+            action = ActionDTO(agent_id, cluster_id, "POST", content=res_txt)
+            
+            # Handle topic/article assignment
+            if topic:
+                try:
+                    uuid.UUID(topic)
+                    action.article_id = topic
+                    self.logger.info(
+                        f"vLLM batch post for agent {agent_id}: article_id={topic}, content_len={len(res_txt)}"
+                    )
+                except ValueError:
+                    action.topic = topic
+                    self.logger.info(
+                        f"vLLM batch post for agent {agent_id}: topic={topic}, content_len={len(res_txt)}"
+                    )
+            else:
+                self.logger.info(
+                    f"vLLM batch post for agent {agent_id}: NO article_id/topic, content_len={len(res_txt)}"
+                )
+            
+            # Annotate the post text
+            annotations = annotate_text(
+                res_txt,
+                enable_sentiment=self.enable_sentiment,
+                enable_toxicity=self.enable_toxicity,
+                perspective_api_key=self.perspective_api_key,
+                enable_emotions=self.enable_emotions,
+                llm_handle=self.llm,
+            )
+            action.annotations = annotations
+            self.logger.info(
+                f"vLLM batch post annotated for agent {agent_id}: has_sentiment={bool(annotations.get('sentiment'))}, has_toxicity={bool(annotations.get('toxicity'))}, has_emotions={bool(annotations.get('emotions'))}"
+            )
+            
             actions.append(action)
 
     def gather_pending_llm_reactions(

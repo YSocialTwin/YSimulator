@@ -48,8 +48,17 @@ class CastGenerator(BaseActionGenerator):
                 agent_attrs,
                 agent.id,
             )
-            # Store pending call: (agent_id, cluster_id, future, selected_topic)
-            result.pending_llm_calls.append((agent.id, agent.cluster, future, selected_topic))
+            # Store pending call: (agent_id, cluster_id, future, selected_topic, day, slot, agent_attrs)
+            # Extended tuple for vLLM batching support
+            result.pending_llm_calls.append((
+                agent.id,
+                agent.cluster,
+                future,
+                selected_topic,
+                self.context.day,
+                self.context.slot,
+                agent_attrs
+            ))
             result.metadata["selected_topic"] = selected_topic
         else:
             # Rule-based: Execute immediately (similar to POST)
