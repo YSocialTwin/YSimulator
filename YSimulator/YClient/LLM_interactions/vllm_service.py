@@ -492,6 +492,9 @@ class VLLMService:
                     post_content = req["post_content"]
                     agent_attrs = req.get("agent_attrs")
                     
+                    # Build persona using attributes or fallback
+                    persona = self._build_persona(cluster_id, agent_attrs)
+                    
                     # Build opinion instruction if available
                     opinion_instruction = ""
                     if agent_attrs and "post_topics" in agent_attrs and agent_attrs["post_topics"]:
@@ -514,8 +517,8 @@ class VLLMService:
                     system_template = self.prompts_config["decide_reaction"]["system_template"]
                     user_template = self.prompts_config["decide_reaction"]["user_template"]
 
-                    # Format templates with opinion instruction appended to user message
-                    system_msg = system_template.format(cluster_id=cluster_id)
+                    # Format templates with persona and opinion instruction
+                    system_msg = system_template.format(cluster_id=cluster_id, persona=persona)
                     user_msg = user_template.format(post_content=post_content) + opinion_instruction
 
                     # Create formatted prompt
@@ -1038,6 +1041,77 @@ class VLLMService:
         except Exception:
             return []
 
+    def extract_topics_from_article_batch(
+        self, articles: List[Dict[str, str]]
+    ) -> List[list]:
+        """
+        Extract topics from multiple articles in a single batch for improved performance.
+
+        Args:
+            articles: List of dicts with keys 'title' and 'summary'
+
+        Returns:
+            List of topic lists (up to 2 topics per article) in same order as inputs
+        """
+        try:
+            logger.debug(
+                f"[vLLM] Starting batch article topic extraction for {len(articles)} articles"
+            )
+
+            system_template = self.prompts_config["extract_article_topics"][
+                "system_template"
+            ]
+            user_template = self.prompts_config["extract_article_topics"]["user_template"]
+
+            # Build prompts for all articles
+            prompts = []
+            for article in articles:
+                article_text = (
+                    f"Title: {article['title']}\n\nSummary: {article['summary']}"
+                    if article.get("summary")
+                    else f"Title: {article['title']}"
+                )
+                prompt = self._format_prompt(system_template, user_template)
+                prompt = prompt.replace("{article_text}", article_text)
+                prompts.append(prompt)
+
+            # Batch generate using vLLM
+            logger.debug(
+                f"[vLLM] Executing batch inference for {len(prompts)} article topic extractions"
+            )
+            outputs = self.llm.generate(prompts, self.sampling_params)
+
+            # Parse results
+            results = []
+            for output in outputs:
+                response = output.outputs[0].text.strip()
+                topics = [t.strip() for t in response.split(",") if t.strip()]
+
+                single_word_topics = []
+                for topic in topics:
+                    words = topic.split()
+                    if words:
+                        single_word = words[0].lower()
+                        single_word = "".join(
+                            char
+                            for char in single_word
+                            if char.isalnum() or char == "-" or char == "_"
+                        )
+                        if single_word:
+                            single_word_topics.append(single_word)
+
+                results.append(single_word_topics[:2])
+
+            logger.debug(
+                f"[vLLM] Batch article topic extraction completed successfully ({len(results)} results)"
+            )
+            return results
+        except Exception as e:
+            logger.error(f"[vLLM] Batch article topic extraction failed: {e}")
+            logger.error(f"[vLLM] Number of articles: {len(articles)}")
+            # Return empty lists for all articles on error
+            return [[] for _ in articles]
+
     def extract_emotions(self, text: str) -> list:
         """Extract emotions from text using LLM based on GoEmotions taxonomy."""
         system_template = self.prompts_config.get("extract_emotions", {}).get(
@@ -1327,3 +1401,82 @@ class VLLMService:
         except Exception as e:
             logger.error(f"Failed to evaluate opinion: {e}")
             return "NEUTRAL"
+
+    def evaluate_opinion_batch(
+        self, requests: List[Dict[str, Any]]
+    ) -> List[str]:
+        """
+        Evaluate multiple opinion changes in a single batch for improved performance.
+
+        Args:
+            requests: List of dicts with keys:
+                - agent_opinion: Agent's current opinion label
+                - author_opinion: Author's opinion label
+                - post_text: Content of the post
+                - topic: Topic name
+                - peers_opinions: Optional list of (opinion_label, count) tuples
+
+        Returns:
+            List of evaluation results ("AGREE"|"DISAGREE"|"NEUTRAL") in same order as inputs
+        """
+        try:
+            logger.debug(
+                f"[vLLM] Starting batch opinion evaluation for {len(requests)} requests"
+            )
+
+            system_template = self.prompts_config.get("evaluate_opinion", {}).get(
+                "system_template",
+                "You are evaluating opinions on various topics. Consider the content and opinions presented.",
+            )
+
+            # Build prompts for all evaluations
+            prompts = []
+            for req in requests:
+                prompt_text = (
+                    f"Read the following text on the topic '{req['topic'].upper()}': '{req['post_text']}'.\n"
+                    f"The author has opinion '{req['author_opinion']}' on the topic.\n"
+                    f"Your initial opinion is '{req['agent_opinion']}'"
+                )
+
+                peers_opinions = req.get("peers_opinions")
+                if peers_opinions and len(peers_opinions) > 0:
+                    prompt_text += "\n\nThe following are the opinions of your friends:\n"
+                    for op, count in peers_opinions:
+                        prompt_text += f"Opinion: '{op}' ({count})\n"
+
+                prompt_text += (
+                    "\nWhat do you think about the expressed opinion? "
+                    "Answer with a single word among the options: AGREE|DISAGREE|NEUTRAL."
+                )
+
+                prompt = self._format_prompt(system_template, prompt_text)
+                prompts.append(prompt)
+
+            # Batch generate using vLLM
+            logger.debug(
+                f"[vLLM] Executing batch inference for {len(prompts)} opinion evaluations"
+            )
+            outputs = self.llm.generate(prompts, self.sampling_params)
+
+            # Parse results
+            results = []
+            for output in outputs:
+                response = output.outputs[0].text.strip().upper()
+                if "AGREE" in response:
+                    results.append("AGREE")
+                elif "DISAGREE" in response:
+                    results.append("DISAGREE")
+                elif "NEUTRAL" in response:
+                    results.append("NEUTRAL")
+                else:
+                    results.append("NEUTRAL")
+
+            logger.debug(
+                f"[vLLM] Batch opinion evaluation completed successfully ({len(results)} results)"
+            )
+            return results
+        except Exception as e:
+            logger.error(f"[vLLM] Batch opinion evaluation failed: {e}")
+            logger.error(f"[vLLM] Number of requests: {len(requests)}")
+            # Return NEUTRAL for all evaluations on error
+            return ["NEUTRAL" for _ in requests]
