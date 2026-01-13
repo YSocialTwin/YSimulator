@@ -38,10 +38,13 @@ class LLMLoadBalancer:
     Distributes LLM inference requests across multiple Ray actors to achieve
     parallel processing and reduce the sequential bottleneck.
 
+    Supports shared actors across multiple clients on the same machine.
+
     Attributes:
         actors: List of LLM Ray actor handles
         strategy: Load balancing strategy to use
         logger: Logger instance
+        owns_actors: Whether this instance created the actors (for lifecycle management)
     """
 
     def __init__(
@@ -50,7 +53,11 @@ class LLMLoadBalancer:
         prompts_config: dict,
         num_actors: int = 4,
         strategy: str = "hash",
+        backend: str = "ollama",
+        llm_v_config: Optional[dict] = None,
         logger: Optional[logging.Logger] = None,
+        reuse_actors: bool = False,
+        actor_name_prefix: str = "ysim_llm",
     ):
         """
         Initialize the LLM load balancer.
@@ -58,32 +65,107 @@ class LLMLoadBalancer:
         Args:
             llm_config: Configuration for LLM service
             prompts_config: Prompt templates configuration
-            num_actors: Number of LLM actor instances to create
+            num_actors: Number of LLM actor instances to create/reuse
             strategy: Load balancing strategy ('hash', 'round_robin')
+            backend: LLM backend to use ('ollama' or 'vllm')
+            llm_v_config: Optional configuration for vision LLM (vLLM only)
             logger: Optional logger instance
+            reuse_actors: If True, try to reuse existing actors from another client
+            actor_name_prefix: Prefix for named actors (for discovery)
         """
         self.logger = logger or logging.getLogger(__name__)
         self.num_actors = num_actors
         self.strategy = LoadBalancingStrategy(strategy)
         self.current_idx = 0  # For round-robin
+        self.backend = backend.lower()
+        self.owns_actors = False  # Track if we created the actors
+        self.actor_name_prefix = actor_name_prefix
 
-        # Create multiple LLM actors
-        self.logger.info(f"Creating {num_actors} LLM actors for parallel inference")
+        # Get GPU allocation per actor (for vLLM)
+        # Supports fractional GPUs to allocate multiple actors per GPU
+        # E.g., gpu_per_actor=0.25 allows 4 actors on 1 GPU
+        gpu_per_actor = llm_config.get("gpu_per_actor", 1.0)
+
+        # Import appropriate service based on backend
+        if self.backend == "vllm":
+            from YSimulator.YClient.LLM_interactions.vllm_service import VLLMService
+
+            ServiceClass = VLLMService
+        else:
+            from YSimulator.YClient.LLM_interactions.llm_service import LLMService
+
+            ServiceClass = LLMService
+
         self.actors = []
 
-        # Import here to avoid circular dependency
-        from YSimulator.YClient.LLM_interactions.llm_service import LLMService
+        # Try to reuse existing actors if requested
+        if reuse_actors:
+            self.logger.info(
+                f"Attempting to reuse existing {num_actors} LLM actors ({self.backend} backend)"
+            )
+            reused_count = 0
+            for i in range(num_actors):
+                actor_name = f"{actor_name_prefix}_{self.backend}_{i}"
+                try:
+                    actor = ray.get_actor(actor_name)
+                    self.actors.append(actor)
+                    reused_count += 1
+                    self.logger.info(f"Reused existing LLM actor {i+1}/{num_actors}: {actor_name}")
+                except ValueError:
+                    # Actor doesn't exist, we'll need to create it
+                    self.logger.debug(f"Actor {actor_name} not found, will create new actors")
+                    break
+
+            if reused_count == num_actors:
+                self.logger.info(
+                    f"Successfully reused {reused_count} existing LLM actors ({self.backend})"
+                )
+                self.owns_actors = False
+                return
+
+            # If we couldn't reuse all actors, start fresh
+            if reused_count > 0:
+                self.logger.warning(
+                    f"Only found {reused_count}/{num_actors} existing actors, creating new set"
+                )
+                self.actors = []
+
+        # Create new actors (either reuse failed or not requested)
+        self.logger.info(
+            f"Creating {num_actors} LLM actors for parallel inference using {self.backend} backend"
+        )
+        if self.backend == "vllm":
+            self.logger.info(f"GPU allocation per actor: {gpu_per_actor}")
 
         for i in range(num_actors):
-            actor = LLMService.remote(
-                llm_config=llm_config,
-                prompts_config=prompts_config,
-            )
+            actor_name = f"{actor_name_prefix}_{self.backend}_{i}"
+            
+            # Allocate GPU resources for vLLM actors
+            if self.backend == "vllm":
+                actor = ServiceClass.options(
+                    name=actor_name,
+                    num_gpus=gpu_per_actor,
+                    lifetime="detached"  # Persist beyond client lifetime
+                ).remote(
+                    llm_config=llm_config,
+                    prompts_config=prompts_config,
+                    llm_v_config=llm_v_config,
+                )
+            else:
+                actor = ServiceClass.options(
+                    name=actor_name,
+                    lifetime="detached"
+                ).remote(
+                    llm_config=llm_config,
+                    prompts_config=prompts_config,
+                    llm_v_config=llm_v_config,
+                )
             self.actors.append(actor)
-            self.logger.info(f"Created LLM actor {i+1}/{num_actors}")
+            self.logger.info(f"Created LLM actor {i+1}/{num_actors} ({self.backend}): {actor_name}")
 
+        self.owns_actors = True
         self.logger.info(
-            f"LLM load balancer initialized with {num_actors} actors, strategy={strategy}"
+            f"LLM load balancer initialized with {num_actors} actors, strategy={strategy}, backend={self.backend}"
         )
 
     def get_actor_for_agent(self, agent_id: str) -> Any:
@@ -173,8 +255,12 @@ class LLMActorPool:
         prompts_config: dict,
         num_actors: int = 4,
         strategy: str = "hash",
+        backend: str = "ollama",
         enable_monitoring: bool = True,
+        llm_v_config: Optional[dict] = None,
         logger: Optional[logging.Logger] = None,
+        reuse_actors: bool = False,
+        actor_name_prefix: str = "ysim_llm",
     ):
         """
         Initialize the LLM actor pool.
@@ -184,8 +270,12 @@ class LLMActorPool:
             prompts_config: Prompt templates configuration
             num_actors: Number of LLM actor instances to create
             strategy: Load balancing strategy ('hash', 'round_robin')
+            backend: LLM backend to use ('ollama' or 'vllm')
             enable_monitoring: Whether to track per-actor statistics
+            llm_v_config: Optional configuration for vision LLM (vLLM only)
             logger: Optional logger instance
+            reuse_actors: If True, try to reuse existing actors from another client
+            actor_name_prefix: Prefix for named actors (for discovery)
         """
         self.logger = logger or logging.getLogger(__name__)
         self.load_balancer = LLMLoadBalancer(
@@ -193,7 +283,11 @@ class LLMActorPool:
             prompts_config=prompts_config,
             num_actors=num_actors,
             strategy=strategy,
+            backend=backend,
+            llm_v_config=llm_v_config,
             logger=logger,
+            reuse_actors=reuse_actors,
+            actor_name_prefix=actor_name_prefix,
         )
         self.enable_monitoring = enable_monitoring
 
@@ -296,32 +390,82 @@ def create_llm_actors(
     prompts_config: dict,
     num_actors: int = 1,
     strategy: str = "hash",
+    backend: str = "ollama",
     enable_monitoring: bool = False,
+    llm_v_config: Optional[dict] = None,
     logger: Optional[logging.Logger] = None,
+    reuse_actors: bool = False,
+    actor_name_prefix: str = "ysim_llm",
 ) -> Any:
     """
-    Create LLM actors with optional load balancing.
+    Create LLM actors with optional load balancing and actor reuse.
 
     Factory function for creating LLM service instances with load balancing.
+    Supports reusing existing actors from other clients on the same machine.
 
     Args:
         llm_config: Configuration for LLM service
         prompts_config: Prompt templates configuration
         num_actors: Number of actors (1 = no load balancing)
         strategy: Load balancing strategy if num_actors > 1
+        backend: LLM backend to use ('ollama' or 'vllm')
         enable_monitoring: Whether to enable per-actor monitoring
+        llm_v_config: Optional configuration for vision LLM (vLLM only)
         logger: Optional logger instance
+        reuse_actors: If True, try to reuse existing actors from another client
+        actor_name_prefix: Prefix for named actors (for discovery)
 
     Returns:
         - If num_actors == 1: Single LLM actor handle (backwards compatible)
         - If num_actors > 1 and enable_monitoring: LLMActorPool instance
         - If num_actors > 1 and not enable_monitoring: LLMLoadBalancer instance
     """
+    backend_lower = backend.lower()
+    
+    # Get GPU allocation per actor (for vLLM)
+    gpu_per_actor = llm_config.get("gpu_per_actor", 1.0)
+    
     if num_actors == 1:
-        # Single actor - backwards compatible
-        from YSimulator.YClient.LLM_interactions.llm_service import LLMService
+        # Single actor - check if we should reuse
+        if reuse_actors:
+            actor_name = f"{actor_name_prefix}_{backend_lower}_0"
+            try:
+                actor = ray.get_actor(actor_name)
+                if logger:
+                    logger.info(f"Reused existing single LLM actor: {actor_name}")
+                return actor
+            except ValueError:
+                # Actor doesn't exist, create new one
+                if logger:
+                    logger.debug(f"Actor {actor_name} not found, creating new one")
+        
+        # Create new single actor
+        if backend_lower == "vllm":
+            from YSimulator.YClient.LLM_interactions.vllm_service import VLLMService
 
-        return LLMService.remote(llm_config=llm_config, prompts_config=prompts_config)
+            actor_name = f"{actor_name_prefix}_{backend_lower}_0" if reuse_actors else None
+            options = {"num_gpus": gpu_per_actor, "lifetime": "detached"}
+            if actor_name:
+                options["name"] = actor_name
+            
+            return VLLMService.options(**options).remote(
+                llm_config=llm_config,
+                prompts_config=prompts_config,
+                llm_v_config=llm_v_config,
+            )
+        else:
+            from YSimulator.YClient.LLM_interactions.llm_service import LLMService
+
+            actor_name = f"{actor_name_prefix}_{backend_lower}_0" if reuse_actors else None
+            options = {"lifetime": "detached"} if reuse_actors else {}
+            if actor_name:
+                options["name"] = actor_name
+            
+            return LLMService.options(**options).remote(
+                llm_config=llm_config,
+                prompts_config=prompts_config,
+                llm_v_config=llm_v_config,
+            )
 
     # Multiple actors - use load balancing
     if enable_monitoring:
@@ -330,8 +474,12 @@ def create_llm_actors(
             prompts_config=prompts_config,
             num_actors=num_actors,
             strategy=strategy,
+            backend=backend,
             enable_monitoring=True,
+            llm_v_config=llm_v_config,
             logger=logger,
+            reuse_actors=reuse_actors,
+            actor_name_prefix=actor_name_prefix,
         )
     else:
         return LLMLoadBalancer(
@@ -339,5 +487,9 @@ def create_llm_actors(
             prompts_config=prompts_config,
             num_actors=num_actors,
             strategy=strategy,
+            backend=backend,
+            llm_v_config=llm_v_config,
             logger=logger,
+            reuse_actors=reuse_actors,
+            actor_name_prefix=actor_name_prefix,
         )

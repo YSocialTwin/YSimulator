@@ -14,12 +14,61 @@ from typing import Any, Dict, List, Optional
 import ray
 
 
+def _get_llm_actor(llm_handle: Any, agent_id: Optional[str] = None) -> Any:
+    """
+    Get the appropriate LLM actor from handle.
+    
+    If llm_handle is a LLMLoadBalancer, uses agent_id to route to the correct actor.
+    Otherwise returns llm_handle directly (single actor case).
+    
+    Args:
+        llm_handle: Either a Ray actor handle or a LLMLoadBalancer instance
+        agent_id: Optional agent ID for load balancing
+        
+    Returns:
+        Ray actor handle for LLM service
+    """
+    # Check if llm_handle is a load balancer by checking its class name
+    # This avoids issues with Mock objects that auto-create attributes
+    if llm_handle.__class__.__name__ in ('LLMLoadBalancer', 'LLMActorPool'):
+        if agent_id is None:
+            # Fallback to first actor if no agent_id provided
+            return llm_handle.get_all_actors()[0]
+        return llm_handle.get_actor_for_agent(agent_id)
+    # Direct actor handle (including Ray actors)
+    return llm_handle
+
+
+def _should_use_vllm_batching(llm_handle: Any) -> bool:
+    """
+    Check if vLLM batching should be used for this LLM handle.
+    
+    vLLM batching defers individual .remote() calls and instead collects
+    request parameters to make a single batch call during the gather phase.
+    
+    Args:
+        llm_handle: LLM handle (actor or load balancer)
+        
+    Returns:
+        bool: True if vLLM batching should be used, False for standard scatter/gather
+    """
+    try:
+        # Get an actor to check capabilities
+        actor = _get_llm_actor(llm_handle)
+        # Check if actor has batch methods (indicates vLLM backend)
+        return hasattr(actor, 'generate_post_batch')
+    except Exception:
+        # Default to standard scatter/gather on error
+        return False
+
+
 def generate_llm_post_async(
     llm_handle: Any,
     cluster_id: int,
     day: int,
     slot: int,
     agent_attrs: Optional[Dict[str, Any]] = None,
+    agent_id: Optional[str] = None,
 ) -> ray.ObjectRef:
     """
     Initiate async LLM post generation.
@@ -35,11 +84,12 @@ def generate_llm_post_async(
     - Any additional context from the LLM service
 
     Args:
-        llm_handle: Ray actor handle for the LLM service
+        llm_handle: Ray actor handle for the LLM service or LLMLoadBalancer
         cluster_id: Cluster/group the agent belongs to (determines persona)
         day: Current simulation day
         slot: Current time slot within the day
         agent_attrs: Optional dict with agent attributes (name, age, gender, etc.)
+        agent_id: Optional agent ID for load balancing (required when using LLMLoadBalancer)
 
     Returns:
         Ray ObjectRef: Future that will resolve to generated post content (str)
@@ -49,7 +99,7 @@ def generate_llm_post_async(
         futures = []
         for agent in agents:
             attrs = {"name": agent.username, "age": agent.age, ...}
-            future = generate_llm_post_async(llm, agent.cluster, day, slot, attrs)
+            future = generate_llm_post_async(llm, agent.cluster, day, slot, attrs, agent.id)
             futures.append((agent.id, agent.cluster, future))
 
         # Gather phase - wait for all results at once
@@ -60,10 +110,18 @@ def generate_llm_post_async(
             agent_id, cluster_id, _ = futures[i]
             actions.append(ActionDTO(agent_id, cluster_id, "POST", content=content))
     """
-    return llm_handle.generate_post.remote(cluster_id, day, slot, agent_attrs)
+    llm_actor = _get_llm_actor(llm_handle, agent_id)
+    
+    # For vLLM batching: Don't create individual futures, return None as placeholder
+    # The batch processor will create a single batch call instead
+    if _should_use_vllm_batching(llm_handle):
+        return None  # Placeholder - batch processor will handle this
+    
+    # For Ollama/standard: Create individual future (standard scatter/gather)
+    return llm_actor.generate_post.remote(cluster_id, day, slot, agent_attrs)
 
 
-def generate_llm_reaction_async(llm_handle: Any, cluster_id: int, content: str) -> ray.ObjectRef:
+def generate_llm_reaction_async(llm_handle: Any, cluster_id: int, content: str, agent_id: Optional[str] = None) -> ray.ObjectRef:
     """
     Initiate async LLM reaction decision.
 
@@ -84,9 +142,10 @@ def generate_llm_reaction_async(llm_handle: Any, cluster_id: int, content: str) 
     - "IGNORE": Choose not to react
 
     Args:
-        llm_handle: Ray actor handle for the LLM service
+        llm_handle: Ray actor handle for the LLM service or LLMLoadBalancer
         cluster_id: Cluster/group the agent belongs to (determines persona)
         content: Content of the post being reacted to
+        agent_id: Optional agent ID for load balancing (required when using LLMLoadBalancer)
 
     Returns:
         Ray ObjectRef: Future that will resolve to reaction type (str)
@@ -95,7 +154,7 @@ def generate_llm_reaction_async(llm_handle: Any, cluster_id: int, content: str) 
         # Scatter phase - fire off multiple LLM calls in parallel
         futures = []
         for agent, target_post in agent_post_pairs:
-            future = generate_llm_reaction_async(llm, agent.cluster, "post content")
+            future = generate_llm_reaction_async(llm, agent.cluster, "post content", agent.id)
             futures.append((agent.id, agent.cluster, target_post, future))
 
         # Gather phase - wait for all results at once
@@ -107,7 +166,8 @@ def generate_llm_reaction_async(llm_handle: Any, cluster_id: int, content: str) 
             if reaction_type != "IGNORE":
                 actions.append(ActionDTO(agent_id, cluster_id, reaction_type, target_post_id=target))
     """
-    return llm_handle.decide_reaction.remote(cluster_id, content)
+    llm_actor = _get_llm_actor(llm_handle, agent_id)
+    return llm_actor.decide_reaction.remote(cluster_id, content)
 
 
 def generate_news_post_async(
@@ -143,7 +203,7 @@ def generate_news_post_async(
 
 
 def generate_llm_read_async(
-    llm_handle: Any, cluster_id: int, content: str, agent_attrs: Optional[Dict[str, Any]] = None
+    llm_handle: Any, cluster_id: int, content: str, agent_attrs: Optional[Dict[str, Any]] = None, agent_id: Optional[str] = None
 ) -> ray.ObjectRef:
     """
     Initiate async LLM read reaction decision.
@@ -155,10 +215,11 @@ def generate_llm_read_async(
     The LLM service will decide how to react to a post discovered via read/recommendation.
 
     Args:
-        llm_handle: Ray actor handle for the LLM service
+        llm_handle: Ray actor handle for the LLM service or LLMLoadBalancer
         cluster_id: Cluster/group the agent belongs to (determines persona)
         content: Content of the post being reacted to
         agent_attrs: Optional dict with agent attributes for dynamic persona building
+        agent_id: Optional agent ID for load balancing (required when using LLMLoadBalancer)
 
     Returns:
         Ray ObjectRef: Future that will resolve to reaction type (str)
@@ -168,7 +229,7 @@ def generate_llm_read_async(
         futures = []
         for agent, target_post, post_content in agent_post_pairs:
             attrs = {"name": agent.username, "age": agent.age, ...}
-            future = generate_llm_read_async(llm, agent.cluster, post_content, attrs)
+            future = generate_llm_read_async(llm, agent.cluster, post_content, attrs, agent.id)
             futures.append((agent.id, agent.cluster, target_post, future))
 
         # Gather phase - wait for all results at once
@@ -180,11 +241,18 @@ def generate_llm_read_async(
             if reaction_type != "IGNORE":
                 actions.append(ActionDTO(agent_id, cluster_id, reaction_type, target_post_id=target))
     """
-    return llm_handle.generate_read_reaction.remote(cluster_id, content, agent_attrs)
+    llm_actor = _get_llm_actor(llm_handle, agent_id)
+    
+    # For vLLM batching: Don't create individual futures, return None as placeholder
+    if _should_use_vllm_batching(llm_handle):
+        return None  # Placeholder - batch processor will handle this
+    
+    # For Ollama/standard: Create individual future
+    return llm_actor.generate_read_reaction.remote(cluster_id, content, agent_attrs)
 
 
 def generate_llm_follow_async(
-    llm_handle: Any, cluster_id: int, candidate_users: List[Dict[str, Any]]
+    llm_handle: Any, cluster_id: int, candidate_users: List[Dict[str, Any]], agent_id: Optional[str] = None
 ) -> ray.ObjectRef:
     """
     Initiate async LLM follow decision.
@@ -196,26 +264,28 @@ def generate_llm_follow_async(
     The LLM service will decide whether to follow one of the suggested users.
 
     Args:
-        llm_handle: Ray actor handle for the LLM service
+        llm_handle: Ray actor handle for the LLM service or LLMLoadBalancer
         cluster_id: Cluster/group the agent belongs to (determines persona)
         candidate_users: List of user IDs that could be followed
+        agent_id: Optional agent ID for load balancing (required when using LLMLoadBalancer)
 
     Returns:
         Ray ObjectRef: Future that will resolve to user ID to follow (str) or None
 
     Usage:
         # Fire off LLM call to decide which user to follow
-        future = generate_llm_follow_async(llm, agent.cluster, candidates)
+        future = generate_llm_follow_async(llm, agent.cluster, candidates, agent.id)
         # Later, resolve the future to get the decision
         target_user = ray.get(future)
         if target_user:
             actions.append(ActionDTO(agent_id, cluster_id, "FOLLOW", target_user_id=target_user))
     """
-    return llm_handle.generate_follow_decision.remote(cluster_id, candidate_users)
+    llm_actor = _get_llm_actor(llm_handle, agent_id)
+    return llm_actor.generate_follow_decision.remote(cluster_id, candidate_users)
 
 
 def generate_llm_search_action_async(
-    llm_handle, cluster_id: int, content: str, agent_attrs: dict = None
+    llm_handle, cluster_id: int, content: str, agent_attrs: dict = None, agent_id: Optional[str] = None
 ):
     """
     Initiate async LLM search action decision.
@@ -236,17 +306,18 @@ def generate_llm_search_action_async(
     - "IGNORE": Choose not to engage
 
     Args:
-        llm_handle: Ray actor handle for the LLM service
+        llm_handle: Ray actor handle for the LLM service or LLMLoadBalancer
         cluster_id: Cluster/group the agent belongs to (determines persona)
         content: Content of the post found via search
         agent_attrs: Optional dict with agent attributes for dynamic persona building
+        agent_id: Optional agent ID for load balancing (required when using LLMLoadBalancer)
 
     Returns:
         Ray ObjectRef: Future that will resolve to action type (str)
 
     Usage:
         # Fire off LLM call to decide action on searched post
-        future = generate_llm_search_action_async(llm, agent.cluster, post_content, attrs)
+        future = generate_llm_search_action_async(llm, agent.cluster, post_content, attrs, agent.id)
         # Later, resolve the future to get the decision
         action_type = ray.get(future)
         if action_type == "COMMENT":
@@ -256,7 +327,8 @@ def generate_llm_search_action_async(
         elif action_type != "IGNORE":
             # Create reaction action
     """
-    return llm_handle.decide_search_action.remote(cluster_id, content, agent_attrs)
+    llm_actor = _get_llm_actor(llm_handle, agent_id)
+    return llm_actor.decide_search_action.remote(cluster_id, content, agent_attrs)
 
 
 def generate_llm_reply_to_mention_async(
@@ -266,6 +338,7 @@ def generate_llm_reply_to_mention_async(
     agent_attrs: dict,
     author_name: str,
     thread_context: list,
+    agent_id: Optional[str] = None,
 ):
     """
     Initiate async LLM reply to mention generation.
@@ -281,12 +354,13 @@ def generate_llm_reply_to_mention_async(
     - Thread context (preceding posts/comments)
 
     Args:
-        llm_handle: Ray actor handle for the LLM service
+        llm_handle: Ray actor handle for the LLM service or LLMLoadBalancer
         cluster_id: Cluster/group the agent belongs to (determines persona)
         post_content: Content of the post that mentioned the agent
         agent_attrs: Dict with agent attributes (name, age, gender, etc.)
         author_name: Username of the person who mentioned the agent
         thread_context: List of previous posts/comments in chronological order
+        agent_id: Optional agent ID for load balancing (required when using LLMLoadBalancer)
 
     Returns:
         Ray ObjectRef: Future that will resolve to generated comment content (str)
@@ -294,7 +368,7 @@ def generate_llm_reply_to_mention_async(
     Usage:
         # Scatter phase - fire off LLM call for reply
         future = generate_llm_reply_to_mention_async(
-            llm, agent.cluster, post_content, agent_attrs, author_name, thread_context
+            llm, agent.cluster, post_content, agent_attrs, author_name, thread_context, agent.id
         )
         pending_llm_reactions.append((agent.id, agent.cluster, post_id, future, mention_id))
 
@@ -302,7 +376,14 @@ def generate_llm_reply_to_mention_async(
         comment_text = ray.get(future)
         action = ActionDTO(agent_id, cluster_id, "COMMENT", content=comment_text, target_post_id=post_id)
     """
-    return llm_handle.generate_comment.remote(
+    llm_actor = _get_llm_actor(llm_handle, agent_id)
+    
+    # For vLLM batching: Don't create individual futures, return None as placeholder
+    if _should_use_vllm_batching(llm_handle):
+        return None  # Placeholder - batch processor will handle this
+    
+    # For Ollama/standard: Create individual future
+    return llm_actor.generate_comment.remote(
         cluster_id, post_content, agent_attrs, author_name, thread_context
     )
 
@@ -313,6 +394,7 @@ def generate_llm_share_async(
     post_content: str,
     agent_attrs: dict = None,
     author_name: str = "Someone",
+    agent_id: Optional[str] = None,
 ):
     """
     Initiate async LLM share commentary generation.
@@ -328,11 +410,12 @@ def generate_llm_share_async(
     - Author name (who wrote the original post)
 
     Args:
-        llm_handle: Ray actor handle for the LLM service
+        llm_handle: Ray actor handle for the LLM service or LLMLoadBalancer
         cluster_id: Cluster/group the agent belongs to (determines persona)
         post_content: Content of the post being reshared
         agent_attrs: Dict with agent attributes (name, age, opinions, etc.)
         author_name: Username of the original post author
+        agent_id: Optional agent ID for load balancing (required when using LLMLoadBalancer)
 
     Returns:
         Ray ObjectRef: Future that will resolve to share commentary (str)
@@ -340,13 +423,20 @@ def generate_llm_share_async(
     Usage:
         # Scatter phase - fire off LLM call
         attrs = {"name": agent.username, "post_topics": [...], "post_opinions": [...]}
-        future = generate_llm_share_async(llm, agent.cluster, post_content, attrs, author)
+        future = generate_llm_share_async(llm, agent.cluster, post_content, attrs, author, agent.id)
 
         # Gather phase - wait for result
         commentary = ray.get(future)
         action = ActionDTO(agent_id, cluster_id, "SHARE", content=commentary, target_post_id=post_id)
     """
-    return llm_handle.generate_share_commentary.remote(
+    llm_actor = _get_llm_actor(llm_handle, agent_id)
+    
+    # For vLLM batching: Don't create individual futures, return None as placeholder
+    if _should_use_vllm_batching(llm_handle):
+        return None  # Placeholder - batch processor will handle this
+    
+    # For Ollama/standard: Create individual future
+    return llm_actor.generate_share_commentary.remote(
         cluster_id, post_content, agent_attrs, author_name
     )
 

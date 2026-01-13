@@ -260,4 +260,5 @@ class OpinionCalculator:
             group_classes=self.opinion_config.get("opinion_groups", {}),
             peers_opinions=peers_opinions,
             llm_manager=self.llm_manager,
+            agent_id=agent_id,
         )

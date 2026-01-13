@@ -371,7 +371,7 @@ class Simulator:
         )
 
         # Gather LLM posts
-        self.batch_processor.gather_pending_llm_posts(pending_llm_posts, actions)
+        self.batch_processor.gather_pending_llm_posts(pending_llm_posts, actions, day, slot)
 
         # Gather LLM reactions and track interactions for secondary follow
         secondary_follow_candidates = self.batch_processor.gather_pending_llm_reactions(

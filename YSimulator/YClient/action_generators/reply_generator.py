@@ -146,11 +146,20 @@ class ReplyGenerator(BaseActionGenerator):
                     agent_attrs,
                     author_username,
                     thread_context,
+                    agent.id,
                 )
                 # Store the mention_id with the pending reaction so we can mark it as replied later
-                # Format: (agent_id, cluster_id, post_id, future, mention_id)
+                # Extended format for vLLM batching: (agent_id, cluster_id, post_id, future, metadata_dict)
+                metadata = {
+                    "type": "comment",  # Reply is also a comment
+                    "post_content": post_content,
+                    "agent_attrs": agent_attrs,
+                    "author_name": author_username,
+                    "thread_context": thread_context,
+                    "mention_id": mention_id  # Keep mention_id for marking as replied
+                }
                 result.pending_llm_calls.append(
-                    (agent.id, agent.cluster, post_id, future, mention_id)
+                    (agent.id, agent.cluster, post_id, future, metadata)
                 )
                 self.context.logger.info(
                     f"[REPLY] LLM reply request queued for agent {agent.username}(mention: {mention_id})"

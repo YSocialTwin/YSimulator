@@ -109,11 +109,25 @@ class ReadGenerator(BaseActionGenerator):
                     agent_attrs["post_opinion_values"] = opinion_info["opinion_values"]
 
                 # Fire off async LLM call to decide reaction
-                future = generate_llm_read_async(
-                    self.context.llm, agent.cluster, post_content, agent_attrs
-                )
-                # Store: (agent_id, cluster_id, target_post_id, future)
-                result.pending_llm_calls.append((agent.id, agent.cluster, target_post, future))
+                from YSimulator.YClient.actions.llm_actions import _should_use_vllm_batching
+                
+                # For vLLM batching: Don't create future, use None as placeholder
+                if _should_use_vllm_batching(self.context.llm):
+                    future = None  # Batch processor will create batch call
+                else:
+                    # For Ollama: Create individual future (standard scatter/gather)
+                    future = generate_llm_read_async(
+                        self.context.llm, agent.cluster, post_content, agent_attrs, agent.id
+                    )
+                
+                # Store with metadata for vLLM batching support
+                # Format: (agent_id, cluster_id, target_post_id, future, metadata_dict)
+                metadata = {
+                    "type": "read",
+                    "post_content": post_content,
+                    "agent_attrs": agent_attrs,
+                }
+                result.pending_llm_calls.append((agent.id, agent.cluster, target_post, future, metadata))
         else:
             # Rule-based: Consider opinion when choosing reaction
             post_data = ray.get(

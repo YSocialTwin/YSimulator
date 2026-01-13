@@ -6,6 +6,7 @@ redis>=4.0.0,<6.0.0
 # LLM and NLP
 langchain-core>=0.1.0,<1.0.0
 langchain-ollama>=0.1.0,<1.0.0
+vllm>=0.6.0,<1.0.0
 
 # Data processing
 feedparser>=6.0.0,<7.0.0

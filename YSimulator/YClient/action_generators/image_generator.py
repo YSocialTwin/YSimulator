@@ -46,8 +46,18 @@ class ImageGenerator(BaseActionGenerator):
                 self.context.slot,
                 agent_attrs,
             )
-            # Store pending call: (agent_id, cluster_id, future, image_id=None)
-            result.pending_llm_calls.append((agent.id, agent.cluster, future, None))
+            # Store pending call with extended format for vLLM batching support
+            # Format: (agent_id, cluster_id, future, topic, day, slot, agent_attrs)
+            # For image posts, topic is None
+            result.pending_llm_calls.append((
+                agent.id, 
+                agent.cluster, 
+                future, 
+                None,  # topic (not applicable for image posts)
+                self.context.day,
+                self.context.slot,
+                agent_attrs
+            ))
         else:
             # Rule-based: Create simple image post
             # Use a placeholder image_id (would normally be from image service)

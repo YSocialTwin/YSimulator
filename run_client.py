@@ -22,6 +22,7 @@ import ray
 from YSimulator.common_utils import validate_config_directory
 from YSimulator.YClient.client import SimulationClient
 from YSimulator.YClient.LLM_interactions.llm_service import LLMService
+from YSimulator.YClient.LLM_interactions.vllm_service import VLLMService
 from YSimulator.YClient.news_feeds.news_service import NewsFeedService
 
 
@@ -245,9 +246,106 @@ if __name__ == "__main__":
     )
 
     # Create LLM service with configuration
+    # Support both Ollama (default) and vLLM backends
     llm_start = time.time()
+    llm_config = sim_config["llm"]
     llm_v_config = sim_config.get("llm_v")  # Get vision LLM config if available
-    llm_service = LLMService.remote(sim_config["llm"], prompts_config, llm_v_config)
+    
+    # Determine which LLM backend to use
+    # Default to "ollama" for backward compatibility and macOS support
+    llm_backend = llm_config.get("backend", "ollama").lower()
+    
+    # Get number of LLM actors (default: 1 for backward compatibility)
+    num_llm_actors = llm_config.get("num_actors", 1)
+    
+    # Get reuse_actors flag (default: False for backward compatibility)
+    reuse_actors = llm_config.get("reuse_actors", False)
+    
+    # Get actor name prefix (default: ysim_llm)
+    actor_name_prefix = llm_config.get("actor_name_prefix", "ysim_llm")
+    
+    if llm_backend == "vllm":
+        logger.info(f"Using vLLM backend with {num_llm_actors} actor(s) for LLM inference")
+        reuse_msg = " (reusing existing if available)" if reuse_actors else ""
+        print(f"--- Using vLLM backend ({num_llm_actors} actor(s) for parallel processing{reuse_msg}) ---")
+        try:
+            from YSimulator.YClient.llm_utils import create_llm_actors
+            
+            # Create LLM service with configured number of actors
+            # Allocates GPU resources for each vLLM actor
+            llm_service = create_llm_actors(
+                llm_config=llm_config,
+                prompts_config=prompts_config,
+                num_actors=num_llm_actors,
+                strategy="hash",  # Hash-based load balancing for agent affinity
+                backend="vllm",
+                enable_monitoring=False,
+                llm_v_config=llm_v_config,
+                logger=logger,
+                reuse_actors=reuse_actors,
+                actor_name_prefix=actor_name_prefix,
+            )
+        except ImportError as e:
+            logger.error(f"Failed to import vLLM: {e}")
+            print(f"❌ Error: vLLM not available: {e}")
+            print("💡 Tip: vLLM requires Linux. On macOS, use 'ollama' backend instead.")
+            sys.exit(1)
+        except Exception as e:
+            logger.error(f"Failed to initialize vLLM service: {e}")
+            logger.error(f"Model: {llm_config.get('model', 'unknown')}")
+            print(f"❌ Error: vLLM initialization failed: {e}")
+            print("💡 Check the logs above for detailed error information.")
+            print("💡 Common issues:")
+            print("   - Insufficient GPU memory (try reducing gpu_memory_utilization or num_actors)")
+            print("   - Model not found (check model path)")
+            print("   - GPU compatibility issues (check CUDA version)")
+            print("   - Insufficient GPU resources (ensure Ray has enough GPUs for num_actors)")
+            sys.exit(1)
+    else:
+        # Default to Ollama backend
+        if num_llm_actors > 1:
+            logger.info(f"Using Ollama backend with {num_llm_actors} actors for parallel inference")
+            reuse_msg = " (reusing existing if available)" if reuse_actors else ""
+            print(f"--- Using Ollama backend ({num_llm_actors} actors for parallel processing{reuse_msg}) ---")
+            try:
+                from YSimulator.YClient.llm_utils import create_llm_actors
+                
+                llm_service = create_llm_actors(
+                    llm_config=llm_config,
+                    prompts_config=prompts_config,
+                    num_actors=num_llm_actors,
+                    strategy="hash",
+                    backend="ollama",
+                    enable_monitoring=False,
+                    llm_v_config=llm_v_config,
+                    logger=logger,
+                    reuse_actors=reuse_actors,
+                    actor_name_prefix=actor_name_prefix,
+                )
+            except Exception as e:
+                logger.error(f"Failed to initialize Ollama service: {e}")
+                print(f"❌ Error: Ollama initialization failed: {e}")
+                sys.exit(1)
+        else:
+            logger.info("Using Ollama backend for LLM inference")
+            print("--- Using Ollama backend ---")
+            
+            # Support actor reuse even for single actor
+            if reuse_actors:
+                from YSimulator.YClient.llm_utils import create_llm_actors
+                llm_service = create_llm_actors(
+                    llm_config=llm_config,
+                    prompts_config=prompts_config,
+                    num_actors=1,
+                    backend="ollama",
+                    llm_v_config=llm_v_config,
+                    logger=logger,
+                    reuse_actors=reuse_actors,
+                    actor_name_prefix=actor_name_prefix,
+                )
+            else:
+                llm_service = LLMService.remote(llm_config, prompts_config, llm_v_config)
+    
     llm_time = (time.time() - llm_start) * 1000
 
     # Create News Feed service with configuration (optional)

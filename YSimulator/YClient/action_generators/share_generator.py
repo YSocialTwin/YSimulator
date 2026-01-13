@@ -80,11 +80,17 @@ class ShareGenerator(BaseActionGenerator):
 
             # Fire off async LLM call to generate share commentary
             future = generate_llm_share_async(
-                self.context.llm, agent.cluster, post_content, agent_attrs, author_name
+                self.context.llm, agent.cluster, post_content, agent_attrs, author_name, agent.id
             )
-            # Store with action_type indicator: (agent_id, cluster_id, target_post_id,
-            # future, action_type)
-            result.pending_llm_calls.append((agent.id, agent.cluster, target_post, future, "SHARE"))
+            # Store with metadata for batching: (agent_id, cluster_id, target_post_id, future, metadata_dict)
+            metadata = {
+                "type": "share",
+                "post_content": post_content,
+                "agent_attrs": agent_attrs,
+                "author_name": author_name,
+                "action_type": "SHARE"  # Mark this as a SHARE action
+            }
+            result.pending_llm_calls.append((agent.id, agent.cluster, target_post, future, metadata))
             result.metadata["author_name"] = author_name
         else:
             # Rule-based: Simple reshare without commentary

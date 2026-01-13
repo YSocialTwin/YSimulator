@@ -75,6 +75,7 @@ def llm_evaluation(
     group_classes: dict = None,
     peers_opinions: list = None,
     llm_manager=None,
+    agent_id: str = None,
 ) -> float:
     """
     LLM-based evaluation of opinion dynamics between two users.
@@ -121,6 +122,7 @@ def llm_evaluation(
         post_text=text,
         topic=topic,
         peers_opinions=peers_opinions if evaluation_scope != "interlocutor_only" else None,
+        agent_id=agent_id,
     )
     response = ray.get(future)
 
