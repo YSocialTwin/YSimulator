@@ -417,7 +417,7 @@ class BatchProcessor:
         
         # Batch extract emotions if any texts collected
         if texts_for_emotions:
-            self._batch_extract_and_update_emotions(texts_for_emotions, actions, action_start_idx)
+            self._batch_extract_and_update_emotions(texts_for_emotions, action_start_idx, actions)
 
     def gather_pending_llm_reactions(
         self,
@@ -882,7 +882,7 @@ class BatchProcessor:
         
         # Batch extract emotions if any texts collected
         if texts_for_emotions:
-            self._batch_extract_and_update_emotions(texts_for_emotions, actions, action_start_idx)
+            self._batch_extract_and_update_emotions(texts_for_emotions, action_start_idx, actions)
         
         # Batch evaluate opinions if any requests collected
         if opinion_requests:
@@ -1009,11 +1009,11 @@ class BatchProcessor:
         
         # Batch extract emotions if any texts collected
         if texts_for_emotions:
-            self._batch_extract_and_update_emotions(texts_for_emotions, actions, action_start_idx)
+            self._batch_extract_and_update_emotions(texts_for_emotions, action_start_idx, actions)
         
         # Batch evaluate opinions if any requests collected
         if opinion_requests:
-            self._batch_evaluate_and_update_opinions(opinion_requests, actions, calculate_opinion_updates_fn)
+            self._batch_evaluate_and_update_emotions(opinion_requests, actions, calculate_opinion_updates_fn)
         
         return secondary_follow_candidates
 
