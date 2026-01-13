@@ -350,6 +350,10 @@ class BatchProcessor:
             return
         
         # Process results
+        # Collect texts for batch emotion extraction
+        texts_for_emotions = []
+        action_start_idx = len(actions)
+        
         for i, res_txt in enumerate(results):
             pending_item = batchable_posts[i]
             agent_id = pending_item[0]
@@ -388,21 +392,32 @@ class BatchProcessor:
                     f"vLLM batch post for agent {agent_id}: NO article_id/topic, content_len={len(res_txt)}"
                 )
             
-            # Annotate the post text
+            # Annotate the post text (without emotions for now if vLLM)
             annotations = annotate_text(
                 res_txt,
                 enable_sentiment=self.enable_sentiment,
                 enable_toxicity=self.enable_toxicity,
                 perspective_api_key=self.perspective_api_key,
-                enable_emotions=self.enable_emotions,
+                enable_emotions=False,  # Disable for now, will batch extract later
                 llm_handle=self.llm,
             )
+            
+            # Collect text for batch emotion extraction if needed
+            if self.enable_emotions:
+                texts_for_emotions.append(res_txt)
+            else:
+                annotations["emotions"] = None
+            
             action.annotations = annotations
             self.logger.info(
-                f"vLLM batch post annotated for agent {agent_id}: has_sentiment={bool(annotations.get('sentiment'))}, has_toxicity={bool(annotations.get('toxicity'))}, has_emotions={bool(annotations.get('emotions'))}"
+                f"vLLM batch post annotated for agent {agent_id}: has_sentiment={bool(annotations.get('sentiment'))}, has_toxicity={bool(annotations.get('toxicity'))}"
             )
             
             actions.append(action)
+        
+        # Batch extract emotions if any texts collected
+        if texts_for_emotions:
+            self._batch_extract_and_update_emotions(texts_for_emotions, actions, action_start_idx)
 
     def gather_pending_llm_reactions(
         self,
@@ -780,6 +795,10 @@ class BatchProcessor:
             return self._gather_reactions_standard(batchable_comments, actions, calculate_opinion_updates_fn)
         
         # Process results
+        # Collect texts for batch emotion extraction
+        texts_for_emotions = []
+        action_start_idx = len(actions)  # Track where new actions start
+        
         for i, comment_text in enumerate(results):
             item = batchable_comments[i]
             agent_id = item[0]
@@ -791,15 +810,21 @@ class BatchProcessor:
                 output_tokens = len(comment_text) // CHARS_PER_TOKEN
                 self.cost_tracker.record_call("generate_comment", PROMPT_TOKENS_COMMENT, output_tokens)
             
-            # Annotate the comment text
+            # Annotate the comment text (without emotions for now if vLLM)
             annotations = annotate_text(
                 comment_text,
                 enable_sentiment=self.enable_sentiment,
                 enable_toxicity=self.enable_toxicity,
                 perspective_api_key=self.perspective_api_key,
-                enable_emotions=self.enable_emotions,
+                enable_emotions=False,  # Disable for now, will batch extract later
                 llm_handle=self.llm,
             )
+            
+            # Collect text for batch emotion extraction if needed
+            if self.enable_emotions:
+                texts_for_emotions.append(comment_text)
+            else:
+                annotations["emotions"] = None
             
             # Calculate opinion updates
             post_data = ray.get(self.server.get_post.remote(target_post, client_id=self.client_id))
@@ -832,6 +857,10 @@ class BatchProcessor:
                 secondary_follow_candidates.append(
                     (agent_id, cluster_id, post_data.get("user_id"), post_data.get("tweet", ""), True)
                 )
+        
+        # Batch extract emotions if any texts collected
+        if texts_for_emotions:
+            self._batch_extract_and_update_emotions(texts_for_emotions, actions, action_start_idx)
         
         return secondary_follow_candidates
 
@@ -884,6 +913,10 @@ class BatchProcessor:
             return self._gather_reactions_standard(batchable_shares, actions, calculate_opinion_updates_fn)
         
         # Process results
+        # Collect texts for batch emotion extraction
+        texts_for_emotions = []
+        action_start_idx = len(actions)
+        
         for i, share_text in enumerate(results):
             item = batchable_shares[i]
             agent_id = item[0]
@@ -895,17 +928,24 @@ class BatchProcessor:
                 output_tokens = len(share_text) // CHARS_PER_TOKEN
                 self.cost_tracker.record_call("generate_share_commentary", PROMPT_TOKENS_COMMENT, output_tokens)
             
-            # Annotate the share commentary text (same as comments/posts)
+            # Annotate the share commentary text (without emotions for now if vLLM)
             annotations = annotate_text(
                 share_text,
                 enable_sentiment=self.enable_sentiment,
                 enable_toxicity=self.enable_toxicity,
                 perspective_api_key=self.perspective_api_key,
-                enable_emotions=self.enable_emotions,
+                enable_emotions=False,  # Disable for now, will batch extract later
                 llm_handle=self.llm,
             )
+            
+            # Collect text for batch emotion extraction if needed
+            if self.enable_emotions:
+                texts_for_emotions.append(share_text)
+            else:
+                annotations["emotions"] = None
+            
             self.logger.info(
-                f"vLLM batch share annotated for agent {agent_id}: has_sentiment={bool(annotations.get('sentiment'))}, has_toxicity={bool(annotations.get('toxicity'))}, has_emotions={bool(annotations.get('emotions'))}"
+                f"vLLM batch share annotated for agent {agent_id}: has_sentiment={bool(annotations.get('sentiment'))}, has_toxicity={bool(annotations.get('toxicity'))}"
             )
             
             # Calculate opinion updates
@@ -931,6 +971,10 @@ class BatchProcessor:
                 secondary_follow_candidates.append(
                     (agent_id, cluster_id, post_data.get("user_id"), post_data.get("tweet", ""), True)
                 )
+        
+        # Batch extract emotions if any texts collected
+        if texts_for_emotions:
+            self._batch_extract_and_update_emotions(texts_for_emotions, actions, action_start_idx)
         
         return secondary_follow_candidates
 
@@ -980,6 +1024,10 @@ class BatchProcessor:
             return self._gather_reactions_standard(batchable_reads, actions, calculate_opinion_updates_fn)
         
         # Process results
+        # Collect texts for batch emotion extraction (only for comments generated by reads)
+        texts_for_emotions = []
+        comment_action_indices = []  # Track which actions are comments that need emotions
+        
         for i, reaction_type in enumerate(results):
             item = batchable_reads[i]
             agent_id = item[0]
@@ -1003,15 +1051,22 @@ class BatchProcessor:
                 # This is comment text from LLM - treat as COMMENT action
                 self.logger.debug(f"[READ] LLM generated comment for agent {agent_id}: '{reaction_type[:50]}...'")
                 
-                # Annotate the comment text
+                # Annotate the comment text (without emotions for now if vLLM)
                 annotations = annotate_text(
                     reaction_type,
                     enable_sentiment=self.enable_sentiment,
                     enable_toxicity=self.enable_toxicity,
                     perspective_api_key=self.perspective_api_key,
-                    enable_emotions=self.enable_emotions,
+                    enable_emotions=False,  # Disable for now, will batch extract later
                     llm_handle=self.llm,
                 )
+                
+                # Collect text for batch emotion extraction if needed
+                if self.enable_emotions:
+                    texts_for_emotions.append(reaction_type)
+                    comment_action_indices.append(len(actions))  # Track action index
+                else:
+                    annotations["emotions"] = None
                 
                 # Calculate opinion updates
                 post_data = ray.get(self.server.get_post.remote(target_post, client_id=self.client_id))
@@ -1070,6 +1125,44 @@ class BatchProcessor:
                 # IGNORE or unrecognized - skip
                 self.logger.debug(f"[READ] Agent {agent_id} chose to IGNORE")
         
+        # Batch extract emotions if any texts collected (only for comments)
+        if texts_for_emotions:
+            # Update specific actions that are comments
+            for idx, action_idx in enumerate(comment_action_indices):
+                if action_idx < len(actions):
+                    # Placeholder - will be updated by batch extraction
+                    pass
+            
+            # Call batch extraction with specific action indices
+            try:
+                llm_actor = self._get_llm_actor()
+                if hasattr(llm_actor, 'extract_emotions_batch'):
+                    self.logger.info(f"Batch extracting emotions for {len(texts_for_emotions)} read comment texts")
+                    batch_future = llm_actor.extract_emotions_batch.remote(texts_for_emotions)
+                    results = self.retry_handler.retry_with_backoff(
+                        lambda f: ray.get(f),
+                        batch_future,
+                        error_message="vLLM batch emotion extraction for read comments"
+                    )
+                    # Update actions with extracted emotions
+                    for i, emotions in enumerate(results):
+                        action_idx = comment_action_indices[i]
+                        if action_idx < len(actions) and hasattr(actions[action_idx], 'annotations'):
+                            actions[action_idx].annotations["emotions"] = emotions if emotions else []
+                else:
+                    # Fallback to individual extraction
+                    for i, text in enumerate(texts_for_emotions):
+                        emotion_future = llm_actor.extract_emotions.remote(text)
+                        emotions = ray.get(emotion_future)
+                        action_idx = comment_action_indices[i]
+                        if action_idx < len(actions) and hasattr(actions[action_idx], 'annotations'):
+                            actions[action_idx].annotations["emotions"] = emotions if emotions else []
+            except Exception as e:
+                self.logger.error(f"Failed to batch extract emotions for read comments: {e}")
+                for action_idx in comment_action_indices:
+                    if action_idx < len(actions) and hasattr(actions[action_idx], 'annotations'):
+                        actions[action_idx].annotations["emotions"] = []
+        
         return secondary_follow_candidates
 
     def gather_pending_llm_follows(
@@ -1106,3 +1199,60 @@ class BatchProcessor:
             # Phase 3: validate response (target_user should be a user_id string or None)
             if target_user and isinstance(target_user, str):
                 actions.append(ActionDTO(a_id, cid, "FOLLOW", target_user_id=target_user))
+
+    def _batch_extract_and_update_emotions(
+        self,
+        texts: List[str],
+        actions: List[ActionDTO],
+        action_start_idx: int,
+    ) -> None:
+        """
+        Batch extract emotions and update actions.
+        
+        Only used with vLLM batching to extract emotions for multiple texts at once.
+        
+        Args:
+            texts: List of text strings to extract emotions from
+            actions: List of actions to update
+            action_start_idx: Starting index in actions list for texts
+        """
+        if not texts:
+            return
+        
+        try:
+            # Check if vLLM backend supports batch emotion extraction
+            llm_actor = self._get_llm_actor()
+            if hasattr(llm_actor, 'extract_emotions_batch'):
+                self.logger.info(f"Batch extracting emotions for {len(texts)} texts using extract_emotions_batch")
+                
+                # Call batch emotion extraction
+                batch_future = llm_actor.extract_emotions_batch.remote(texts)
+                results = self.retry_handler.retry_with_backoff(
+                    lambda f: ray.get(f),
+                    batch_future,
+                    error_message="vLLM batch emotion extraction"
+                )
+                
+                self.logger.info(f"Successfully batch extracted emotions for {len(results)} texts")
+            else:
+                # Fallback to individual extraction for Ollama
+                self.logger.info(f"Extracting emotions individually for {len(texts)} texts (no batch support)")
+                results = []
+                for text in texts:
+                    emotion_future = llm_actor.extract_emotions.remote(text)
+                    emotions = ray.get(emotion_future)
+                    results.append(emotions if emotions else [])
+            
+            # Update actions with extracted emotions
+            for i, emotions in enumerate(results):
+                action_idx = action_start_idx + i
+                if action_idx < len(actions) and hasattr(actions[action_idx], 'annotations'):
+                    actions[action_idx].annotations["emotions"] = emotions if emotions else []
+                    
+        except Exception as e:
+            self.logger.error(f"Failed to batch extract emotions: {e}")
+            # Set empty emotions on error
+            for i in range(len(texts)):
+                action_idx = action_start_idx + i
+                if action_idx < len(actions) and hasattr(actions[action_idx], 'annotations'):
+                    actions[action_idx].annotations["emotions"] = []

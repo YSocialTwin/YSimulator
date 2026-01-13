@@ -1065,6 +1065,58 @@ class VLLMService:
         except Exception:
             return []
 
+    def extract_emotions_batch(self, texts: List[str]) -> List[list]:
+        """
+        Extract emotions from multiple texts in a single batch for improved performance.
+
+        Args:
+            texts: List of text strings to extract emotions from
+
+        Returns:
+            List of emotion lists (one per input text) in the same order as inputs
+        """
+        try:
+            logger.debug(f"[vLLM] Starting batch emotion extraction for {len(texts)} texts")
+            
+            system_template = self.prompts_config.get("extract_emotions", {}).get(
+                "system_template",
+                "You are an emotion classification assistant. Identify which emotions from the GoEmotions taxonomy the given text elicits.",
+            )
+            user_template = self.prompts_config.get("extract_emotions", {}).get(
+                "user_template",
+                'Identify emotions from this text. Choose ONLY from: {emotion_list}\n\nText: "{text}"\n\nReturn emotions as comma-separated list:',
+            )
+
+            emotion_list = "admiration, amusement, anger, annoyance, approval, caring, confusion, curiosity, desire, disappointment, disapproval, disgust, embarrassment, excitement, fear, gratitude, grief, joy, love, nervousness, optimism, pride, realization, relief, remorse, sadness, surprise, trust"
+
+            # Build prompts for all texts
+            prompts = []
+            for text in texts:
+                prompt = self._format_prompt(system_template, user_template)
+                prompt = prompt.replace("{text}", text).replace("{emotion_list}", emotion_list)
+                prompts.append(prompt)
+
+            # Batch generate using vLLM
+            logger.debug(f"[vLLM] Executing batch inference for {len(prompts)} emotion extraction prompts")
+            outputs = self.llm.generate(prompts, self.sampling_params)
+            
+            # Parse results
+            results = []
+            valid_emotions = emotion_list.split(", ")
+            for output in outputs:
+                response = output.outputs[0].text.strip()
+                emotions = [e.strip().lower() for e in response.split(",") if e.strip()]
+                emotions = [e for e in emotions if e in valid_emotions]
+                results.append(emotions)
+            
+            logger.debug(f"[vLLM] Batch emotion extraction completed successfully ({len(results)} results)")
+            return results
+        except Exception as e:
+            logger.error(f"[vLLM] Batch emotion extraction failed: {e}")
+            logger.error(f"[vLLM] Number of texts: {len(texts)}")
+            # Return empty lists for all texts on error
+            return [[] for _ in texts]
+
     def describe_image(self, image_url: str) -> Optional[str]:
         """
         Generate a description of an image using the vision LLM.

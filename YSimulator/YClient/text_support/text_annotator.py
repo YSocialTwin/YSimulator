@@ -22,6 +22,7 @@ def annotate_text(
     perspective_api_key: Optional[str] = None,
     enable_emotions: bool = False,
     llm_handle=None,
+    defer_emotions: bool = False,
 ) -> Dict:
     """
     Annotate text with hashtags, mentions, sentiment, toxicity, and emotions.
@@ -39,6 +40,8 @@ def annotate_text(
         perspective_api_key: API key for Perspective API toxicity analysis
         enable_emotions: Whether to extract emotions using LLM (default: False)
         llm_handle: Ray actor handle for LLM service (required if enable_emotions=True)
+        defer_emotions: If True, returns future for emotion extraction instead of result (default: False)
+                       Only used with vLLM batching to defer emotion extraction for batch processing
 
     Returns:
         dict: Annotations containing:
@@ -47,6 +50,7 @@ def annotate_text(
             - sentiment: Dict with neg, pos, neu, compound scores (if enabled)
             - toxicity: Dict with toxicity scores (if enabled)
             - emotions: List of emotion names from GoEmotions taxonomy (if enabled)
+                       OR Ray ObjectRef if defer_emotions=True
     """
     annotations = {}
 
@@ -79,11 +83,17 @@ def annotate_text(
         try:
             import ray
 
-            emotions = ray.get(llm_handle.extract_emotions.remote(text))
-            annotations["emotions"] = emotions if emotions else []
+            if defer_emotions:
+                # For vLLM batching: return future instead of blocking
+                # Caller will batch resolve all emotion futures together
+                annotations["emotions"] = llm_handle.extract_emotions.remote(text)
+            else:
+                # Standard path (Ollama): block and get result immediately
+                emotions = ray.get(llm_handle.extract_emotions.remote(text))
+                annotations["emotions"] = emotions if emotions else []
         except Exception:
-            # If emotion extraction fails, return empty list
-            annotations["emotions"] = []
+            # If emotion extraction fails, return empty list or None
+            annotations["emotions"] = [] if not defer_emotions else None
     else:
         annotations["emotions"] = None
 
