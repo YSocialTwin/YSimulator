@@ -203,6 +203,9 @@ if __name__ == "__main__":
     if not server_address:
         print("❌ Error: No server address specified in configuration.")
         print("Please set 'server.address' in simulation_config.json to the Ray cluster address.")
+        print(
+            "The server address is displayed when you start run_server.py (look for '🚀 Server Running on...')."
+        )
         print('Example: "server": {"address": "ray://127.0.0.1:10001"}')
         sys.exit(1)
 
