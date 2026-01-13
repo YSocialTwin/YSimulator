@@ -409,6 +409,63 @@ class VLLMService:
             logger.warning(f"[vLLM] Returning fallback reaction: IGNORE")
             return "IGNORE"
 
+    def decide_reaction_batch(
+        self, requests: List[Dict[str, Any]]
+    ) -> List[str]:
+        """
+        Decide reactions for multiple posts in a single batch for improved performance.
+
+        Args:
+            requests: List of request dicts, each with keys:
+                - cluster_id: Agent cluster ID
+                - post_content: Content of the post to react to
+
+        Returns:
+            List of reaction strings (LIKE, COMMENT, IGNORE) in the same order as requests
+        """
+        try:
+            logger.debug(f"[vLLM] Starting batch reaction decision for {len(requests)} requests")
+            prompts = []
+            for idx, req in enumerate(requests):
+                try:
+                    cluster_id = req["cluster_id"]
+                    post_content = req["post_content"]
+
+                    # Get prompt templates
+                    system_template = self.prompts_config["decide_reaction"]["system_template"]
+                    user_template = self.prompts_config["decide_reaction"]["user_template"]
+
+                    # Format templates
+                    system_msg = system_template.format(cluster_id=cluster_id)
+                    user_msg = user_template.format(post_content=post_content)
+
+                    # Create formatted prompt
+                    prompt = self._format_prompt(system_msg, user_msg)
+                    prompts.append(prompt)
+                except Exception as e:
+                    logger.error(f"[vLLM] Failed to build prompt for batch reaction request {idx}: {e}")
+                    logger.error(f"[vLLM] Request: {req}")
+                    raise
+
+            # Batch generate using vLLM
+            logger.debug(f"[vLLM] Executing batch inference for {len(prompts)} reaction prompts")
+            outputs = self.llm.generate(prompts, self.sampling_params)
+            results = []
+            for output in outputs:
+                result = output.outputs[0].text.strip().upper()
+                if "LIKE" in result:
+                    results.append("LIKE")
+                elif "COMMENT" in result:
+                    results.append("COMMENT")
+                else:
+                    results.append("IGNORE")
+            logger.debug(f"[vLLM] Batch reaction decision completed successfully ({len(results)} results)")
+            return results
+        except Exception as e:
+            logger.error(f"[vLLM] Batch reaction decision failed: {e}")
+            logger.error(f"[vLLM] Number of requests: {len(requests)}")
+            raise RuntimeError(f"vLLM batch reaction decision failed: {e}") from e
+
     def generate_comment(
         self,
         cluster_id: int,
@@ -503,6 +560,109 @@ class VLLMService:
             logger.error(f"[vLLM] cluster_id={cluster_id}, author={author_name}, post_content_len={len(post_content) if post_content else 0}")
             logger.warning("[vLLM] Returning fallback comment")
             return "Interesting perspective!"
+
+    def generate_comment_batch(
+        self, requests: List[Dict[str, Any]]
+    ) -> List[str]:
+        """
+        Generate multiple comments in a single batch for improved performance.
+
+        Args:
+            requests: List of request dicts, each with keys:
+                - cluster_id: Agent cluster ID
+                - post_content: Content of the post to comment on
+                - agent_attrs: Agent attributes dict (optional)
+                - author_name: Username of the post author (optional, default: "Someone")
+                - thread_context: List of thread context (optional)
+
+        Returns:
+            List of generated comment strings in the same order as requests
+        """
+        try:
+            logger.debug(f"[vLLM] Starting batch comment generation for {len(requests)} requests")
+            prompts = []
+            for idx, req in enumerate(requests):
+                try:
+                    cluster_id = req["cluster_id"]
+                    post_content = req["post_content"]
+                    agent_attrs = req.get("agent_attrs")
+                    author_name = req.get("author_name", "Someone")
+                    thread_context = req.get("thread_context")
+
+                    # Build persona
+                    persona = self._build_persona(cluster_id, agent_attrs)
+                    toxicity = agent_attrs.get("toxicity", "no") if agent_attrs else "no"
+
+                    # Get opinions on the post's topics if available
+                    opinion_instruction = ""
+                    if agent_attrs and "post_topics" in agent_attrs and agent_attrs["post_topics"]:
+                        topics = agent_attrs["post_topics"]
+                        opinions = agent_attrs.get("post_opinions", {})
+
+                        if topics and opinions:
+                            opinion_parts = []
+                            for topic in topics:
+                                if topic in opinions:
+                                    opinion_parts.append(f"{topic}: {opinions[topic]}")
+
+                            if opinion_parts:
+                                opinion_str = ", ".join(opinion_parts)
+                                opinion_instruction = f" Your opinions on the discussed topics: {opinion_str}. Express your viewpoint accordingly."
+
+                    # Get prompt templates
+                    system_template = self.prompts_config["generate_comment"]["system_template"]
+                    user_template = self.prompts_config["generate_comment"]["user_template"]
+
+                    # Format thread context if provided
+                    thread_context_str = ""
+                    thread_context_instruction = ""
+                    if thread_context and len(thread_context) > 0:
+                        thread_context_lines = []
+                        for ctx in thread_context:
+                            username = ctx.get("username", "Someone")
+                            tweet = ctx.get("tweet", "")
+                            thread_context_lines.append(f"{username}: {tweet}")
+                        thread_context_str = "\n".join(thread_context_lines)
+                        thread_context_instruction = (
+                            f"Previous discussion in this thread:\n{thread_context_str}\n\n"
+                        )
+
+                    # Format templates
+                    system_msg = system_template.format(persona=persona, toxicity=toxicity)
+                    user_msg = user_template.format(
+                        author_name=author_name,
+                        post_content=post_content,
+                        thread_context_instruction=thread_context_instruction,
+                    )
+
+                    # Add opinion instruction if available
+                    if opinion_instruction:
+                        user_msg += opinion_instruction
+
+                    # Create formatted prompt
+                    prompt = self._format_prompt(system_msg, user_msg)
+                    prompts.append(prompt)
+                except Exception as e:
+                    logger.error(f"[vLLM] Failed to build prompt for batch comment request {idx}: {e}")
+                    logger.error(f"[vLLM] Request: {req}")
+                    raise
+
+            # Batch generate using vLLM
+            logger.debug(f"[vLLM] Executing batch inference for {len(prompts)} comment prompts")
+            outputs = self.llm.generate(prompts, self.sampling_params)
+            results = []
+            for output in outputs:
+                comment = output.outputs[0].text.strip()
+                # Ensure comment doesn't exceed length
+                if len(comment) > 280:
+                    comment = comment[:277] + "..."
+                results.append(comment)
+            logger.debug(f"[vLLM] Batch comment generation completed successfully ({len(results)} results)")
+            return results
+        except Exception as e:
+            logger.error(f"[vLLM] Batch comment generation failed: {e}")
+            logger.error(f"[vLLM] Number of requests: {len(requests)}")
+            raise RuntimeError(f"vLLM batch comment generation failed: {e}") from e
 
     # Add placeholder methods for compatibility with LLMService interface
     # These methods maintain the same signature but may need full implementation

@@ -140,8 +140,16 @@ class CommentGenerator(BaseActionGenerator):
                 future = llm_actor.generate_comment.remote(
                     agent.cluster, post_content, agent_attrs, author_name, thread_context
                 )
-                # Store: (agent_id, cluster_id, target_post_id, future)
-                result.pending_llm_calls.append((agent.id, agent.cluster, target_post, future))
+                # Store: (agent_id, cluster_id, target_post_id, future, metadata_dict)
+                # Extended tuple for vLLM batching support - metadata includes parameters for batch inference
+                metadata = {
+                    "type": "comment",
+                    "post_content": post_content,
+                    "agent_attrs": agent_attrs,
+                    "author_name": author_name,
+                    "thread_context": thread_context
+                }
+                result.pending_llm_calls.append((agent.id, agent.cluster, target_post, future, metadata))
                 result.metadata["author_name"] = author_name
         else:
             # Rule-based: Just comment "COMMENT"

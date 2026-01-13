@@ -396,9 +396,10 @@ class BatchProcessor:
 
         Args:
             pending_llm_reactions: List of tuples:
-                - (agent_id, cluster_id, target_post_id, future) for regular reactions/comments
-                - (agent_id, cluster_id, target_post_id, future, mention_id) for replies to mentions
-                - (agent_id, cluster_id, target_post_id, future, "SHARE") for share with commentary
+                - (agent_id, cluster_id, target_post_id, future) for regular reactions/comments (old format)
+                - (agent_id, cluster_id, target_post_id, future, mention_id) for replies to mentions (old format)
+                - (agent_id, cluster_id, target_post_id, future, "SHARE") for share with commentary (old format)
+                - (agent_id, cluster_id, target_post_id, future, metadata_dict) for batching (new format)
             actions: List to append resolved reaction/comment/share actions to
             calculate_opinion_updates_fn: Function to calculate opinion updates
 
@@ -413,6 +414,39 @@ class BatchProcessor:
         self.logger.info(
             f"[REPLY] Gathering {len(pending_llm_reactions)} pending LLM reactions/comments"
         )
+
+        # Check if using vLLM backend for batch inference
+        use_vllm_batching = self._is_vllm_backend()
+        
+        if use_vllm_batching:
+            self.logger.info(f"Using vLLM batch inference for reactions/comments")
+            return self._gather_reactions_with_vllm_batch(
+                pending_llm_reactions, actions, calculate_opinion_updates_fn
+            )
+        else:
+            self.logger.debug(f"Using standard scatter/gather for reactions/comments (Ollama)")
+            return self._gather_reactions_standard(
+                pending_llm_reactions, actions, calculate_opinion_updates_fn
+            )
+
+    def _gather_reactions_standard(
+        self,
+        pending_llm_reactions: List[Tuple],
+        actions: List[ActionDTO],
+        calculate_opinion_updates_fn,
+    ) -> List[Tuple]:
+        """
+        Standard scatter/gather pattern for Ollama backend (default).
+        
+        Args:
+            pending_llm_reactions: List of pending reaction tuples
+            actions: List to append resolved reaction/comment/share actions to
+            calculate_opinion_updates_fn: Function to calculate opinion updates
+            
+        Returns:
+            List of secondary follow candidates
+        """
+        secondary_follow_candidates = []
 
         # Count how many are mention replies
         mention_replies = sum(1 for r in pending_llm_reactions if len(r) > 4)
@@ -583,6 +617,160 @@ class BatchProcessor:
                     },
                 )
 
+        return secondary_follow_candidates
+
+    def _gather_reactions_with_vllm_batch(
+        self,
+        pending_llm_reactions: List[Tuple],
+        actions: List[ActionDTO],
+        calculate_opinion_updates_fn,
+    ) -> List[Tuple]:
+        """
+        vLLM batch inference pattern for reactions/comments.
+        
+        Separates reactions into batchable (with metadata) and non-batchable,
+        then processes them accordingly.
+        
+        Args:
+            pending_llm_reactions: List of pending reaction tuples
+            actions: List to append resolved actions to
+            calculate_opinion_updates_fn: Function to calculate opinion updates
+            
+        Returns:
+            List of secondary follow candidates
+        """
+        secondary_follow_candidates = []
+        
+        # Separate into batchable and non-batchable
+        batchable_comments = []
+        non_batchable = []
+        
+        for reaction_tuple in pending_llm_reactions:
+            # New format with metadata: (agent_id, cluster_id, target_post_id, future, metadata_dict)
+            if len(reaction_tuple) >= 5 and isinstance(reaction_tuple[4], dict):
+                metadata = reaction_tuple[4]
+                if metadata.get("type") == "comment":
+                    batchable_comments.append(reaction_tuple)
+                else:
+                    non_batchable.append(reaction_tuple)
+            else:
+                # Old format - use standard gather
+                non_batchable.append(reaction_tuple)
+        
+        # Process batchable comments with vLLM batch inference
+        if batchable_comments:
+            self.logger.info(f"Processing {len(batchable_comments)} comments with vLLM batch inference")
+            candidates = self._process_vllm_comment_batch(
+                batchable_comments, actions, calculate_opinion_updates_fn
+            )
+            secondary_follow_candidates.extend(candidates)
+        
+        # Process non-batchable with standard gather
+        if non_batchable:
+            self.logger.info(f"Processing {len(non_batchable)} reactions with standard gather (no metadata)")
+            candidates = self._gather_reactions_standard(
+                non_batchable, actions, calculate_opinion_updates_fn
+            )
+            secondary_follow_candidates.extend(candidates)
+        
+        return secondary_follow_candidates
+    
+    def _process_vllm_comment_batch(
+        self,
+        batchable_comments: List[Tuple],
+        actions: List[ActionDTO],
+        calculate_opinion_updates_fn,
+    ) -> List[Tuple]:
+        """
+        Process comments using vLLM's generate_comment_batch method.
+        
+        Args:
+            batchable_comments: List of tuples with format (agent_id, cluster_id, target_post_id, future, metadata_dict)
+            actions: List to append resolved actions to
+            calculate_opinion_updates_fn: Function to calculate opinion updates
+            
+        Returns:
+            List of secondary follow candidates
+        """
+        secondary_follow_candidates = []
+        
+        # Build batch requests from metadata
+        batch_requests = []
+        for item in batchable_comments:
+            agent_id, cluster_id, target_post, future, metadata = item
+            batch_requests.append({
+                "cluster_id": cluster_id,
+                "post_content": metadata.get("post_content", ""),
+                "agent_attrs": metadata.get("agent_attrs"),
+                "author_name": metadata.get("author_name", "Someone"),
+                "thread_context": metadata.get("thread_context")
+            })
+        
+        # Get LLM actor for batch call
+        if hasattr(self.llm, 'get_all_actors'):
+            llm_actor = self.llm.get_all_actors()[0]
+        else:
+            llm_actor = self.llm
+        
+        # Call generate_comment_batch with retry logic
+        self.logger.info(f"Calling generate_comment_batch for {len(batch_requests)} requests")
+        try:
+            batch_future = llm_actor.generate_comment_batch.remote(batch_requests)
+            results = self.retry_handler.retry_with_backoff(
+                lambda f: ray.get(f),
+                batch_future,
+                error_message="vLLM batch comment generation"
+            )
+        except Exception as e:
+            self.logger.error(f"vLLM batch comment generation failed: {e}, falling back to standard gather")
+            return self._gather_reactions_standard(batchable_comments, actions, calculate_opinion_updates_fn)
+        
+        # Process results
+        for i, comment_text in enumerate(results):
+            item = batchable_comments[i]
+            agent_id = item[0]
+            cluster_id = item[1]
+            target_post = item[2]
+            
+            # Track LLM usage
+            if self.cost_tracker:
+                output_tokens = len(comment_text) // CHARS_PER_TOKEN
+                self.cost_tracker.record_call("generate_comment", PROMPT_TOKENS_COMMENT, output_tokens)
+            
+            # Annotate the comment text
+            annotations = annotate_text(
+                comment_text,
+                enable_sentiment=self.enable_sentiment,
+                enable_toxicity=self.enable_toxicity,
+                perspective_api_key=self.perspective_api_key,
+                enable_emotions=self.enable_emotions,
+                llm_handle=self.llm,
+            )
+            
+            # Calculate opinion updates
+            post_data = ray.get(self.server.get_post.remote(target_post, client_id=self.client_id))
+            updated_opinions = None
+            if post_data:
+                updated_opinions = calculate_opinion_updates_fn(agent_id, target_post, post_data)
+            
+            # Create action
+            action = ActionDTO(
+                agent_id,
+                cluster_id,
+                "COMMENT",
+                content=comment_text,
+                target_post_id=target_post,
+                annotations=annotations,
+                updated_opinions=updated_opinions,
+            )
+            actions.append(action)
+            
+            # Track for secondary follow
+            if post_data:
+                secondary_follow_candidates.append(
+                    (agent_id, cluster_id, post_data.get("user_id"), post_data.get("tweet", ""), True)
+                )
+        
         return secondary_follow_candidates
 
     def gather_pending_llm_follows(
