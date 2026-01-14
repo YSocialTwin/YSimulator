@@ -194,7 +194,7 @@ def write_network_csv(edges, filepath):
 
 def generate_simulation_config(client_id):
     """
-    Generate simulation configuration for a specific client.
+    Generate simulation configuration for a specific client with vLLM backend.
 
     Args:
         client_id: Client identifier (1-4)
@@ -207,20 +207,27 @@ def generate_simulation_config(client_id):
         "namespace": "social_sim",
         "server": {"address": None, "port": None},
         "llm": {
-            "address": "localhost",
-            "port": 11434,
-            "model": "llama3.2",
+            "backend": "vllm",
+            "model": "AMead10/Llama-3.2-3B-Instruct-AWQ",
             "temperature": 0.9,
-            "llm_api_key": "NULL",
-            "llm_max_tokens": -1,
+            "max_tokens": 256,
+            "max_model_len": 4096,
+            "tensor_parallel_size": 1,
+            "gpu_memory_utilization": 0.15,
+            "enable_flashattention": False,
+            "num_actors": 4,
+            "gpu_per_actor": 1,
+            "reuse_actors": False,
+            "actor_name_prefix": f"ysim_llm_client{client_id}",
+            "note": "FlashAttention disabled by default (requires GPU compute capability >= 8.0). Set to true to enable on compatible GPUs. max_model_len sets the maximum sequence length (default: 40000). num_actors specifies how many vLLM instances to start for parallel processing (default: 1). With 4 actors, achieve ~30x speedup vs sequential Ollama. gpu_per_actor specifies GPU allocation per actor (default: 1.0). Set to 0.25 to fit 4 actors on 1 GPU, or 0.5 for 2 actors per GPU. reuse_actors (default: false) allows clients to share existing vLLM instances on the same machine - set to true to reuse actors from another client. actor_name_prefix is unique per client to avoid conflicts.",
         },
         "llm_v": {
-            "address": "localhost",
-            "port": 11434,
-            "model": "minicpm-v",
+            "model": "openbmb/MiniCPM-V-2_6-int4",
             "temperature": 0.5,
-            "llm_api_key": "NULL",
-            "llm_max_tokens": 300,
+            "max_tokens": 300,
+            "max_model_len": 4096,
+            "gpu_memory_utilization": 0.15,
+            "note": "max_model_len sets the maximum sequence length for the vision model (default: 40000).",
         },
         "simulation": {
             "num_days": 3,
@@ -279,7 +286,10 @@ def generate_simulation_config(client_id):
                 "agent_downcast": True,
                 "distribution": {"validator": 0.33, "broadcaster": 0.33, "explorer": 0.34},
             },
-            "emotion_annotation": False,
+            "enable_sentiment": True,
+            "emotion_annotation": True,
+            "enable_toxicity": False,
+            "perspective_api_key": None,
         },
         "agents": {
             "reading_from_follower_ratio": 0.6,
@@ -294,6 +304,7 @@ def generate_simulation_config(client_id):
                 "decay_rate": 0.01,
                 "min_probability_ratio": 0.1,
             },
+            "batch_size": 100,
             "churn": {
                 "enabled": True,
                 "churn_probability": 0.01,
@@ -315,12 +326,12 @@ def generate_simulation_config(client_id):
         },
         "opinion_dynamics": {
             "enabled": True,
-            "model_name": "bounded_confidence",
+            "model_name": "llm_evaluation",
+            "note": "Uses LLM-based opinion evaluation with natural language reasoning. Requires LLM agents.",
             "parameters": {
-                "epsilon": 0.25,
-                "mu": 0.5,
-                "theta": 0.0,
+                "evaluation_scope": "neighbors",
                 "cold_start": "neutral",
+                "note": "evaluation_scope='neighbors' considers opinions of followed users. cold_start='neutral' initializes new opinions at 0.5.",
             },
             "opinion_groups": {
                 "Strongly against": [0.0, 0.2],

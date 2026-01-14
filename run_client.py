@@ -243,27 +243,51 @@ if __name__ == "__main__":
         },
     )
 
-    # Get server address from config
-    server_address = sim_config["server"].get("address")
+    # Get server address and port from config
+    server_config = sim_config.get("server", {})
+    server_address = server_config.get("address")
+    server_port = server_config.get("port")
+
     if not server_address:
         print("❌ Error: No server address specified in configuration.")
         print("Please set 'server.address' in simulation_config.json to the Ray cluster address.")
         print(
             "The server address is displayed when you start run_server.py (look for '🚀 Server Running on...')."
         )
-        print('Example: "server": {"address": "ray://127.0.0.1:10001"}')
+        print('Example: "server": {"address": "127.0.0.1", "port": 10001}')
+        print('Or: "server": {"address": "ray://127.0.0.1:10001", "port": null}')
         sys.exit(1)
 
-    logger.info(
-        "Connecting to Ray cluster", extra={"extra_data": {"server_address": server_address}}
-    )
+    # Construct full Ray address
+    # If address already contains "ray://" and port, use it as-is
+    # Otherwise, construct from address and port fields
+    if server_address.startswith("ray://"):
+        ray_address = server_address
+    elif server_port:
+        # Construct ray:// URL from separate address and port
+        ray_address = f"ray://{server_address}:{server_port}"
+    else:
+        # Check if port is embedded in address (legacy format - not recommended)
+        if ":" in server_address:
+            print(
+                "⚠️  Warning: Port appears to be in the address field. "
+                "Please use separate 'address' and 'port' fields."
+            )
+            ray_address = f"ray://{server_address}"
+        else:
+            print("❌ Error: No server port specified in configuration.")
+            print("Please set 'server.port' or include port in 'server.address'.")
+            print('Example: "server": {"address": "127.0.0.1", "port": 10001}')
+            sys.exit(1)
 
-    print(f"--- Connecting to Cluster at {server_address} ---")
+    logger.info("Connecting to Ray cluster", extra={"extra_data": {"server_address": ray_address}})
+
+    print(f"--- Connecting to Cluster at {ray_address} ---")
 
     # Initialize with namespace from config
     namespace = sim_config.get("namespace", "social_sim")
     connect_start = time.time()
-    ray.init(address=server_address, namespace=namespace, ignore_reinit_error=True)
+    ray.init(address=ray_address, namespace=namespace, ignore_reinit_error=True)
     connect_time = (time.time() - connect_start) * 1000
 
     logger.info(

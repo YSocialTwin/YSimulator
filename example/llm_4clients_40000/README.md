@@ -1,11 +1,13 @@
-# Multi-Client LLM Population Experiment (4 Clients × 10,000 Agents)
+# Multi-Client vLLM Population Experiment (4 Clients × 10,000 Agents)
 
-This experiment demonstrates a large-scale YSimulator configuration with **parallel client execution**:
+This experiment demonstrates a large-scale YSimulator configuration with **parallel client execution using vLLM**:
 - **40,004 agents total**: **40,000 LLM-enabled agents** across 4 clients + **4 news pages** (one per client)
+- **vLLM backend**: High-performance LLM inference with ~30x speedup vs sequential Ollama
 - **Initial shared social network** with ~400,000 follow relationships (~10 connections per agent)
 - **Discussion topics**: war, politics, sport, books, movies
 - **Dynamic follow actions** using multiple recommendation strategies
 - **Agent archetypes**: Validator, Broadcaster, Explorer
+- **LLM-based opinion dynamics**: Natural language opinion evaluation
 - **Parallel execution**: Each client runs independently managing 10,000 agents
 
 ## Architecture
@@ -60,22 +62,33 @@ Copy the Ray address from the server output:
 
 ### 3. Update Client Configurations with Server Address
 
-Before starting the clients, update all 4 client configuration files with the server address:
+Before starting the clients, update all 4 client configuration files with the server address and port:
 
 ```bash
 # Edit each client configuration file
 nano example/llm_4clients_40000/client_1_simulation_config.json
-# Set "server": {"address": "ray://127.0.0.1:10001", "port": null}
+# Set "server": {"address": "127.0.0.1", "port": 10001}
+# (Get the address and port from server startup output)
 # Repeat for client_2, client_3, client_4
 ```
 
-Or use this quick command to update all files:
+Or use this quick command to update all files (replace with your actual server address and port):
 ```bash
 cd example/llm_4clients_40000
-# Replace 127.0.0.1:10001 with your actual server address
+# Replace 127.0.0.1 and 10001 with your actual server address and port
+SERVER_ADDR="127.0.0.1"
+SERVER_PORT="10001"
 for i in 1 2 3 4; do
-  sed -i 's/"address": null/"address": "ray:\/\/127.0.0.1:10001"/' client_${i}_simulation_config.json
+  jq --arg addr "$SERVER_ADDR" --arg port "$SERVER_PORT" \
+    '.server.address = $addr | .server.port = ($port | tonumber)' \
+    client_${i}_simulation_config.json > tmp_${i}.json && \
+    mv tmp_${i}.json client_${i}_simulation_config.json
 done
+```
+
+**Alternative format**: You can also use the full Ray URL format:
+```bash
+# Set "server": {"address": "ray://127.0.0.1:10001", "port": null}
 ```
 
 ### 4. Start Clients in Parallel
@@ -145,6 +158,26 @@ python run_client.py \
 
 wait
 ```
+
+## vLLM Configuration
+
+This experiment uses vLLM for high-performance LLM inference. Each client is configured with:
+
+- **Model**: AMead10/Llama-3.2-3B-Instruct-AWQ (quantized for efficiency)
+- **num_actors**: 4 vLLM instances per client for parallel processing
+- **gpu_per_actor**: 1.0 (adjust to 0.25 to fit 4 actors on 1 GPU)
+- **actor_name_prefix**: Unique per client (e.g., `ysim_llm_client1`) to avoid conflicts
+- **reuse_actors**: false (each client starts its own vLLM instances)
+
+**GPU Requirements:**
+- **Option 1**: 4 GPUs per client (16 GPUs total) with `gpu_per_actor: 1`
+- **Option 2**: 1 GPU per client (4 GPUs total) with `gpu_per_actor: 0.25`
+- **Option 3**: Share GPUs across clients by adjusting `gpu_per_actor` and enabling `reuse_actors`
+
+**Performance Notes:**
+- vLLM provides ~30x speedup compared to sequential Ollama
+- With 4 actors per client, each client can process agent actions in parallel
+- Total: 16 vLLM actors across 4 clients for maximum throughput
 
 ## Log Files
 

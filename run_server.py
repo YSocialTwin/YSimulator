@@ -238,12 +238,29 @@ if __name__ == "__main__":
     # Build ray.init() arguments
     init_kwargs = {"include_dashboard": False, "namespace": namespace}
 
-    # Add address if not 'auto'
+    # Handle address and port configuration
     if address and address != "auto":
-        init_kwargs["address"] = address
-
-    # Note: Port configuration is handled by Ray's internal mechanisms
-    # Use RAY_ADDRESS environment variable or ray start --port for custom ports
+        # If address already contains "ray://" prefix, use it as-is
+        if address.startswith("ray://"):
+            init_kwargs["address"] = address
+        elif port:
+            # Construct ray:// URL from separate address and port
+            init_kwargs["address"] = f"ray://{address}:{port}"
+        else:
+            # Check if port is embedded in address (legacy format)
+            if ":" in address:
+                print(
+                    "⚠️  Warning: Port appears to be in the address field. "
+                    "Consider using separate 'address' and 'port' fields."
+                )
+                init_kwargs["address"] = f"ray://{address}"
+            else:
+                # Just use the address without port (Ray will use default)
+                init_kwargs["address"] = address
+    elif port:
+        # Only port specified, use localhost
+        init_kwargs["address"] = f"ray://localhost:{port}"
+    # else: auto mode - Ray will start a new cluster
 
     # Start Ray cluster
     init_start = time.time()
