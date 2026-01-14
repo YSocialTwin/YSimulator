@@ -10,6 +10,9 @@ from unittest.mock import Mock, patch
 
 import pytest
 
+# Mark all tests in this module to run in isolated execution group
+pytestmark = pytest.mark.xdist_group(name="server_tests")
+
 
 # Use a module-level fixture that ONLY affects this test file
 @pytest.fixture(scope="module", autouse=True)
