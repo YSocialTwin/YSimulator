@@ -11,15 +11,23 @@ from unittest.mock import Mock, patch
 import pytest
 
 
+# Use a module-level fixture that ONLY affects this test file
 @pytest.fixture(scope="module", autouse=True)
-def mock_ray_remote():
-    """Patch ray.remote to allow direct instantiation of actors in tests."""
-    # Start the patch
-    patcher = patch("ray.remote", lambda x: x)
-    patcher.start()
+def mock_ray_remote_for_server_tests():
+    """Patch ray.remote ONLY for this test module."""
+    # Import ray here to ensure we're patching the right thing
+    import ray
+    
+    # Store original
+    original_remote = ray.remote
+    
+    # Replace with identity function
+    ray.remote = lambda x: x
+    
     yield
-    # Stop the patch after module tests complete
-    patcher.stop()
+    
+    # Restore original
+    ray.remote = original_remote
 
 
 class TestLogServerRequestDecorator:
