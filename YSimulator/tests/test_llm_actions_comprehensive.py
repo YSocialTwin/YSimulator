@@ -11,6 +11,8 @@ Tests cover:
 
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from YSimulator.YClient.actions.llm_actions import (
     generate_image_post_async,
     generate_llm_follow_async,
@@ -24,12 +26,25 @@ from YSimulator.YClient.actions.llm_actions import (
 )
 
 
+@pytest.fixture
+def mock_ollama_llm():
+    """Create a mock LLM that behaves like Ollama (non-vLLM batching)."""
+    # Use spec=[] to prevent auto-creation of attributes like generate_post_batch
+    mock = MagicMock(spec=['generate_post', 'decide_reaction', 'generate_read_reaction', 
+                           'generate_reply_to_mention', 'generate_follow_decision', 
+                           'generate_image_post', 'generate_comment', 
+                           'decide_search_action', '__class__'])
+    # Ensure the mock is not detected as a load balancer
+    mock.__class__.__name__ = "LLMService"
+    return mock
+
+
 class TestGenerateLLMPostAsync:
     """Test suite for generate_llm_post_async."""
 
-    def test_generate_llm_post_async_basic(self):
+    def test_generate_llm_post_async_basic(self, mock_ollama_llm):
         """Test basic LLM post generation."""
-        mock_llm = MagicMock()
+        mock_llm = mock_ollama_llm
         mock_ref = MagicMock()
         mock_llm.generate_post.remote.return_value = mock_ref
 
@@ -38,9 +53,9 @@ class TestGenerateLLMPostAsync:
         mock_llm.generate_post.remote.assert_called_once_with(1, 5, 10, None)
         assert result == mock_ref
 
-    def test_generate_llm_post_async_with_attrs(self):
+    def test_generate_llm_post_async_with_attrs(self, mock_ollama_llm):
         """Test LLM post generation with agent attributes."""
-        mock_llm = MagicMock()
+        mock_llm = mock_ollama_llm
         mock_ref = MagicMock()
         mock_llm.generate_post.remote.return_value = mock_ref
         agent_attrs = {"name": "John", "age": 25, "gender": "M"}
@@ -52,9 +67,9 @@ class TestGenerateLLMPostAsync:
         mock_llm.generate_post.remote.assert_called_once_with(2, 3, 5, agent_attrs)
         assert result == mock_ref
 
-    def test_generate_llm_post_async_day_zero(self):
+    def test_generate_llm_post_async_day_zero(self, mock_ollama_llm):
         """Test LLM post generation on day zero."""
-        mock_llm = MagicMock()
+        mock_llm = mock_ollama_llm
         mock_ref = MagicMock()
         mock_llm.generate_post.remote.return_value = mock_ref
 
@@ -63,9 +78,9 @@ class TestGenerateLLMPostAsync:
         mock_llm.generate_post.remote.assert_called_once()
         assert result == mock_ref
 
-    def test_generate_llm_post_async_high_values(self):
+    def test_generate_llm_post_async_high_values(self, mock_ollama_llm):
         """Test LLM post generation with high day/slot values."""
-        mock_llm = MagicMock()
+        mock_llm = mock_ollama_llm
         mock_ref = MagicMock()
         mock_llm.generate_post.remote.return_value = mock_ref
 
@@ -74,9 +89,9 @@ class TestGenerateLLMPostAsync:
         mock_llm.generate_post.remote.assert_called_once_with(5, 100, 48, None)
         assert result == mock_ref
 
-    def test_generate_llm_post_async_empty_attrs(self):
+    def test_generate_llm_post_async_empty_attrs(self, mock_ollama_llm):
         """Test LLM post generation with empty attributes dict."""
-        mock_llm = MagicMock()
+        mock_llm = mock_ollama_llm
         mock_ref = MagicMock()
         mock_llm.generate_post.remote.return_value = mock_ref
 
@@ -89,9 +104,9 @@ class TestGenerateLLMPostAsync:
 class TestGenerateLLMReactionAsync:
     """Test suite for generate_llm_reaction_async."""
 
-    def test_generate_llm_reaction_async_basic(self):
+    def test_generate_llm_reaction_async_basic(self, mock_ollama_llm):
         """Test basic LLM reaction decision."""
-        mock_llm = MagicMock()
+        mock_llm = mock_ollama_llm
         mock_ref = MagicMock()
         mock_llm.decide_reaction.remote.return_value = mock_ref
 
@@ -100,9 +115,9 @@ class TestGenerateLLMReactionAsync:
         mock_llm.decide_reaction.remote.assert_called_once_with(1, "Test post")
         assert result == mock_ref
 
-    def test_generate_llm_reaction_async_long_content(self):
+    def test_generate_llm_reaction_async_long_content(self, mock_ollama_llm):
         """Test LLM reaction with long content."""
-        mock_llm = MagicMock()
+        mock_llm = mock_ollama_llm
         mock_ref = MagicMock()
         mock_llm.decide_reaction.remote.return_value = mock_ref
         long_content = "A" * 1000
@@ -112,9 +127,9 @@ class TestGenerateLLMReactionAsync:
         mock_llm.decide_reaction.remote.assert_called_once_with(2, long_content)
         assert result == mock_ref
 
-    def test_generate_llm_reaction_async_empty_content(self):
+    def test_generate_llm_reaction_async_empty_content(self, mock_ollama_llm):
         """Test LLM reaction with empty content."""
-        mock_llm = MagicMock()
+        mock_llm = mock_ollama_llm
         mock_ref = MagicMock()
         mock_llm.decide_reaction.remote.return_value = mock_ref
 
@@ -123,9 +138,9 @@ class TestGenerateLLMReactionAsync:
         mock_llm.decide_reaction.remote.assert_called_once_with(1, "")
         assert result == mock_ref
 
-    def test_generate_llm_reaction_async_special_characters(self):
+    def test_generate_llm_reaction_async_special_characters(self, mock_ollama_llm):
         """Test LLM reaction with special characters."""
-        mock_llm = MagicMock()
+        mock_llm = mock_ollama_llm
         mock_ref = MagicMock()
         mock_llm.decide_reaction.remote.return_value = mock_ref
         content = "Test @mention #hashtag 👍 emoji!"
@@ -135,9 +150,9 @@ class TestGenerateLLMReactionAsync:
         mock_llm.decide_reaction.remote.assert_called_once_with(1, content)
         assert result == mock_ref
 
-    def test_generate_llm_reaction_async_different_clusters(self):
+    def test_generate_llm_reaction_async_different_clusters(self, mock_ollama_llm):
         """Test LLM reaction with different cluster IDs."""
-        mock_llm = MagicMock()
+        mock_llm = mock_ollama_llm
         mock_ref = MagicMock()
         mock_llm.decide_reaction.remote.return_value = mock_ref
 
@@ -230,9 +245,9 @@ class TestGenerateNewsPostAsync:
 class TestGenerateLLMReadAsync:
     """Test suite for generate_llm_read_async."""
 
-    def test_generate_llm_read_async_basic(self):
+    def test_generate_llm_read_async_basic(self, mock_ollama_llm):
         """Test basic LLM read reaction."""
-        mock_llm = MagicMock()
+        mock_llm = mock_ollama_llm
         mock_ref = MagicMock()
         mock_llm.generate_read_reaction.remote.return_value = mock_ref
 
@@ -241,9 +256,9 @@ class TestGenerateLLMReadAsync:
         mock_llm.generate_read_reaction.remote.assert_called_once_with(1, "Test content", None)
         assert result == mock_ref
 
-    def test_generate_llm_read_async_with_attrs(self):
+    def test_generate_llm_read_async_with_attrs(self, mock_ollama_llm):
         """Test LLM read reaction with agent attributes."""
-        mock_llm = MagicMock()
+        mock_llm = mock_ollama_llm
         mock_ref = MagicMock()
         mock_llm.generate_read_reaction.remote.return_value = mock_ref
         agent_attrs = {"name": "Alice", "age": 30}
@@ -257,9 +272,9 @@ class TestGenerateLLMReadAsync:
         )
         assert result == mock_ref
 
-    def test_generate_llm_read_async_empty_content(self):
+    def test_generate_llm_read_async_empty_content(self, mock_ollama_llm):
         """Test LLM read reaction with empty content."""
-        mock_llm = MagicMock()
+        mock_llm = mock_ollama_llm
         mock_ref = MagicMock()
         mock_llm.generate_read_reaction.remote.return_value = mock_ref
 
@@ -268,9 +283,9 @@ class TestGenerateLLMReadAsync:
         mock_llm.generate_read_reaction.remote.assert_called_once_with(1, "", None)
         assert result == mock_ref
 
-    def test_generate_llm_read_async_long_content(self):
+    def test_generate_llm_read_async_long_content(self, mock_ollama_llm):
         """Test LLM read reaction with long content."""
-        mock_llm = MagicMock()
+        mock_llm = mock_ollama_llm
         mock_ref = MagicMock()
         mock_llm.generate_read_reaction.remote.return_value = mock_ref
         long_content = "Lorem ipsum " * 100
@@ -284,9 +299,9 @@ class TestGenerateLLMReadAsync:
 class TestGenerateLLMFollowAsync:
     """Test suite for generate_llm_follow_async."""
 
-    def test_generate_llm_follow_async_basic(self):
+    def test_generate_llm_follow_async_basic(self, mock_ollama_llm):
         """Test basic LLM follow decision."""
-        mock_llm = MagicMock()
+        mock_llm = mock_ollama_llm
         mock_ref = MagicMock()
         mock_llm.generate_follow_decision.remote.return_value = mock_ref
         candidates = [{"id": "user1"}, {"id": "user2"}]
@@ -296,9 +311,9 @@ class TestGenerateLLMFollowAsync:
         mock_llm.generate_follow_decision.remote.assert_called_once_with(1, candidates)
         assert result == mock_ref
 
-    def test_generate_llm_follow_async_single_candidate(self):
+    def test_generate_llm_follow_async_single_candidate(self, mock_ollama_llm):
         """Test LLM follow decision with single candidate."""
-        mock_llm = MagicMock()
+        mock_llm = mock_ollama_llm
         mock_ref = MagicMock()
         mock_llm.generate_follow_decision.remote.return_value = mock_ref
         candidates = [{"id": "user1", "username": "john"}]
@@ -308,9 +323,9 @@ class TestGenerateLLMFollowAsync:
         mock_llm.generate_follow_decision.remote.assert_called_once_with(2, candidates)
         assert result == mock_ref
 
-    def test_generate_llm_follow_async_many_candidates(self):
+    def test_generate_llm_follow_async_many_candidates(self, mock_ollama_llm):
         """Test LLM follow decision with many candidates."""
-        mock_llm = MagicMock()
+        mock_llm = mock_ollama_llm
         mock_ref = MagicMock()
         mock_llm.generate_follow_decision.remote.return_value = mock_ref
         candidates = [{"id": f"user{i}"} for i in range(20)]
@@ -320,9 +335,9 @@ class TestGenerateLLMFollowAsync:
         mock_llm.generate_follow_decision.remote.assert_called_once_with(1, candidates)
         assert result == mock_ref
 
-    def test_generate_llm_follow_async_empty_candidates(self):
+    def test_generate_llm_follow_async_empty_candidates(self, mock_ollama_llm):
         """Test LLM follow decision with empty candidates list."""
-        mock_llm = MagicMock()
+        mock_llm = mock_ollama_llm
         mock_ref = MagicMock()
         mock_llm.generate_follow_decision.remote.return_value = mock_ref
 
@@ -335,9 +350,9 @@ class TestGenerateLLMFollowAsync:
 class TestGenerateLLMSearchActionAsync:
     """Test suite for generate_llm_search_action_async."""
 
-    def test_generate_llm_search_action_async_basic(self):
+    def test_generate_llm_search_action_async_basic(self, mock_ollama_llm):
         """Test basic LLM search action decision."""
-        mock_llm = MagicMock()
+        mock_llm = mock_ollama_llm
         mock_ref = MagicMock()
         mock_llm.decide_search_action.remote.return_value = mock_ref
 
@@ -346,9 +361,9 @@ class TestGenerateLLMSearchActionAsync:
         mock_llm.decide_search_action.remote.assert_called_once_with(1, "Post", None)
         assert result == mock_ref
 
-    def test_generate_llm_search_action_async_with_attrs(self):
+    def test_generate_llm_search_action_async_with_attrs(self, mock_ollama_llm):
         """Test LLM search action with agent attributes."""
-        mock_llm = MagicMock()
+        mock_llm = mock_ollama_llm
         mock_ref = MagicMock()
         mock_llm.decide_search_action.remote.return_value = mock_ref
         agent_attrs = {"name": "Bob", "interests": ["tech", "sports"]}
@@ -362,9 +377,9 @@ class TestGenerateLLMSearchActionAsync:
         )
         assert result == mock_ref
 
-    def test_generate_llm_search_action_async_empty_content(self):
+    def test_generate_llm_search_action_async_empty_content(self, mock_ollama_llm):
         """Test LLM search action with empty content."""
-        mock_llm = MagicMock()
+        mock_llm = mock_ollama_llm
         mock_ref = MagicMock()
         mock_llm.decide_search_action.remote.return_value = mock_ref
 
@@ -373,9 +388,9 @@ class TestGenerateLLMSearchActionAsync:
         mock_llm.decide_search_action.remote.assert_called_once_with(1, "", None)
         assert result == mock_ref
 
-    def test_generate_llm_search_action_async_special_content(self):
+    def test_generate_llm_search_action_async_special_content(self, mock_ollama_llm):
         """Test LLM search action with special content."""
-        mock_llm = MagicMock()
+        mock_llm = mock_ollama_llm
         mock_ref = MagicMock()
         mock_llm.decide_search_action.remote.return_value = mock_ref
         content = "Breaking news! #important @everyone 🚨"
@@ -389,9 +404,9 @@ class TestGenerateLLMSearchActionAsync:
 class TestGenerateLLMReplyToMentionAsync:
     """Test suite for generate_llm_reply_to_mention_async."""
 
-    def test_generate_llm_reply_to_mention_async_basic(self):
+    def test_generate_llm_reply_to_mention_async_basic(self, mock_ollama_llm):
         """Test basic LLM reply to mention."""
-        mock_llm = MagicMock()
+        mock_llm = mock_ollama_llm
         mock_ref = MagicMock()
         mock_llm.generate_comment.remote.return_value = mock_ref
         agent_attrs = {"name": "Charlie"}
@@ -411,9 +426,9 @@ class TestGenerateLLMReplyToMentionAsync:
         )
         assert result == mock_ref
 
-    def test_generate_llm_reply_to_mention_async_with_context(self):
+    def test_generate_llm_reply_to_mention_async_with_context(self, mock_ollama_llm):
         """Test LLM reply with thread context."""
-        mock_llm = MagicMock()
+        mock_llm = mock_ollama_llm
         mock_ref = MagicMock()
         mock_llm.generate_comment.remote.return_value = mock_ref
         agent_attrs = {"name": "Dave"}
@@ -436,9 +451,9 @@ class TestGenerateLLMReplyToMentionAsync:
         )
         assert result == mock_ref
 
-    def test_generate_llm_reply_to_mention_async_empty_attrs(self):
+    def test_generate_llm_reply_to_mention_async_empty_attrs(self, mock_ollama_llm):
         """Test LLM reply with empty agent attributes."""
-        mock_llm = MagicMock()
+        mock_llm = mock_ollama_llm
         mock_ref = MagicMock()
         mock_llm.generate_comment.remote.return_value = mock_ref
 
@@ -454,9 +469,9 @@ class TestGenerateLLMReplyToMentionAsync:
         mock_llm.generate_comment.remote.assert_called_once()
         assert result == mock_ref
 
-    def test_generate_llm_reply_to_mention_async_long_content(self):
+    def test_generate_llm_reply_to_mention_async_long_content(self, mock_ollama_llm):
         """Test LLM reply with long post content."""
-        mock_llm = MagicMock()
+        mock_llm = mock_ollama_llm
         mock_ref = MagicMock()
         mock_llm.generate_comment.remote.return_value = mock_ref
         long_content = "Hey @user! " + "A" * 500
@@ -478,19 +493,19 @@ class TestGenerateLLMReplyToMentionAsync:
 class TestGenerateLLMNewsCommentary:
     """Test suite for generate_llm_news_commentary."""
 
-    def test_generate_llm_news_commentary_is_ray_remote(self):
+    def test_generate_llm_news_commentary_is_ray_remote(self, mock_ollama_llm):
         """Test that generate_llm_news_commentary is decorated with @ray.remote."""
         # Check if the function has ray.remote decoration
         assert hasattr(generate_llm_news_commentary, "remote")
 
-    def test_generate_llm_news_commentary_fallback_short_title(self):
+    def test_generate_llm_news_commentary_fallback_short_title(self, mock_ollama_llm):
         """Test news commentary fallback with short title."""
         # We can test the fallback logic directly by looking at the source
         # Since calling .remote() causes segfaults, we verify the function exists
         # and has proper error handling by checking it's a ray.remote function
         assert callable(generate_llm_news_commentary.remote)
 
-    def test_generate_llm_news_commentary_fallback_long_title(self):
+    def test_generate_llm_news_commentary_fallback_long_title(self, mock_ollama_llm):
         """Test news commentary fallback with long title."""
         # Verify the function is properly decorated for Ray
         assert hasattr(generate_llm_news_commentary, "_function")
@@ -501,7 +516,7 @@ class TestGenerateLLMNewsCommentary:
 class TestGenerateImagePostAsync:
     """Test suite for generate_image_post_async."""
 
-    def test_generate_image_post_async_basic(self):
+    def test_generate_image_post_async_basic(self, mock_ollama_llm):
         """Test basic image post generation."""
         mock_server = MagicMock()
         mock_llm_service = MagicMock()
@@ -525,7 +540,7 @@ class TestGenerateImagePostAsync:
         assert image_id == "img123"
         assert commentary_future == mock_commentary_future
 
-    def test_generate_image_post_async_with_topics(self):
+    def test_generate_image_post_async_with_topics(self, mock_ollama_llm):
         """Test image post generation with topics."""
         mock_server = MagicMock()
         mock_llm_service = MagicMock()
@@ -552,7 +567,7 @@ class TestGenerateImagePostAsync:
         )
         assert image_id == "img456"
 
-    def test_generate_image_post_async_with_agent_attrs(self):
+    def test_generate_image_post_async_with_agent_attrs(self, mock_ollama_llm):
         """Test image post generation with agent attributes."""
         mock_server = MagicMock()
         mock_llm_service = MagicMock()
@@ -577,7 +592,7 @@ class TestGenerateImagePostAsync:
         )
         assert image_id == "img789"
 
-    def test_generate_image_post_async_no_description(self):
+    def test_generate_image_post_async_no_description(self, mock_ollama_llm):
         """Test image post generation with missing description."""
         mock_server = MagicMock()
         mock_llm_service = MagicMock()
@@ -595,7 +610,7 @@ class TestGenerateImagePostAsync:
         )
         assert image_id == "img999"
 
-    def test_generate_image_post_async_empty_topics(self):
+    def test_generate_image_post_async_empty_topics(self, mock_ollama_llm):
         """Test image post generation with empty topics list."""
         mock_server = MagicMock()
         mock_llm_service = MagicMock()
@@ -621,9 +636,9 @@ class TestGenerateImagePostAsync:
 class TestLLMActionsIntegration:
     """Integration tests for LLM actions."""
 
-    def test_all_functions_return_ray_objectref(self):
+    def test_all_functions_return_ray_objectref(self, mock_ollama_llm):
         """Test that all async functions return ObjectRefs."""
-        mock_llm = MagicMock()
+        mock_llm = mock_ollama_llm
         mock_ref = MagicMock()
 
         # Setup mocks
@@ -645,9 +660,9 @@ class TestLLMActionsIntegration:
         # Verify all return the mock ref
         assert all(r == mock_ref for r in [result1, result2, result3, result4, result5, result6])
 
-    def test_scatter_gather_pattern_simulation(self):
+    def test_scatter_gather_pattern_simulation(self, mock_ollama_llm):
         """Test scatter-gather pattern with multiple agents."""
-        mock_llm = MagicMock()
+        mock_llm = mock_ollama_llm
 
         # Simulate scatter phase - fire off multiple async calls
         futures = []
