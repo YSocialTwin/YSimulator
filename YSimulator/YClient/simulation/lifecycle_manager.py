@@ -257,10 +257,7 @@ class LifecycleManager:
                         recsys_type=getattr(template, "recsys_type", "random"),
                         frecsys_type=getattr(template, "frecsys_type", "random"),
                         # Additional attributes
-                        leaning=getattr(template, "leaning", 0),
-                        leaning_bias=getattr(template, "leaning_bias", 1),
-                        profile=getattr(template, "profile", ""),
-                        action_likelihoods=getattr(template, "action_likelihoods", {}),
+                        leaning=getattr(template, "leaning", "neutral"),
                     )
 
                     new_agents.append(new_agent)
