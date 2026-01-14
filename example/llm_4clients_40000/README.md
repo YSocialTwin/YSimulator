@@ -72,7 +72,7 @@ python run_server.py --config example/llm_4clients_40000
   "port": 40233
   ```
 
-**Important**: The server is configured with `min_to_start: 4`, meaning it will wait for all 4 clients to connect before starting the simulation.
+**Important**: The server is configured with `min_to_start: 1`, allowing clients to start sequentially. This enables GPU actor reuse when `"reuse_actors": true` is set in client configurations - the first client creates the GPU actors, and subsequent clients reuse them.
 
 The server will display its Ray address:
 ```
@@ -188,17 +188,21 @@ This experiment uses vLLM for high-performance LLM inference. Each client is con
 - **num_actors**: 4 vLLM instances per client for parallel processing
 - **gpu_per_actor**: 1.0 (adjust to 0.25 to fit 4 actors on 1 GPU)
 - **actor_name_prefix**: Unique per client (e.g., `ysim_llm_client1`) to avoid conflicts
-- **reuse_actors**: false (each client starts its own vLLM instances)
+- **reuse_actors**: false by default (each client starts its own vLLM instances)
 
 **GPU Requirements:**
 - **Option 1**: 4 GPUs per client (16 GPUs total) with `gpu_per_actor: 1`
 - **Option 2**: 1 GPU per client (4 GPUs total) with `gpu_per_actor: 0.25`
-- **Option 3**: Share GPUs across clients by adjusting `gpu_per_actor` and enabling `reuse_actors`
+- **Option 3 (GPU Actor Reuse)**: Share GPU actors across clients
+  - Set `"reuse_actors": true` in client_2, client_3, client_4 configurations
+  - Set the same `actor_name_prefix` across all clients (e.g., `"ysim_llm_shared"`)
+  - Start clients sequentially (not in parallel) - client_1 creates actors, others reuse them
+  - **Note**: Server must have `min_to_start: 1` to allow sequential client startup (already configured)
 
 **Performance Notes:**
 - vLLM provides ~30x speedup compared to sequential Ollama
 - With 4 actors per client, each client can process agent actions in parallel
-- Total: 16 vLLM actors across 4 clients for maximum throughput
+- Total: 16 vLLM actors across 4 clients for maximum throughput (or 4 actors shared if using reuse_actors)
 
 ## Log Files
 
@@ -262,7 +266,7 @@ Each client has its own configuration file (`client_N_simulation_config.json`) w
 
 `server_config.json` includes:
 - **Database**: SQLite (configurable for PostgreSQL/MySQL)
-- **min_to_start**: 4 (waits for all 4 clients)
+- **min_to_start**: 1 (allows clients to start sequentially, enabling GPU actor reuse)
 - **Timeout**: 300 seconds (increased for large network loading)
 - **Redis**: Optional caching (disabled by default)
 
@@ -378,8 +382,8 @@ Edit individual `client_N_simulation_config.json` files to:
 
 To add more clients:
 1. Modify `generate_population.py` to generate additional client configs
-2. Update `min_to_start` in server_config.json
-3. Start the additional clients
+2. Optionally update `min_to_start` in server_config.json if you need all clients to connect before starting
+3. Start the additional clients (sequentially if using `reuse_actors: true`)
 
 ## Research Use Cases
 

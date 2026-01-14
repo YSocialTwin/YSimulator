@@ -369,7 +369,7 @@ def generate_server_config():
                 "password": "password",
             },
         },
-        "min_to_start": 4,  # Wait for all 4 clients
+        "min_to_start": 1,  # Allow clients to start sequentially (enables GPU actor reuse)
         "timeout_seconds": 300,  # Increased timeout for large network
         "redis": {
             "enabled": False,
