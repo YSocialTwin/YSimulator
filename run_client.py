@@ -121,22 +121,64 @@ if __name__ == "__main__":
         "--config",
         type=str,
         default=".",
-        help="Path to configuration directory containing simulation_config.json (default: current directory)",
+        help="Path to configuration directory or simulation_config.json file (default: current directory)",
+    )
+    parser.add_argument(
+        "--agents",
+        type=str,
+        default=None,
+        help="Path to agent_population.json file (optional, overrides config directory)",
+    )
+    parser.add_argument(
+        "--prompts",
+        type=str,
+        default=None,
+        help="Path to prompts.json file (optional, overrides config directory)",
     )
     args = parser.parse_args()
 
-    # Validate config directory and check for required files
-    config_dir = validate_config_directory(
-        args.config,
-        required_files=[
-            "simulation_config.json",
-            "agent_population.json",
-            "prompts.json",
-        ],
-    )
+    # Determine configuration directory and files
+    config_path = Path(args.config)
+
+    if config_path.is_file():
+        # If --config points to a file, use its parent directory as config_dir
+        config_dir = config_path.parent
+        sim_config_file = config_path
+    else:
+        # If --config points to a directory, validate it
+        # Only require simulation_config.json if we're relying on directory structure
+        config_dir = validate_config_directory(
+            args.config,
+            required_files=(
+                ["simulation_config.json"] if not (args.agents and args.prompts) else None
+            ),
+        )
+        sim_config_file = config_dir / "simulation_config.json"
+
+    # Determine agent population and prompts files
+    if args.agents:
+        agent_population_file = Path(args.agents)
+        if not agent_population_file.exists():
+            print(f"❌ Error: Agent population file '{agent_population_file}' not found.")
+            sys.exit(1)
+    else:
+        agent_population_file = config_dir / "agent_population.json"
+        if not agent_population_file.exists():
+            print(f"❌ Error: Required file '{agent_population_file}' not found.")
+            sys.exit(1)
+
+    if args.prompts:
+        prompts_file = Path(args.prompts)
+        if not prompts_file.exists():
+            print(f"❌ Error: Prompts file '{prompts_file}' not found.")
+            sys.exit(1)
+    else:
+        prompts_file = config_dir / "prompts.json"
+        if not prompts_file.exists():
+            print(f"❌ Error: Required file '{prompts_file}' not found.")
+            sys.exit(1)
 
     # Load simulation config first to get client name
-    sim_config_file = config_dir / "simulation_config.json"
     try:
         with open(sim_config_file, "r") as f:
             sim_config = json.load(f)
@@ -148,8 +190,11 @@ if __name__ == "__main__":
     client_name = sim_config.get("client_name", "client_1")
 
     # Helper function to find client-specific or generic config file
-    def find_config_file(base_name: str) -> Path:
+    def find_config_file(base_name: str, override_file: Path = None) -> Path:
         """Find client-specific config file or fall back to generic."""
+        if override_file:
+            return override_file
+
         client_specific = config_dir / f"{client_name}_{base_name}"
         generic = config_dir / base_name
 
@@ -160,8 +205,8 @@ if __name__ == "__main__":
             return generic
 
     # Use client-specific file names with fallback to conventional names
-    agent_config_file = find_config_file("agent_population.json")
-    prompts_config_file = find_config_file("prompts.json")
+    agent_config_file = find_config_file("agent_population.json", agent_population_file)
+    prompts_config_file = find_config_file("prompts.json", prompts_file)
 
     # Load configuration files
     start_time = time.time()
@@ -198,28 +243,65 @@ if __name__ == "__main__":
         },
     )
 
-    # Get server address from temp file or config
-    server_address = sim_config["server"].get("address")
-    if not server_address:
-        # Fallback to temp file in config directory
-        ray_config_file = config_dir / "ray_config.temp"
-        if not ray_config_file.exists():
-            print(f"❌ Error: '{ray_config_file}' not found and no server address in config.")
-            print("Start run_server.py first.")
-            sys.exit(1)
+    # Get server address - check ray_config.temp first (takes priority), then config
+    ray_config_file = config_dir / "ray_config.temp"
+
+    if ray_config_file.exists():
+        # Priority: Use ray_config.temp if it exists
         with open(ray_config_file, "r") as f:
-            server_address = f.read().strip()
+            ray_address = f.read().strip()
+        print(f"--- Using server address from ray_config.temp: {ray_address} ---")
+    else:
+        # Fallback: Use server address from config
+        server_config = sim_config.get("server", {})
+        server_address = server_config.get("address")
+        server_port = server_config.get("port")
 
-    logger.info(
-        "Connecting to Ray cluster", extra={"extra_data": {"server_address": server_address}}
-    )
+        if not server_address:
+            print("❌ Error: No server address specified in configuration.")
+            print(
+                "Please set 'server.address' in simulation_config.json to the Ray cluster address."
+            )
+            print(
+                "The server address is displayed when you start run_server.py (look for '🚀 Server Running on...')."
+            )
+            print('Example: "server": {"address": "127.0.0.1", "port": 10001}')
+            print('Or: "server": {"address": "ray://127.0.0.1:10001", "port": null}')
+            print(
+                f"Alternatively, start the server in the same config directory to create {ray_config_file}"
+            )
+            sys.exit(1)
 
-    print(f"--- Connecting to Cluster at {server_address} ---")
+        # Construct full Ray address
+        # If address already contains "ray://" and port, use it as-is
+        # Otherwise, construct from address and port fields
+        if server_address.startswith("ray://"):
+            ray_address = server_address
+        elif server_port:
+            # Construct ray:// URL from separate address and port
+            ray_address = f"ray://{server_address}:{server_port}"
+        else:
+            # Check if port is embedded in address (legacy format - not recommended)
+            if ":" in server_address:
+                print(
+                    "⚠️  Warning: Port appears to be in the address field. "
+                    "Please use separate 'address' and 'port' fields."
+                )
+                ray_address = f"ray://{server_address}"
+            else:
+                print("❌ Error: No server port specified in configuration.")
+                print("Please set 'server.port' or include port in 'server.address'.")
+                print('Example: "server": {"address": "127.0.0.1", "port": 10001}')
+                sys.exit(1)
+
+    logger.info("Connecting to Ray cluster", extra={"extra_data": {"server_address": ray_address}})
+
+    print(f"--- Connecting to Cluster at {ray_address} ---")
 
     # Initialize with namespace from config
     namespace = sim_config.get("namespace", "social_sim")
     connect_start = time.time()
-    ray.init(address=server_address, namespace=namespace, ignore_reinit_error=True)
+    ray.init(address=ray_address, namespace=namespace, ignore_reinit_error=True)
     connect_time = (time.time() - connect_start) * 1000
 
     logger.info(
@@ -250,27 +332,29 @@ if __name__ == "__main__":
     llm_start = time.time()
     llm_config = sim_config["llm"]
     llm_v_config = sim_config.get("llm_v")  # Get vision LLM config if available
-    
+
     # Determine which LLM backend to use
     # Default to "ollama" for backward compatibility and macOS support
     llm_backend = llm_config.get("backend", "ollama").lower()
-    
+
     # Get number of LLM actors (default: 1 for backward compatibility)
     num_llm_actors = llm_config.get("num_actors", 1)
-    
+
     # Get reuse_actors flag (default: False for backward compatibility)
     reuse_actors = llm_config.get("reuse_actors", False)
-    
+
     # Get actor name prefix (default: ysim_llm)
     actor_name_prefix = llm_config.get("actor_name_prefix", "ysim_llm")
-    
+
     if llm_backend == "vllm":
         logger.info(f"Using vLLM backend with {num_llm_actors} actor(s) for LLM inference")
         reuse_msg = " (reusing existing if available)" if reuse_actors else ""
-        print(f"--- Using vLLM backend ({num_llm_actors} actor(s) for parallel processing{reuse_msg}) ---")
+        print(
+            f"--- Using vLLM backend ({num_llm_actors} actor(s) for parallel processing{reuse_msg}) ---"
+        )
         try:
             from YSimulator.YClient.llm_utils import create_llm_actors
-            
+
             # Create LLM service with configured number of actors
             # Allocates GPU resources for each vLLM actor
             llm_service = create_llm_actors(
@@ -296,7 +380,9 @@ if __name__ == "__main__":
             print(f"❌ Error: vLLM initialization failed: {e}")
             print("💡 Check the logs above for detailed error information.")
             print("💡 Common issues:")
-            print("   - Insufficient GPU memory (try reducing gpu_memory_utilization or num_actors)")
+            print(
+                "   - Insufficient GPU memory (try reducing gpu_memory_utilization or num_actors)"
+            )
             print("   - Model not found (check model path)")
             print("   - GPU compatibility issues (check CUDA version)")
             print("   - Insufficient GPU resources (ensure Ray has enough GPUs for num_actors)")
@@ -306,10 +392,12 @@ if __name__ == "__main__":
         if num_llm_actors > 1:
             logger.info(f"Using Ollama backend with {num_llm_actors} actors for parallel inference")
             reuse_msg = " (reusing existing if available)" if reuse_actors else ""
-            print(f"--- Using Ollama backend ({num_llm_actors} actors for parallel processing{reuse_msg}) ---")
+            print(
+                f"--- Using Ollama backend ({num_llm_actors} actors for parallel processing{reuse_msg}) ---"
+            )
             try:
                 from YSimulator.YClient.llm_utils import create_llm_actors
-                
+
                 llm_service = create_llm_actors(
                     llm_config=llm_config,
                     prompts_config=prompts_config,
@@ -329,10 +417,11 @@ if __name__ == "__main__":
         else:
             logger.info("Using Ollama backend for LLM inference")
             print("--- Using Ollama backend ---")
-            
+
             # Support actor reuse even for single actor
             if reuse_actors:
                 from YSimulator.YClient.llm_utils import create_llm_actors
+
                 llm_service = create_llm_actors(
                     llm_config=llm_config,
                     prompts_config=prompts_config,
@@ -345,7 +434,7 @@ if __name__ == "__main__":
                 )
             else:
                 llm_service = LLMService.remote(llm_config, prompts_config, llm_v_config)
-    
+
     llm_time = (time.time() - llm_start) * 1000
 
     # Create News Feed service with configuration (optional)

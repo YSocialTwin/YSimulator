@@ -238,14 +238,52 @@ if __name__ == "__main__":
     # Build ray.init() arguments
     init_kwargs = {"include_dashboard": False, "namespace": namespace}
 
-    # Add address if not 'auto'
-    if address and address != "auto":
-        init_kwargs["address"] = address
+    # Handle address and port configuration
+    # Ray behavior:
+    # - address="auto" or None: Start a new local Ray cluster (port is randomly assigned)
+    # - address=<ray_url>: Connect to an existing Ray cluster at that address
+    #
+    # To start Ray on a specific port, you must start Ray externally first:
+    #   ray start --head --port=<port> --node-ip-address=<address>
+    # Then set address="auto" or leave it unset in config to connect to it.
 
-    # Note: Port configuration is handled by Ray's internal mechanisms
-    # Use RAY_ADDRESS environment variable or ray start --port for custom ports
+    start_new_cluster = (not address) or (address == "auto")
 
-    # Start Ray cluster
+    if not start_new_cluster:
+        # User specified an address - assume they want to connect to existing cluster
+        if address.startswith("ray://"):
+            # Full Ray URL provided
+            ray_url = address
+        elif port:
+            # Construct ray:// URL from separate address and port
+            ray_url = f"ray://{address}:{port}"
+        else:
+            # Check if port is embedded in address
+            if ":" in address:
+                ray_url = f"ray://{address}"
+                print(
+                    "⚠️  Warning: Port appears to be in the address field. "
+                    "Consider using separate 'address' and 'port' fields."
+                )
+            else:
+                # Just hostname/IP without port - will use default Ray port (6379)
+                ray_url = address
+
+        init_kwargs["address"] = ray_url
+        print(f"--- Attempting to connect to existing Ray cluster at {ray_url} ---")
+    else:
+        # Start a new local Ray cluster
+        print("--- Starting new local Ray cluster ---")
+        if port:
+            print(f"⚠️  Warning: Port {port} specified but will be ignored.")
+            print(f"    When starting a new cluster, Ray assigns a random port.")
+            print(f"    To use a specific port, start Ray externally first:")
+            print(
+                f"      ray start --head --port={port} --node-ip-address={address if address != 'auto' else '127.0.0.1'}"
+            )
+            print(f"    Then set 'address': 'auto' in server_config.json")
+
+    # Start or connect to Ray cluster
     init_start = time.time()
     context = ray.init(**init_kwargs)
     ray_address = context.address_info["address"]

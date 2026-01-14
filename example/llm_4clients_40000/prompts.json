@@ -16,7 +16,7 @@
   },
   "generate_comment": {
     "system_template": "{persona} You engage in discussions by commenting on posts. Generate {toxicity} confrontational language contents. Respond ONLY with the comment text itself - no explanations, no meta-commentary, no formatting notes.",
-    "user_template": "{author_name} posted this:\n\n\"{post_content}\"\n\n{thread_context_instruction}Write a brief, thoughtful comment. You can tag the author with @{author_name} to continue the discussion. under 100 characters. Be authentic to your persona. Output ONLY the comment text."
+    "user_template": "{author_name} posted this:\n\n\"{post_content}\"\n\n{thread_context_instruction}Write a brief, thoughtful comment. You can tag the author with @{author_name} (under 100 characters). Be authentic to your persona. Output ONLY the comment text."
   },
   "generate_read_reaction": {
     "system_template": "{persona} You're deciding how to react to content you discovered.",

@@ -72,7 +72,7 @@ config_directory/
 ├── {client_name}_llm_prompts.json        # Client-specific LLM prompts (optional)
 ├── {client_name}_network.csv             # Client-specific network (optional)
 ├── simulation.db                         # Database (auto-created)
-├── ray_config.temp                       # Ray address (auto-created)
+├── ray_config.temp                       # Ray address (auto-created by server, used by clients)
 └── logs/                                 # Log files (auto-created)
     ├── _server.log                       # Server request log
     ├── {server_name}_server.log          # Server execution log
@@ -423,8 +423,8 @@ Controls simulation parameters, agent behavior, and LLM settings.
 **Basic Settings:**
 - `client_name` (string): Unique name for this client instance
 - `namespace` (string): Ray namespace (must match server)
-- `server.address` (string|null): Server address (null to use ray_config.temp)
-- `server.port` (number|null): Server port
+- `server.address` (string|null): Server address (optional if ray_config.temp exists in config directory)
+- `server.port` (number|null): Server port (optional if using ray_config.temp)
 
 **Simulation Timing:**
 - `simulation.num_days` (number): Days to simulate (0 = infinite)
