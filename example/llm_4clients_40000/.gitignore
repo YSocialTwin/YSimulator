@@ -2,7 +2,7 @@
 # Keeping server_config.json in git for convenience
 client_*_agent_population.json
 client_*_simulation_config.json
-network.csv
+client_*_network.csv
 
 # Database files
 *.db

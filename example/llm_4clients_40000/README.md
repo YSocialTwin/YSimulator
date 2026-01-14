@@ -3,7 +3,7 @@
 This experiment demonstrates a large-scale YSimulator configuration with **parallel client execution using vLLM**:
 - **40,004 agents total**: **40,000 LLM-enabled agents** across 4 clients + **4 news pages** (one per client)
 - **vLLM backend**: High-performance LLM inference with ~30x speedup vs sequential Ollama
-- **Initial shared social network** with ~400,000 follow relationships (~10 connections per agent)
+- **Separate social networks**: Each client has its own network (~100,000 edges per client, agents only follow peers from same client)
 - **Discussion topics**: war, politics, sport, books, movies
 - **Dynamic follow actions** using multiple recommendation strategies
 - **Agent archetypes**: Validator, Broadcaster, Explorer
@@ -15,9 +15,9 @@ This experiment demonstrates a large-scale YSimulator configuration with **paral
 This experiment is designed to demonstrate YSimulator's ability to scale horizontally by distributing agents across multiple clients that run in parallel. Each client:
 - Manages its own subset of 10,000 agents (+ 1 news page)
 - Has its own configuration file and agent population file
+- Has its own separate social network (agents only follow peers within the same client)
 - Creates its own log files (automatically separated by `client_name`)
 - Connects to the same shared Ray server
-- Shares the same social network topology
 
 ### Agent Distribution
 
@@ -41,10 +41,10 @@ python generate_population.py
 This creates:
 - `client_1_agent_population.json` through `client_4_agent_population.json` - Agent definitions (one per client)
 - `client_1_simulation_config.json` through `client_4_simulation_config.json` - Simulation parameters (one per client)
-- `network.csv` - Shared initial social network (~400,000 edges)
-- `server_config.json` - Server settings (configured for 4 clients)
+- `client_1_network.csv` through `client_4_network.csv` - Separate social networks (agents only follow peers from same client)
+- `server_config.json` - Server settings
 
-**Note**: Generation may take several minutes due to the large network size (~400,000 edges).
+**Note**: Generation may take several minutes to create separate networks for each client (~100,000 edges per client).
 
 ### 2. Start Server
 
@@ -182,27 +182,69 @@ wait
 
 ## vLLM Configuration
 
-This experiment uses vLLM for high-performance LLM inference. Each client is configured with:
+This experiment uses vLLM for high-performance LLM inference with **GPU actor reuse enabled by default**.
+
+### Default Configuration (GPU Actor Reuse)
 
 - **Model**: AMead10/Llama-3.2-3B-Instruct-AWQ (quantized for efficiency)
-- **num_actors**: 4 vLLM instances per client for parallel processing
+- **num_actors**: 4 vLLM instances for parallel processing
 - **gpu_per_actor**: 1.0 (adjust to 0.25 to fit 4 actors on 1 GPU)
-- **actor_name_prefix**: Unique per client (e.g., `ysim_llm_client1`) to avoid conflicts
-- **reuse_actors**: false by default (each client starts its own vLLM instances)
+- **actor_name_prefix**: `ysim_llm_shared` (same across all clients for reuse)
+- **reuse_actors**: 
+  - `false` for client_1 (creates the actors)
+  - `true` for client_2, client_3, client_4 (reuse actors created by client_1)
 
-**GPU Requirements:**
-- **Option 1**: 4 GPUs per client (16 GPUs total) with `gpu_per_actor: 1`
-- **Option 2**: 1 GPU per client (4 GPUs total) with `gpu_per_actor: 0.25`
-- **Option 3 (GPU Actor Reuse)**: Share GPU actors across clients
-  - Set `"reuse_actors": true` in client_2, client_3, client_4 configurations
-  - Set the same `actor_name_prefix` across all clients (e.g., `"ysim_llm_shared"`)
-  - Start clients sequentially (not in parallel) - client_1 creates actors, others reuse them
-  - **Note**: Server must have `min_to_start: 1` to allow sequential client startup (already configured)
+### How GPU Actor Reuse Works
+
+1. **Client_1** starts first and creates 4 vLLM GPU actors with name prefix `ysim_llm_shared`
+2. **Client_2, 3, 4** start sequentially and reuse those same 4 actors
+3. All 4 clients share the same 4 GPU actors, reducing GPU memory requirements
+4. **GPU Requirements**: Only 4 actors × gpu_per_actor (e.g., 1 GPU if gpu_per_actor=0.25, or 4 GPUs if gpu_per_actor=1)
+
+### Starting Clients for Actor Reuse
+
+**Important**: Start clients **sequentially** (not in parallel) to ensure client_1 creates actors before others try to reuse them:
+
+```bash
+# Terminal 1 - Start client_1 first and wait for it to initialize
+python run_client.py \
+  --config example/llm_4clients_40000/client_1_simulation_config.json \
+  --agents example/llm_4clients_40000/client_1_agent_population.json \
+  --prompts example/llm_4clients_40000/prompts.json
+
+# Wait ~30 seconds for client_1 to create GPU actors
+
+# Terminal 2 - Start client_2
+python run_client.py \
+  --config example/llm_4clients_40000/client_2_simulation_config.json \
+  --agents example/llm_4clients_40000/client_2_agent_population.json \
+  --prompts example/llm_4clients_40000/prompts.json
+
+# Terminal 3 - Start client_3
+python run_client.py \
+  --config example/llm_4clients_40000/client_3_simulation_config.json \
+  --agents example/llm_4clients_40000/client_3_agent_population.json \
+  --prompts example/llm_4clients_40000/prompts.json
+
+# Terminal 4 - Start client_4
+python run_client.py \
+  --config example/llm_4clients_40000/client_4_simulation_config.json \
+  --agents example/llm_4clients_40000/client_4_agent_population.json \
+  --prompts example/llm_4clients_40000/prompts.json
+```
+
+### Alternative: Disable Actor Reuse
+
+To have each client create its own GPU actors (requires more GPU memory):
+- Set `"reuse_actors": false` in all client configs
+- Set unique `actor_name_prefix` for each client (e.g., `ysim_llm_client1`, `ysim_llm_client2`, etc.)
+- Can start all clients in parallel
+- **GPU Requirements**: 16 actors total × gpu_per_actor (e.g., 4 GPUs if gpu_per_actor=0.25, or 16 GPUs if gpu_per_actor=1)
 
 **Performance Notes:**
 - vLLM provides ~30x speedup compared to sequential Ollama
-- With 4 actors per client, each client can process agent actions in parallel
-- Total: 16 vLLM actors across 4 clients for maximum throughput (or 4 actors shared if using reuse_actors)
+- With actor reuse: 4 shared GPU actors handle requests from all 40,000 agents
+- Without actor reuse: 16 GPU actors total (4 per client) for maximum throughput
 
 ## Log Files
 
@@ -248,7 +290,11 @@ Each file contains 10,001 agents with diverse characteristics:
 
 ### Network Topology
 
-`network.csv` contains a **shared** social network with approximately 400,000 directed follow edges using Erdős–Rényi random graph model. This network spans all agents across all clients, enabling cross-client interactions.
+Each client has its own separate social network file:
+- `client_1_network.csv`, `client_2_network.csv`, `client_3_network.csv`, `client_4_network.csv`
+- Each contains approximately 100,000 directed follow edges using Erdős–Rényi random graph model
+- **Important**: Agents only follow other agents from the **same client** (no cross-client connections)
+- This creates isolated social networks for each client, simulating independent communities
 
 ### Simulation Config Files
 

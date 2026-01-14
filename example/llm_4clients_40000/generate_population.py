@@ -157,26 +157,27 @@ def generate_agent_population(client_id, start_idx, num_agents=10000):
     }
 
 
-def generate_shared_network(all_agents, avg_degree=10):
+def generate_client_network(client_agents, avg_degree=10):
     """
-    Generate a shared random social network across all clients.
+    Generate a random social network for a specific client's agents.
+    Agents only follow other agents from the SAME client (no cross-client connections).
     Uses Erdős–Rényi random graph model.
 
     Args:
-        all_agents: List of all agents from all clients
+        client_agents: List of agents belonging to this client
         avg_degree: Average number of connections per agent
 
     Returns:
-        List of tuples (follower, followee)
+        List of tuples (follower, followee) for this client's agents
     """
     edges = []
-    usernames = [agent["username"] for agent in all_agents]
+    usernames = [agent["username"] for agent in client_agents]
     n = len(usernames)
 
     # Calculate probability for desired average degree
     p = avg_degree / (n - 1) if n > 1 else 0
 
-    # Generate edges
+    # Generate edges only within this client's agents
     for i, follower in enumerate(usernames):
         for j, followee in enumerate(usernames):
             if i != j and random.random() < p:
@@ -196,12 +197,19 @@ def generate_simulation_config(client_id):
     """
     Generate simulation configuration for a specific client with vLLM backend.
 
+    Client 1 creates the GPU actors, clients 2-4 reuse them by default.
+
     Args:
         client_id: Client identifier (1-4)
 
     Returns:
         Dict with simulation configuration
     """
+    # For actor reuse: client_1 creates actors, others reuse them
+    reuse_actors = client_id > 1  # True for clients 2, 3, 4
+    # Use same actor_name_prefix for all clients to enable reuse
+    actor_name_prefix = "ysim_llm_shared"
+
     return {
         "client_name": f"client_{client_id}",
         "namespace": "social_sim",
@@ -217,9 +225,9 @@ def generate_simulation_config(client_id):
             "enable_flashattention": False,
             "num_actors": 4,
             "gpu_per_actor": 1,
-            "reuse_actors": False,
-            "actor_name_prefix": f"ysim_llm_client{client_id}",
-            "note": "FlashAttention disabled by default (requires GPU compute capability >= 8.0). Set to true to enable on compatible GPUs. max_model_len sets the maximum sequence length (default: 40000). num_actors specifies how many vLLM instances to start for parallel processing (default: 1). With 4 actors, achieve ~30x speedup vs sequential Ollama. gpu_per_actor specifies GPU allocation per actor (default: 1.0). Set to 0.25 to fit 4 actors on 1 GPU, or 0.5 for 2 actors per GPU. reuse_actors (default: false) allows clients to share existing vLLM instances on the same machine - set to true to reuse actors from another client. actor_name_prefix is unique per client to avoid conflicts.",
+            "reuse_actors": reuse_actors,
+            "actor_name_prefix": actor_name_prefix,
+            "note": "FlashAttention disabled by default (requires GPU compute capability >= 8.0). Set to true to enable on compatible GPUs. max_model_len sets the maximum sequence length (default: 40000). num_actors specifies how many vLLM instances to start for parallel processing (default: 1). With 4 actors, achieve ~30x speedup vs sequential Ollama. gpu_per_actor specifies GPU allocation per actor (default: 1.0). Set to 0.25 to fit 4 actors on 1 GPU, or 0.5 for 2 actors per GPU. reuse_actors enables sharing vLLM actors across clients - client_1 creates actors, clients 2-4 reuse them. All clients use actor_name_prefix='ysim_llm_shared' for reuse to work.",
         },
         "llm_v": {
             "model": "openbmb/MiniCPM-V-2_6-int4",
@@ -410,6 +418,7 @@ def main():
     print("=" * 70)
 
     all_agents = []
+    client_agents_list = []
 
     # Generate agent populations for each client
     for client_id in range(1, 5):
@@ -430,6 +439,7 @@ def main():
         )
 
         all_agents.extend(agent_data["agents"])
+        client_agents_list.append(agent_data["agents"])
 
         # Generate simulation config for this client
         print(f"  Generating simulation configuration for client_{client_id}...")
@@ -440,15 +450,26 @@ def main():
             json.dump(sim_config, f, indent=2)
         print(f"✓ Created {sim_filename}")
 
-    # Generate shared network topology
+    # Generate separate network topology for each client
     print("\n" + "=" * 70)
-    print("Generating shared social network topology...")
-    print("This may take a few minutes for 40,004 agents...")
-    edges = generate_shared_network(all_agents, avg_degree=10)
-    network_path = os.path.join(output_dir, "network.csv")
-    write_network_csv(edges, network_path)
-    print(f"✓ Created network.csv with {len(edges)} follow relationships")
-    print(f"  - Average degree: ~{len(edges) / len(all_agents):.1f} connections per agent")
+    print("Generating separate social network topology for each client...")
+    print("(Agents only follow peers from the same client)")
+    print("This may take a few minutes...")
+
+    total_edges = 0
+    for client_id in range(1, 5):
+        print(f"\nGenerating network for client_{client_id}...")
+        client_agents = client_agents_list[client_id - 1]
+        edges = generate_client_network(client_agents, avg_degree=10)
+        network_filename = f"client_{client_id}_network.csv"
+        network_path = os.path.join(output_dir, network_filename)
+        write_network_csv(edges, network_path)
+        print(f"✓ Created {network_filename} with {len(edges)} follow relationships")
+        print(f"  - Average degree: ~{len(edges) / len(client_agents):.1f} connections per agent")
+        print(f"  - All connections are within client_{client_id} agents only")
+        total_edges += len(edges)
+
+    print(f"\nTotal edges across all clients: {total_edges}")
 
     # Generate server configuration
     print("\nGenerating server configuration...")
@@ -457,7 +478,7 @@ def main():
     with open(server_filepath, "w") as f:
         json.dump(server_config, f, indent=2)
     print("✓ Created server_config.json")
-    print("  - Configured to wait for 4 clients before starting")
+    print("  - Configured to allow sequential client startup (min_to_start: 1)")
     print("  - Timeout increased to 300 seconds for network loading")
 
     print("\n" + "=" * 70)
@@ -466,7 +487,7 @@ def main():
     print("\nGenerated files:")
     print("  - 4 × client_N_agent_population.json (agent definitions)")
     print("  - 4 × client_N_simulation_config.json (client configurations)")
-    print("  - 1 × network.csv (shared social network)")
+    print("  - 4 × client_N_network.csv (separate social networks per client)")
     print("  - 1 × server_config.json (server settings)")
     print("\nNext steps:")
     print("  1. Copy prompts.json from another example (e.g., llm_population_10000)")
