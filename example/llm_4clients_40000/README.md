@@ -53,11 +53,28 @@ This creates:
 python run_server.py --config example/llm_4clients_40000
 ```
 
+**Server Configuration Notes:**
+- The default `server_config.json` has `"address": "auto"` which starts a new Ray cluster
+- Ray will assign a random port when starting a new cluster
+- **To use a specific port**: Start Ray externally first, then set `"address": "auto"` in config
+  ```bash
+  # Start Ray on specific port (in a separate terminal)
+  ray start --head --port=40233 --node-ip-address=146.48.83.173
+  
+  # Then set in server_config.json:
+  # "address": "auto"  (will connect to the externally started Ray)
+  ```
+- **To connect to existing Ray cluster**: Set address and port in config
+  ```json
+  "address": "146.48.83.173",
+  "port": 40233
+  ```
+
 **Important**: The server is configured with `min_to_start: 4`, meaning it will wait for all 4 clients to connect before starting the simulation.
 
 Copy the Ray address from the server output:
 ```
---- 🚀 Server Running on ray://127.0.0.1:10001 ---
+--- 🚀 Server Running on 146.48.83.173:40233 ---
 ```
 
 ### 3. Update Client Configurations with Server Address
