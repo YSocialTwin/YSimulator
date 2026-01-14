@@ -1673,13 +1673,14 @@ class OrchestratorServer:
         )
 
         if should_advance:
-            # Clear submitted clients for next round
-            self.client_manager.clear_submitted_clients()
-
-            # Advance simulation using RoundManager
+            # Advance simulation using RoundManager BEFORE clearing submitted clients
+            # This prevents race condition where fast clients could get the same slot twice
             result = self.round_manager.advance_simulation(
                 recompute_interests_callback=self._recompute_all_agent_interests
             )
+
+            # Clear submitted clients for next round AFTER advancing
+            self.client_manager.clear_submitted_clients()
 
             # Check if it's time for archetype transitions (every 7 days)
             if result["day_completed"] and self.archetype_manager.should_perform_transitions(
