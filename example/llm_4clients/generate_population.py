@@ -408,7 +408,7 @@ def generate_server_config():
     }
 
 
-def main():
+def main(size=50000):
     """Generate all configuration files for multi-client experiment."""
     output_dir = os.path.dirname(os.path.abspath(__file__))
 
@@ -423,8 +423,8 @@ def main():
     # Generate agent populations for each client
     for client_id in range(1, 5):
         print(f"\nGenerating agent population for client_{client_id}...")
-        start_idx = (client_id - 1) * 10000
-        agent_data = generate_agent_population(client_id, start_idx, num_agents=10000)
+        start_idx = (client_id - 1) * (size // 4)
+        agent_data = generate_agent_population(client_id, start_idx, num_agents=size // 4)
 
         # Save agent population
         filename = f"client_{client_id}_agent_population.json"
@@ -435,7 +435,7 @@ def main():
         print(f"✓ Created {filename}")
         print(f"  - 1 page agent (NewsPage_Client{client_id})")
         print(
-            f"  - 10,000 LLM-enabled agents (agent_{start_idx:05d} to agent_{start_idx+9999:05d})"
+            f"  - {size // 4} LLM-enabled agents (agent_{start_idx:05d} to agent_{start_idx + (size // 4) - 1:05d})"
         )
 
         all_agents.extend(agent_data["agents"])
@@ -490,10 +490,11 @@ def main():
     print("  - 4 × client_N_network.csv (separate social networks per client)")
     print("  - 1 × server_config.json (server settings)")
     print("\nNext steps:")
-    print("  1. Copy prompts.json from another example (e.g., llm_population_10000)")
-    print("  2. Start the server: python run_server.py --config example/llm_4clients_40000")
+    print(f"  1. Copy prompts.json from another example (e.g., llm_population_{size//4}) to this directory")
+    print("  2. Start the server: python run_server.py --config example/llm_4clients/")
     print("  3. Start each client in parallel (see README.md for details)")
 
 
 if __name__ == "__main__":
-    main()
+    SIZE = 50000
+    main(size=SIZE)
