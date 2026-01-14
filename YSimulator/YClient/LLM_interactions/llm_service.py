@@ -1,6 +1,11 @@
 import logging
+import os
 import random
 from typing import Any, Dict, List, Optional
+
+# Fix langchain verbose attribute error
+# Set environment variable before importing langchain packages
+os.environ.setdefault('LANGCHAIN_VERBOSE', 'false')
 
 import ray
 from langchain_core.output_parsers import StrOutputParser
