@@ -54,6 +54,8 @@ python run_server.py --config example/llm_4clients_40000
 ```
 
 **Server Configuration Notes:**
+- The server automatically creates `ray_config.temp` in the config directory
+- This file contains the Ray cluster address and is automatically used by clients
 - The default `server_config.json` has `"address": "auto"` which starts a new Ray cluster
 - Ray will assign a random port when starting a new cluster
 - **To use a specific port**: Start Ray externally first, then set `"address": "auto"` in config
@@ -72,14 +74,16 @@ python run_server.py --config example/llm_4clients_40000
 
 **Important**: The server is configured with `min_to_start: 4`, meaning it will wait for all 4 clients to connect before starting the simulation.
 
-Copy the Ray address from the server output:
+The server will display its Ray address:
 ```
 --- 🚀 Server Running on 146.48.83.173:40233 ---
 ```
 
-### 3. Update Client Configurations with Server Address
+### 3. Start Clients (No Configuration Update Needed!)
 
-Before starting the clients, update all 4 client configuration files with the server address and port:
+**Good news**: If you run the clients from the same config directory as the server, they will automatically use the `ray_config.temp` file. No manual configuration needed!
+
+However, if you want to manually set the server address or run clients from a different directory, update the client configuration files:
 
 ```bash
 # Edit each client configuration file

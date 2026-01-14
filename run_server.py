@@ -300,6 +300,11 @@ if __name__ == "__main__":
         },
     )
 
+    # Save address for clients in config directory
+    ray_config_file = config_dir / "ray_config.temp"
+    with open(ray_config_file, "w") as f:
+        f.write(ray_address)
+
     print(f"--- 🚀 Server Running on {ray_address} ---")
     print(f"--- 📝 Server Name: {server_name} ---")
     print(f"--- 📝 Namespace: {namespace} ---")
@@ -330,5 +335,7 @@ if __name__ == "__main__":
     except KeyboardInterrupt:
         logger.info("Server shutting down")
         print("Stopping...")
+        if ray_config_file.exists():
+            ray_config_file.unlink()
         ray.shutdown()
         logger.info("Server shutdown complete")

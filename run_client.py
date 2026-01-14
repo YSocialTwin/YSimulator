@@ -243,42 +243,56 @@ if __name__ == "__main__":
         },
     )
 
-    # Get server address and port from config
-    server_config = sim_config.get("server", {})
-    server_address = server_config.get("address")
-    server_port = server_config.get("port")
+    # Get server address - check ray_config.temp first (takes priority), then config
+    ray_config_file = config_dir / "ray_config.temp"
 
-    if not server_address:
-        print("❌ Error: No server address specified in configuration.")
-        print("Please set 'server.address' in simulation_config.json to the Ray cluster address.")
-        print(
-            "The server address is displayed when you start run_server.py (look for '🚀 Server Running on...')."
-        )
-        print('Example: "server": {"address": "127.0.0.1", "port": 10001}')
-        print('Or: "server": {"address": "ray://127.0.0.1:10001", "port": null}')
-        sys.exit(1)
-
-    # Construct full Ray address
-    # If address already contains "ray://" and port, use it as-is
-    # Otherwise, construct from address and port fields
-    if server_address.startswith("ray://"):
-        ray_address = server_address
-    elif server_port:
-        # Construct ray:// URL from separate address and port
-        ray_address = f"ray://{server_address}:{server_port}"
+    if ray_config_file.exists():
+        # Priority: Use ray_config.temp if it exists
+        with open(ray_config_file, "r") as f:
+            ray_address = f.read().strip()
+        print(f"--- Using server address from ray_config.temp: {ray_address} ---")
     else:
-        # Check if port is embedded in address (legacy format - not recommended)
-        if ":" in server_address:
+        # Fallback: Use server address from config
+        server_config = sim_config.get("server", {})
+        server_address = server_config.get("address")
+        server_port = server_config.get("port")
+
+        if not server_address:
+            print("❌ Error: No server address specified in configuration.")
             print(
-                "⚠️  Warning: Port appears to be in the address field. "
-                "Please use separate 'address' and 'port' fields."
+                "Please set 'server.address' in simulation_config.json to the Ray cluster address."
             )
-            ray_address = f"ray://{server_address}"
-        else:
-            print("❌ Error: No server port specified in configuration.")
-            print("Please set 'server.port' or include port in 'server.address'.")
+            print(
+                "The server address is displayed when you start run_server.py (look for '🚀 Server Running on...')."
+            )
             print('Example: "server": {"address": "127.0.0.1", "port": 10001}')
+            print('Or: "server": {"address": "ray://127.0.0.1:10001", "port": null}')
+            print(
+                f"Alternatively, start the server in the same config directory to create {ray_config_file}"
+            )
             sys.exit(1)
+
+        # Construct full Ray address
+        # If address already contains "ray://" and port, use it as-is
+        # Otherwise, construct from address and port fields
+        if server_address.startswith("ray://"):
+            ray_address = server_address
+        elif server_port:
+            # Construct ray:// URL from separate address and port
+            ray_address = f"ray://{server_address}:{server_port}"
+        else:
+            # Check if port is embedded in address (legacy format - not recommended)
+            if ":" in server_address:
+                print(
+                    "⚠️  Warning: Port appears to be in the address field. "
+                    "Please use separate 'address' and 'port' fields."
+                )
+                ray_address = f"ray://{server_address}"
+            else:
+                print("❌ Error: No server port specified in configuration.")
+                print("Please set 'server.port' or include port in 'server.address'.")
+                print('Example: "server": {"address": "127.0.0.1", "port": 10001}')
+                sys.exit(1)
 
     logger.info("Connecting to Ray cluster", extra={"extra_data": {"server_address": ray_address}})
 
