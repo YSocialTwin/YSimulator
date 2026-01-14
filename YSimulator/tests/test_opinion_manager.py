@@ -43,7 +43,9 @@ def mock_server():
 @pytest.fixture
 def mock_llm_manager():
     """Create a mock LLM manager."""
-    llm = Mock()
+    # Use spec to prevent auto-creation of attributes
+    llm = Mock(spec=['infer_article_opinion', '__class__'])
+    llm.__class__.__name__ = "LLMManager"
     return llm
 
 
