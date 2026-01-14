@@ -10,15 +10,16 @@ from unittest.mock import Mock, patch
 
 import pytest
 
-# Use pytest marker to isolate ray.remote patching to this module only
-pytestmark = pytest.mark.usefixtures("mock_ray_remote")
 
-
-@pytest.fixture(scope="module")
+@pytest.fixture(scope="module", autouse=True)
 def mock_ray_remote():
     """Patch ray.remote to allow direct instantiation of actors in tests."""
-    with patch("ray.remote", lambda x: x):
-        yield
+    # Start the patch
+    patcher = patch("ray.remote", lambda x: x)
+    patcher.start()
+    yield
+    # Stop the patch after module tests complete
+    patcher.stop()
 
 
 class TestLogServerRequestDecorator:
