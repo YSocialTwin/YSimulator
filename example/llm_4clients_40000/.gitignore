@@ -1,8 +1,8 @@
-# Generated configuration files (run generate_population.py to create these)
+# Generated configuration files (can be regenerated with generate_population.py)
+# Keeping server_config.json in git for convenience
 client_*_agent_population.json
 client_*_simulation_config.json
 network.csv
-server_config.json
 
 # Database files
 *.db
