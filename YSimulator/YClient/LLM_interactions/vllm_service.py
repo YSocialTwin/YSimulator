@@ -630,7 +630,8 @@ class VLLMService:
                 thread_context_lines.append(f"{username}: {tweet}")
             thread_context_str = "\n".join(thread_context_lines)
             thread_context_instruction = (
-                f"Previous discussion in this thread:\n{thread_context_str}\n\n"
+                f"Previous discussion in this thread (for context only):\n{thread_context_str}\n\n"
+                f"Now respond specifically to {author_name}'s post above. "
             )
 
         # Format templates
@@ -732,7 +733,8 @@ class VLLMService:
                             thread_context_lines.append(f"{username}: {tweet}")
                         thread_context_str = "\n".join(thread_context_lines)
                         thread_context_instruction = (
-                            f"Previous discussion in this thread:\n{thread_context_str}\n\n"
+                            f"Previous discussion in this thread (for context only):\n{thread_context_str}\n\n"
+                            f"Now respond specifically to {author_name}'s post above. "
                         )
 
                     # Format templates
