@@ -33,6 +33,7 @@ class LLMService:
         llm_config: Optional[Dict[str, Any]] = None,
         prompts_config: Optional[Dict[str, Any]] = None,
         llm_v_config: Optional[Dict[str, Any]] = None,
+        logging_config: Optional[Dict[str, Any]] = None,
     ):
         # Load configuration with defaults
         if llm_config is None:
@@ -98,8 +99,57 @@ class LLMService:
                 base_url=base_url_v,
             )
         
-        # Initialize prompt logger (will check if enabled)
-        self.prompt_logger = logging.getLogger(f"{logger.name}.prompts")
+        # Set up prompt logging if enabled
+        if logging_config is None:
+            logging_config = {}
+        
+        enable_prompt_log = logging_config.get("enable_prompt_log", False)
+        self.prompt_logger = None
+        
+        if enable_prompt_log:
+            # Set up prompt logger with file handler
+            import os
+            from logging.handlers import RotatingFileHandler
+            from pathlib import Path
+            
+            # Get log directory from environment or use default
+            log_dir = os.environ.get("YSIMULATOR_LOG_DIR", "./logs")
+            log_dir = Path(log_dir)
+            log_dir.mkdir(exist_ok=True)
+            
+            # Create prompt logger
+            self.prompt_logger = logging.getLogger(f"{logger.name}.prompts")
+            self.prompt_logger.setLevel(logging.DEBUG)
+            self.prompt_logger.propagate = False
+            
+            # Only add handler if it doesn't exist
+            if not self.prompt_logger.handlers:
+                prompt_log_file = log_dir / "llm_prompts.log"
+                
+                # Create rotating file handler
+                prompt_handler = RotatingFileHandler(
+                    prompt_log_file, maxBytes=50 * 1024 * 1024, backupCount=3
+                )
+                prompt_handler.setLevel(logging.DEBUG)
+                
+                # Create formatter
+                import json
+                from datetime import datetime
+                
+                class PromptJsonFormatter(logging.Formatter):
+                    def format(self, record):
+                        log_data = {
+                            "timestamp": datetime.utcnow().isoformat(),
+                            "level": record.levelname,
+                            "message": record.getMessage(),
+                        }
+                        if hasattr(record, "extra_data"):
+                            log_data.update(record.extra_data)
+                        return json.dumps(log_data, indent=2)
+                
+                prompt_handler.setFormatter(PromptJsonFormatter())
+                self.prompt_logger.addHandler(prompt_handler)
+                logger.info("Prompt logging enabled in LLM service")
 
     def _log_prompt(self, method_name: str, system_msg: str, user_msg: str, agent_attrs: dict = None):
         """
@@ -111,7 +161,7 @@ class LLMService:
             user_msg: User message content
             agent_attrs: Optional agent attributes used in prompt generation
         """
-        if self.prompt_logger.isEnabledFor(logging.DEBUG):
+        if self.prompt_logger is not None:
             log_data = {
                 "method": method_name,
                 "system_message": system_msg,

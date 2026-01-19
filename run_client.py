@@ -468,9 +468,10 @@ if __name__ == "__main__":
                     logger=logger,
                     reuse_actors=reuse_actors,
                     actor_name_prefix=actor_name_prefix,
+                    logging_config=logging_config,
                 )
             else:
-                llm_service = LLMService.remote(llm_config, prompts_config, llm_v_config)
+                llm_service = LLMService.remote(llm_config, prompts_config, llm_v_config, logging_config)
 
     llm_time = (time.time() - llm_start) * 1000
 
