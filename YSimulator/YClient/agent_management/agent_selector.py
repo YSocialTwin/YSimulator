@@ -153,14 +153,14 @@ class AgentSelector:
         
         # INFO: Log when agent has no interests (this is expected per INTERESTS.md)
         if not topics or not counts:
-            logger.info(
+            self.logger.info(
                 f"Agent {agent.username} (ID: {agent.id}) has no interests defined. "
                 f"This is expected behavior per INTERESTS.md - posts will be generic without topics."
             )
         elif topics and counts:
             # Weight topics by their interaction counts
             selected_topic = random.choices(topics, weights=counts, k=1)[0]
-            logger.debug(
+            self.logger.debug(
                 f"Sampled topic '{selected_topic}' for agent {agent.username} from interests: {topics}"
             )
 
