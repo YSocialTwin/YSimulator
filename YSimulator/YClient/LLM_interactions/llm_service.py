@@ -227,12 +227,13 @@ class LLMService:
         # Get topic if available
         topic = agent_attrs.get("topic") if agent_attrs else None
         
-        # DEBUG: Log if topic is missing
-        if not topic and agent_attrs:
+        # DEBUG: Log if topic is unexpectedly missing
+        # Note: null topic is EXPECTED when agent has no interests (per INTERESTS.md)
+        if not topic and agent_attrs and "topic" in agent_attrs:
             agent_name = agent_attrs.get("name", "Unknown")
             logger.warning(
-                f"No topic provided for agent {agent_name} in generate_post. "
-                f"Agent attrs: {agent_attrs.keys() if agent_attrs else 'None'}"
+                f"Topic is explicitly None for agent {agent_name} in generate_post. "
+                f"This may indicate the agent has no interests defined or interests are malformed."
             )
 
         # Get opinion on the topic if available

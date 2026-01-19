@@ -151,11 +151,11 @@ class AgentSelector:
         selected_topic = None
         topics, counts = validate_and_extract_interests_func(agent.interests)
         
-        # DEBUG: Log if agent has no interests
+        # INFO: Log when agent has no interests (this is expected per INTERESTS.md)
         if not topics or not counts:
-            logger.warning(
+            logger.info(
                 f"Agent {agent.username} (ID: {agent.id}) has no interests defined. "
-                f"Interests: {agent.interests}. Posts will be generic without topics."
+                f"This is expected behavior per INTERESTS.md - posts will be generic without topics."
             )
         elif topics and counts:
             # Weight topics by their interaction counts

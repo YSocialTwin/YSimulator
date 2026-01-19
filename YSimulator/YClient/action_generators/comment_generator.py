@@ -102,6 +102,14 @@ class CommentGenerator(BaseActionGenerator):
             )
             if post_data:
                 post_content = post_data.get("tweet", "")
+                
+                # Validate post content is not empty
+                if not post_content or not post_content.strip():
+                    self.context.logger.warning(
+                        f"Skipping comment on post {target_post} - post content is empty or whitespace only"
+                    )
+                    result.metadata["reason"] = "empty_post_content"
+                    return result
                 author_id = post_data.get("user_id")
 
                 # Get author username

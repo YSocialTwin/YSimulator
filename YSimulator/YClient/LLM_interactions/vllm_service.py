@@ -351,6 +351,15 @@ class VLLMService:
 
             # Get topic if available
             topic = agent_attrs.get("topic") if agent_attrs else None
+            
+            # DEBUG: Log if topic is unexpectedly missing
+            # Note: null topic is EXPECTED when agent has no interests (per INTERESTS.md)
+            if not topic and agent_attrs and "topic" in agent_attrs:
+                agent_name = agent_attrs.get("name", "Unknown")
+                logger.warning(
+                    f"Topic is explicitly None for agent {agent_name} in generate_post. "
+                    f"This may indicate the agent has no interests defined or interests are malformed."
+                )
 
             # Get opinion on the topic if available
             topic_opinion = agent_attrs.get("topic_opinion") if agent_attrs else None
