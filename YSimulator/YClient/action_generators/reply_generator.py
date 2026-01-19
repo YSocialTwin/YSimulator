@@ -138,7 +138,7 @@ class ReplyGenerator(BaseActionGenerator):
                 )
 
                 # Fire off async LLM call to generate reply
-                agent_attrs = self.context.extract_agent_attrs_fn(agent)
+                agent_attrs = self._extract_agent_attrs(agent)
                 
                 # Get opinions for the topics in this post
                 opinion_info = self._get_opinions_for_post(agent.id, post_id)
