@@ -220,6 +220,7 @@ if __name__ == "__main__":
         try:
             with open(filename, "r") as f:
                 configs[filename] = json.load(f)
+                print(f"✓ Loaded {description} from: {filename}")
         except json.JSONDecodeError as e:
             print(f"❌ Error: Invalid JSON in '{filename}': {e}")
             sys.exit(1)

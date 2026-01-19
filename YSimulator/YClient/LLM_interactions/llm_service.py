@@ -44,6 +44,7 @@ class LLMService:
             }
 
         if prompts_config is None:
+            print("⚠ Warning: No prompts configuration provided. Using default fallback prompts.")
             prompts_config = {
                 "personas": {
                     "0": "You are a 'Validator'. Skeptical, brief, authentic.",
