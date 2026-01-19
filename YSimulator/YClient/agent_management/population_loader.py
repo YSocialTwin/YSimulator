@@ -275,8 +275,14 @@ class PopulationLoader:
         Returns:
             tuple: (topics, counts) or (None, None) if invalid
         """
-        if not interests or not isinstance(interests, (list, tuple)) or len(interests) != 2:
-            return None, None
+        if not interests:
+            if len(interests) != 2:
+                return None, None
+            else:
+                if len(interests[0]) == 1 and not isinstance(interests[1], list):
+                    interests = [interests[0], [interests[1]]]
+                if not isinstance(interests, (list, tuple)):
+                    return None, None
 
         topics = interests[0]
         counts = interests[1]
