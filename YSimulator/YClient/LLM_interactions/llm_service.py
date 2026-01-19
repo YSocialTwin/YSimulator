@@ -97,6 +97,36 @@ class LLMService:
                 temperature=llm_v_config.get("temperature", 0.5),
                 base_url=base_url_v,
             )
+        
+        # Initialize prompt logger (will check if enabled)
+        self.prompt_logger = logging.getLogger(f"{logger.name}.prompts")
+
+    def _log_prompt(self, method_name: str, system_msg: str, user_msg: str, agent_attrs: dict = None):
+        """
+        Log the prompt details for debugging.
+        
+        Args:
+            method_name: Name of the method generating the prompt
+            system_msg: System message content
+            user_msg: User message content
+            agent_attrs: Optional agent attributes used in prompt generation
+        """
+        if self.prompt_logger.isEnabledFor(logging.DEBUG):
+            log_data = {
+                "method": method_name,
+                "system_message": system_msg,
+                "user_message": user_msg,
+            }
+            if agent_attrs:
+                log_data["agent_attrs"] = {
+                    k: v for k, v in agent_attrs.items() 
+                    if k in ["name", "topic", "topic_opinion", "topic_opinion_value", 
+                            "post_topics", "post_opinions", "cluster_id"]
+                }
+            self.prompt_logger.debug(
+                f"LLM Prompt - {method_name}",
+                extra={"extra_data": log_data}
+            )
 
     def _build_persona(self, cluster_id: int, agent_attrs: dict = None) -> str:
         """
@@ -173,6 +203,9 @@ class LLMService:
             slot=slot,
             topic_instruction=topic_instruction
         )
+
+        # Log the prompt for debugging
+        self._log_prompt("generate_post", system_msg, user_msg, agent_attrs)
 
         prompt = ChatPromptTemplate.from_messages([("system", system_msg), ("user", user_msg)])
         chain = prompt | self.llm | StrOutputParser()
@@ -327,6 +360,9 @@ class LLMService:
         # Add opinion instruction if available
         if opinion_instruction:
             user_msg += opinion_instruction
+
+        # Log the prompt for debugging
+        self._log_prompt("generate_comment", system_msg, user_msg, agent_attrs)
 
         prompt = ChatPromptTemplate.from_messages([("system", system_msg), ("user", user_msg)])
 

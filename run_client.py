@@ -52,6 +52,7 @@ def setup_logging(
         logging_config: Optional logging configuration dict with keys:
             - enable_execution_log: bool (default True)
             - enable_console_log: bool (default True)
+            - enable_prompt_log: bool (default False)
 
     Returns:
         Configured logger instance
@@ -62,6 +63,7 @@ def setup_logging(
 
     enable_execution_log = logging_config.get("enable_execution_log", True)
     enable_console_log = logging_config.get("enable_console_log", True)
+    enable_prompt_log = logging_config.get("enable_prompt_log", False)
 
     log_dir = config_path / "logs"
     log_dir.mkdir(exist_ok=True)
@@ -108,6 +110,40 @@ def setup_logging(
             logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
         )
         logger.addHandler(console_handler)
+
+    # Set up prompt logging if enabled
+    if enable_prompt_log:
+        prompt_logger = logging.getLogger(f"YSimulator.Client.{client_name}.prompts")
+        prompt_logger.setLevel(logging.DEBUG)
+        prompt_logger.propagate = False  # Don't propagate to parent logger
+        
+        prompt_log_file = log_dir / f"{client_name}_prompts.log"
+        
+        # Create rotating file handler for prompts (50MB per file, keep 3 backups)
+        prompt_handler = RotatingFileHandler(
+            prompt_log_file, maxBytes=50 * 1024 * 1024, backupCount=3
+        )
+        
+        # Add compression for rotated files
+        prompt_handler.rotator = compress_rotated_log
+        prompt_handler.namer = lambda name: name + ".gz"
+        
+        # Create JSON formatter for prompts
+        class PromptJsonFormatter(logging.Formatter):
+            def format(self, record):
+                log_data = {
+                    "timestamp": datetime.utcnow().isoformat(),
+                    "level": record.levelname,
+                    "message": record.getMessage(),
+                }
+                if hasattr(record, "extra_data"):
+                    log_data.update(record.extra_data)
+                return json.dumps(log_data, indent=2)
+        
+        prompt_handler.setFormatter(PromptJsonFormatter())
+        prompt_logger.addHandler(prompt_handler)
+        
+        logger.info(f"Prompt logging enabled - writing to {prompt_log_file}")
 
     return logger
 

@@ -207,6 +207,36 @@ class VLLMService:
                 logger.warning("[vLLM] Vision model functionality will be disabled")
                 self.llm_v = None
                 self.sampling_params_v = None
+        
+        # Initialize prompt logger (will check if enabled)
+        self.prompt_logger = logging.getLogger(f"{logger.name}.prompts")
+
+    def _log_prompt(self, method_name: str, system_msg: str, user_msg: str, agent_attrs: dict = None):
+        """
+        Log the prompt details for debugging.
+        
+        Args:
+            method_name: Name of the method generating the prompt
+            system_msg: System message content
+            user_msg: User message content
+            agent_attrs: Optional agent attributes used in prompt generation
+        """
+        if self.prompt_logger.isEnabledFor(logging.DEBUG):
+            log_data = {
+                "method": method_name,
+                "system_message": system_msg,
+                "user_message": user_msg,
+            }
+            if agent_attrs:
+                log_data["agent_attrs"] = {
+                    k: v for k, v in agent_attrs.items() 
+                    if k in ["name", "topic", "topic_opinion", "topic_opinion_value", 
+                            "post_topics", "post_opinions", "cluster_id"]
+                }
+            self.prompt_logger.debug(
+                f"LLM Prompt - {method_name}",
+                extra={"extra_data": log_data}
+            )
 
     def _build_persona(self, cluster_id: int, agent_attrs: dict = None) -> str:
         """
@@ -297,6 +327,9 @@ class VLLMService:
                 slot=slot,
                 topic_instruction=topic_instruction
             )
+
+            # Log the prompt for debugging
+            self._log_prompt("generate_post", system_msg, user_msg, agent_attrs)
 
             # Create formatted prompt
             prompt = self._format_prompt(system_msg, user_msg)
@@ -661,6 +694,9 @@ class VLLMService:
         # Add opinion instruction if available
         if opinion_instruction:
             user_msg += opinion_instruction
+
+        # Log the prompt for debugging
+        self._log_prompt("generate_comment", system_msg, user_msg, agent_attrs)
 
         # Create formatted prompt
         prompt = self._format_prompt(system_msg, user_msg)
