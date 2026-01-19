@@ -139,6 +139,15 @@ class ReplyGenerator(BaseActionGenerator):
 
                 # Fire off async LLM call to generate reply
                 agent_attrs = self.context.extract_agent_attrs_fn(agent)
+                
+                # Get opinions for the topics in this post
+                opinion_info = self._get_opinions_for_post(agent.id, post_id)
+                if opinion_info["topics"]:
+                    # Add opinion information to agent attrs
+                    agent_attrs["post_topics"] = opinion_info["topics"]
+                    agent_attrs["post_opinions"] = opinion_info["opinions"]
+                    agent_attrs["post_opinion_values"] = opinion_info["opinion_values"]
+                
                 future = generate_llm_reply_to_mention_async(
                     self.context.llm,
                     agent.cluster,
