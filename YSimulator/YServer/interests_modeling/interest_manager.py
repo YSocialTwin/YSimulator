@@ -87,6 +87,9 @@ class InterestManager:
             # Counts is already a list - validate it
             if len(counts) == 0:
                 return None, None
+            # Validate counts list length matches topics length
+            if len(counts) != len(topics):
+                return None, None
         else:
             # Counts is neither int nor list - invalid
             return None, None
