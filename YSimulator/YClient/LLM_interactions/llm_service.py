@@ -569,7 +569,7 @@ class LLMService:
         user_template = search_action_config.get("user_template")
 
         # Validate templates are configured
-        if not system_template or not user_template:
+        if system_template is None or user_template is None:
             # Log warning and return default fallback
             logger.warning(
                 "decide_search_action prompts not configured in llm_prompts.json, using default fallback"
