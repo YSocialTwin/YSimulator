@@ -52,11 +52,19 @@ class LLMService:
                 },
                 "generate_post": {
                     "system_template": "{persona}",
-                    "user_template": "Write a tweet for Day {day} Slot {slot}. Max 15 words.",
+                    "user_template": "Write a tweet for Day {day} Slot {slot}.{topic_instruction} Max 15 words.",
                 },
                 "decide_reaction": {
                     "system_template": "You are user type {cluster_id}. Read post. Reply ONLY: 'LIKE', 'COMMENT', 'IGNORE'.",
                     "user_template": "{post_content}",
+                },
+                "generate_comment": {
+                    "system_template": "{persona} You engage in discussions by commenting on posts. Generate {toxicity} confrontational language contents.",
+                    "user_template": '{author_name} posted this:\n\n"{post_content}"\n\n{thread_context_instruction}Write a brief, thoughtful comment. Max 100 characters.',
+                },
+                "generate_read_reaction": {
+                    "system_template": "{persona} You're deciding how to react to content you discovered.",
+                    "user_template": 'You found this post:\n\n"{post_content}"\n\nHow do you react? Reply with ONLY ONE WORD: LIKE, LOVE, LAUGH, ANGRY, SAD, or IGNORE.',
                 },
                 "decide_search_action": {
                     "system_template": "{persona} You searched for posts on a topic you're interested in and found relevant content. Decide how to engage with it.",
