@@ -159,9 +159,9 @@ class LLMService:
 
         # Build topic instruction with opinion if available
         if topic and topic_opinion:
-            topic_instruction = f" Topic: {topic}. Your opinion on this topic is: {topic_opinion}. Express this viewpoint in your post."
+            topic_instruction = f" You MUST write about the topic: {topic}. Your stance is: {topic_opinion}. Express this viewpoint clearly."
         elif topic:
-            topic_instruction = f" Topic: {topic}."
+            topic_instruction = f" You MUST write about the topic: {topic}."
         else:
             topic_instruction = ""
 
