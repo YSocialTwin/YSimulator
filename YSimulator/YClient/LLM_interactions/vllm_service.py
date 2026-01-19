@@ -279,7 +279,7 @@ class VLLMService:
             user_template = self.prompts_config["generate_post"]["user_template"]
 
             # Format templates
-            system_msg = system_template.format(persona=persona, toxicity=toxicity)
+            system_msg = system_template.format(persona=persona, toxicity=toxicity) if system_template else ""
 
             # Build topic instruction with opinion if available
             if topic and topic_opinion:
@@ -289,8 +289,14 @@ class VLLMService:
             else:
                 topic_instruction = ""
 
-            # Format user message with topic instruction
-            user_msg = user_template.format(day=day, slot=slot, topic_instruction=topic_instruction)
+            # Format user message with all placeholders
+            user_msg = user_template.format(
+                persona=persona,
+                toxicity=toxicity,
+                day=day,
+                slot=slot,
+                topic_instruction=topic_instruction
+            )
 
             # Create formatted prompt
             prompt = self._format_prompt(system_msg, user_msg)
@@ -347,7 +353,7 @@ class VLLMService:
                     user_template = self.prompts_config["generate_post"]["user_template"]
 
                     # Format templates
-                    system_msg = system_template.format(persona=persona, toxicity=toxicity)
+                    system_msg = system_template.format(persona=persona, toxicity=toxicity) if system_template else ""
 
                     # Build topic instruction
                     if topic and topic_opinion:
@@ -358,7 +364,11 @@ class VLLMService:
                         topic_instruction = ""
 
                     user_msg = user_template.format(
-                        day=day, slot=slot, topic_instruction=topic_instruction
+                        persona=persona,
+                        toxicity=toxicity,
+                        day=day,
+                        slot=slot,
+                        topic_instruction=topic_instruction
                     )
 
                     # Create formatted prompt
@@ -383,13 +393,16 @@ class VLLMService:
     def decide_reaction(self, cluster_id: int, post_content: str) -> str:
         """Decide: LIKE, COMMENT, or IGNORE."""
         try:
+            # Build persona from cluster_id
+            persona = self._build_persona(cluster_id, None)
+            
             # Get prompt templates from configuration
             system_template = self.prompts_config["decide_reaction"]["system_template"]
             user_template = self.prompts_config["decide_reaction"]["user_template"]
 
             # Format templates
-            system_msg = system_template.format(cluster_id=cluster_id)
-            user_msg = user_template.format(post_content=post_content)
+            system_msg = system_template.format(cluster_id=cluster_id, persona=persona) if system_template else ""
+            user_msg = user_template.format(cluster_id=cluster_id, persona=persona, post_content=post_content)
 
             # Create formatted prompt
             prompt = self._format_prompt(system_msg, user_msg)
@@ -636,8 +649,10 @@ class VLLMService:
             )
 
         # Format templates
-        system_msg = system_template.format(persona=persona, toxicity=toxicity)
+        system_msg = system_template.format(persona=persona, toxicity=toxicity) if system_template else ""
         user_msg = user_template.format(
+            persona=persona,
+            toxicity=toxicity,
             author_name=author_name,
             post_content=post_content,
             thread_context_instruction=thread_context_instruction,
@@ -739,8 +754,10 @@ class VLLMService:
                         )
 
                     # Format templates
-                    system_msg = system_template.format(persona=persona, toxicity=toxicity)
+                    system_msg = system_template.format(persona=persona, toxicity=toxicity) if system_template else ""
                     user_msg = user_template.format(
+                        persona=persona,
+                        toxicity=toxicity,
                         author_name=author_name,
                         post_content=post_content,
                         thread_context_instruction=thread_context_instruction,
@@ -858,8 +875,13 @@ class VLLMService:
         system_template = self.prompts_config["generate_share_commentary"]["system_template"]
         user_template = self.prompts_config["generate_share_commentary"]["user_template"]
 
-        system_msg = system_template.format(persona=persona, toxicity=toxicity)
-        user_msg = user_template.format(author_name=author_name, post_content=post_content)
+        system_msg = system_template.format(persona=persona, toxicity=toxicity) if system_template else ""
+        user_msg = user_template.format(
+            persona=persona,
+            toxicity=toxicity,
+            author_name=author_name,
+            post_content=post_content
+        )
 
         if opinion_instruction:
             user_msg += opinion_instruction
