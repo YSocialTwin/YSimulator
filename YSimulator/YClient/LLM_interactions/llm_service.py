@@ -112,8 +112,8 @@ class LLMService:
             from logging.handlers import RotatingFileHandler
             from pathlib import Path
             
-            # Get log directory from environment or use default
-            log_dir = os.environ.get("YSIMULATOR_LOG_DIR", "./logs")
+            # Get log directory from logging_config or use default
+            log_dir = logging_config.get("log_dir", "./logs")
             log_dir = Path(log_dir)
             log_dir.mkdir(exist_ok=True)
             
@@ -226,6 +226,14 @@ class LLMService:
 
         # Get topic if available
         topic = agent_attrs.get("topic") if agent_attrs else None
+        
+        # DEBUG: Log if topic is missing
+        if not topic and agent_attrs:
+            agent_name = agent_attrs.get("name", "Unknown")
+            logger.warning(
+                f"No topic provided for agent {agent_name} in generate_post. "
+                f"Agent attrs: {agent_attrs.keys() if agent_attrs else 'None'}"
+            )
 
         # Get opinion on the topic if available
         topic_opinion = agent_attrs.get("topic_opinion") if agent_attrs else None

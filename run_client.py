@@ -267,6 +267,9 @@ if __name__ == "__main__":
     # Set up logging in config directory
     logging_config = sim_config.get("logging", {})
     logger = setup_logging(config_dir, client_name, logging_config)
+    
+    # Add log directory path to logging_config for Ray actors
+    logging_config["log_dir"] = str(config_dir / "logs")
 
     load_time = (time.time() - start_time) * 1000
     logger.info(

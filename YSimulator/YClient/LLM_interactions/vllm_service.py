@@ -223,8 +223,8 @@ class VLLMService:
             from logging.handlers import RotatingFileHandler
             from pathlib import Path
             
-            # Get log directory from environment or use default
-            log_dir = os.environ.get("YSIMULATOR_LOG_DIR", "./logs")
+            # Get log directory from logging_config or use default
+            log_dir = logging_config.get("log_dir", "./logs")
             log_dir = Path(log_dir)
             log_dir.mkdir(exist_ok=True)
             

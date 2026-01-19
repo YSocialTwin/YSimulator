@@ -150,9 +150,19 @@ class AgentSelector:
         # Sample a topic from agent's interests if available
         selected_topic = None
         topics, counts = validate_and_extract_interests_func(agent.interests)
-        if topics and counts:
+        
+        # DEBUG: Log if agent has no interests
+        if not topics or not counts:
+            logger.warning(
+                f"Agent {agent.username} (ID: {agent.id}) has no interests defined. "
+                f"Interests: {agent.interests}. Posts will be generic without topics."
+            )
+        elif topics and counts:
             # Weight topics by their interaction counts
             selected_topic = random.choices(topics, weights=counts, k=1)[0]
+            logger.debug(
+                f"Sampled topic '{selected_topic}' for agent {agent.username} from interests: {topics}"
+            )
 
         # Get opinion on the selected topic if available
         topic_opinion = None
