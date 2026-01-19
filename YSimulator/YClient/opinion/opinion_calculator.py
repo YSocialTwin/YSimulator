@@ -107,7 +107,7 @@ class OpinionCalculator:
                 return None
 
             # Get post content (needed for LLM evaluation)
-            post_content = parent_post_data.get("tweet", "")
+            post_content = parent_post_data.get("tweet") or parent_post_data.get("text") or ""
 
             # Calculate updated opinions for each topic
             updated_opinions = {}

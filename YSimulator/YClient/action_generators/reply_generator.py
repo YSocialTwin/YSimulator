@@ -101,7 +101,7 @@ class ReplyGenerator(BaseActionGenerator):
                 )
                 return result
 
-            post_content = post_data.get("tweet", "")
+            post_content = post_data.get("tweet") or post_data.get("text") or ""
             author_id = post_data.get("user_id")
 
             self.context.logger.debug(

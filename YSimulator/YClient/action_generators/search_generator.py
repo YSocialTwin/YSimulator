@@ -104,7 +104,7 @@ class SearchGenerator(BaseActionGenerator):
             if not post_data:
                 result.metadata["reason"] = "post_not_found"
                 return result
-            post_content = post_data.get("tweet", "")
+            post_content = post_data.get("tweet") or post_data.get("text") or ""
             post_author_id = post_data.get("user_id", "unknown")
         except Exception as e:
             result.metadata["reason"] = "post_fetch_error"

@@ -101,12 +101,23 @@ class CommentGenerator(BaseActionGenerator):
                 self.context.server.get_post.remote(target_post, client_id=self.context.client_id)
             )
             if post_data:
-                post_content = post_data.get("tweet", "")
+                # Handle None value explicitly - .get() returns None if key exists with None value
+                post_content = post_data.get("tweet") or post_data.get("text") or ""
+                
+                # Log what we got for debugging
+                self.context.logger.debug(
+                    f"Post {target_post} data keys: {list(post_data.keys())}, "
+                    f"tweet value: {repr(post_data.get('tweet'))}, "
+                    f"text value: {repr(post_data.get('text'))}, "
+                    f"final content length: {len(post_content) if post_content else 0}"
+                )
                 
                 # Validate post content is not empty
                 if not post_content or not post_content.strip():
                     self.context.logger.warning(
-                        f"Skipping comment on post {target_post} - post content is empty or whitespace only"
+                        f"Skipping comment on post {target_post} - post content is empty or whitespace only. "
+                        f"Post data keys: {list(post_data.keys())}, tweet={repr(post_data.get('tweet'))}, "
+                        f"text={repr(post_data.get('text'))}"
                     )
                     result.metadata["reason"] = "empty_post_content"
                     return result
@@ -191,7 +202,7 @@ class CommentGenerator(BaseActionGenerator):
                     "agent_id": agent.id,
                     "cluster_id": agent.cluster,
                     "post_author_id": post_data.get("user_id"),
-                    "post_content": post_data.get("tweet", ""),
+                    "post_content": post_data.get("tweet") or post_data.get("text") or "",
                     "is_llm": False,
                 }
 
