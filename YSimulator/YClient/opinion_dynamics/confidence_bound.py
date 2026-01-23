@@ -40,6 +40,6 @@ def bounded_confidence(
                     x = max(x - theta, 0)
 
         else:
-            x += mu * abs(x - y)
+            x += mu * (y - x)
 
     return x

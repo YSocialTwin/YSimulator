@@ -55,7 +55,7 @@ class ShareGenerator(BaseActionGenerator):
 
         if agent_type == "llm":
             # LLM: Generate share with personalized commentary
-            post_content = post_data.get("tweet", "")
+            post_content = post_data.get("tweet") or post_data.get("text") or ""
             author_id = post_data.get("user_id")
 
             # Get author username

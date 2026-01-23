@@ -95,7 +95,7 @@ class ReadGenerator(BaseActionGenerator):
                 self.context.server.get_post.remote(target_post, client_id=self.context.client_id)
             )
             if post_data:
-                post_content = post_data.get("tweet", "")
+                post_content = post_data.get("tweet") or post_data.get("text") or ""
 
                 # Get agent attributes for persona
                 agent_attrs = self._extract_agent_attrs(agent)
@@ -176,7 +176,7 @@ class ReadGenerator(BaseActionGenerator):
                             "agent_id": agent.id,
                             "cluster_id": agent.cluster,
                             "post_author_id": post_data.get("user_id"),
-                            "post_content": post_data.get("tweet", ""),
+                            "post_content": post_data.get("tweet") or post_data.get("text") or "",
                             "is_llm": False,
                         }
                     else:
@@ -192,7 +192,7 @@ class ReadGenerator(BaseActionGenerator):
                             "agent_id": agent.id,
                             "cluster_id": agent.cluster,
                             "post_author_id": post_data.get("user_id"),
-                            "post_content": post_data.get("tweet", ""),
+                            "post_content": post_data.get("tweet") or post_data.get("text") or "",
                             "is_llm": False,
                         }
                     else:

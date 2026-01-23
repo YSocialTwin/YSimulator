@@ -33,7 +33,7 @@ class FollowRecommender:
     def get_follow_suggestions(
         self,
         agent_id: str,
-        mode: str = "random",
+        mode: str = "FollowRecSys",
         n_neighbors: int = 5,
         leaning_bias: int = 0,
     ) -> List[str]:
@@ -42,7 +42,7 @@ class FollowRecommender:
 
         Args:
             agent_id: UUID of the agent requesting suggestions
-            mode: Recommendation mode (random, common_neighbors, jaccard, etc.)
+            mode: Recommendation mode (random, CommonNeighbors, Jaccard, etc.)
             n_neighbors: Number of suggestions to return
             leaning_bias: Political leaning bias strength (0 = no bias)
 
@@ -125,23 +125,23 @@ class FollowRecommender:
                 following_ids = {f.user_id for f in following}
 
                 # Dispatch to appropriate recommendation function
-                if mode == "random":
+                if mode == "FollowRecSys":
                     suggestions = follow_recsys_db.recommend_random_follows(
                         session, agent_id, following_ids, n_neighbors
                     )
-                elif mode == "common_neighbors":
+                elif mode == "CommonNeighbors":
                     suggestions = follow_recsys_db.recommend_common_neighbors(
                         session, agent_id, following_ids, n_neighbors
                     )
-                elif mode == "jaccard":
+                elif mode == "Jaccard":
                     suggestions = follow_recsys_db.recommend_jaccard(
                         session, agent_id, following_ids, n_neighbors
                     )
-                elif mode == "adamic_adar":
+                elif mode == "AdamicAdar":
                     suggestions = follow_recsys_db.recommend_adamic_adar(
                         session, agent_id, following_ids, n_neighbors
                     )
-                elif mode == "preferential_attachment":
+                elif mode == "PreferentialAttachment":
                     suggestions = follow_recsys_db.recommend_preferential_attachment(
                         session, agent_id, following_ids, n_neighbors
                     )
@@ -177,23 +177,23 @@ class FollowRecommender:
         """Get follow suggestions using Redis backend."""
         try:
             # Dispatch to appropriate recommendation function
-            if mode == "random":
+            if mode == "FollowRecSys":
                 recommendations = follow_recsys_redis.recommend_random_follows_redis(
                     self.db.redis_client, self.db._redis_key, agent_id, n_neighbors, self.logger
                 )
-            elif mode == "preferential_attachment":
+            elif mode == "PreferentialAttachment":
                 recommendations = follow_recsys_redis.recommend_preferential_attachment_redis(
                     self.db.redis_client, self.db._redis_key, agent_id, n_neighbors, self.logger
                 )
-            elif mode == "common_neighbors":
+            elif mode == "CommonNeighbors":
                 recommendations = follow_recsys_redis.recommend_common_neighbors_redis(
                     self.db.redis_client, self.db._redis_key, agent_id, n_neighbors, self.logger
                 )
-            elif mode == "jaccard":
+            elif mode == "Jaccard":
                 recommendations = follow_recsys_redis.recommend_jaccard_redis(
                     self.db.redis_client, self.db._redis_key, agent_id, n_neighbors, self.logger
                 )
-            elif mode == "adamic_adar":
+            elif mode == "AdamicAdar":
                 recommendations = follow_recsys_redis.recommend_adamic_adar_redis(
                     self.db.redis_client, self.db._redis_key, agent_id, n_neighbors, self.logger
                 )

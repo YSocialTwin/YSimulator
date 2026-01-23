@@ -370,14 +370,26 @@ class SQLPostRepository(PostRepository):
 
         session = Session(self.engine)
         try:
+            # Generate post ID if not provided
+            post_id = post_data.get("id") or str(uuid.uuid4())
+            
+            # Determine comment_to value
+            comment_to = post_data.get("parent_post") or post_data.get("comment_to", -1)
+            
+            # Get thread_id from data, or set to post's own ID if this is a root post (not a comment)
+            thread_id = post_data.get("root_post") or post_data.get("thread_id")
+            if not thread_id and comment_to in (-1, "-1", None):
+                # This is a root post (not a comment), so it starts its own thread
+                thread_id = post_id
+            
             # Map common field names to actual model field names
             mapped_data = {
-                "id": post_data.get("id") or str(uuid.uuid4()),  # Generate UUID if not provided
+                "id": post_id,
                 "tweet": post_data.get("text") or post_data.get("tweet"),
                 "user_id": post_data.get("author") or post_data.get("user_id"),
                 "round": post_data.get("round"),
-                "comment_to": post_data.get("parent_post") or post_data.get("comment_to", -1),
-                "thread_id": post_data.get("root_post") or post_data.get("thread_id"),
+                "comment_to": comment_to,
+                "thread_id": thread_id,
                 "reaction_count": post_data.get("num_reactions")
                 or post_data.get("reaction_count", 0),
             }

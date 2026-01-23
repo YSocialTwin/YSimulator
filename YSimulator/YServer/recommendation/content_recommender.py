@@ -42,7 +42,7 @@ class ContentRecommender:
     def get_recommended_posts(
         self,
         agent_id: str,
-        mode: str = "random",
+        mode: str = "ContentRecSys",
         limit: int = 5,
         followers_ratio: float = 0.6,
         day: int = None,
@@ -149,25 +149,25 @@ class ContentRecommender:
         }
 
         # Dispatch to appropriate recommendation function
-        if mode == "rchrono":
+        if mode == "ReverseChrono":
             return content_recsys_redis.recommend_rchrono_redis(**common_kwargs)
-        elif mode == "rchrono_popularity":
+        elif mode == "ReverseChronoPopularity":
             return content_recsys_redis.recommend_rchrono_popularity_redis(**common_kwargs)
-        elif mode == "rchrono_followers":
+        elif mode == "ReverseChronoFollowers":
             return content_recsys_redis.recommend_rchrono_followers_redis(**common_kwargs)
-        elif mode == "rchrono_followers_popularity":
+        elif mode == "ReverseChronoFollowersPopularity":
             return content_recsys_redis.recommend_rchrono_followers_popularity_redis(
                 **common_kwargs
             )
-        elif mode == "rchrono_comments":
+        elif mode == "ReverseChronoComments":
             return content_recsys_redis.recommend_rchrono_comments_redis(**common_kwargs)
-        elif mode == "common_interests":
+        elif mode == "CommonInterests":
             return content_recsys_redis.recommend_common_interests_redis(**common_kwargs)
-        elif mode == "common_user_interests":
+        elif mode == "CommonUserInterests":
             return content_recsys_redis.recommend_common_user_interests_redis(**common_kwargs)
-        elif mode == "similar_users_react":
+        elif mode == "SimilarUsersReactions":
             return content_recsys_redis.recommend_similar_users_react_redis(**common_kwargs)
-        elif mode == "similar_users_posts":
+        elif mode == "SimilarUsersPosts":
             return content_recsys_redis.recommend_similar_users_posts_redis(**common_kwargs)
         else:
             # Default: random ordering
@@ -187,39 +187,39 @@ class ContentRecommender:
 
         session = Session(self.db.engine)
         try:
-            if mode == "rchrono":
+            if mode == "ReverseChrono":
                 return content_recsys_db.recommend_rchrono(
                     session, agent_id, visibility_day, visibility_hour, limit
                 )
-            elif mode == "rchrono_popularity":
+            elif mode == "ReverseChronoPopularity":
                 return content_recsys_db.recommend_rchrono_popularity(
                     session, agent_id, visibility_day, visibility_hour, limit
                 )
-            elif mode == "rchrono_followers":
+            elif mode == "ReverseChronoFollowers":
                 return content_recsys_db.recommend_rchrono_followers(
                     session, agent_id, visibility_day, visibility_hour, limit, followers_ratio
                 )
-            elif mode == "rchrono_followers_popularity":
+            elif mode == "ReverseChronoFollowersPopularity":
                 return content_recsys_db.recommend_rchrono_followers_popularity(
                     session, agent_id, visibility_day, visibility_hour, limit, followers_ratio
                 )
-            elif mode == "rchrono_comments":
+            elif mode == "ReverseChronoComments":
                 return content_recsys_db.recommend_rchrono_comments(
                     session, agent_id, visibility_day, visibility_hour, limit
                 )
-            elif mode == "common_interests":
+            elif mode == "CommonInterests":
                 return content_recsys_db.recommend_common_interests(
                     session, agent_id, visibility_day, visibility_hour, limit, followers_ratio
                 )
-            elif mode == "common_user_interests":
+            elif mode == "CommonUserInterests":
                 return content_recsys_db.recommend_common_user_interests(
                     session, agent_id, visibility_day, visibility_hour, limit, followers_ratio
                 )
-            elif mode == "similar_users_react":
+            elif mode == "SimilarUsersReactions":
                 return content_recsys_db.recommend_similar_users_react(
                     session, agent_id, visibility_day, visibility_hour, limit
                 )
-            elif mode == "similar_users_posts":
+            elif mode == "SimilarUsersPosts":
                 return content_recsys_db.recommend_similar_users_posts(
                     session, agent_id, visibility_day, visibility_hour, limit
                 )

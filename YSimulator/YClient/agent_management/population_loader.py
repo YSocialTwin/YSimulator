@@ -271,20 +271,43 @@ class PopulationLoader:
 
         Args:
             interests: Interest data in format [["Topic1", "Topic2"], [1, 2]]
+                      Can also accept [["Topic1", "Topic2"], 1] - single count for all topics
 
         Returns:
             tuple: (topics, counts) or (None, None) if invalid
         """
-        if not interests or not isinstance(interests, (list, tuple)) or len(interests) != 2:
-            return None, None
+        if not interests:
+            if len(interests) != 2:
+                return None, None
+            else:
+                if len(interests[0]) == 1 and not isinstance(interests[1], list):
+                    interests = [interests[0], [interests[1]]]
+                if not isinstance(interests, (list, tuple)):
+                    return None, None
 
         topics = interests[0]
         counts = interests[1]
 
-        if not topics or not counts or not isinstance(topics, list) or not isinstance(counts, list):
+        # Validate topics is a list
+        if not topics or not isinstance(topics, list):
             return None, None
 
         if len(topics) == 0:
+            return None, None
+
+        # Handle counts as either a list or a single integer
+        if isinstance(counts, int):
+            # Single count for all topics - expand to list
+            counts = [counts] * len(topics)
+        elif isinstance(counts, list):
+            # Counts is already a list - validate it
+            if len(counts) == 0:
+                return None, None
+            # Validate counts list length matches topics length
+            if len(counts) != len(topics):
+                return None, None
+        else:
+            # Counts is neither int nor list - invalid
             return None, None
 
         return topics, counts

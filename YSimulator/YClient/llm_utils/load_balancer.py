@@ -393,6 +393,7 @@ def create_llm_actors(
     logger: Optional[logging.Logger] = None,
     reuse_actors: bool = False,
     actor_name_prefix: str = "ysim_llm",
+    logging_config: Optional[dict] = None,
 ) -> Any:
     """
     Create LLM actors with optional load balancing and actor reuse.
@@ -449,6 +450,7 @@ def create_llm_actors(
                 llm_config=llm_config,
                 prompts_config=prompts_config,
                 llm_v_config=llm_v_config,
+                logging_config=logging_config,
             )
         else:
             from YSimulator.YClient.LLM_interactions.llm_service import LLMService
@@ -462,6 +464,7 @@ def create_llm_actors(
                 llm_config=llm_config,
                 prompts_config=prompts_config,
                 llm_v_config=llm_v_config,
+                logging_config=logging_config,
             )
 
     # Multiple actors - use load balancing
