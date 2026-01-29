@@ -129,8 +129,8 @@ def test_get_or_create_round_method():
 if __name__ == "__main__":
     success = True
     
-    success = test_rounds_with_sqlite() and success
-    success = test_get_or_create_round_method() and success
+    success = success and test_rounds_with_sqlite()
+    success = success and test_get_or_create_round_method()
     
     if success:
         print("\n" + "="*50)

@@ -135,11 +135,11 @@ CREATE TABLE post (
     tweet          TEXT NOT NULL,
     post_img       VARCHAR(20),
     user_id        VARCHAR(36) NOT NULL REFERENCES user_mgmt(id) ON DELETE CASCADE,
-    comment_to     VARCHAR(36) DEFAULT '-1',
+    comment_to     VARCHAR(36),
     thread_id      VARCHAR(36),
     round          VARCHAR(36) REFERENCES rounds(id) ON DELETE CASCADE,
-    news_id        VARCHAR(36) DEFAULT '-1' REFERENCES articles(id) ON DELETE CASCADE,
-    shared_from    VARCHAR(36) DEFAULT '-1',
+    news_id        VARCHAR(36) REFERENCES articles(id) ON DELETE CASCADE,
+    shared_from    VARCHAR(36),
     image_id       VARCHAR(36) REFERENCES images(id) ON DELETE CASCADE,
     reaction_count INTEGER DEFAULT 0
 );
