@@ -768,7 +768,7 @@ def recommend_collaborative_user_user_redis(
         from sqlalchemy.orm import Session
 
         with Session(db_engine) as session:
-            from YSimulator.YServer.classes.models import Post
+            from YSimulator.YServer.classes.models import Post, Reaction
 
             # Get agent's liked posts
             agent_likes_query = session.query(Reaction.post_id).filter(
@@ -912,7 +912,7 @@ def recommend_collaborative_item_item_redis(
         from sqlalchemy.orm import Session, aliased
 
         with Session(db_engine) as session:
-            from YSimulator.YServer.classes.models import Post
+            from YSimulator.YServer.classes.models import Post, Reaction
 
             # Get agent's liked posts
             agent_likes_query = session.query(Reaction.post_id).filter(
@@ -1034,7 +1034,7 @@ def recommend_content_based_features_redis(
         from sqlalchemy.orm import Session
 
         with Session(db_engine) as session:
-            from YSimulator.YServer.classes.models import Post
+            from YSimulator.YServer.classes.models import Post, PostTopic, Reaction
 
             # Get topics from liked posts
             liked_topics_query = (
@@ -1157,7 +1157,7 @@ def recommend_content_based_vector_redis(
         from sqlalchemy.orm import Session
 
         with Session(db_engine) as session:
-            from YSimulator.YServer.classes.models import Post
+            from YSimulator.YServer.classes.models import Post, PostTopic, Reaction
 
             # Build preference vector from liked posts
             user_topics_query = (
