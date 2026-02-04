@@ -688,7 +688,7 @@ def recommend_collaborative_user_user_redis(
     db_engine,
     logger,
     **kwargs,
-) -> List[str]:
+) -> tuple[List[str], bool]:
     """
     Collaborative Filtering - User-User (Redis).
     Finds users with high overlap in liked posts and recommends their liked posts.
@@ -705,7 +705,7 @@ def recommend_collaborative_user_user_redis(
         logger: Logger instance
 
     Returns:
-        List of post IDs
+        Tuple of (List of post IDs, bool indicating if fallback was used)
     """
     # Try to get liked posts from Redis
     agent_likes_key = redis_key_fn("user", agent_id) + ":likes"
@@ -713,8 +713,9 @@ def recommend_collaborative_user_user_redis(
         agent_likes = redis_client.smembers(agent_likes_key)
 
         if not agent_likes:
-            # No likes yet, fall back to recent posts
-            return [p["id"] for p in valid_posts_with_data[:limit]]
+            # No likes yet, cold start fallback to random posts
+            result = recommend_random_redis(valid_posts_with_data, limit)
+            return result, True
 
         # Find similar users based on like overlap
         user_ids_key = redis_key_fn("user_mgmt", "ids")
@@ -753,12 +754,17 @@ def recommend_collaborative_user_user_redis(
         sorted_posts = sorted(posts_with_scores, key=lambda x: (-x["score"], x["index"]))
         post_ids = [p["id"] for p in sorted_posts[:limit]]
 
-        # Fill with recent posts if needed
+        # Check if we need cold start fallback
+        if not post_ids:
+            result = recommend_random_redis(valid_posts_with_data, limit)
+            return result, True
+
+        # Fill with random posts if needed (partial results, not full cold start)
         if len(post_ids) < limit:
             additional = [p["id"] for p in valid_posts_with_data if p["id"] not in post_ids]
             post_ids.extend(additional[: limit - len(post_ids)])
 
-        return post_ids
+        return post_ids, False
     else:
         # Fallback to SQLAlchemy ORM
         logger.info(
@@ -777,8 +783,9 @@ def recommend_collaborative_user_user_redis(
             agent_likes_ids = [row[0] for row in agent_likes_query.all()]
 
             if not agent_likes_ids:
-                # No likes, return recent posts
-                post_ids = [p["id"] for p in valid_posts_with_data[:limit]]
+                # No likes, cold start fallback to random posts
+                result = recommend_random_redis(valid_posts_with_data, limit)
+                return result, True
             else:
                 # Find similar users
                 similar_users_query = (
@@ -813,12 +820,17 @@ def recommend_collaborative_user_user_redis(
                 else:
                     post_ids = []
 
-                # Fill with recent posts if needed
+                # Check if we need cold start fallback
+                if not post_ids:
+                    result = recommend_random_redis(valid_posts_with_data, limit)
+                    return result, True
+
+                # Fill with random posts if needed (partial results, not full cold start)
                 if len(post_ids) < limit:
                     additional = [p["id"] for p in valid_posts_with_data if p["id"] not in post_ids]
                     post_ids.extend(additional[: limit - len(post_ids)])
 
-        return post_ids
+        return post_ids, False
 
 
 def recommend_collaborative_item_item_redis(
