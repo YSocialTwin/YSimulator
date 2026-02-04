@@ -9,7 +9,12 @@ Tests cover:
 - OpinionCache for performance optimization
 """
 
-from unittest.mock import Mock, patch
+import sys
+from unittest.mock import Mock, MagicMock, patch
+
+# Mock ray before any imports that use it
+if 'ray' not in sys.modules:
+    sys.modules['ray'] = MagicMock()
 
 import pytest
 

@@ -94,15 +94,15 @@ class TestContentRecommender:
         """Test different recommendation modes."""
         recommender = ContentRecommender(mock_db_adapter, visibility_rounds=36)
 
-        # Test rchrono mode
+        # Test ReverseChrono mode
         mock_recsys_db.recommend_rchrono = Mock(return_value=["post1"])
-        _ = recommender.get_recommended_posts(agent_id="agent1", mode="rchrono", day=1, slot=5)
+        _ = recommender.get_recommended_posts(agent_id="agent1", mode="ReverseChrono", day=1, slot=5)
         assert mock_recsys_db.recommend_rchrono.called
 
-        # Test rchrono_popularity mode
+        # Test ReverseChronoPopularity mode
         mock_recsys_db.recommend_rchrono_popularity = Mock(return_value=["post2"])
         _ = recommender.get_recommended_posts(
-            agent_id="agent1", mode="rchrono_popularity", day=1, slot=5
+            agent_id="agent1", mode="ReverseChronoPopularity", day=1, slot=5
         )
         assert mock_recsys_db.recommend_rchrono_popularity.called
 
@@ -217,16 +217,16 @@ class TestFollowRecommender:
         """Test different recommendation modes."""
         recommender = FollowRecommender(mock_db_adapter_redis)
 
-        # Test common_neighbors mode
+        # Test CommonNeighbors mode
         mock_recsys_redis.recommend_common_neighbors_redis = Mock(return_value=["user1"])
         _ = recommender.get_follow_suggestions(
-            agent_id="agent1", mode="common_neighbors", n_neighbors=1
+            agent_id="agent1", mode="CommonNeighbors", n_neighbors=1
         )
         assert mock_recsys_redis.recommend_common_neighbors_redis.called
 
-        # Test jaccard mode
+        # Test Jaccard mode
         mock_recsys_redis.recommend_jaccard_redis = Mock(return_value=["user2"])
-        _ = recommender.get_follow_suggestions(agent_id="agent1", mode="jaccard", n_neighbors=1)
+        _ = recommender.get_follow_suggestions(agent_id="agent1", mode="Jaccard", n_neighbors=1)
         assert mock_recsys_redis.recommend_jaccard_redis.called
 
 
