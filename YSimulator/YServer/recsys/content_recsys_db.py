@@ -607,7 +607,7 @@ def recommend_similar_users_react(
             ),
             Post.user_id != agent_id,
             ReactorUser.id != agent_id,
-            Reaction.type == "like",
+            Reaction.type == "LIKE",
             or_(
                 ReactorUser.age_group == TargetUser.age_group,
                 ReactorUser.gender == TargetUser.gender,
@@ -701,7 +701,7 @@ def recommend_collaborative_user_user(
     # Get posts liked by the agent
     agent_likes_subq = (
         session.query(Reaction.post_id)
-        .filter(Reaction.user_id == agent_id, Reaction.type == "like")
+        .filter(Reaction.user_id == agent_id, Reaction.type == "LIKE")
         .subquery()
     )
 
@@ -712,7 +712,7 @@ def recommend_collaborative_user_user(
         .filter(
             Reaction.post_id.in_(session.query(agent_likes_subq.c.post_id)),
             Reaction.user_id != agent_id,
-            Reaction.type == "like",
+            Reaction.type == "LIKE",
         )
         .group_by(Reaction.user_id)
         .order_by(desc("common_likes_count"))
@@ -733,7 +733,7 @@ def recommend_collaborative_user_user(
                 and_(Round.day == visibility_day, Round.hour >= visibility_hour),
             ),
             Post.user_id != agent_id,
-            Reaction.type == "like",
+            Reaction.type == "LIKE",
             Post.id.notin_(session.query(agent_likes_subq.c.post_id)),
         )
         .group_by(Post.id)
@@ -771,7 +771,7 @@ def recommend_collaborative_item_item(
     # Get posts liked by the agent
     agent_likes_subq = (
         session.query(Reaction.post_id)
-        .filter(Reaction.user_id == agent_id, Reaction.type == "like")
+        .filter(Reaction.user_id == agent_id, Reaction.type == "LIKE")
         .subquery()
     )
 
@@ -797,8 +797,8 @@ def recommend_collaborative_item_item(
                 and_(Round.day == visibility_day, Round.hour >= visibility_hour),
             ),
             Post.user_id != agent_id,
-            Reaction2.type == "like",
-            Reaction.type == "like",
+            Reaction2.type == "LIKE",
+            Reaction.type == "LIKE",
             Post.id.notin_(session.query(agent_likes_subq.c.post_id)),
         )
         .group_by(Post.id)
@@ -837,7 +837,7 @@ def recommend_content_based_features(
     liked_topics_subq = (
         session.query(PostTopic.topic_id, func.count(PostTopic.topic_id).label("topic_freq"))
         .join(Reaction, PostTopic.post_id == Reaction.post_id)
-        .filter(Reaction.user_id == agent_id, Reaction.type == "like")
+        .filter(Reaction.user_id == agent_id, Reaction.type == "LIKE")
         .group_by(PostTopic.topic_id)
         .subquery()
     )
@@ -896,7 +896,7 @@ def recommend_content_based_vector(
     user_topics_subq = (
         session.query(PostTopic.topic_id, func.count(PostTopic.topic_id).label("weight"))
         .join(Reaction, PostTopic.post_id == Reaction.post_id)
-        .filter(Reaction.user_id == agent_id, Reaction.type == "like")
+        .filter(Reaction.user_id == agent_id, Reaction.type == "LIKE")
         .group_by(PostTopic.topic_id)
         .subquery()
     )

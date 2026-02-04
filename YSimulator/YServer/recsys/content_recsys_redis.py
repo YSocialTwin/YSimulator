@@ -427,7 +427,7 @@ def recommend_common_user_interests_redis(
                     UserInterest2.user_id == agent_id,
                     Reaction.user_id != agent_id,
                     Post.user_id != agent_id,
-                    Reaction.type == "like",
+                    Reaction.type == "LIKE",
                 )
                 .order_by(desc(Reaction.post_id))
                 .limit(limit)
@@ -551,7 +551,7 @@ def recommend_similar_users_react_redis(
                 .filter(
                     Post.user_id != agent_id,
                     ReactorUser.id != agent_id,
-                    Reaction.type == "like",
+                    Reaction.type == "LIKE",
                     or_(
                         ReactorUser.age_group == TargetUser.age_group,
                         ReactorUser.gender == TargetUser.gender,
@@ -826,7 +826,7 @@ def recommend_collaborative_user_user_redis(
 
             # Get agent's liked posts
             agent_likes_query = session.query(Reaction.post_id).filter(
-                Reaction.user_id == agent_id, Reaction.type == "like"
+                Reaction.user_id == agent_id, Reaction.type == "LIKE"
             )
             agent_likes_ids = [row[0] for row in agent_likes_query.all()]
 
@@ -841,7 +841,7 @@ def recommend_collaborative_user_user_redis(
                     .filter(
                         Reaction.post_id.in_(agent_likes_ids),
                         Reaction.user_id != agent_id,
-                        Reaction.type == "like",
+                        Reaction.type == "LIKE",
                     )
                     .distinct()
                     .limit(50)
@@ -855,7 +855,7 @@ def recommend_collaborative_user_user_redis(
                         .join(Post, Reaction.post_id == Post.id)
                         .filter(
                             Reaction.user_id.in_(similar_user_ids),
-                            Reaction.type == "like",
+                            Reaction.type == "LIKE",
                             Post.user_id != agent_id,
                             Reaction.post_id.notin_(agent_likes_ids),
                         )
@@ -982,7 +982,7 @@ def recommend_collaborative_item_item_redis(
 
             # Get agent's liked posts
             agent_likes_query = session.query(Reaction.post_id).filter(
-                Reaction.user_id == agent_id, Reaction.type == "like"
+                Reaction.user_id == agent_id, Reaction.type == "LIKE"
             )
             agent_likes_ids = [row[0] for row in agent_likes_query.all()]
 
@@ -999,8 +999,8 @@ def recommend_collaborative_item_item_redis(
                     .join(Post, Reaction2.post_id == Post.id)
                     .filter(
                         Reaction.post_id.in_(agent_likes_ids),
-                        Reaction.type == "like",
-                        Reaction2.type == "like",
+                        Reaction.type == "LIKE",
+                        Reaction2.type == "LIKE",
                         Reaction2.user_id != agent_id,
                         Post.user_id != agent_id,
                         Reaction2.post_id.notin_(agent_likes_ids),
@@ -1120,7 +1120,7 @@ def recommend_content_based_features_redis(
             liked_topics_query = (
                 session.query(PostTopic.topic_id)
                 .join(Reaction, PostTopic.post_id == Reaction.post_id)
-                .filter(Reaction.user_id == agent_id, Reaction.type == "like")
+                .filter(Reaction.user_id == agent_id, Reaction.type == "LIKE")
                 .distinct()
             )
             liked_topic_ids = [row[0] for row in liked_topics_query.all()]
@@ -1257,7 +1257,7 @@ def recommend_content_based_vector_redis(
             user_topics_query = (
                 session.query(PostTopic.topic_id, func.count(PostTopic.topic_id).label("weight"))
                 .join(Reaction, PostTopic.post_id == Reaction.post_id)
-                .filter(Reaction.user_id == agent_id, Reaction.type == "like")
+                .filter(Reaction.user_id == agent_id, Reaction.type == "LIKE")
                 .group_by(PostTopic.topic_id)
             )
             user_topics = {row[0]: row[1] for row in user_topics_query.all()}
