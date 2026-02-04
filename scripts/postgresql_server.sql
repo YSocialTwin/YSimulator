@@ -1,30 +1,31 @@
 CREATE TABLE emotions (
-    id      SERIAL PRIMARY KEY,
+    id      VARCHAR(36) PRIMARY KEY,
     emotion TEXT NOT NULL,
     icon    TEXT
 );
 
 CREATE TABLE hashtags (
-    id      SERIAL PRIMARY KEY,
+    id      VARCHAR(36) PRIMARY KEY,
     hashtag TEXT NOT NULL
 );
 
 CREATE TABLE interests (
-    iid      SERIAL PRIMARY KEY,
+    iid      VARCHAR(36) PRIMARY KEY,
     interest TEXT
 );
 
 CREATE TABLE rounds (
-    id   SERIAL PRIMARY KEY,
+    id   VARCHAR(36) PRIMARY KEY,
     day  INTEGER,
-    hour INTEGER
+    hour INTEGER,
+    CONSTRAINT uq_round_day_hour UNIQUE (day, hour)
 );
 
 -- -----------------------------
 -- User management
 -- -----------------------------
 CREATE TABLE user_mgmt (
-    id                   SERIAL PRIMARY KEY,
+    id                   VARCHAR(36) PRIMARY KEY,
     username             VARCHAR(50) NOT NULL UNIQUE,
     email                VARCHAR(50),
     password             VARCHAR(400) NOT NULL,
@@ -40,17 +41,18 @@ CREATE TABLE user_mgmt (
     language             TEXT,
     owner                TEXT,
     education_level      TEXT,
-    joined_on            INTEGER,
+    joined_on            VARCHAR(36) REFERENCES rounds(id) ON DELETE SET NULL,
     frecsys_type         TEXT,
     round_actions        INTEGER NOT NULL DEFAULT 3,
     gender               TEXT,
     nationality          TEXT,
     toxicity             TEXT,
     is_page              INTEGER NOT NULL DEFAULT 0,
-    left_on              INTEGER,
+    left_on              VARCHAR(36),
     daily_activity_level INTEGER DEFAULT 1,
     profession           TEXT,
     activity_profile     TEXT,
+    archetype            TEXT DEFAULT NULL,
     last_active_day      INTEGER
 );
 
@@ -58,135 +60,135 @@ CREATE TABLE user_mgmt (
 -- Social interactions
 -- -----------------------------
 CREATE TABLE follow (
-    id          SERIAL PRIMARY KEY,
-    user_id     INTEGER NOT NULL REFERENCES user_mgmt(id) ON DELETE CASCADE,
-    follower_id INTEGER NOT NULL REFERENCES user_mgmt(id) ON DELETE CASCADE,
+    id          VARCHAR(36) PRIMARY KEY,
+    user_id     VARCHAR(36) NOT NULL REFERENCES user_mgmt(id) ON DELETE CASCADE,
+    follower_id VARCHAR(36) NOT NULL REFERENCES user_mgmt(id) ON DELETE CASCADE,
     action      TEXT,
-    round       INTEGER
+    round       VARCHAR(36)
 );
 
 CREATE TABLE recommendations (
-    id       SERIAL PRIMARY KEY,
-    user_id  INTEGER NOT NULL REFERENCES user_mgmt(id) ON DELETE CASCADE,
+    id       VARCHAR(36) PRIMARY KEY,
+    user_id  VARCHAR(36) NOT NULL REFERENCES user_mgmt(id) ON DELETE CASCADE,
     post_ids TEXT,
-    round    INTEGER NOT NULL REFERENCES rounds(id) ON DELETE CASCADE
+    round    VARCHAR(36) NOT NULL REFERENCES rounds(id) ON DELETE CASCADE
 );
 
 CREATE TABLE user_interest (
-    id          SERIAL PRIMARY KEY,
-    user_id     INTEGER REFERENCES user_mgmt(id) ON DELETE CASCADE,
-    interest_id INTEGER REFERENCES interests(iid) ON DELETE CASCADE,
-    round_id    INTEGER REFERENCES rounds(id) ON DELETE CASCADE
+    id          VARCHAR(36) PRIMARY KEY,
+    user_id     VARCHAR(36) REFERENCES user_mgmt(id) ON DELETE CASCADE,
+    interest_id VARCHAR(36) REFERENCES interests(iid) ON DELETE CASCADE,
+    round_id    VARCHAR(36) REFERENCES rounds(id) ON DELETE CASCADE
 );
 
 CREATE TABLE voting (
-    vid          SERIAL PRIMARY KEY,
-    round        INTEGER,
-    user_id      INTEGER REFERENCES user_mgmt(id) ON DELETE CASCADE,
+    vid          VARCHAR(36) PRIMARY KEY,
+    round        VARCHAR(36),
+    user_id      VARCHAR(36) REFERENCES user_mgmt(id) ON DELETE CASCADE,
     preference   TEXT,
     content_type TEXT,
-    content_id   INTEGER
+    content_id   VARCHAR(36)
 );
 
 -- -----------------------------
 -- Content sources
 -- -----------------------------
 CREATE TABLE websites (
-    id           SERIAL PRIMARY KEY,
+    id           VARCHAR(36) PRIMARY KEY,
     name         TEXT,
     rss          TEXT,
     leaning      TEXT,
     category     TEXT,
-    last_fetched INTEGER,
+    last_fetched VARCHAR(36),
     country      TEXT,
     language     TEXT
 );
 
 CREATE TABLE articles (
-    id          SERIAL PRIMARY KEY,
+    id          VARCHAR(36) PRIMARY KEY,
     title       TEXT NOT NULL,
     summary     TEXT,
-    website_id  INTEGER NOT NULL REFERENCES websites(id) ON DELETE CASCADE,
-    fetched_on  INTEGER NOT NULL,
+    website_id  VARCHAR(36) NOT NULL REFERENCES websites(id) ON DELETE CASCADE,
+    fetched_on  VARCHAR(36) NOT NULL,
     link        TEXT
 );
 
 CREATE TABLE article_topics (
-    id         SERIAL PRIMARY KEY,
-    article_id INTEGER NOT NULL REFERENCES articles(id) ON DELETE CASCADE,
-    topic_id   INTEGER REFERENCES interests(iid) ON DELETE CASCADE,
+    id         VARCHAR(36) PRIMARY KEY,
+    article_id VARCHAR(36) NOT NULL REFERENCES articles(id) ON DELETE CASCADE,
+    topic_id   VARCHAR(36) REFERENCES interests(iid) ON DELETE CASCADE,
     CONSTRAINT article_topic UNIQUE (article_id, topic_id)
 );
 
 CREATE TABLE images (
-    id          SERIAL PRIMARY KEY,
+    id          VARCHAR(36) PRIMARY KEY,
     url         TEXT,
     description TEXT,
-    article_id  INTEGER REFERENCES articles(id) ON DELETE CASCADE
+    article_id  VARCHAR(36) REFERENCES articles(id) ON DELETE CASCADE
 );
 
 -- -----------------------------
 -- Posts and interactions
 -- -----------------------------
 CREATE TABLE post (
-    id             SERIAL PRIMARY KEY,
+    id             VARCHAR(36) PRIMARY KEY,
     tweet          TEXT NOT NULL,
     post_img       VARCHAR(20),
-    user_id        INTEGER NOT NULL REFERENCES user_mgmt(id) ON DELETE CASCADE,
-    comment_to     INTEGER DEFAULT -1,
-    thread_id      INTEGER,
-    round          INTEGER REFERENCES rounds(id) ON DELETE CASCADE,
-    news_id        INTEGER DEFAULT -1 REFERENCES articles(id) ON DELETE CASCADE,
-    shared_from    INTEGER DEFAULT -1,
-    image_id       INTEGER REFERENCES images(id) ON DELETE CASCADE,
+    user_id        VARCHAR(36) NOT NULL REFERENCES user_mgmt(id) ON DELETE CASCADE,
+    comment_to     VARCHAR(36),
+    thread_id      VARCHAR(36),
+    round          VARCHAR(36) REFERENCES rounds(id) ON DELETE CASCADE,
+    news_id        VARCHAR(36) REFERENCES articles(id) ON DELETE CASCADE,
+    shared_from    VARCHAR(36),
+    image_id       VARCHAR(36) REFERENCES images(id) ON DELETE CASCADE,
     reaction_count INTEGER DEFAULT 0
 );
 
 CREATE TABLE mentions (
-    id        SERIAL PRIMARY KEY,
-    user_id   INTEGER REFERENCES user_mgmt(id) ON DELETE CASCADE,
-    post_id   INTEGER REFERENCES post(id) ON DELETE CASCADE,
-    round     INTEGER,
+    id        VARCHAR(36) PRIMARY KEY,
+    user_id   VARCHAR(36) REFERENCES user_mgmt(id) ON DELETE CASCADE,
+    post_id   VARCHAR(36) REFERENCES post(id) ON DELETE CASCADE,
+    round     VARCHAR(36),
     answered  INTEGER DEFAULT 0
 );
 
 CREATE TABLE post_emotions (
-    id         SERIAL PRIMARY KEY,
-    post_id    INTEGER REFERENCES post(id) ON DELETE CASCADE,
-    emotion_id INTEGER REFERENCES emotions(id) ON DELETE CASCADE
+    id         VARCHAR(36) PRIMARY KEY,
+    post_id    VARCHAR(36) REFERENCES post(id) ON DELETE CASCADE,
+    emotion_id VARCHAR(36) REFERENCES emotions(id) ON DELETE CASCADE
 );
 
 CREATE TABLE post_hashtags (
-    id         SERIAL PRIMARY KEY,
-    post_id    INTEGER REFERENCES post(id) ON DELETE CASCADE,
-    hashtag_id INTEGER REFERENCES hashtags(id) ON DELETE CASCADE
+    id         VARCHAR(36) PRIMARY KEY,
+    post_id    VARCHAR(36) REFERENCES post(id) ON DELETE CASCADE,
+    hashtag_id VARCHAR(36) REFERENCES hashtags(id) ON DELETE CASCADE
 );
 
 CREATE TABLE post_sentiment (
-    id              SERIAL PRIMARY KEY,
-    post_id         INTEGER NOT NULL REFERENCES post(id) ON DELETE CASCADE,
+    id              VARCHAR(36) PRIMARY KEY,
+    post_id         VARCHAR(36) NOT NULL REFERENCES post(id) ON DELETE CASCADE,
     neg             REAL,
     pos             REAL,
     neu             REAL,
     compound        REAL,
-    user_id         INTEGER NOT NULL REFERENCES user_mgmt(id) ON DELETE CASCADE,
-    round           INTEGER NOT NULL REFERENCES rounds(id) ON DELETE CASCADE,
+    user_id         VARCHAR(36) NOT NULL REFERENCES user_mgmt(id) ON DELETE CASCADE,
+    round           VARCHAR(36) NOT NULL REFERENCES rounds(id) ON DELETE CASCADE,
     sentiment_parent TEXT,
-    topic_id        INTEGER NOT NULL REFERENCES interests(iid) ON DELETE CASCADE,
+    topic_id        VARCHAR(36) NOT NULL REFERENCES interests(iid) ON DELETE CASCADE,
     is_post         INTEGER NOT NULL DEFAULT 0,
     is_comment      INTEGER NOT NULL DEFAULT 0,
     is_reaction     INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE TABLE post_topics (
-    id       SERIAL PRIMARY KEY,
-    post_id  INTEGER REFERENCES post(id) ON DELETE CASCADE,
-    topic_id INTEGER REFERENCES interests(iid) ON DELETE CASCADE
+    id       VARCHAR(36) PRIMARY KEY,
+    post_id  VARCHAR(36) REFERENCES post(id) ON DELETE CASCADE,
+    topic_id VARCHAR(36) REFERENCES interests(iid) ON DELETE CASCADE
 );
 
 CREATE TABLE post_toxicity (
-    id                SERIAL PRIMARY KEY,
-    post_id           INTEGER NOT NULL REFERENCES post(id) ON DELETE CASCADE,
+    id                VARCHAR(36) PRIMARY KEY,
+    post_id           VARCHAR(36) NOT NULL REFERENCES post(id) ON DELETE CASCADE,
     toxicity          REAL DEFAULT 0 NOT NULL,
     severe_toxicity   REAL DEFAULT 0,
     identity_attack   REAL DEFAULT 0,
@@ -198,11 +200,11 @@ CREATE TABLE post_toxicity (
 );
 
 CREATE TABLE reactions (
-    id      SERIAL PRIMARY KEY,
-    post_id INTEGER REFERENCES post(id) ON DELETE CASCADE,
-    user_id INTEGER REFERENCES user_mgmt(id) ON DELETE CASCADE,
+    id      VARCHAR(36) PRIMARY KEY,
+    post_id VARCHAR(36) REFERENCES post(id) ON DELETE CASCADE,
+    user_id VARCHAR(36) REFERENCES user_mgmt(id) ON DELETE CASCADE,
     type    TEXT,
-    round   INTEGER REFERENCES rounds(id) ON DELETE CASCADE
+    round   VARCHAR(36) REFERENCES rounds(id) ON DELETE CASCADE
 );
 
 -- -----------------------------
