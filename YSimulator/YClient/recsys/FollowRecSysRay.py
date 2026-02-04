@@ -94,9 +94,7 @@ class CommonNeighborsFollowRecSys(FollowRecSysRay):
     """Common neighbors follow recommendation system."""
 
     def __init__(self, n_neighbors=10, leaning_bias=1):
-        super().__init__(
-            mode="CommonNeighbors", n_neighbors=n_neighbors, leaning_bias=leaning_bias
-        )
+        super().__init__(mode="CommonNeighbors", n_neighbors=n_neighbors, leaning_bias=leaning_bias)
 
 
 class JaccardFollowRecSys(FollowRecSysRay):

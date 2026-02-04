@@ -30,10 +30,19 @@ from YSimulator.YClient.actions.llm_actions import (
 def mock_ollama_llm():
     """Create a mock LLM that behaves like Ollama (non-vLLM batching)."""
     # Use spec=[] to prevent auto-creation of attributes like generate_post_batch
-    mock = MagicMock(spec=['generate_post', 'decide_reaction', 'generate_read_reaction', 
-                           'generate_reply_to_mention', 'generate_follow_decision', 
-                           'generate_image_post', 'generate_comment', 
-                           'decide_search_action', '__class__'])
+    mock = MagicMock(
+        spec=[
+            "generate_post",
+            "decide_reaction",
+            "generate_read_reaction",
+            "generate_reply_to_mention",
+            "generate_follow_decision",
+            "generate_image_post",
+            "generate_comment",
+            "decide_search_action",
+            "__class__",
+        ]
+    )
     # Ensure the mock is not detected as a load balancer
     mock.__class__.__name__ = "LLMService"
     return mock

@@ -135,7 +135,9 @@ class ReverseChronoFollowers(ContentRecSys):
             followers_ratio (float, optional): Proportion of posts from followed users.
                                               Defaults to 0.6.
         """
-        super().__init__(mode="ReverseChronoFollowers", n_posts=n_posts, followers_ratio=followers_ratio)
+        super().__init__(
+            mode="ReverseChronoFollowers", n_posts=n_posts, followers_ratio=followers_ratio
+        )
 
 
 class ReverseChronoFollowersPopularity(ContentRecSys):
@@ -155,7 +157,9 @@ class ReverseChronoFollowersPopularity(ContentRecSys):
                                               Defaults to 0.6.
         """
         super().__init__(
-            mode="ReverseChronoFollowersPopularity", n_posts=n_posts, followers_ratio=followers_ratio
+            mode="ReverseChronoFollowersPopularity",
+            n_posts=n_posts,
+            followers_ratio=followers_ratio,
         )
 
 

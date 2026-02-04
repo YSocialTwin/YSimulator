@@ -20,15 +20,15 @@ def mock_ray_remote_for_server_tests():
     """Patch ray.remote ONLY for this test module."""
     # Import ray here to ensure we're patching the right thing
     import ray
-    
+
     # Store original
     original_remote = ray.remote
-    
+
     # Replace with identity function
     ray.remote = lambda x: x
-    
+
     yield
-    
+
     # Restore original
     ray.remote = original_remote
 

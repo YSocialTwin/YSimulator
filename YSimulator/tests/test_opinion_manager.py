@@ -44,7 +44,7 @@ def mock_server():
 def mock_llm_manager():
     """Create a mock LLM manager."""
     # Use spec to prevent auto-creation of attributes
-    llm = Mock(spec=['infer_article_opinion', '__class__'])
+    llm = Mock(spec=["infer_article_opinion", "__class__"])
     llm.__class__.__name__ = "LLMManager"
     return llm
 

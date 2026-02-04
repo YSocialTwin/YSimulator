@@ -103,7 +103,7 @@ class CommentGenerator(BaseActionGenerator):
             if post_data:
                 # Handle None value explicitly - .get() returns None if key exists with None value
                 post_content = post_data.get("tweet") or post_data.get("text") or ""
-                
+
                 # Log what we got for debugging
                 self.context.logger.debug(
                     f"Post {target_post} data keys: {list(post_data.keys())}, "
@@ -111,7 +111,7 @@ class CommentGenerator(BaseActionGenerator):
                     f"text value: {repr(post_data.get('text'))}, "
                     f"final content length: {len(post_content) if post_content else 0}"
                 )
-                
+
                 # Validate post content is not empty
                 if not post_content or not post_content.strip():
                     self.context.logger.warning(

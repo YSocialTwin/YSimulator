@@ -150,7 +150,7 @@ class AgentSelector:
         # Sample a topic from agent's interests if available
         selected_topic = None
         topics, counts = validate_and_extract_interests_func(agent.interests)
-        
+
         # INFO: Log when agent has no interests (this is expected per INTERESTS.md)
         if not topics or not counts:
             self.logger.info(

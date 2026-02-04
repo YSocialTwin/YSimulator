@@ -69,8 +69,15 @@ class TestLLMActionGeneration:
     def mock_llm_handle(self):
         """Create a mock LLM handle for testing."""
         # Use spec to prevent auto-creation of vLLM batch methods
-        mock = Mock(spec=['generate_post', 'decide_reaction', 'generate_read_reaction', 
-                         'generate_follow_decision', '__class__'])
+        mock = Mock(
+            spec=[
+                "generate_post",
+                "decide_reaction",
+                "generate_read_reaction",
+                "generate_follow_decision",
+                "__class__",
+            ]
+        )
         mock.__class__.__name__ = "LLMService"
         mock.generate_post = Mock()
         mock.generate_post.remote = Mock(return_value="mock_object_ref")

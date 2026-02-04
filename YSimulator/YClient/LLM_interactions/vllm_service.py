@@ -209,44 +209,44 @@ class VLLMService:
                 logger.warning("[vLLM] Vision model functionality will be disabled")
                 self.llm_v = None
                 self.sampling_params_v = None
-        
+
         # Set up prompt logging if enabled
         if logging_config is None:
             logging_config = {}
-        
+
         enable_prompt_log = logging_config.get("enable_prompt_log", False)
         self.prompt_logger = None
-        
+
         if enable_prompt_log:
             # Set up prompt logger with file handler
             import os
             from logging.handlers import RotatingFileHandler
             from pathlib import Path
-            
+
             # Get log directory from logging_config or use default
             log_dir = logging_config.get("log_dir", "./logs")
             log_dir = Path(log_dir)
             log_dir.mkdir(exist_ok=True)
-            
+
             # Create prompt logger
             self.prompt_logger = logging.getLogger(f"{logger.name}.prompts")
             self.prompt_logger.setLevel(logging.DEBUG)
             self.prompt_logger.propagate = False
-            
+
             # Only add handler if it doesn't exist
             if not self.prompt_logger.handlers:
                 prompt_log_file = log_dir / "vllm_prompts.log"
-                
+
                 # Create rotating file handler
                 prompt_handler = RotatingFileHandler(
                     prompt_log_file, maxBytes=50 * 1024 * 1024, backupCount=3
                 )
                 prompt_handler.setLevel(logging.DEBUG)
-                
+
                 # Create formatter
                 import json
                 from datetime import datetime
-                
+
                 class PromptJsonFormatter(logging.Formatter):
                     def format(self, record):
                         log_data = {
@@ -257,15 +257,17 @@ class VLLMService:
                         if hasattr(record, "extra_data"):
                             log_data.update(record.extra_data)
                         return json.dumps(log_data, indent=2)
-                
+
                 prompt_handler.setFormatter(PromptJsonFormatter())
                 self.prompt_logger.addHandler(prompt_handler)
                 logger.info("Prompt logging enabled in vLLM service")
 
-    def _log_prompt(self, method_name: str, system_msg: str, user_msg: str, agent_attrs: dict = None):
+    def _log_prompt(
+        self, method_name: str, system_msg: str, user_msg: str, agent_attrs: dict = None
+    ):
         """
         Log the prompt details for debugging.
-        
+
         Args:
             method_name: Name of the method generating the prompt
             system_msg: System message content
@@ -280,14 +282,20 @@ class VLLMService:
             }
             if agent_attrs:
                 log_data["agent_attrs"] = {
-                    k: v for k, v in agent_attrs.items() 
-                    if k in ["name", "topic", "topic_opinion", "topic_opinion_value", 
-                            "post_topics", "post_opinions", "cluster_id"]
+                    k: v
+                    for k, v in agent_attrs.items()
+                    if k
+                    in [
+                        "name",
+                        "topic",
+                        "topic_opinion",
+                        "topic_opinion_value",
+                        "post_topics",
+                        "post_opinions",
+                        "cluster_id",
+                    ]
                 }
-            self.prompt_logger.debug(
-                f"LLM Prompt - {method_name}",
-                extra={"extra_data": log_data}
-            )
+            self.prompt_logger.debug(f"LLM Prompt - {method_name}", extra={"extra_data": log_data})
 
     def _build_persona(self, cluster_id: int, agent_attrs: dict = None) -> str:
         """
@@ -351,7 +359,7 @@ class VLLMService:
 
             # Get topic if available
             topic = agent_attrs.get("topic") if agent_attrs else None
-            
+
             # DEBUG: Log if topic is unexpectedly missing
             # Note: null topic is EXPECTED when agent has no interests (per INTERESTS.md)
             if not topic and agent_attrs and "topic" in agent_attrs:
@@ -369,7 +377,11 @@ class VLLMService:
             user_template = self.prompts_config["generate_post"]["user_template"]
 
             # Format templates
-            system_msg = system_template.format(persona=persona, toxicity=toxicity) if system_template else ""
+            system_msg = (
+                system_template.format(persona=persona, toxicity=toxicity)
+                if system_template
+                else ""
+            )
 
             # Build topic instruction with opinion if available
             if topic and topic_opinion:
@@ -385,7 +397,7 @@ class VLLMService:
                 toxicity=toxicity,
                 day=day,
                 slot=slot,
-                topic_instruction=topic_instruction
+                topic_instruction=topic_instruction,
             )
 
             # Log the prompt for debugging
@@ -446,7 +458,11 @@ class VLLMService:
                     user_template = self.prompts_config["generate_post"]["user_template"]
 
                     # Format templates
-                    system_msg = system_template.format(persona=persona, toxicity=toxicity) if system_template else ""
+                    system_msg = (
+                        system_template.format(persona=persona, toxicity=toxicity)
+                        if system_template
+                        else ""
+                    )
 
                     # Build topic instruction
                     if topic and topic_opinion:
@@ -461,7 +477,7 @@ class VLLMService:
                         toxicity=toxicity,
                         day=day,
                         slot=slot,
-                        topic_instruction=topic_instruction
+                        topic_instruction=topic_instruction,
                     )
 
                     # Create formatted prompt
@@ -488,14 +504,20 @@ class VLLMService:
         try:
             # Build persona from cluster_id
             persona = self._build_persona(cluster_id, None)
-            
+
             # Get prompt templates from configuration
             system_template = self.prompts_config["decide_reaction"]["system_template"]
             user_template = self.prompts_config["decide_reaction"]["user_template"]
 
             # Format templates
-            system_msg = system_template.format(cluster_id=cluster_id, persona=persona) if system_template else ""
-            user_msg = user_template.format(cluster_id=cluster_id, persona=persona, post_content=post_content)
+            system_msg = (
+                system_template.format(cluster_id=cluster_id, persona=persona)
+                if system_template
+                else ""
+            )
+            user_msg = user_template.format(
+                cluster_id=cluster_id, persona=persona, post_content=post_content
+            )
 
             # Create formatted prompt
             prompt = self._format_prompt(system_msg, user_msg)
@@ -742,7 +764,9 @@ class VLLMService:
             )
 
         # Format templates
-        system_msg = system_template.format(persona=persona, toxicity=toxicity) if system_template else ""
+        system_msg = (
+            system_template.format(persona=persona, toxicity=toxicity) if system_template else ""
+        )
         user_msg = user_template.format(
             persona=persona,
             toxicity=toxicity,
@@ -850,7 +874,11 @@ class VLLMService:
                         )
 
                     # Format templates
-                    system_msg = system_template.format(persona=persona, toxicity=toxicity) if system_template else ""
+                    system_msg = (
+                        system_template.format(persona=persona, toxicity=toxicity)
+                        if system_template
+                        else ""
+                    )
                     user_msg = user_template.format(
                         persona=persona,
                         toxicity=toxicity,
@@ -971,12 +999,11 @@ class VLLMService:
         system_template = self.prompts_config["generate_share_commentary"]["system_template"]
         user_template = self.prompts_config["generate_share_commentary"]["user_template"]
 
-        system_msg = system_template.format(persona=persona, toxicity=toxicity) if system_template else ""
+        system_msg = (
+            system_template.format(persona=persona, toxicity=toxicity) if system_template else ""
+        )
         user_msg = user_template.format(
-            persona=persona,
-            toxicity=toxicity,
-            author_name=author_name,
-            post_content=post_content
+            persona=persona, toxicity=toxicity, author_name=author_name, post_content=post_content
         )
 
         if opinion_instruction:

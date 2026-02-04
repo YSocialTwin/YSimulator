@@ -372,16 +372,16 @@ class SQLPostRepository(PostRepository):
         try:
             # Generate post ID if not provided
             post_id = post_data.get("id") or str(uuid.uuid4())
-            
+
             # Determine comment_to value
             comment_to = post_data.get("parent_post") or post_data.get("comment_to", -1)
-            
+
             # Get thread_id from data, or set to post's own ID if this is a root post (not a comment)
             thread_id = post_data.get("root_post") or post_data.get("thread_id")
             if not thread_id and comment_to in (-1, "-1", None):
                 # This is a root post (not a comment), so it starts its own thread
                 thread_id = post_id
-            
+
             # Map common field names to actual model field names
             mapped_data = {
                 "id": post_id,
