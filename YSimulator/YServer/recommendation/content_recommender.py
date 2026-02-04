@@ -169,6 +169,14 @@ class ContentRecommender:
             return content_recsys_redis.recommend_similar_users_react_redis(**common_kwargs)
         elif mode == "SimilarUsersPosts":
             return content_recsys_redis.recommend_similar_users_posts_redis(**common_kwargs)
+        elif mode == "CollaborativeUserUser":
+            return content_recsys_redis.recommend_collaborative_user_user_redis(**common_kwargs)
+        elif mode == "CollaborativeItemItem":
+            return content_recsys_redis.recommend_collaborative_item_item_redis(**common_kwargs)
+        elif mode == "ContentBasedFeatures":
+            return content_recsys_redis.recommend_content_based_features_redis(**common_kwargs)
+        elif mode == "ContentBasedVector":
+            return content_recsys_redis.recommend_content_based_vector_redis(**common_kwargs)
         else:
             # Default: random ordering
             return content_recsys_redis.recommend_random_redis(**common_kwargs)
@@ -221,6 +229,22 @@ class ContentRecommender:
                 )
             elif mode == "SimilarUsersPosts":
                 return content_recsys_db.recommend_similar_users_posts(
+                    session, agent_id, visibility_day, visibility_hour, limit
+                )
+            elif mode == "CollaborativeUserUser":
+                return content_recsys_db.recommend_collaborative_user_user(
+                    session, agent_id, visibility_day, visibility_hour, limit
+                )
+            elif mode == "CollaborativeItemItem":
+                return content_recsys_db.recommend_collaborative_item_item(
+                    session, agent_id, visibility_day, visibility_hour, limit
+                )
+            elif mode == "ContentBasedFeatures":
+                return content_recsys_db.recommend_content_based_features(
+                    session, agent_id, visibility_day, visibility_hour, limit
+                )
+            elif mode == "ContentBasedVector":
+                return content_recsys_db.recommend_content_based_vector(
                     session, agent_id, visibility_day, visibility_hour, limit
                 )
             else:

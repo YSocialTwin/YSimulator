@@ -675,3 +675,524 @@ def recommend_random_redis(
         return [p["id"] for p in selected]
     else:
         return [p["id"] for p in valid_posts_with_data]
+
+
+def recommend_collaborative_user_user_redis(
+    valid_posts_with_data: List[Dict[str, Any]],
+    limit: int,
+    agent_id: str,
+    all_post_ids: List[str],
+    posts_data: List[Dict[str, bytes]],
+    redis_client,
+    redis_key_fn,
+    db_engine,
+    logger,
+    **kwargs,
+) -> List[str]:
+    """
+    Collaborative Filtering - User-User (Redis).
+    Finds users with high overlap in liked posts and recommends their liked posts.
+
+    Args:
+        valid_posts_with_data: List of post dictionaries
+        limit: Number of posts to recommend
+        agent_id: UUID of agent requesting recommendations
+        all_post_ids: All post IDs from Redis
+        posts_data: All post data from Redis
+        redis_client: Redis client instance
+        redis_key_fn: Function to generate Redis keys
+        db_engine: Database engine for SQL fallback
+        logger: Logger instance
+
+    Returns:
+        List of post IDs
+    """
+    # Try to get liked posts from Redis
+    agent_likes_key = redis_key_fn("user", agent_id) + ":likes"
+    if redis_client.exists(agent_likes_key):
+        agent_likes = redis_client.smembers(agent_likes_key)
+
+        if not agent_likes:
+            # No likes yet, fall back to recent posts
+            return [p["id"] for p in valid_posts_with_data[:limit]]
+
+        # Find similar users based on like overlap
+        user_ids_key = redis_key_fn("user_mgmt", "ids")
+        all_user_ids = (
+            redis_client.smembers(user_ids_key) if redis_client.exists(user_ids_key) else []
+        )
+
+        # Calculate overlap for each user
+        user_similarities = []
+        for uid in all_user_ids:
+            if uid != agent_id:
+                user_likes_key = redis_key_fn("user", uid) + ":likes"
+                if redis_client.exists(user_likes_key):
+                    user_likes = redis_client.smembers(user_likes_key)
+                    overlap = len(agent_likes & user_likes)
+                    if overlap > 0:
+                        user_similarities.append({"user_id": uid, "overlap": overlap})
+
+        # Sort by overlap
+        user_similarities.sort(key=lambda x: -x["overlap"])
+        similar_users = {u["user_id"] for u in user_similarities[:50]}  # Top 50
+
+        # Get posts liked by similar users
+        posts_with_scores = []
+        for post in valid_posts_with_data:
+            if post["id"] not in agent_likes:  # Not already liked
+                post_reactions_key = redis_key_fn("post", post["id"]) + ":reactions"
+                if redis_client.exists(post_reactions_key):
+                    reaction_user_ids = redis_client.smembers(post_reactions_key)
+                    similar_user_likes = len(similar_users & reaction_user_ids)
+                    if similar_user_likes > 0:
+                        posts_with_scores.append(
+                            {"id": post["id"], "index": post["index"], "score": similar_user_likes}
+                        )
+
+        sorted_posts = sorted(posts_with_scores, key=lambda x: (-x["score"], x["index"]))
+        post_ids = [p["id"] for p in sorted_posts[:limit]]
+
+        # Fill with recent posts if needed
+        if len(post_ids) < limit:
+            additional = [p["id"] for p in valid_posts_with_data if p["id"] not in post_ids]
+            post_ids.extend(additional[: limit - len(post_ids)])
+
+        return post_ids
+    else:
+        # Fallback to SQLAlchemy ORM
+        logger.info(
+            "Mode collaborative_user_user - Redis cache not available yet, using SQLAlchemy ORM"
+        )
+        from sqlalchemy import desc
+        from sqlalchemy.orm import Session
+
+        with Session(db_engine) as session:
+            from YSimulator.YServer.classes.models import Post
+
+            # Get agent's liked posts
+            agent_likes_query = session.query(Reaction.post_id).filter(
+                Reaction.user_id == agent_id, Reaction.type == "like"
+            )
+            agent_likes_ids = [row[0] for row in agent_likes_query.all()]
+
+            if not agent_likes_ids:
+                # No likes, return recent posts
+                post_ids = [p["id"] for p in valid_posts_with_data[:limit]]
+            else:
+                # Find similar users
+                similar_users_query = (
+                    session.query(Reaction.user_id)
+                    .filter(
+                        Reaction.post_id.in_(agent_likes_ids),
+                        Reaction.user_id != agent_id,
+                        Reaction.type == "like",
+                    )
+                    .distinct()
+                    .limit(50)
+                )
+                similar_user_ids = [row[0] for row in similar_users_query.all()]
+
+                if similar_user_ids:
+                    # Get posts liked by similar users
+                    posts_query = (
+                        session.query(Reaction.post_id)
+                        .join(Post, Reaction.post_id == Post.id)
+                        .filter(
+                            Reaction.user_id.in_(similar_user_ids),
+                            Reaction.type == "like",
+                            Post.user_id != agent_id,
+                            Reaction.post_id.notin_(agent_likes_ids),
+                        )
+                        .distinct()
+                        .order_by(desc(Reaction.post_id))
+                        .limit(limit)
+                    )
+                    sql_post_ids = [row[0] for row in posts_query.all()]
+                    post_ids = [pid for pid in sql_post_ids if pid in all_post_ids][:limit]
+                else:
+                    post_ids = []
+
+                # Fill with recent posts if needed
+                if len(post_ids) < limit:
+                    additional = [p["id"] for p in valid_posts_with_data if p["id"] not in post_ids]
+                    post_ids.extend(additional[: limit - len(post_ids)])
+
+        return post_ids
+
+
+def recommend_collaborative_item_item_redis(
+    valid_posts_with_data: List[Dict[str, Any]],
+    limit: int,
+    agent_id: str,
+    all_post_ids: List[str],
+    posts_data: List[Dict[str, bytes]],
+    redis_client,
+    redis_key_fn,
+    db_engine,
+    logger,
+    **kwargs,
+) -> List[str]:
+    """
+    Collaborative Filtering - Item-Item (Redis).
+    Finds posts often liked together by the same groups.
+
+    Args:
+        valid_posts_with_data: List of post dictionaries
+        limit: Number of posts to recommend
+        agent_id: UUID of agent requesting recommendations
+        all_post_ids: All post IDs from Redis
+        posts_data: All post data from Redis
+        redis_client: Redis client instance
+        redis_key_fn: Function to generate Redis keys
+        db_engine: Database engine for SQL fallback
+        logger: Logger instance
+
+    Returns:
+        List of post IDs
+    """
+    # Try to get liked posts from Redis
+    agent_likes_key = redis_key_fn("user", agent_id) + ":likes"
+    if redis_client.exists(agent_likes_key):
+        agent_likes = redis_client.smembers(agent_likes_key)
+
+        if not agent_likes:
+            # No likes yet, fall back to recent posts
+            return [p["id"] for p in valid_posts_with_data[:limit]]
+
+        # For each post the agent liked, find users who also liked it
+        # Then find other posts those users liked (co-occurrence)
+        post_co_occurrences = {}
+
+        for liked_post_id in agent_likes:
+            # Get users who liked this post
+            liked_post_reactions_key = redis_key_fn("post", liked_post_id) + ":reactions"
+            if redis_client.exists(liked_post_reactions_key):
+                users_who_liked = redis_client.smembers(liked_post_reactions_key)
+
+                # Find other posts these users liked
+                for user_id in users_who_liked:
+                    if user_id != agent_id:
+                        user_likes_key = redis_key_fn("user", user_id) + ":likes"
+                        if redis_client.exists(user_likes_key):
+                            user_other_likes = redis_client.smembers(user_likes_key)
+                            for other_post_id in user_other_likes:
+                                if other_post_id not in agent_likes:
+                                    post_co_occurrences[other_post_id] = (
+                                        post_co_occurrences.get(other_post_id, 0) + 1
+                                    )
+
+        # Score valid posts based on co-occurrence
+        posts_with_scores = []
+        for post in valid_posts_with_data:
+            if post["id"] in post_co_occurrences:
+                posts_with_scores.append(
+                    {
+                        "id": post["id"],
+                        "index": post["index"],
+                        "score": post_co_occurrences[post["id"]],
+                    }
+                )
+
+        sorted_posts = sorted(posts_with_scores, key=lambda x: (-x["score"], x["index"]))
+        post_ids = [p["id"] for p in sorted_posts[:limit]]
+
+        # Fill with recent posts if needed
+        if len(post_ids) < limit:
+            additional = [p["id"] for p in valid_posts_with_data if p["id"] not in post_ids]
+            post_ids.extend(additional[: limit - len(post_ids)])
+
+        return post_ids
+    else:
+        # Fallback to SQLAlchemy ORM
+        logger.info(
+            "Mode collaborative_item_item - Redis cache not available yet, using SQLAlchemy ORM"
+        )
+        from sqlalchemy import desc
+        from sqlalchemy.orm import Session, aliased
+
+        with Session(db_engine) as session:
+            from YSimulator.YServer.classes.models import Post
+
+            # Get agent's liked posts
+            agent_likes_query = session.query(Reaction.post_id).filter(
+                Reaction.user_id == agent_id, Reaction.type == "like"
+            )
+            agent_likes_ids = [row[0] for row in agent_likes_query.all()]
+
+            if not agent_likes_ids:
+                post_ids = [p["id"] for p in valid_posts_with_data[:limit]]
+            else:
+                # Find posts liked by users who liked the same posts as agent
+                Reaction2 = aliased(Reaction)
+                posts_query = (
+                    session.query(Reaction2.post_id)
+                    .join(Reaction, Reaction.user_id == Reaction2.user_id)
+                    .join(Post, Reaction2.post_id == Post.id)
+                    .filter(
+                        Reaction.post_id.in_(agent_likes_ids),
+                        Reaction.type == "like",
+                        Reaction2.type == "like",
+                        Reaction2.user_id != agent_id,
+                        Post.user_id != agent_id,
+                        Reaction2.post_id.notin_(agent_likes_ids),
+                    )
+                    .distinct()
+                    .order_by(desc(Reaction2.post_id))
+                    .limit(limit)
+                )
+                sql_post_ids = [row[0] for row in posts_query.all()]
+                post_ids = [pid for pid in sql_post_ids if pid in all_post_ids][:limit]
+
+                # Fill with recent posts if needed
+                if len(post_ids) < limit:
+                    additional = [p["id"] for p in valid_posts_with_data if p["id"] not in post_ids]
+                    post_ids.extend(additional[: limit - len(post_ids)])
+
+        return post_ids
+
+
+def recommend_content_based_features_redis(
+    valid_posts_with_data: List[Dict[str, Any]],
+    limit: int,
+    agent_id: str,
+    all_post_ids: List[str],
+    posts_data: List[Dict[str, bytes]],
+    redis_client,
+    redis_key_fn,
+    db_engine,
+    logger,
+    **kwargs,
+) -> List[str]:
+    """
+    Content Based Filtering - Feature Extraction (Redis).
+    Analyzes attributes of content the user has interacted with (hashtags, topics).
+
+    Args:
+        valid_posts_with_data: List of post dictionaries
+        limit: Number of posts to recommend
+        agent_id: UUID of agent requesting recommendations
+        all_post_ids: All post IDs from Redis
+        posts_data: All post data from Redis
+        redis_client: Redis client instance
+        redis_key_fn: Function to generate Redis keys
+        db_engine: Database engine for SQL fallback
+        logger: Logger instance
+
+    Returns:
+        List of post IDs
+    """
+    # Try to get liked posts from Redis
+    agent_likes_key = redis_key_fn("user", agent_id) + ":likes"
+    if redis_client.exists(agent_likes_key):
+        agent_likes = redis_client.smembers(agent_likes_key)
+
+        if not agent_likes:
+            # No likes yet, fall back to recent posts
+            return [p["id"] for p in valid_posts_with_data[:limit]]
+
+        # Extract topics from liked posts
+        liked_topics = set()
+        for liked_post_id in agent_likes:
+            post_topics_key = redis_key_fn("post", liked_post_id) + ":topics"
+            if redis_client.exists(post_topics_key):
+                post_topics = redis_client.smembers(post_topics_key)
+                liked_topics.update(post_topics)
+
+        if not liked_topics:
+            # No topic data available
+            return [p["id"] for p in valid_posts_with_data[:limit]]
+
+        # Score posts by topic match
+        posts_with_scores = []
+        for post in valid_posts_with_data:
+            if post["id"] not in agent_likes:  # Not already liked
+                post_topics_key = redis_key_fn("post", post["id"]) + ":topics"
+                if redis_client.exists(post_topics_key):
+                    post_topics = redis_client.smembers(post_topics_key)
+                    topic_match = len(liked_topics & post_topics)
+                    if topic_match > 0:
+                        posts_with_scores.append(
+                            {"id": post["id"], "index": post["index"], "score": topic_match}
+                        )
+
+        sorted_posts = sorted(posts_with_scores, key=lambda x: (-x["score"], x["index"]))
+        post_ids = [p["id"] for p in sorted_posts[:limit]]
+
+        # Fill with recent posts if needed
+        if len(post_ids) < limit:
+            additional = [p["id"] for p in valid_posts_with_data if p["id"] not in post_ids]
+            post_ids.extend(additional[: limit - len(post_ids)])
+
+        return post_ids
+    else:
+        # Fallback to SQLAlchemy ORM
+        logger.info(
+            "Mode content_based_features - Redis cache not available yet, using SQLAlchemy ORM"
+        )
+        from sqlalchemy import desc
+        from sqlalchemy.orm import Session
+
+        with Session(db_engine) as session:
+            from YSimulator.YServer.classes.models import Post
+
+            # Get topics from liked posts
+            liked_topics_query = (
+                session.query(PostTopic.topic_id)
+                .join(Reaction, PostTopic.post_id == Reaction.post_id)
+                .filter(Reaction.user_id == agent_id, Reaction.type == "like")
+                .distinct()
+            )
+            liked_topic_ids = [row[0] for row in liked_topics_query.all()]
+
+            if not liked_topic_ids:
+                post_ids = [p["id"] for p in valid_posts_with_data[:limit]]
+            else:
+                # Find posts with matching topics
+                posts_query = (
+                    session.query(PostTopic.post_id)
+                    .join(Post, PostTopic.post_id == Post.id)
+                    .outerjoin(Reaction, Reaction.post_id == Post.id)
+                    .filter(
+                        PostTopic.topic_id.in_(liked_topic_ids),
+                        Post.user_id != agent_id,
+                        Reaction.id.is_(None),
+                    )
+                    .distinct()
+                    .order_by(desc(PostTopic.post_id))
+                    .limit(limit)
+                )
+                sql_post_ids = [row[0] for row in posts_query.all()]
+                post_ids = [pid for pid in sql_post_ids if pid in all_post_ids][:limit]
+
+                # Fill with recent posts if needed
+                if len(post_ids) < limit:
+                    additional = [p["id"] for p in valid_posts_with_data if p["id"] not in post_ids]
+                    post_ids.extend(additional[: limit - len(post_ids)])
+
+        return post_ids
+
+
+def recommend_content_based_vector_redis(
+    valid_posts_with_data: List[Dict[str, Any]],
+    limit: int,
+    agent_id: str,
+    all_post_ids: List[str],
+    posts_data: List[Dict[str, bytes]],
+    redis_client,
+    redis_key_fn,
+    db_engine,
+    logger,
+    **kwargs,
+) -> List[str]:
+    """
+    Content Based Filtering - Vector Space Similarity (Redis).
+    Recommends posts mathematically close to the user's preference vector.
+
+    Args:
+        valid_posts_with_data: List of post dictionaries
+        limit: Number of posts to recommend
+        agent_id: UUID of agent requesting recommendations
+        all_post_ids: All post IDs from Redis
+        posts_data: All post data from Redis
+        redis_client: Redis client instance
+        redis_key_fn: Function to generate Redis keys
+        db_engine: Database engine for SQL fallback
+        logger: Logger instance
+
+    Returns:
+        List of post IDs
+    """
+    # Try to get liked posts from Redis
+    agent_likes_key = redis_key_fn("user", agent_id) + ":likes"
+    if redis_client.exists(agent_likes_key):
+        agent_likes = redis_client.smembers(agent_likes_key)
+
+        if not agent_likes:
+            # No likes yet, fall back to recent posts
+            return [p["id"] for p in valid_posts_with_data[:limit]]
+
+        # Build preference vector: topic -> weight (frequency)
+        preference_vector = {}
+        for liked_post_id in agent_likes:
+            post_topics_key = redis_key_fn("post", liked_post_id) + ":topics"
+            if redis_client.exists(post_topics_key):
+                post_topics = redis_client.smembers(post_topics_key)
+                for topic in post_topics:
+                    preference_vector[topic] = preference_vector.get(topic, 0) + 1
+
+        if not preference_vector:
+            # No topic data available
+            return [p["id"] for p in valid_posts_with_data[:limit]]
+
+        # Calculate similarity score for each post
+        posts_with_scores = []
+        for post in valid_posts_with_data:
+            if post["id"] not in agent_likes:  # Not already liked
+                post_topics_key = redis_key_fn("post", post["id"]) + ":topics"
+                if redis_client.exists(post_topics_key):
+                    post_topics = redis_client.smembers(post_topics_key)
+                    # Calculate dot product (simple similarity)
+                    similarity_score = sum(
+                        preference_vector.get(topic, 0) for topic in post_topics
+                    )
+                    if similarity_score > 0:
+                        posts_with_scores.append(
+                            {"id": post["id"], "index": post["index"], "score": similarity_score}
+                        )
+
+        sorted_posts = sorted(posts_with_scores, key=lambda x: (-x["score"], x["index"]))
+        post_ids = [p["id"] for p in sorted_posts[:limit]]
+
+        # Fill with recent posts if needed
+        if len(post_ids) < limit:
+            additional = [p["id"] for p in valid_posts_with_data if p["id"] not in post_ids]
+            post_ids.extend(additional[: limit - len(post_ids)])
+
+        return post_ids
+    else:
+        # Fallback to SQLAlchemy ORM
+        logger.info(
+            "Mode content_based_vector - Redis cache not available yet, using SQLAlchemy ORM"
+        )
+        from sqlalchemy import desc, func
+        from sqlalchemy.orm import Session
+
+        with Session(db_engine) as session:
+            from YSimulator.YServer.classes.models import Post
+
+            # Build preference vector from liked posts
+            user_topics_query = (
+                session.query(PostTopic.topic_id, func.count(PostTopic.topic_id).label("weight"))
+                .join(Reaction, PostTopic.post_id == Reaction.post_id)
+                .filter(Reaction.user_id == agent_id, Reaction.type == "like")
+                .group_by(PostTopic.topic_id)
+            )
+            user_topics = {row[0]: row[1] for row in user_topics_query.all()}
+
+            if not user_topics:
+                post_ids = [p["id"] for p in valid_posts_with_data[:limit]]
+            else:
+                # Find posts with matching topics, weighted by preference
+                posts_query = (
+                    session.query(PostTopic.post_id)
+                    .join(Post, PostTopic.post_id == Post.id)
+                    .outerjoin(Reaction, Reaction.post_id == Post.id)
+                    .filter(
+                        PostTopic.topic_id.in_(user_topics.keys()),
+                        Post.user_id != agent_id,
+                        Reaction.id.is_(None),
+                    )
+                    .distinct()
+                    .order_by(desc(PostTopic.post_id))
+                    .limit(limit)
+                )
+                sql_post_ids = [row[0] for row in posts_query.all()]
+                post_ids = [pid for pid in sql_post_ids if pid in all_post_ids][:limit]
+
+                # Fill with recent posts if needed
+                if len(post_ids) < limit:
+                    additional = [p["id"] for p in valid_posts_with_data if p["id"] not in post_ids]
+                    post_ids.extend(additional[: limit - len(post_ids)])
+
+        return post_ids
