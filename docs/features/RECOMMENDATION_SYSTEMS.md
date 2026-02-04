@@ -40,7 +40,7 @@ Both systems support **hybrid Redis/SQL backends** with graceful fallback mechan
 
 ### Key Features
 
-- ✅ **10 Content Recommendation Modes**: From simple chronological to complex interest-based
+- ✅ **14 Content Recommendation Modes**: From simple chronological to complex interest-based
 - ✅ **5 Follow Recommendation Modes**: From random to sophisticated social graph algorithms
 - ✅ **Hybrid Backend**: Redis for performance, SQL for complex queries
 - ✅ **Graceful Degradation**: Automatic fallback when Redis data unavailable
@@ -51,7 +51,7 @@ Both systems support **hybrid Redis/SQL backends** with graceful fallback mechan
 
 ## Content Recommendation System
 
-The content recommendation system determines which posts appear in a user's feed. It supports 10 distinct modes that simulate different feed algorithms found in real social media platforms.
+The content recommendation system determines which posts appear in a user's feed. It supports 14 distinct modes that simulate different feed algorithms found in real social media platforms.
 
 ### Recommendation Modes
 
@@ -390,6 +390,126 @@ recommended_posts = matching_posts[:limit]
 
 ---
 
+#### 11. **Collaborative User-User Filtering** (`CollaborativeUserUser`)
+
+**Description:** Finds users with high overlap in liked posts and recommends posts they liked.
+
+**Use Case:** "Users who like the same content as you also liked these posts"
+
+**Algorithm:**
+1. Identify agent's liked posts (reactions with type="LIKE")
+2. Find other users who liked similar posts (calculate overlap score)
+3. Select top 50 most similar users
+4. Recommend posts liked by these similar users
+5. Filter: within temporal window, not own posts, not already reacted to
+
+**Expected Outcomes:**
+- Agent who likes tech posts → Recommends tech posts liked by other tech enthusiasts
+- Agents with similar taste get similar recommendations
+- Creates filter bubbles based on engagement patterns
+- Cold start: Falls back to random if no likes yet (mode shows as "CollaborativeUserUser-Random")
+
+**Characteristics:**
+- Personalized based on behavior
+- Requires user interaction history
+- Works across topics
+- Scales with user base
+
+**Redis Support:** ✅ Full
+**SQL Support:** ✅ Full
+
+---
+
+#### 12. **Collaborative Item-Item Filtering** (`CollaborativeItemItem`)
+
+**Description:** Finds posts that are often liked together by the same groups of users.
+
+**Use Case:** "Posts that are frequently liked together with content you enjoyed"
+
+**Algorithm:**
+1. Identify agent's liked posts
+2. For each liked post, find all users who liked it
+3. Find other posts those users also liked (co-occurrence)
+4. Rank by co-occurrence score (how often posts are liked together)
+5. Filter: within temporal window, not own posts, not already reacted to
+
+**Expected Outcomes:**
+- Agent likes post about "Python" → Recommends posts about "Machine Learning" (often liked together)
+- Discovers related content through user behavior patterns
+- Creates topic clusters based on co-engagement
+- Cold start: Falls back to random if no likes yet (mode shows as "CollaborativeItemItem-Random")
+
+**Characteristics:**
+- Item-centric (post-based)
+- Discovers implicit relationships
+- Works without explicit topics
+- Good for "more like this"
+
+**Redis Support:** ✅ Full
+**SQL Support:** ✅ Full
+
+---
+
+#### 13. **Content-Based Feature Extraction** (`ContentBasedFeatures`)
+
+**Description:** Analyzes topics/hashtags of liked posts and recommends posts with matching topics.
+
+**Use Case:** "New posts about topics you're interested in"
+
+**Algorithm:**
+1. Extract topics from agent's liked posts
+2. Build topic preference profile (list of preferred topics)
+3. Find new posts containing those topics
+4. Rank by number of matching topics
+5. Filter: within temporal window, not own posts, not already reacted to
+
+**Expected Outcomes:**
+- Agent likes posts about #AI and #Tech → Recommends new posts tagged with #AI or #Tech
+- Direct topic matching
+- Transparent recommendations (clear why recommended)
+- Cold start: Falls back to random if no topic preferences yet (mode shows as "ContentBasedFeatures-Random")
+
+**Characteristics:**
+- Explicit feature matching
+- Requires topic/hashtag data
+- No filter bubble from user similarity
+- Interpretable results
+
+**Redis Support:** ✅ Full
+**SQL Support:** ✅ Full
+
+---
+
+#### 14. **Content-Based Vector Space** (`ContentBasedVector`)
+
+**Description:** Uses vector space similarity to recommend posts close to user's preference vector.
+
+**Use Case:** "Posts that match your overall content preference profile"
+
+**Algorithm:**
+1. Build preference vector from liked posts' topics (weighted by frequency)
+2. For each candidate post, create topic vector
+3. Calculate similarity score (dot product of vectors)
+4. Rank posts by similarity to preference vector
+5. Filter: within temporal window, not own posts, not already reacted to
+
+**Expected Outcomes:**
+- Agent with 70% tech, 30% politics preferences → Recommends posts matching this distribution
+- Weighted topic matching (considers relative importance)
+- Smoother recommendations than simple matching
+- Cold start: Falls back to random if no topic preferences yet (mode shows as "ContentBasedVector-Random")
+
+**Characteristics:**
+- Mathematical similarity
+- Weighted topic preferences
+- Sophisticated content matching
+- Handles multi-topic interests
+
+**Redis Support:** ✅ Full
+**SQL Support:** ✅ Full
+
+---
+
 ### Content Recommendation Summary
 
 | Mode | Complexity | Personalization | Redis Support | Primary Signals |
@@ -404,6 +524,10 @@ recommended_posts = matching_posts[:limit]
 | `common_user_interests` | High | User Similarity | 🔄 Ready | User Interests |
 | `similar_users_react` | High | Behavioral | 🔄 Ready | Reactions + Demographics |
 | `similar_users_posts` | Medium | Demographic | 🔄 Ready | Demographics |
+| `CollaborativeUserUser` | High | Behavioral | ✅ Full | User-User Similarity + Likes |
+| `CollaborativeItemItem` | High | Behavioral | ✅ Full | Item-Item Co-occurrence |
+| `ContentBasedFeatures` | High | Content | ✅ Full | Topic Matching |
+| `ContentBasedVector` | High | Content | ✅ Full | Vector Similarity |
 
 ---
 
