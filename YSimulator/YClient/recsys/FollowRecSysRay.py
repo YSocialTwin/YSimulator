@@ -32,7 +32,7 @@ class FollowRecSysRay:
         leaning_bias (int): Political leaning bias factor
     """
 
-    def __init__(self, mode="random", n_neighbors=10, leaning_bias=1):
+    def __init__(self, mode="FollowRecSys", n_neighbors=10, leaning_bias=1):
         """
         Initialize the follow recommendation system.
 
@@ -87,28 +87,28 @@ class RandomFollowRecSys(FollowRecSysRay):
     """Random follow recommendation system."""
 
     def __init__(self, n_neighbors=10, leaning_bias=1):
-        super().__init__(mode="random", n_neighbors=n_neighbors, leaning_bias=leaning_bias)
+        super().__init__(mode="FollowRecSys", n_neighbors=n_neighbors, leaning_bias=leaning_bias)
 
 
 class CommonNeighborsFollowRecSys(FollowRecSysRay):
     """Common neighbors follow recommendation system."""
 
     def __init__(self, n_neighbors=10, leaning_bias=1):
-        super().__init__(mode="common_neighbors", n_neighbors=n_neighbors, leaning_bias=leaning_bias)
+        super().__init__(mode="CommonNeighbors", n_neighbors=n_neighbors, leaning_bias=leaning_bias)
 
 
 class JaccardFollowRecSys(FollowRecSysRay):
     """Jaccard similarity follow recommendation system."""
 
     def __init__(self, n_neighbors=10, leaning_bias=1):
-        super().__init__(mode="jaccard", n_neighbors=n_neighbors, leaning_bias=leaning_bias)
+        super().__init__(mode="Jaccard", n_neighbors=n_neighbors, leaning_bias=leaning_bias)
 
 
 class AdamicAdarFollowRecSys(FollowRecSysRay):
     """Adamic/Adar follow recommendation system."""
 
     def __init__(self, n_neighbors=10, leaning_bias=1):
-        super().__init__(mode="adamic_adar", n_neighbors=n_neighbors, leaning_bias=leaning_bias)
+        super().__init__(mode="AdamicAdar", n_neighbors=n_neighbors, leaning_bias=leaning_bias)
 
 
 class PreferentialAttachmentFollowRecSys(FollowRecSysRay):
@@ -116,5 +116,5 @@ class PreferentialAttachmentFollowRecSys(FollowRecSysRay):
 
     def __init__(self, n_neighbors=10, leaning_bias=1):
         super().__init__(
-            mode="preferential_attachment", n_neighbors=n_neighbors, leaning_bias=leaning_bias
+            mode="PreferentialAttachment", n_neighbors=n_neighbors, leaning_bias=leaning_bias
         )

@@ -24,7 +24,7 @@ class TestContentRecSysClient:
         from YSimulator.YClient.recsys.ContentRecSys import ContentRecSys
 
         recsys = ContentRecSys()
-        assert recsys.mode == "random"
+        assert recsys.mode == "ContentRecSys"
         assert recsys.n_posts == 5
         assert recsys.followers_ratio == 0.6
 
@@ -91,7 +91,7 @@ class TestContentRecSysClient:
         from YSimulator.YClient.recsys.ContentRecSys import ReverseChrono
 
         recsys = ReverseChrono(n_posts=7)
-        assert recsys.mode == "rchrono"
+        assert recsys.mode == "ReverseChrono"
         assert recsys.n_posts == 7
 
     def test_reverse_chrono_popularity(self):
@@ -99,7 +99,7 @@ class TestContentRecSysClient:
         from YSimulator.YClient.recsys.ContentRecSys import ReverseChronoPopularity
 
         recsys = ReverseChronoPopularity(n_posts=8)
-        assert recsys.mode == "rchrono_popularity"
+        assert recsys.mode == "ReverseChronoPopularity"
         assert recsys.n_posts == 8
 
     def test_reverse_chrono_followers(self):
@@ -107,7 +107,7 @@ class TestContentRecSysClient:
         from YSimulator.YClient.recsys.ContentRecSys import ReverseChronoFollowers
 
         recsys = ReverseChronoFollowers(n_posts=6, followers_ratio=0.7)
-        assert recsys.mode == "rchrono_followers"
+        assert recsys.mode == "ReverseChronoFollowers"
         assert recsys.n_posts == 6
         assert recsys.followers_ratio == 0.7
 
@@ -116,7 +116,7 @@ class TestContentRecSysClient:
         from YSimulator.YClient.recsys.ContentRecSys import ReverseChronoFollowersPopularity
 
         recsys = ReverseChronoFollowersPopularity(n_posts=9, followers_ratio=0.5)
-        assert recsys.mode == "rchrono_followers_popularity"
+        assert recsys.mode == "ReverseChronoFollowersPopularity"
         assert recsys.n_posts == 9
         assert recsys.followers_ratio == 0.5
 
@@ -125,7 +125,7 @@ class TestContentRecSysClient:
         from YSimulator.YClient.recsys.ContentRecSys import ReverseChronoComments
 
         recsys = ReverseChronoComments(n_posts=4)
-        assert recsys.mode == "rchrono_comments"
+        assert recsys.mode == "ReverseChronoComments"
         assert recsys.n_posts == 4
 
     def test_random_order(self):
@@ -133,7 +133,7 @@ class TestContentRecSysClient:
         from YSimulator.YClient.recsys.ContentRecSys import RandomOrder
 
         recsys = RandomOrder(n_posts=10)
-        assert recsys.mode == "random"
+        assert recsys.mode == "ContentRecSys"
         assert recsys.n_posts == 10
 
     def test_common_interests(self):
@@ -141,7 +141,7 @@ class TestContentRecSysClient:
         from YSimulator.YClient.recsys.ContentRecSys import CommonInterests
 
         recsys = CommonInterests(n_posts=5, followers_ratio=0.4)
-        assert recsys.mode == "common_interests"
+        assert recsys.mode == "CommonInterests"
         assert recsys.n_posts == 5
         assert recsys.followers_ratio == 0.4
 
@@ -150,7 +150,7 @@ class TestContentRecSysClient:
         from YSimulator.YClient.recsys.ContentRecSys import CommonUserInterests
 
         recsys = CommonUserInterests(n_posts=6, followers_ratio=0.3)
-        assert recsys.mode == "common_user_interests"
+        assert recsys.mode == "CommonUserInterests"
         assert recsys.n_posts == 6
         assert recsys.followers_ratio == 0.3
 
@@ -159,7 +159,7 @@ class TestContentRecSysClient:
         from YSimulator.YClient.recsys.ContentRecSys import SimilarUsersReact
 
         recsys = SimilarUsersReact(n_posts=8)
-        assert recsys.mode == "similar_users_react"
+        assert recsys.mode == "SimilarUsersReactions"
         assert recsys.n_posts == 8
 
     def test_similar_users_posts(self):
@@ -167,7 +167,7 @@ class TestContentRecSysClient:
         from YSimulator.YClient.recsys.ContentRecSys import SimilarUsersPosts
 
         recsys = SimilarUsersPosts(n_posts=12)
-        assert recsys.mode == "similar_users_posts"
+        assert recsys.mode == "SimilarUsersPosts"
         assert recsys.n_posts == 12
 
 
@@ -179,7 +179,7 @@ class TestFollowRecSysRayClient:
         from YSimulator.YClient.recsys.FollowRecSysRay import FollowRecSysRay
 
         recsys = FollowRecSysRay()
-        assert recsys.mode == "random"
+        assert recsys.mode == "FollowRecSys"
         assert recsys.n_neighbors == 10
         assert recsys.leaning_bias == 1
 
@@ -244,7 +244,7 @@ class TestFollowRecSysRayClient:
         from YSimulator.YClient.recsys.FollowRecSysRay import RandomFollowRecSys
 
         recsys = RandomFollowRecSys(n_neighbors=12, leaning_bias=3)
-        assert recsys.mode == "random"
+        assert recsys.mode == "FollowRecSys"
         assert recsys.n_neighbors == 12
         assert recsys.leaning_bias == 3
 
@@ -253,7 +253,7 @@ class TestFollowRecSysRayClient:
         from YSimulator.YClient.recsys.FollowRecSysRay import CommonNeighborsFollowRecSys
 
         recsys = CommonNeighborsFollowRecSys(n_neighbors=8, leaning_bias=2)
-        assert recsys.mode == "common_neighbors"
+        assert recsys.mode == "CommonNeighbors"
         assert recsys.n_neighbors == 8
 
     def test_jaccard_follow_recsys(self):
@@ -261,7 +261,7 @@ class TestFollowRecSysRayClient:
         from YSimulator.YClient.recsys.FollowRecSysRay import JaccardFollowRecSys
 
         recsys = JaccardFollowRecSys(n_neighbors=7, leaning_bias=1)
-        assert recsys.mode == "jaccard"
+        assert recsys.mode == "Jaccard"
         assert recsys.n_neighbors == 7
 
     def test_adamic_adar_follow_recsys(self):
@@ -269,7 +269,7 @@ class TestFollowRecSysRayClient:
         from YSimulator.YClient.recsys.FollowRecSysRay import AdamicAdarFollowRecSys
 
         recsys = AdamicAdarFollowRecSys(n_neighbors=9, leaning_bias=2)
-        assert recsys.mode == "adamic_adar"
+        assert recsys.mode == "AdamicAdar"
         assert recsys.n_neighbors == 9
 
     def test_preferential_attachment_follow_recsys(self):
@@ -277,7 +277,7 @@ class TestFollowRecSysRayClient:
         from YSimulator.YClient.recsys.FollowRecSysRay import PreferentialAttachmentFollowRecSys
 
         recsys = PreferentialAttachmentFollowRecSys(n_neighbors=20, leaning_bias=4)
-        assert recsys.mode == "preferential_attachment"
+        assert recsys.mode == "PreferentialAttachment"
         assert recsys.n_neighbors == 20
 
 
