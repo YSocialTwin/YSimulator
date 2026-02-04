@@ -33,7 +33,7 @@ class ContentRecSys:
         followers_ratio (float): Ratio of posts from followers vs others
     """
 
-    def __init__(self, mode="ContentRecSys", n_posts=5, followers_ratio=0.6):
+    def __init__(self, mode="random", n_posts=5, followers_ratio=0.6):
         """
         Initialize the content recommendation system.
 
@@ -99,7 +99,7 @@ class ReverseChrono(ContentRecSys):
         Args:
             n_posts (int, optional): Number of posts to recommend. Defaults to 5.
         """
-        super().__init__(mode="ReverseChrono", n_posts=n_posts)
+        super().__init__(mode="rchrono", n_posts=n_posts)
 
 
 class ReverseChronoPopularity(ContentRecSys):
@@ -116,7 +116,7 @@ class ReverseChronoPopularity(ContentRecSys):
         Args:
             n_posts (int, optional): Number of posts to recommend. Defaults to 5.
         """
-        super().__init__(mode="ReverseChronoPopularity", n_posts=n_posts)
+        super().__init__(mode="rchrono_popularity", n_posts=n_posts)
 
 
 class ReverseChronoFollowers(ContentRecSys):
@@ -136,7 +136,7 @@ class ReverseChronoFollowers(ContentRecSys):
                                               Defaults to 0.6.
         """
         super().__init__(
-            mode="ReverseChronoFollowers", n_posts=n_posts, followers_ratio=followers_ratio
+            mode="rchrono_followers", n_posts=n_posts, followers_ratio=followers_ratio
         )
 
 
@@ -157,7 +157,7 @@ class ReverseChronoFollowersPopularity(ContentRecSys):
                                               Defaults to 0.6.
         """
         super().__init__(
-            mode="ReverseChronoFollowersPopularity",
+            mode="rchrono_followers_popularity",
             n_posts=n_posts,
             followers_ratio=followers_ratio,
         )
@@ -177,7 +177,7 @@ class ReverseChronoComments(ContentRecSys):
         Args:
             n_posts (int, optional): Number of posts to recommend. Defaults to 5.
         """
-        super().__init__(mode="ReverseChronoComments", n_posts=n_posts)
+        super().__init__(mode="rchrono_comments", n_posts=n_posts)
 
 
 class RandomOrder(ContentRecSys):
@@ -195,7 +195,7 @@ class RandomOrder(ContentRecSys):
         Args:
             n_posts (int, optional): Number of posts to recommend. Defaults to 5.
         """
-        super().__init__(mode="ContentRecSys", n_posts=n_posts)
+        super().__init__(mode="random", n_posts=n_posts)
 
 
 class CommonInterests(ContentRecSys):
@@ -214,7 +214,7 @@ class CommonInterests(ContentRecSys):
             followers_ratio (float, optional): Proportion of posts from followed users.
                                               Defaults to 0.6.
         """
-        super().__init__(mode="CommonInterests", n_posts=n_posts, followers_ratio=followers_ratio)
+        super().__init__(mode="common_interests", n_posts=n_posts, followers_ratio=followers_ratio)
 
 
 class CommonUserInterests(ContentRecSys):
@@ -234,7 +234,7 @@ class CommonUserInterests(ContentRecSys):
                                               Defaults to 0.6.
         """
         super().__init__(
-            mode="CommonUserInterests", n_posts=n_posts, followers_ratio=followers_ratio
+            mode="common_user_interests", n_posts=n_posts, followers_ratio=followers_ratio
         )
 
 
@@ -252,7 +252,7 @@ class SimilarUsersReact(ContentRecSys):
         Args:
             n_posts (int, optional): Number of posts to recommend. Defaults to 5.
         """
-        super().__init__(mode="SimilarUsersReactions", n_posts=n_posts)
+        super().__init__(mode="similar_users_react", n_posts=n_posts)
 
 
 class SimilarUsersPosts(ContentRecSys):
@@ -269,4 +269,4 @@ class SimilarUsersPosts(ContentRecSys):
         Args:
             n_posts (int, optional): Number of posts to recommend. Defaults to 5.
         """
-        super().__init__(mode="SimilarUsersPosts", n_posts=n_posts)
+        super().__init__(mode="similar_users_posts", n_posts=n_posts)
