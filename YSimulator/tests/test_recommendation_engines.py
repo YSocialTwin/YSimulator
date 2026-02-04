@@ -96,7 +96,9 @@ class TestContentRecommender:
 
         # Test ReverseChrono mode
         mock_recsys_db.recommend_rchrono = Mock(return_value=["post1"])
-        _ = recommender.get_recommended_posts(agent_id="agent1", mode="ReverseChrono", day=1, slot=5)
+        _ = recommender.get_recommended_posts(
+            agent_id="agent1", mode="ReverseChrono", day=1, slot=5
+        )
         assert mock_recsys_db.recommend_rchrono.called
 
         # Test ReverseChronoPopularity mode
@@ -105,6 +107,95 @@ class TestContentRecommender:
             agent_id="agent1", mode="ReverseChronoPopularity", day=1, slot=5
         )
         assert mock_recsys_db.recommend_rchrono_popularity.called
+
+    @patch("YSimulator.YServer.recommendation.content_recommender.content_recsys_db")
+    def test_new_collaborative_filtering_modes(self, mock_recsys_db, mock_db_adapter):
+        """Test new collaborative filtering recommendation modes."""
+        recommender = ContentRecommender(mock_db_adapter, visibility_rounds=36)
+
+        # Test CollaborativeUserUser mode
+        mock_recsys_db.recommend_collaborative_user_user = Mock(return_value=["post1", "post2"])
+        result = recommender.get_recommended_posts(
+            agent_id="agent1", mode="CollaborativeUserUser", day=1, slot=5
+        )
+        assert mock_recsys_db.recommend_collaborative_user_user.called
+        assert len(result) == 2
+
+        # Test CollaborativeItemItem mode
+        mock_recsys_db.recommend_collaborative_item_item = Mock(return_value=["post3", "post4"])
+        result = recommender.get_recommended_posts(
+            agent_id="agent1", mode="CollaborativeItemItem", day=1, slot=5
+        )
+        assert mock_recsys_db.recommend_collaborative_item_item.called
+        assert len(result) == 2
+
+    @patch("YSimulator.YServer.recommendation.content_recommender.content_recsys_db")
+    def test_new_content_based_modes(self, mock_recsys_db, mock_db_adapter):
+        """Test new content-based filtering recommendation modes."""
+        recommender = ContentRecommender(mock_db_adapter, visibility_rounds=36)
+
+        # Test ContentBasedFeatures mode
+        mock_recsys_db.recommend_content_based_features = Mock(return_value=["post5", "post6"])
+        result = recommender.get_recommended_posts(
+            agent_id="agent1", mode="ContentBasedFeatures", day=1, slot=5
+        )
+        assert mock_recsys_db.recommend_content_based_features.called
+        assert len(result) == 2
+
+        # Test ContentBasedVector mode
+        mock_recsys_db.recommend_content_based_vector = Mock(return_value=["post7", "post8"])
+        result = recommender.get_recommended_posts(
+            agent_id="agent1", mode="ContentBasedVector", day=1, slot=5
+        )
+        assert mock_recsys_db.recommend_content_based_vector.called
+        assert len(result) == 2
+
+    @patch("YSimulator.YServer.recommendation.content_recommender.content_recsys_redis")
+    def test_new_modes_redis(self, mock_recsys_redis, mock_db_adapter_redis):
+        """Test new recommendation modes using Redis backend."""
+        # Mock the Redis recommendation functions
+        mock_recsys_redis.recommend_collaborative_user_user_redis = Mock(
+            return_value=["post1", "post2"]
+        )
+        mock_recsys_redis.recommend_collaborative_item_item_redis = Mock(
+            return_value=["post3", "post4"]
+        )
+        mock_recsys_redis.recommend_content_based_features_redis = Mock(
+            return_value=["post5", "post6"]
+        )
+        mock_recsys_redis.recommend_content_based_vector_redis = Mock(
+            return_value=["post7", "post8"]
+        )
+
+        recommender = ContentRecommender(mock_db_adapter_redis, visibility_rounds=36)
+
+        # Test CollaborativeUserUser
+        result = recommender.get_recommended_posts(
+            agent_id="agent1", mode="CollaborativeUserUser", limit=2, day=1, slot=5
+        )
+        assert len(result) == 2
+        assert mock_recsys_redis.recommend_collaborative_user_user_redis.called
+
+        # Test CollaborativeItemItem
+        result = recommender.get_recommended_posts(
+            agent_id="agent1", mode="CollaborativeItemItem", limit=2, day=1, slot=5
+        )
+        assert len(result) == 2
+        assert mock_recsys_redis.recommend_collaborative_item_item_redis.called
+
+        # Test ContentBasedFeatures
+        result = recommender.get_recommended_posts(
+            agent_id="agent1", mode="ContentBasedFeatures", limit=2, day=1, slot=5
+        )
+        assert len(result) == 2
+        assert mock_recsys_redis.recommend_content_based_features_redis.called
+
+        # Test ContentBasedVector
+        result = recommender.get_recommended_posts(
+            agent_id="agent1", mode="ContentBasedVector", limit=2, day=1, slot=5
+        )
+        assert len(result) == 2
+        assert mock_recsys_redis.recommend_content_based_vector_redis.called
 
     def test_calculate_visibility_params(self, mock_db_adapter):
         """Test visibility parameter calculation."""

@@ -684,9 +684,7 @@ def recommend_collaborative_user_user(
     # Find users who liked similar posts (high overlap)
     # Count how many posts each user has in common with the agent
     similar_users_subq = (
-        session.query(
-            Reaction.user_id, func.count(Reaction.post_id).label("common_likes_count")
-        )
+        session.query(Reaction.user_id, func.count(Reaction.post_id).label("common_likes_count"))
         .filter(
             Reaction.post_id.in_(session.query(agent_likes_subq.c.post_id)),
             Reaction.user_id != agent_id,

@@ -1133,9 +1133,7 @@ def recommend_content_based_vector_redis(
                 if redis_client.exists(post_topics_key):
                     post_topics = redis_client.smembers(post_topics_key)
                     # Calculate dot product (simple similarity)
-                    similarity_score = sum(
-                        preference_vector.get(topic, 0) for topic in post_topics
-                    )
+                    similarity_score = sum(preference_vector.get(topic, 0) for topic in post_topics)
                     if similarity_score > 0:
                         posts_with_scores.append(
                             {"id": post["id"], "index": post["index"], "score": similarity_score}
