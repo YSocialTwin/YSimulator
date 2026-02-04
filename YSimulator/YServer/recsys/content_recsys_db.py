@@ -104,27 +104,29 @@ def recommend_rchrono_popularity(
         List of post UUIDs
     """
     # Subquery to count reactions per post
-    reaction_count_subq = (
-        session.query(Reaction.post_id, func.count().label("reaction_count"))
-        .group_by(Reaction.post_id)
-        .subquery()
-    )
+    #reaction_count_subq = (
+    #    session.query(Reaction.post_id, func.count().label("reaction_count"))
+    #    .group_by(Reaction.post_id)
+    #    .subquery()
+    #)
 
     query = (
         session.query(Post.id)
         .join(Round, Post.round == Round.id)
-        .outerjoin(reaction_count_subq, Post.id == reaction_count_subq.c.post_id)
+        #.join(reaction_count_subq, Post.id == reaction_count_subq.c.post_id)  # inner join
         .filter(
             or_(
                 Round.day > visibility_day,
                 and_(Round.day == visibility_day, Round.hour >= visibility_hour),
             ),
             Post.user_id != agent_id,
+            #reaction_count_subq.c.reaction_count > 0,  # technically redundant now
         )
         .order_by(
+            desc(Post.reaction_count),
+            #desc(reaction_count_subq.c.reaction_count),
             desc(Round.day),
             desc(Round.hour),
-            desc(func.coalesce(reaction_count_subq.c.reaction_count, 0)),
         )
         .limit(limit)
     )
@@ -242,18 +244,18 @@ def recommend_rchrono_followers_popularity(
     additional_posts_limit = limit - follower_posts_limit
 
     # Subquery to count reactions per post
-    reaction_count_subq = (
-        session.query(Reaction.post_id, func.count().label("reaction_count"))
-        .group_by(Reaction.post_id)
-        .subquery()
-    )
+    #reaction_count_subq = (
+    #    session.query(Reaction.post_id, func.count().label("reaction_count"))
+    #    .group_by(Reaction.post_id)
+    #    .subquery()
+    #)
 
     query_followers = (
         session.query(Post.id)
         .distinct()
         .join(Round, Post.round == Round.id)
         .join(Follow, Post.user_id == Follow.follower_id)
-        .outerjoin(reaction_count_subq, Post.id == reaction_count_subq.c.post_id)
+        #.outerjoin(reaction_count_subq, Post.id == reaction_count_subq.c.post_id)
         .filter(
             Follow.user_id == agent_id,
             Follow.action == "follow",
@@ -262,8 +264,13 @@ def recommend_rchrono_followers_popularity(
                 and_(Round.day == visibility_day, Round.hour >= visibility_hour),
             ),
             Post.user_id != agent_id,
+            #func.coalesce(reaction_count_subq.c.reaction_count, 0) > 0,  # added
         )
-        .order_by(desc(Post.round), desc(func.coalesce(reaction_count_subq.c.reaction_count, 0)))
+        .order_by(
+            desc(Post.reaction_count),
+            desc(Post.round),
+            # desc(func.coalesce(reaction_count_subq.c.reaction_count, 0)),
+        )
         .limit(follower_posts_limit)
     )
 
@@ -271,17 +278,17 @@ def recommend_rchrono_followers_popularity(
 
     if len(post_ids) < limit and additional_posts_limit > 0:
         # Recreate reaction count subquery for additional posts
-        reaction_count_subq2 = (
-            session.query(Reaction.post_id, func.count().label("reaction_count"))
-            .group_by(Reaction.post_id)
-            .subquery()
-        )
+        #reaction_count_subq2 = (
+        #    session.query(Reaction.post_id, func.count().label("reaction_count"))
+        #    .group_by(Reaction.post_id)
+        #    .subquery()
+        #)
 
         if post_ids:
             query_additional = (
                 session.query(Post.id)
                 .join(Round, Post.round == Round.id)
-                .outerjoin(reaction_count_subq2, Post.id == reaction_count_subq2.c.post_id)
+                #.outerjoin(reaction_count_subq2, Post.id == reaction_count_subq2.c.post_id)
                 .filter(
                     or_(
                         Round.day > visibility_day,
@@ -291,7 +298,8 @@ def recommend_rchrono_followers_popularity(
                     Post.id.notin_(post_ids),
                 )
                 .order_by(
-                    desc(Post.round), desc(func.coalesce(reaction_count_subq2.c.reaction_count, 0))
+                    desc(Post.reaction_count),
+                    desc(Post.round) #, desc(func.coalesce(reaction_count_subq2.c.reaction_count, 0))
                 )
                 .limit(additional_posts_limit)
             )
@@ -299,7 +307,7 @@ def recommend_rchrono_followers_popularity(
             query_additional = (
                 session.query(Post.id)
                 .join(Round, Post.round == Round.id)
-                .outerjoin(reaction_count_subq2, Post.id == reaction_count_subq2.c.post_id)
+                # .outerjoin(reaction_count_subq2, Post.id == reaction_count_subq2.c.post_id)
                 .filter(
                     or_(
                         Round.day > visibility_day,
@@ -308,7 +316,7 @@ def recommend_rchrono_followers_popularity(
                     Post.user_id != agent_id,
                 )
                 .order_by(
-                    desc(Post.round), desc(func.coalesce(reaction_count_subq2.c.reaction_count, 0))
+                     desc(Post.reaction_count), desc(Post.round) #, desc(func.coalesce(reaction_count_subq2.c.reaction_count, 0))
                 )
                 .limit(additional_posts_limit)
             )
