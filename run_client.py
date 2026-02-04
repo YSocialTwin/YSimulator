@@ -161,8 +161,10 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--agents",
+        "--population",
         type=str,
         default=None,
+        dest="agents",
         help="Path to agent_population.json file (optional, overrides config directory)",
     )
     parser.add_argument(
