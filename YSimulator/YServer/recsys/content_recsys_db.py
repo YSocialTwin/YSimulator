@@ -710,7 +710,7 @@ def recommend_collaborative_user_user(
     similar_users_subq = (
         session.query(Reaction.user_id, func.count(Reaction.post_id).label("common_likes_count"))
         .filter(
-            Reaction.post_id.in_(session.query(agent_likes_subq.c.post_id)),
+            Reaction.post_id.in_(agent_likes_subq),
             Reaction.user_id != agent_id,
             Reaction.type == "LIKE",
         )
@@ -734,7 +734,7 @@ def recommend_collaborative_user_user(
             ),
             Post.user_id != agent_id,
             Reaction.type == "LIKE",
-            Post.id.notin_(session.query(agent_likes_subq.c.post_id)),
+            Post.id.notin_(agent_likes_subq),
         )
         .group_by(Post.id)
         .order_by(desc("recommendation_score"), desc(Round.day), desc(Round.hour))
@@ -788,7 +788,7 @@ def recommend_collaborative_item_item(
             Reaction,
             and_(
                 Reaction.user_id == Reaction2.user_id,
-                Reaction.post_id.in_(session.query(agent_likes_subq.c.post_id)),
+                Reaction.post_id.in_(agent_likes_subq),
             ),
         )
         .filter(
@@ -799,7 +799,7 @@ def recommend_collaborative_item_item(
             Post.user_id != agent_id,
             Reaction2.type == "LIKE",
             Reaction.type == "LIKE",
-            Post.id.notin_(session.query(agent_likes_subq.c.post_id)),
+            Post.id.notin_(agent_likes_subq),
         )
         .group_by(Post.id)
         .order_by(desc("co_occurrence_score"), desc(Round.day), desc(Round.hour))
