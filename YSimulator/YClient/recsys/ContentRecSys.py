@@ -6,11 +6,19 @@ with the Ray orchestrator server to fetch recommended posts for agents.
 
 The server implements different recommendation strategies (modes):
     - "random": Random post ordering (default)
-    - "rchrono": Reverse chronological ordering (newest first)
-    - "rchrono_popularity": Chronological with popularity boost
-    - "rchrono_followers": Prioritizes posts from followed users
-    - "rchrono_followers_popularity": Followers + popularity
-    - "rchrono_comments": Prioritizes highly commented posts
+    - "ReverseChrono": Reverse chronological ordering (newest first)
+    - "ReverseChronoPopularity": Chronological with popularity boost
+    - "ReverseChronoFollowers": Prioritizes posts from followed users
+    - "ReverseChronoFollowersPopularity": Followers + popularity
+    - "ReverseChronoComments": Prioritizes highly commented posts
+    - "CommonInterests": Posts with common topic interests
+    - "CommonUserInterests": Posts by users with common interests
+    - "SimilarUsersReactions": Posts from similar users (by reactions)
+    - "SimilarUsersPosts": Posts from similar users (by posting)
+    - "CollaborativeUserUser": Collaborative filtering - user similarity
+    - "CollaborativeItemItem": Collaborative filtering - item co-occurrence
+    - "ContentBasedFeatures": Content-based filtering - feature extraction
+    - "ContentBasedVector": Content-based filtering - vector space similarity
 """
 
 import logging
@@ -40,11 +48,19 @@ class ContentRecSys:
         Args:
             mode (str, optional): Recommendation mode. Options:
                 - "random": Random post ordering (default)
-                - "rchrono": Reverse chronological ordering
-                - "rchrono_popularity": Chronological with popularity boost
-                - "rchrono_followers": Prioritizes posts from followed users
-                - "rchrono_followers_popularity": Followers + popularity
-                - "rchrono_comments": Prioritizes highly commented posts
+                - "ReverseChrono": Reverse chronological ordering
+                - "ReverseChronoPopularity": Chronological with popularity boost
+                - "ReverseChronoFollowers": Prioritizes posts from followed users
+                - "ReverseChronoFollowersPopularity": Followers + popularity
+                - "ReverseChronoComments": Prioritizes highly commented posts
+                - "CommonInterests": Posts with common topic interests
+                - "CommonUserInterests": Posts by users with common interests
+                - "SimilarUsersReactions": Posts from similar users (by reactions)
+                - "SimilarUsersPosts": Posts from similar users (by posting)
+                - "CollaborativeUserUser": Collaborative filtering - user similarity
+                - "CollaborativeItemItem": Collaborative filtering - item co-occurrence
+                - "ContentBasedFeatures": Content-based filtering - feature extraction
+                - "ContentBasedVector": Content-based filtering - vector space similarity
             n_posts (int, optional): Number of posts to recommend. Defaults to 5.
             followers_ratio (float, optional): Ratio of posts from followers (0.0-1.0).
                                               Defaults to 0.6.
@@ -270,3 +286,75 @@ class SimilarUsersPosts(ContentRecSys):
             n_posts (int, optional): Number of posts to recommend. Defaults to 5.
         """
         super().__init__(mode="SimilarUsersPosts", n_posts=n_posts)
+
+
+class CollaborativeUserUser(ContentRecSys):
+    """
+    Collaborative Filtering - User-User.
+
+    Finds users with a high overlap in liked posts and recommends posts they liked.
+    Uses behavioral similarity (actual likes) to find similar users.
+    """
+
+    def __init__(self, n_posts=5):
+        """
+        Initialize collaborative user-user filtering recommendation system.
+
+        Args:
+            n_posts (int, optional): Number of posts to recommend. Defaults to 5.
+        """
+        super().__init__(mode="CollaborativeUserUser", n_posts=n_posts)
+
+
+class CollaborativeItemItem(ContentRecSys):
+    """
+    Collaborative Filtering - Item-Item.
+
+    Finds posts that are often liked together by the same groups of users.
+    Uses co-occurrence patterns to recommend related content.
+    """
+
+    def __init__(self, n_posts=5):
+        """
+        Initialize collaborative item-item filtering recommendation system.
+
+        Args:
+            n_posts (int, optional): Number of posts to recommend. Defaults to 5.
+        """
+        super().__init__(mode="CollaborativeItemItem", n_posts=n_posts)
+
+
+class ContentBasedFeatures(ContentRecSys):
+    """
+    Content-Based Filtering - Feature Extraction.
+
+    Analyzes attributes of content the user has interacted with (topics, hashtags)
+    and recommends posts with similar features. Learns preferences from behavior.
+    """
+
+    def __init__(self, n_posts=5):
+        """
+        Initialize content-based feature extraction recommendation system.
+
+        Args:
+            n_posts (int, optional): Number of posts to recommend. Defaults to 5.
+        """
+        super().__init__(mode="ContentBasedFeatures", n_posts=n_posts)
+
+
+class ContentBasedVector(ContentRecSys):
+    """
+    Content-Based Filtering - Vector Space Similarity.
+
+    Recommends posts mathematically close to the user's "preference vector"
+    using weighted topic distributions. Uses frequency-based similarity scoring.
+    """
+
+    def __init__(self, n_posts=5):
+        """
+        Initialize content-based vector space recommendation system.
+
+        Args:
+            n_posts (int, optional): Number of posts to recommend. Defaults to 5.
+        """
+        super().__init__(mode="ContentBasedVector", n_posts=n_posts)

@@ -170,6 +170,38 @@ class TestContentRecSysClient:
         assert recsys.mode == "SimilarUsersPosts"
         assert recsys.n_posts == 12
 
+    def test_collaborative_user_user(self):
+        """Test CollaborativeUserUser initialization."""
+        from YSimulator.YClient.recsys.ContentRecSys import CollaborativeUserUser
+
+        recsys = CollaborativeUserUser(n_posts=10)
+        assert recsys.mode == "CollaborativeUserUser"
+        assert recsys.n_posts == 10
+
+    def test_collaborative_item_item(self):
+        """Test CollaborativeItemItem initialization."""
+        from YSimulator.YClient.recsys.ContentRecSys import CollaborativeItemItem
+
+        recsys = CollaborativeItemItem(n_posts=15)
+        assert recsys.mode == "CollaborativeItemItem"
+        assert recsys.n_posts == 15
+
+    def test_content_based_features(self):
+        """Test ContentBasedFeatures initialization."""
+        from YSimulator.YClient.recsys.ContentRecSys import ContentBasedFeatures
+
+        recsys = ContentBasedFeatures(n_posts=20)
+        assert recsys.mode == "ContentBasedFeatures"
+        assert recsys.n_posts == 20
+
+    def test_content_based_vector(self):
+        """Test ContentBasedVector initialization."""
+        from YSimulator.YClient.recsys.ContentRecSys import ContentBasedVector
+
+        recsys = ContentBasedVector(n_posts=25)
+        assert recsys.mode == "ContentBasedVector"
+        assert recsys.n_posts == 25
+
 
 class TestFollowRecSysRayClient:
     """Test FollowRecSysRay and its subclasses (client-side)."""
