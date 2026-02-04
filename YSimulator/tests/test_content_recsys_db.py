@@ -344,7 +344,7 @@ class TestRecommendRchronoFollowersPopularity(unittest.TestCase):
 
             mock_session = Mock(spec=Session)
 
-            # Main follower posts query 
+            # Main follower posts query
             mock_query_followers = Mock()
             mock_query_followers.distinct.return_value = mock_query_followers
             mock_query_followers.join.return_value = mock_query_followers
@@ -366,9 +366,7 @@ class TestRecommendRchronoFollowersPopularity(unittest.TestCase):
                 mock_query_additional,
             ]
 
-            result = recommend_rchrono_followers_popularity(
-                mock_session, "agent1", 1, 0, 5, 0.6
-            )
+            result = recommend_rchrono_followers_popularity(mock_session, "agent1", 1, 0, 5, 0.6)
 
             assert len(result) == 5
             assert "post1" in result
@@ -405,16 +403,19 @@ class TestRecommendRchronoFollowersPopularity(unittest.TestCase):
             mock_query_additional.filter.return_value = mock_query_additional
             mock_query_additional.order_by.return_value = mock_query_additional
             mock_query_additional.limit.return_value = mock_query_additional
-            mock_query_additional.all.return_value = [("post2",), ("post3",), ("post4",), ("post5",)]
+            mock_query_additional.all.return_value = [
+                ("post2",),
+                ("post3",),
+                ("post4",),
+                ("post5",),
+            ]
 
             mock_session.query.side_effect = [
                 mock_query_followers,
                 mock_query_additional,
             ]
 
-            result = recommend_rchrono_followers_popularity(
-                mock_session, "agent1", 1, 0, 5, 0.6
-            )
+            result = recommend_rchrono_followers_popularity(mock_session, "agent1", 1, 0, 5, 0.6)
 
             assert len(result) == 5
             assert "post1" in result

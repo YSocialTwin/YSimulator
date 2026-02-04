@@ -250,21 +250,25 @@ class TestImageExtraction(unittest.TestCase):
         # Mock dependencies before importing llm_service
         import sys
         from unittest.mock import MagicMock
-        
-        sys.modules['ray'] = sys.modules.get('ray', MagicMock())
-        sys.modules['langchain_ollama'] = sys.modules.get('langchain_ollama', MagicMock())
-        sys.modules['langchain_core'] = sys.modules.get('langchain_core', MagicMock())
-        sys.modules['langchain_core.output_parsers'] = sys.modules.get('langchain_core.output_parsers', MagicMock())
-        sys.modules['langchain_core.prompts'] = sys.modules.get('langchain_core.prompts', MagicMock())
 
-        from YSimulator.YClient.LLM_interactions import llm_service
+        sys.modules["ray"] = sys.modules.get("ray", MagicMock())
+        sys.modules["langchain_ollama"] = sys.modules.get("langchain_ollama", MagicMock())
+        sys.modules["langchain_core"] = sys.modules.get("langchain_core", MagicMock())
+        sys.modules["langchain_core.output_parsers"] = sys.modules.get(
+            "langchain_core.output_parsers", MagicMock()
+        )
+        sys.modules["langchain_core.prompts"] = sys.modules.get(
+            "langchain_core.prompts", MagicMock()
+        )
 
         # Check that describe_image method exists in the module
         # Using getsource approach to handle Ray's wrapping
         import inspect
 
+        from YSimulator.YClient.LLM_interactions import llm_service
+
         source = inspect.getsource(llm_service)
-        
+
         # Check that the method is defined with correct signature
         self.assertIn("def describe_image(", source)
         self.assertIn("image_url", source)

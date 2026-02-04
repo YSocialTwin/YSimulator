@@ -96,7 +96,9 @@ class TestContentRecommender:
 
         # Test ReverseChrono mode
         mock_recsys_db.recommend_rchrono = Mock(return_value=["post1"])
-        _ = recommender.get_recommended_posts(agent_id="agent1", mode="ReverseChrono", day=1, slot=5)
+        _ = recommender.get_recommended_posts(
+            agent_id="agent1", mode="ReverseChrono", day=1, slot=5
+        )
         assert mock_recsys_db.recommend_rchrono.called
 
         # Test ReverseChronoPopularity mode

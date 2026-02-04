@@ -10,11 +10,11 @@ Tests cover:
 """
 
 import sys
-from unittest.mock import Mock, MagicMock, patch
+from unittest.mock import MagicMock, Mock, patch
 
 # Mock ray before any imports that use it
-if 'ray' not in sys.modules:
-    sys.modules['ray'] = MagicMock()
+if "ray" not in sys.modules:
+    sys.modules["ray"] = MagicMock()
 
 import pytest
 

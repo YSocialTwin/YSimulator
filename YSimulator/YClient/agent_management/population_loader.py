@@ -278,13 +278,13 @@ class PopulationLoader:
         """
         if not interests:
             return None, None
-        
+
         if not isinstance(interests, (list, tuple)):
             return None, None
-        
+
         if len(interests) != 2:
             return None, None
-        
+
         # Handle single-element case: [["Topic"], 1] -> [["Topic"], [1]]
         if len(interests[0]) == 1 and not isinstance(interests[1], list):
             interests = [interests[0], [interests[1]]]
