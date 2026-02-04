@@ -225,7 +225,7 @@ def recommend_common_interests_redis(
     db_engine,
     logger,
     **kwargs,
-) -> List[str]:
+) -> tuple[List[str], bool]:
     """
     Posts matching user's topic interests.
 
@@ -241,7 +241,7 @@ def recommend_common_interests_redis(
         logger: Logger instance
 
     Returns:
-        List of post IDs with matching topic interests
+        Tuple of (List of post IDs with matching topic interests, bool indicating if fallback was used)
     """
     # Try to get user interests from Redis
     user_interests_key = redis_key_fn("user", agent_id) + ":interests"
@@ -266,10 +266,17 @@ def recommend_common_interests_redis(
         sorted_posts = sorted(posts_with_scores, key=lambda x: (-x["score"], x["index"]))
         post_ids = [p["id"] for p in sorted_posts[:limit]]
 
-        # Fill with recent posts if needed
+        # Cold start check: if no results, return random posts
+        if not post_ids:
+            result = recommend_random_redis(valid_posts_with_data, limit)
+            return result, True
+
+        # Fill with random posts if needed (partial results, not full cold start)
         if len(post_ids) < limit:
             additional = [p["id"] for p in valid_posts_with_data if p["id"] not in post_ids]
             post_ids.extend(additional[: limit - len(post_ids)])
+        
+        return post_ids, False
     else:
         # Fallback to SQL query when Redis data not available yet
         logger.info(
@@ -306,11 +313,16 @@ def recommend_common_interests_redis(
                 sql_post_ids = []
                 post_ids = []
 
+            # Cold start check: if no results, return random posts
+            if not post_ids:
+                result = recommend_random_redis(valid_posts_with_data, limit)
+                return result, True
+
             if len(post_ids) < limit:
                 additional = [p["id"] for p in valid_posts_with_data if p["id"] not in post_ids]
                 post_ids.extend(additional[: limit - len(post_ids)])
 
-    return post_ids
+    return post_ids, False
 
 
 def recommend_common_user_interests_redis(
@@ -324,7 +336,7 @@ def recommend_common_user_interests_redis(
     db_engine,
     logger,
     **kwargs,
-) -> List[str]:
+) -> tuple[List[str], bool]:
     """
     Posts interacted with by users who share interests.
 
@@ -340,7 +352,7 @@ def recommend_common_user_interests_redis(
         logger: Logger instance
 
     Returns:
-        List of post IDs liked by users with common interests
+        Tuple of (List of post IDs liked by users with common interests, bool indicating if fallback was used)
     """
     user_interests_key = redis_key_fn("user", agent_id) + ":interests"
     if redis_client.exists(user_interests_key):
@@ -379,9 +391,16 @@ def recommend_common_user_interests_redis(
         sorted_posts = sorted(posts_with_scores, key=lambda x: (-x["score"], x["index"]))
         post_ids = [p["id"] for p in sorted_posts[:limit]]
 
+        # Cold start check: if no results, return random posts
+        if not post_ids:
+            result = recommend_random_redis(valid_posts_with_data, limit)
+            return result, True
+
         if len(post_ids) < limit:
             additional = [p["id"] for p in valid_posts_with_data if p["id"] not in post_ids]
             post_ids.extend(additional[: limit - len(post_ids)])
+        
+        return post_ids, False
     else:
         # Fallback to SQLAlchemy ORM
         logger.info(
@@ -417,11 +436,16 @@ def recommend_common_user_interests_redis(
             sql_post_ids = [row[0] for row in query.all()]
             post_ids = [pid for pid in sql_post_ids if pid in all_post_ids][:limit]
 
+            # Cold start check: if no results, return random posts
+            if not post_ids:
+                result = recommend_random_redis(valid_posts_with_data, limit)
+                return result, True
+
             if len(post_ids) < limit:
                 additional = [p["id"] for p in valid_posts_with_data if p["id"] not in post_ids]
                 post_ids.extend(additional[: limit - len(post_ids)])
 
-    return post_ids
+    return post_ids, False
 
 
 def recommend_similar_users_react_redis(
@@ -435,7 +459,7 @@ def recommend_similar_users_react_redis(
     db_engine,
     logger,
     **kwargs,
-) -> List[str]:
+) -> tuple[List[str], bool]:
     """
     Posts liked by demographically similar users (by reactions).
 
@@ -451,7 +475,7 @@ def recommend_similar_users_react_redis(
         logger: Logger instance
 
     Returns:
-        List of post IDs liked by similar users
+        Tuple of (List of post IDs liked by similar users, bool indicating if fallback was used)
     """
     # Get agent demographics from Redis
     agent_key = redis_key_fn("users", agent_id)
@@ -495,10 +519,17 @@ def recommend_similar_users_react_redis(
         sorted_posts = sorted(posts_with_scores, key=lambda x: (-x["score"], x["index"]))
         post_ids = [p["id"] for p in sorted_posts[:limit]]
 
-        # Fill with recent posts if needed
+        # Cold start check: if no results, return random posts
+        if not post_ids:
+            result = recommend_random_redis(valid_posts_with_data, limit)
+            return result, True
+
+        # Fill with random posts if needed (partial results, not full cold start)
         if len(post_ids) < limit:
             additional = [p["id"] for p in valid_posts_with_data if p["id"] not in post_ids]
             post_ids.extend(additional[: limit - len(post_ids)])
+        
+        return post_ids, False
     else:
         # Fallback to SQLAlchemy ORM query
         logger.info("Mode similar_users_react - Using SQLAlchemy ORM for user demographics query")
@@ -534,11 +565,16 @@ def recommend_similar_users_react_redis(
             sql_post_ids = [row[0] for row in query.all()]
             post_ids = [pid for pid in sql_post_ids if pid in all_post_ids][:limit]
 
+            # Cold start check: if no results, return random posts
+            if not post_ids:
+                result = recommend_random_redis(valid_posts_with_data, limit)
+                return result, True
+
             if len(post_ids) < limit:
                 additional = [p["id"] for p in valid_posts_with_data if p["id"] not in post_ids]
                 post_ids.extend(additional[: limit - len(post_ids)])
 
-    return post_ids
+    return post_ids, False
 
 
 def recommend_similar_users_posts_redis(
@@ -552,7 +588,7 @@ def recommend_similar_users_posts_redis(
     db_engine,
     logger,
     **kwargs,
-) -> List[str]:
+) -> tuple[List[str], bool]:
     """
     Posts from demographically similar users (by posting behavior).
 
@@ -568,7 +604,7 @@ def recommend_similar_users_posts_redis(
         logger: Logger instance
 
     Returns:
-        List of post IDs from similar users
+        Tuple of (List of post IDs from similar users, bool indicating if fallback was used)
     """
     # Get agent demographics from Redis
     agent_key = redis_key_fn("users", agent_id)
@@ -615,10 +651,17 @@ def recommend_similar_users_posts_redis(
         sorted_posts = sorted(posts_with_similarity, key=lambda x: (-x["score"], x["index"]))
         post_ids = [p["id"] for p in sorted_posts[:limit]]
 
-        # Fill with recent posts if needed
+        # Cold start check: if no results, return random posts
+        if not post_ids:
+            result = recommend_random_redis(valid_posts_with_data, limit)
+            return result, True
+
+        # Fill with random posts if needed (partial results, not full cold start)
         if len(post_ids) < limit:
             additional = [p["id"] for p in valid_posts_with_data if p["id"] not in post_ids]
             post_ids.extend(additional[: limit - len(post_ids)])
+        
+        return post_ids, False
     else:
         # Fallback to SQLAlchemy ORM query
         logger.info("Mode similar_users_posts - Using SQLAlchemy ORM for user demographics query")
@@ -650,11 +693,16 @@ def recommend_similar_users_posts_redis(
             sql_post_ids = [row[0] for row in query.all()]
             post_ids = [pid for pid in sql_post_ids if pid in all_post_ids][:limit]
 
+            # Cold start check: if no results, return random posts
+            if not post_ids:
+                result = recommend_random_redis(valid_posts_with_data, limit)
+                return result, True
+
             if len(post_ids) < limit:
                 additional = [p["id"] for p in valid_posts_with_data if p["id"] not in post_ids]
                 post_ids.extend(additional[: limit - len(post_ids)])
 
-    return post_ids
+    return post_ids, False
 
 
 def recommend_random_redis(
@@ -844,7 +892,7 @@ def recommend_collaborative_item_item_redis(
     db_engine,
     logger,
     **kwargs,
-) -> List[str]:
+) -> tuple[List[str], bool]:
     """
     Collaborative Filtering - Item-Item (Redis).
     Finds posts often liked together by the same groups.
@@ -861,7 +909,7 @@ def recommend_collaborative_item_item_redis(
         logger: Logger instance
 
     Returns:
-        List of post IDs
+        Tuple of (List of post IDs, bool indicating if fallback was used)
     """
     # Try to get liked posts from Redis
     agent_likes_key = redis_key_fn("user", agent_id) + ":likes"
@@ -869,8 +917,9 @@ def recommend_collaborative_item_item_redis(
         agent_likes = redis_client.smembers(agent_likes_key)
 
         if not agent_likes:
-            # No likes yet, fall back to recent posts
-            return [p["id"] for p in valid_posts_with_data[:limit]]
+            # No likes yet, cold start fallback to random posts
+            result = recommend_random_redis(valid_posts_with_data, limit)
+            return result, True
 
         # For each post the agent liked, find users who also liked it
         # Then find other posts those users liked (co-occurrence)
@@ -909,12 +958,17 @@ def recommend_collaborative_item_item_redis(
         sorted_posts = sorted(posts_with_scores, key=lambda x: (-x["score"], x["index"]))
         post_ids = [p["id"] for p in sorted_posts[:limit]]
 
-        # Fill with recent posts if needed
+        # Cold start check: if no results, return random posts
+        if not post_ids:
+            result = recommend_random_redis(valid_posts_with_data, limit)
+            return result, True
+
+        # Fill with random posts if needed (partial results, not full cold start)
         if len(post_ids) < limit:
             additional = [p["id"] for p in valid_posts_with_data if p["id"] not in post_ids]
             post_ids.extend(additional[: limit - len(post_ids)])
 
-        return post_ids
+        return post_ids, False
     else:
         # Fallback to SQLAlchemy ORM
         logger.info(
@@ -933,7 +987,9 @@ def recommend_collaborative_item_item_redis(
             agent_likes_ids = [row[0] for row in agent_likes_query.all()]
 
             if not agent_likes_ids:
-                post_ids = [p["id"] for p in valid_posts_with_data[:limit]]
+                # No likes, cold start fallback to random posts
+                result = recommend_random_redis(valid_posts_with_data, limit)
+                return result, True
             else:
                 # Find posts liked by users who liked the same posts as agent
                 Reaction2 = aliased(Reaction)
@@ -956,12 +1012,17 @@ def recommend_collaborative_item_item_redis(
                 sql_post_ids = [row[0] for row in posts_query.all()]
                 post_ids = [pid for pid in sql_post_ids if pid in all_post_ids][:limit]
 
-                # Fill with recent posts if needed
+                # Cold start check: if no results, return random posts
+                if not post_ids:
+                    result = recommend_random_redis(valid_posts_with_data, limit)
+                    return result, True
+
+                # Fill with random posts if needed (partial results, not full cold start)
                 if len(post_ids) < limit:
                     additional = [p["id"] for p in valid_posts_with_data if p["id"] not in post_ids]
                     post_ids.extend(additional[: limit - len(post_ids)])
 
-        return post_ids
+        return post_ids, False
 
 
 def recommend_content_based_features_redis(
@@ -975,7 +1036,7 @@ def recommend_content_based_features_redis(
     db_engine,
     logger,
     **kwargs,
-) -> List[str]:
+) -> tuple[List[str], bool]:
     """
     Content Based Filtering - Feature Extraction (Redis).
     Analyzes attributes of content the user has interacted with (hashtags, topics).
@@ -992,7 +1053,7 @@ def recommend_content_based_features_redis(
         logger: Logger instance
 
     Returns:
-        List of post IDs
+        Tuple of (List of post IDs, bool indicating if fallback was used)
     """
     # Try to get liked posts from Redis
     agent_likes_key = redis_key_fn("user", agent_id) + ":likes"
@@ -1000,8 +1061,9 @@ def recommend_content_based_features_redis(
         agent_likes = redis_client.smembers(agent_likes_key)
 
         if not agent_likes:
-            # No likes yet, fall back to recent posts
-            return [p["id"] for p in valid_posts_with_data[:limit]]
+            # No likes yet, cold start fallback to random posts
+            result = recommend_random_redis(valid_posts_with_data, limit)
+            return result, True
 
         # Extract topics from liked posts
         liked_topics = set()
@@ -1012,8 +1074,9 @@ def recommend_content_based_features_redis(
                 liked_topics.update(post_topics)
 
         if not liked_topics:
-            # No topic data available
-            return [p["id"] for p in valid_posts_with_data[:limit]]
+            # No topic data available, cold start fallback to random posts
+            result = recommend_random_redis(valid_posts_with_data, limit)
+            return result, True
 
         # Score posts by topic match
         posts_with_scores = []
@@ -1031,12 +1094,17 @@ def recommend_content_based_features_redis(
         sorted_posts = sorted(posts_with_scores, key=lambda x: (-x["score"], x["index"]))
         post_ids = [p["id"] for p in sorted_posts[:limit]]
 
-        # Fill with recent posts if needed
+        # Cold start check: if no results, return random posts
+        if not post_ids:
+            result = recommend_random_redis(valid_posts_with_data, limit)
+            return result, True
+
+        # Fill with random posts if needed (partial results, not full cold start)
         if len(post_ids) < limit:
             additional = [p["id"] for p in valid_posts_with_data if p["id"] not in post_ids]
             post_ids.extend(additional[: limit - len(post_ids)])
 
-        return post_ids
+        return post_ids, False
     else:
         # Fallback to SQLAlchemy ORM
         logger.info(
@@ -1058,7 +1126,9 @@ def recommend_content_based_features_redis(
             liked_topic_ids = [row[0] for row in liked_topics_query.all()]
 
             if not liked_topic_ids:
-                post_ids = [p["id"] for p in valid_posts_with_data[:limit]]
+                # Cold start fallback to random posts
+                result = recommend_random_redis(valid_posts_with_data, limit)
+                return result, True
             else:
                 # Find posts with matching topics
                 posts_query = (
@@ -1077,12 +1147,17 @@ def recommend_content_based_features_redis(
                 sql_post_ids = [row[0] for row in posts_query.all()]
                 post_ids = [pid for pid in sql_post_ids if pid in all_post_ids][:limit]
 
-                # Fill with recent posts if needed
+                # Cold start check: if no results, return random posts
+                if not post_ids:
+                    result = recommend_random_redis(valid_posts_with_data, limit)
+                    return result, True
+
+                # Fill with random posts if needed (partial results, not full cold start)
                 if len(post_ids) < limit:
                     additional = [p["id"] for p in valid_posts_with_data if p["id"] not in post_ids]
                     post_ids.extend(additional[: limit - len(post_ids)])
 
-        return post_ids
+        return post_ids, False
 
 
 def recommend_content_based_vector_redis(
@@ -1096,7 +1171,7 @@ def recommend_content_based_vector_redis(
     db_engine,
     logger,
     **kwargs,
-) -> List[str]:
+) -> tuple[List[str], bool]:
     """
     Content Based Filtering - Vector Space Similarity (Redis).
     Recommends posts mathematically close to the user's preference vector.
@@ -1113,7 +1188,7 @@ def recommend_content_based_vector_redis(
         logger: Logger instance
 
     Returns:
-        List of post IDs
+        Tuple of (List of post IDs, bool indicating if fallback was used)
     """
     # Try to get liked posts from Redis
     agent_likes_key = redis_key_fn("user", agent_id) + ":likes"
@@ -1121,8 +1196,9 @@ def recommend_content_based_vector_redis(
         agent_likes = redis_client.smembers(agent_likes_key)
 
         if not agent_likes:
-            # No likes yet, fall back to recent posts
-            return [p["id"] for p in valid_posts_with_data[:limit]]
+            # No likes yet, cold start fallback to random posts
+            result = recommend_random_redis(valid_posts_with_data, limit)
+            return result, True
 
         # Build preference vector: topic -> weight (frequency)
         preference_vector = {}
@@ -1134,8 +1210,9 @@ def recommend_content_based_vector_redis(
                     preference_vector[topic] = preference_vector.get(topic, 0) + 1
 
         if not preference_vector:
-            # No topic data available
-            return [p["id"] for p in valid_posts_with_data[:limit]]
+            # No topic data available, cold start fallback to random posts
+            result = recommend_random_redis(valid_posts_with_data, limit)
+            return result, True
 
         # Calculate similarity score for each post
         posts_with_scores = []
@@ -1154,12 +1231,17 @@ def recommend_content_based_vector_redis(
         sorted_posts = sorted(posts_with_scores, key=lambda x: (-x["score"], x["index"]))
         post_ids = [p["id"] for p in sorted_posts[:limit]]
 
-        # Fill with recent posts if needed
+        # Cold start check: if no results, return random posts
+        if not post_ids:
+            result = recommend_random_redis(valid_posts_with_data, limit)
+            return result, True
+
+        # Fill with random posts if needed (partial results, not full cold start)
         if len(post_ids) < limit:
             additional = [p["id"] for p in valid_posts_with_data if p["id"] not in post_ids]
             post_ids.extend(additional[: limit - len(post_ids)])
 
-        return post_ids
+        return post_ids, False
     else:
         # Fallback to SQLAlchemy ORM
         logger.info(
@@ -1181,7 +1263,9 @@ def recommend_content_based_vector_redis(
             user_topics = {row[0]: row[1] for row in user_topics_query.all()}
 
             if not user_topics:
-                post_ids = [p["id"] for p in valid_posts_with_data[:limit]]
+                # Cold start fallback to random posts
+                result = recommend_random_redis(valid_posts_with_data, limit)
+                return result, True
             else:
                 # Find posts with matching topics, weighted by preference
                 posts_query = (
@@ -1200,9 +1284,14 @@ def recommend_content_based_vector_redis(
                 sql_post_ids = [row[0] for row in posts_query.all()]
                 post_ids = [pid for pid in sql_post_ids if pid in all_post_ids][:limit]
 
-                # Fill with recent posts if needed
+                # Cold start check: if no results, return random posts
+                if not post_ids:
+                    result = recommend_random_redis(valid_posts_with_data, limit)
+                    return result, True
+
+                # Fill with random posts if needed (partial results, not full cold start)
                 if len(post_ids) < limit:
                     additional = [p["id"] for p in valid_posts_with_data if p["id"] not in post_ids]
                     post_ids.extend(additional[: limit - len(post_ids)])
 
-        return post_ids
+        return post_ids, False
