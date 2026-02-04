@@ -14,6 +14,11 @@ import tempfile
 from pathlib import Path
 from typing import Generator
 
+# Fix langchain verbose attribute error
+# Set environment variable before importing langchain packages
+# to prevent AttributeError: module 'langchain' has no attribute 'verbose'
+os.environ.setdefault('LANGCHAIN_VERBOSE', 'false')
+
 import nltk
 import pytest
 import ray

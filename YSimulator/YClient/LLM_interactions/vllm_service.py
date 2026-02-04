@@ -33,6 +33,7 @@ class VLLMService:
         llm_config: Optional[Dict[str, Any]] = None,
         prompts_config: Optional[Dict[str, Any]] = None,
         llm_v_config: Optional[Dict[str, Any]] = None,
+        logging_config: Optional[Dict[str, Any]] = None,
     ):
         """
         Initialize vLLM service with configuration.
@@ -52,6 +53,7 @@ class VLLMService:
                 - temperature: Sampling temperature (default: 0.5)
                 - max_tokens: Maximum tokens to generate (default: 300)
                 - max_model_len: Maximum sequence length (default: 40000)
+            logging_config: Optional logging configuration dict
         """
         try:
             from vllm import LLM, SamplingParams
@@ -72,6 +74,7 @@ class VLLMService:
             }
 
         if prompts_config is None:
+            print("⚠ Warning: No prompts configuration provided. Using default fallback prompts.")
             prompts_config = {
                 "personas": {
                     "0": "You are a 'Validator'. Skeptical, brief, authentic.",
@@ -206,6 +209,85 @@ class VLLMService:
                 logger.warning("[vLLM] Vision model functionality will be disabled")
                 self.llm_v = None
                 self.sampling_params_v = None
+        
+        # Set up prompt logging if enabled
+        if logging_config is None:
+            logging_config = {}
+        
+        enable_prompt_log = logging_config.get("enable_prompt_log", False)
+        self.prompt_logger = None
+        
+        if enable_prompt_log:
+            # Set up prompt logger with file handler
+            import os
+            from logging.handlers import RotatingFileHandler
+            from pathlib import Path
+            
+            # Get log directory from logging_config or use default
+            log_dir = logging_config.get("log_dir", "./logs")
+            log_dir = Path(log_dir)
+            log_dir.mkdir(exist_ok=True)
+            
+            # Create prompt logger
+            self.prompt_logger = logging.getLogger(f"{logger.name}.prompts")
+            self.prompt_logger.setLevel(logging.DEBUG)
+            self.prompt_logger.propagate = False
+            
+            # Only add handler if it doesn't exist
+            if not self.prompt_logger.handlers:
+                prompt_log_file = log_dir / "vllm_prompts.log"
+                
+                # Create rotating file handler
+                prompt_handler = RotatingFileHandler(
+                    prompt_log_file, maxBytes=50 * 1024 * 1024, backupCount=3
+                )
+                prompt_handler.setLevel(logging.DEBUG)
+                
+                # Create formatter
+                import json
+                from datetime import datetime
+                
+                class PromptJsonFormatter(logging.Formatter):
+                    def format(self, record):
+                        log_data = {
+                            "timestamp": datetime.utcnow().isoformat(),
+                            "level": record.levelname,
+                            "message": record.getMessage(),
+                        }
+                        if hasattr(record, "extra_data"):
+                            log_data.update(record.extra_data)
+                        return json.dumps(log_data, indent=2)
+                
+                prompt_handler.setFormatter(PromptJsonFormatter())
+                self.prompt_logger.addHandler(prompt_handler)
+                logger.info("Prompt logging enabled in vLLM service")
+
+    def _log_prompt(self, method_name: str, system_msg: str, user_msg: str, agent_attrs: dict = None):
+        """
+        Log the prompt details for debugging.
+        
+        Args:
+            method_name: Name of the method generating the prompt
+            system_msg: System message content
+            user_msg: User message content
+            agent_attrs: Optional agent attributes used in prompt generation
+        """
+        if self.prompt_logger is not None:
+            log_data = {
+                "method": method_name,
+                "system_message": system_msg,
+                "user_message": user_msg,
+            }
+            if agent_attrs:
+                log_data["agent_attrs"] = {
+                    k: v for k, v in agent_attrs.items() 
+                    if k in ["name", "topic", "topic_opinion", "topic_opinion_value", 
+                            "post_topics", "post_opinions", "cluster_id"]
+                }
+            self.prompt_logger.debug(
+                f"LLM Prompt - {method_name}",
+                extra={"extra_data": log_data}
+            )
 
     def _build_persona(self, cluster_id: int, agent_attrs: dict = None) -> str:
         """
@@ -269,6 +351,15 @@ class VLLMService:
 
             # Get topic if available
             topic = agent_attrs.get("topic") if agent_attrs else None
+            
+            # DEBUG: Log if topic is unexpectedly missing
+            # Note: null topic is EXPECTED when agent has no interests (per INTERESTS.md)
+            if not topic and agent_attrs and "topic" in agent_attrs:
+                agent_name = agent_attrs.get("name", "Unknown")
+                logger.warning(
+                    f"Topic is explicitly None for agent {agent_name} in generate_post. "
+                    f"This may indicate the agent has no interests defined or interests are malformed."
+                )
 
             # Get opinion on the topic if available
             topic_opinion = agent_attrs.get("topic_opinion") if agent_attrs else None
@@ -278,18 +369,27 @@ class VLLMService:
             user_template = self.prompts_config["generate_post"]["user_template"]
 
             # Format templates
-            system_msg = system_template.format(persona=persona, toxicity=toxicity)
+            system_msg = system_template.format(persona=persona, toxicity=toxicity) if system_template else ""
 
             # Build topic instruction with opinion if available
             if topic and topic_opinion:
-                topic_instruction = f" Topic: {topic}. Your opinion on this topic is: {topic_opinion}. Express this viewpoint in your post."
+                topic_instruction = f" You MUST write about the topic: {topic}. Your stance is: {topic_opinion}. Express this viewpoint clearly."
             elif topic:
-                topic_instruction = f" Topic: {topic}."
+                topic_instruction = f" You MUST write about the topic: {topic}."
             else:
                 topic_instruction = ""
 
-            # Format user message with topic instruction
-            user_msg = user_template.format(day=day, slot=slot, topic_instruction=topic_instruction)
+            # Format user message with all placeholders
+            user_msg = user_template.format(
+                persona=persona,
+                toxicity=toxicity,
+                day=day,
+                slot=slot,
+                topic_instruction=topic_instruction
+            )
+
+            # Log the prompt for debugging
+            self._log_prompt("generate_post", system_msg, user_msg, agent_attrs)
 
             # Create formatted prompt
             prompt = self._format_prompt(system_msg, user_msg)
@@ -346,18 +446,22 @@ class VLLMService:
                     user_template = self.prompts_config["generate_post"]["user_template"]
 
                     # Format templates
-                    system_msg = system_template.format(persona=persona, toxicity=toxicity)
+                    system_msg = system_template.format(persona=persona, toxicity=toxicity) if system_template else ""
 
                     # Build topic instruction
                     if topic and topic_opinion:
-                        topic_instruction = f" Topic: {topic}. Your opinion on this topic is: {topic_opinion}. Express this viewpoint in your post."
+                        topic_instruction = f" You MUST write about the topic: {topic}. Your stance is: {topic_opinion}. Express this viewpoint clearly."
                     elif topic:
-                        topic_instruction = f" Topic: {topic}."
+                        topic_instruction = f" You MUST write about the topic: {topic}."
                     else:
                         topic_instruction = ""
 
                     user_msg = user_template.format(
-                        day=day, slot=slot, topic_instruction=topic_instruction
+                        persona=persona,
+                        toxicity=toxicity,
+                        day=day,
+                        slot=slot,
+                        topic_instruction=topic_instruction
                     )
 
                     # Create formatted prompt
@@ -382,13 +486,16 @@ class VLLMService:
     def decide_reaction(self, cluster_id: int, post_content: str) -> str:
         """Decide: LIKE, COMMENT, or IGNORE."""
         try:
+            # Build persona from cluster_id
+            persona = self._build_persona(cluster_id, None)
+            
             # Get prompt templates from configuration
             system_template = self.prompts_config["decide_reaction"]["system_template"]
             user_template = self.prompts_config["decide_reaction"]["user_template"]
 
             # Format templates
-            system_msg = system_template.format(cluster_id=cluster_id)
-            user_msg = user_template.format(post_content=post_content)
+            system_msg = system_template.format(cluster_id=cluster_id, persona=persona) if system_template else ""
+            user_msg = user_template.format(cluster_id=cluster_id, persona=persona, post_content=post_content)
 
             # Create formatted prompt
             prompt = self._format_prompt(system_msg, user_msg)
@@ -630,12 +737,15 @@ class VLLMService:
                 thread_context_lines.append(f"{username}: {tweet}")
             thread_context_str = "\n".join(thread_context_lines)
             thread_context_instruction = (
-                f"Previous discussion in this thread:\n{thread_context_str}\n\n"
+                f"Previous discussion in this thread (for context only):\n{thread_context_str}\n\n"
+                f"Now respond specifically to {author_name}'s post above. "
             )
 
         # Format templates
-        system_msg = system_template.format(persona=persona, toxicity=toxicity)
+        system_msg = system_template.format(persona=persona, toxicity=toxicity) if system_template else ""
         user_msg = user_template.format(
+            persona=persona,
+            toxicity=toxicity,
             author_name=author_name,
             post_content=post_content,
             thread_context_instruction=thread_context_instruction,
@@ -644,6 +754,9 @@ class VLLMService:
         # Add opinion instruction if available
         if opinion_instruction:
             user_msg += opinion_instruction
+
+        # Log the prompt for debugging
+        self._log_prompt("generate_comment", system_msg, user_msg, agent_attrs)
 
         # Create formatted prompt
         prompt = self._format_prompt(system_msg, user_msg)
@@ -732,12 +845,15 @@ class VLLMService:
                             thread_context_lines.append(f"{username}: {tweet}")
                         thread_context_str = "\n".join(thread_context_lines)
                         thread_context_instruction = (
-                            f"Previous discussion in this thread:\n{thread_context_str}\n\n"
+                            f"Previous discussion in this thread (for context only):\n{thread_context_str}\n\n"
+                            f"Now respond specifically to {author_name}'s post above. "
                         )
 
                     # Format templates
-                    system_msg = system_template.format(persona=persona, toxicity=toxicity)
+                    system_msg = system_template.format(persona=persona, toxicity=toxicity) if system_template else ""
                     user_msg = user_template.format(
+                        persona=persona,
+                        toxicity=toxicity,
                         author_name=author_name,
                         post_content=post_content,
                         thread_context_instruction=thread_context_instruction,
@@ -855,8 +971,13 @@ class VLLMService:
         system_template = self.prompts_config["generate_share_commentary"]["system_template"]
         user_template = self.prompts_config["generate_share_commentary"]["user_template"]
 
-        system_msg = system_template.format(persona=persona, toxicity=toxicity)
-        user_msg = user_template.format(author_name=author_name, post_content=post_content)
+        system_msg = system_template.format(persona=persona, toxicity=toxicity) if system_template else ""
+        user_msg = user_template.format(
+            persona=persona,
+            toxicity=toxicity,
+            author_name=author_name,
+            post_content=post_content
+        )
 
         if opinion_instruction:
             user_msg += opinion_instruction
@@ -969,7 +1090,7 @@ class VLLMService:
         system_template = search_action_config.get("system_template")
         user_template = search_action_config.get("user_template")
 
-        if not system_template or not user_template:
+        if system_template is None or user_template is None:
             logger.warning(
                 "decide_search_action prompts not configured in llm_prompts.json, using default fallback"
             )

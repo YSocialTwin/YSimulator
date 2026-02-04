@@ -136,10 +136,13 @@ def test_post_generator_llm(mock_context, mock_agent):
     assert len(result.actions) == 0  # LLM calls are async
     assert len(result.pending_llm_calls) == 1
 
-    agent_id, cluster_id, future, topic = result.pending_llm_calls[0]
+    agent_id, cluster_id, future, topic, day, slot, agent_attrs = result.pending_llm_calls[0]
     assert agent_id == 1
     assert cluster_id == 1
     assert topic == "test_topic"
+    assert day == 1
+    assert slot == 5
+    assert isinstance(agent_attrs, dict)
 
 
 def test_follow_generator_no_suggestions(mock_context, mock_agent):

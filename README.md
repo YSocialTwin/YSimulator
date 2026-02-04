@@ -199,7 +199,16 @@ python -m pytest YSimulator/tests/
 
 # Run specific test file
 python -m pytest YSimulator/tests/test_network_loading.py
+
+# Run tests with better isolation (recommended for avoiding test interference)
+# Install pytest-xdist first: pip install pytest-xdist
+python -m pytest YSimulator/tests/ -n auto
+
+# Run tests in parallel with 4 workers
+python -m pytest YSimulator/tests/ -n 4
 ```
+
+**Note:** Some tests use module-level mocking (e.g., `test_server.py` mocks `ray.remote`). When running the full test suite, use `pytest-xdist` with the `-n` flag to run tests in separate worker processes, which prevents mock interference between test modules.
 
 ## Utilities
 

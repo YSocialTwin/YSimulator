@@ -52,6 +52,7 @@ def setup_logging(
         logging_config: Optional logging configuration dict with keys:
             - enable_execution_log: bool (default True)
             - enable_console_log: bool (default True)
+            - enable_prompt_log: bool (default False)
 
     Returns:
         Configured logger instance
@@ -62,6 +63,7 @@ def setup_logging(
 
     enable_execution_log = logging_config.get("enable_execution_log", True)
     enable_console_log = logging_config.get("enable_console_log", True)
+    enable_prompt_log = logging_config.get("enable_prompt_log", False)
 
     log_dir = config_path / "logs"
     log_dir.mkdir(exist_ok=True)
@@ -108,6 +110,40 @@ def setup_logging(
             logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
         )
         logger.addHandler(console_handler)
+
+    # Set up prompt logging if enabled
+    if enable_prompt_log:
+        prompt_logger = logging.getLogger(f"YSimulator.Client.{client_name}.prompts")
+        prompt_logger.setLevel(logging.DEBUG)
+        prompt_logger.propagate = False  # Don't propagate to parent logger
+        
+        prompt_log_file = log_dir / f"{client_name}_prompts.log"
+        
+        # Create rotating file handler for prompts (50MB per file, keep 3 backups)
+        prompt_handler = RotatingFileHandler(
+            prompt_log_file, maxBytes=50 * 1024 * 1024, backupCount=3
+        )
+        
+        # Add compression for rotated files
+        prompt_handler.rotator = compress_rotated_log
+        prompt_handler.namer = lambda name: name + ".gz"
+        
+        # Create JSON formatter for prompts
+        class PromptJsonFormatter(logging.Formatter):
+            def format(self, record):
+                log_data = {
+                    "timestamp": datetime.utcnow().isoformat(),
+                    "level": record.levelname,
+                    "message": record.getMessage(),
+                }
+                if hasattr(record, "extra_data"):
+                    log_data.update(record.extra_data)
+                return json.dumps(log_data, indent=2)
+        
+        prompt_handler.setFormatter(PromptJsonFormatter())
+        prompt_logger.addHandler(prompt_handler)
+        
+        logger.info(f"Prompt logging enabled - writing to {prompt_log_file}")
 
     return logger
 
@@ -220,6 +256,7 @@ if __name__ == "__main__":
         try:
             with open(filename, "r") as f:
                 configs[filename] = json.load(f)
+                print(f"✓ Loaded {description} from: {filename}")
         except json.JSONDecodeError as e:
             print(f"❌ Error: Invalid JSON in '{filename}': {e}")
             sys.exit(1)
@@ -230,6 +267,9 @@ if __name__ == "__main__":
     # Set up logging in config directory
     logging_config = sim_config.get("logging", {})
     logger = setup_logging(config_dir, client_name, logging_config)
+    
+    # Add log directory path to logging_config for Ray actors
+    logging_config["log_dir"] = str(config_dir / "logs")
 
     load_time = (time.time() - start_time) * 1000
     logger.info(
@@ -431,9 +471,10 @@ if __name__ == "__main__":
                     logger=logger,
                     reuse_actors=reuse_actors,
                     actor_name_prefix=actor_name_prefix,
+                    logging_config=logging_config,
                 )
             else:
-                llm_service = LLMService.remote(llm_config, prompts_config, llm_v_config)
+                llm_service = LLMService.remote(llm_config, prompts_config, llm_v_config, logging_config)
 
     llm_time = (time.time() - llm_start) * 1000
 

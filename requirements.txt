@@ -4,6 +4,7 @@ ray>=2.0.0,<3.0.0
 redis>=4.0.0,<6.0.0
 
 # LLM and NLP
+langchain>=0.1.0,<1.0.0
 langchain-core>=0.1.0,<1.0.0
 langchain-ollama>=0.1.0,<1.0.0
 vllm>=0.6.0,<1.0.0

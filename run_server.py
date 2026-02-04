@@ -155,15 +155,7 @@ if __name__ == "__main__":
     # Make database name unique per server instance
     # This ensures each server instance has its own database
     if db_config.get("type") == "sqlite":
-        sqlite_config = db_config.get("sqlite", {})
-        base_filename = sqlite_config.get("filename", "simulation.db")
-        # Add server_name to filename to make it unique
-        name_parts = base_filename.rsplit(".", 1)
-        if len(name_parts) == 2:
-            unique_filename = f"{name_parts[0]}_{server_name}.{name_parts[1]}"
-        else:
-            unique_filename = f"{base_filename}_{server_name}"
-        db_config["sqlite"]["filename"] = unique_filename
+        db_config["sqlite"]["filename"] = "database_server.db"
     elif db_config.get("type") in ["postgresql", "mysql"]:
         # For PostgreSQL/MySQL, append server_name to database name
         db_type = db_config["type"]
