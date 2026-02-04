@@ -61,7 +61,7 @@
       "daily_activity_level": 3,
       "round_actions": 4,
       "is_page": 0,
-      "recsys_type": "rchrono_followers",
+      "recsys_type": "ReverseChronoFollowers",
       "frecsys_type": "preferential_attachment",
       "interests": [
         [
@@ -141,7 +141,7 @@
       "daily_activity_level": 3,
       "round_actions": 4,
       "is_page": 0,
-      "recsys_type": "rchrono",
+      "recsys_type": "ReverseChrono",
       "frecsys_type": "common_neighbors",
       "interests": [
         [
@@ -181,7 +181,7 @@
       "daily_activity_level": 1,
       "round_actions": 5,
       "is_page": 0,
-      "recsys_type": "rchrono",
+      "recsys_type": "ReverseChrono",
       "frecsys_type": "random",
       "interests": [
         [
@@ -221,7 +221,7 @@
       "daily_activity_level": 1,
       "round_actions": 5,
       "is_page": 0,
-      "recsys_type": "rchrono",
+      "recsys_type": "ReverseChrono",
       "frecsys_type": "preferential_attachment",
       "interests": [
         [
@@ -261,7 +261,7 @@
       "daily_activity_level": 3,
       "round_actions": 3,
       "is_page": 0,
-      "recsys_type": "rchrono",
+      "recsys_type": "ReverseChrono",
       "frecsys_type": "jaccard",
       "interests": [
         [
@@ -301,7 +301,7 @@
       "daily_activity_level": 2,
       "round_actions": 4,
       "is_page": 0,
-      "recsys_type": "rchrono_followers",
+      "recsys_type": "ReverseChronoFollowers",
       "frecsys_type": "common_neighbors",
       "interests": [
         [
@@ -381,7 +381,7 @@
       "daily_activity_level": 2,
       "round_actions": 2,
       "is_page": 0,
-      "recsys_type": "rchrono_followers",
+      "recsys_type": "ReverseChronoFollowers",
       "frecsys_type": "adamic_adar",
       "interests": [
         [
@@ -421,7 +421,7 @@
       "daily_activity_level": 2,
       "round_actions": 3,
       "is_page": 0,
-      "recsys_type": "rchrono",
+      "recsys_type": "ReverseChrono",
       "frecsys_type": "preferential_attachment",
       "interests": [
         [
@@ -461,7 +461,7 @@
       "daily_activity_level": 1,
       "round_actions": 5,
       "is_page": 0,
-      "recsys_type": "rchrono_followers",
+      "recsys_type": "ReverseChronoFollowers",
       "frecsys_type": "common_neighbors",
       "interests": [
         [
@@ -501,7 +501,7 @@
       "daily_activity_level": 1,
       "round_actions": 5,
       "is_page": 0,
-      "recsys_type": "rchrono",
+      "recsys_type": "ReverseChrono",
       "frecsys_type": "preferential_attachment",
       "interests": [
         [
@@ -541,7 +541,7 @@
       "daily_activity_level": 3,
       "round_actions": 4,
       "is_page": 0,
-      "recsys_type": "rchrono",
+      "recsys_type": "ReverseChrono",
       "frecsys_type": "common_neighbors",
       "interests": [
         [
@@ -581,7 +581,7 @@
       "daily_activity_level": 3,
       "round_actions": 4,
       "is_page": 0,
-      "recsys_type": "rchrono_followers",
+      "recsys_type": "ReverseChronoFollowers",
       "frecsys_type": "preferential_attachment",
       "interests": [
         [
@@ -621,7 +621,7 @@
       "daily_activity_level": 2,
       "round_actions": 3,
       "is_page": 0,
-      "recsys_type": "rchrono",
+      "recsys_type": "ReverseChrono",
       "frecsys_type": "adamic_adar",
       "interests": [
         [
@@ -661,7 +661,7 @@
       "daily_activity_level": 2,
       "round_actions": 3,
       "is_page": 0,
-      "recsys_type": "rchrono_followers",
+      "recsys_type": "ReverseChronoFollowers",
       "frecsys_type": "adamic_adar",
       "interests": [
         [
@@ -701,7 +701,7 @@
       "daily_activity_level": 3,
       "round_actions": 5,
       "is_page": 0,
-      "recsys_type": "rchrono_followers",
+      "recsys_type": "ReverseChronoFollowers",
       "frecsys_type": "adamic_adar",
       "interests": [
         [
@@ -741,7 +741,7 @@
       "daily_activity_level": 2,
       "round_actions": 5,
       "is_page": 0,
-      "recsys_type": "rchrono_followers",
+      "recsys_type": "ReverseChronoFollowers",
       "frecsys_type": "adamic_adar",
       "interests": [
         [
@@ -821,7 +821,7 @@
       "daily_activity_level": 1,
       "round_actions": 2,
       "is_page": 0,
-      "recsys_type": "rchrono_followers",
+      "recsys_type": "ReverseChronoFollowers",
       "frecsys_type": "adamic_adar",
       "interests": [
         [
@@ -941,7 +941,7 @@
       "daily_activity_level": 1,
       "round_actions": 3,
       "is_page": 0,
-      "recsys_type": "rchrono",
+      "recsys_type": "ReverseChrono",
       "frecsys_type": "common_neighbors",
       "interests": [
         [
@@ -1021,7 +1021,7 @@
       "daily_activity_level": 2,
       "round_actions": 5,
       "is_page": 0,
-      "recsys_type": "rchrono",
+      "recsys_type": "ReverseChrono",
       "frecsys_type": "random",
       "interests": [
         [
@@ -1101,7 +1101,7 @@
       "daily_activity_level": 3,
       "round_actions": 2,
       "is_page": 0,
-      "recsys_type": "rchrono_followers",
+      "recsys_type": "ReverseChronoFollowers",
       "frecsys_type": "adamic_adar",
       "interests": [
         [
@@ -1141,7 +1141,7 @@
       "daily_activity_level": 3,
       "round_actions": 2,
       "is_page": 0,
-      "recsys_type": "rchrono",
+      "recsys_type": "ReverseChrono",
       "frecsys_type": "random",
       "interests": [
         [
@@ -1181,7 +1181,7 @@
       "daily_activity_level": 3,
       "round_actions": 2,
       "is_page": 0,
-      "recsys_type": "rchrono_followers",
+      "recsys_type": "ReverseChronoFollowers",
       "frecsys_type": "preferential_attachment",
       "interests": [
         [
@@ -1221,7 +1221,7 @@
       "daily_activity_level": 3,
       "round_actions": 4,
       "is_page": 0,
-      "recsys_type": "rchrono_followers",
+      "recsys_type": "ReverseChronoFollowers",
       "frecsys_type": "jaccard",
       "interests": [
         [
@@ -1261,7 +1261,7 @@
       "daily_activity_level": 1,
       "round_actions": 5,
       "is_page": 0,
-      "recsys_type": "rchrono_followers",
+      "recsys_type": "ReverseChronoFollowers",
       "frecsys_type": "common_neighbors",
       "interests": [
         [
@@ -1301,7 +1301,7 @@
       "daily_activity_level": 2,
       "round_actions": 2,
       "is_page": 0,
-      "recsys_type": "rchrono",
+      "recsys_type": "ReverseChrono",
       "frecsys_type": "preferential_attachment",
       "interests": [
         [
@@ -1541,7 +1541,7 @@
       "daily_activity_level": 2,
       "round_actions": 3,
       "is_page": 0,
-      "recsys_type": "rchrono_followers",
+      "recsys_type": "ReverseChronoFollowers",
       "frecsys_type": "adamic_adar",
       "interests": [
         [
@@ -1581,7 +1581,7 @@
       "daily_activity_level": 1,
       "round_actions": 3,
       "is_page": 0,
-      "recsys_type": "rchrono",
+      "recsys_type": "ReverseChrono",
       "frecsys_type": "common_neighbors",
       "interests": [
         [
@@ -1621,7 +1621,7 @@
       "daily_activity_level": 1,
       "round_actions": 5,
       "is_page": 0,
-      "recsys_type": "rchrono",
+      "recsys_type": "ReverseChrono",
       "frecsys_type": "jaccard",
       "interests": [
         [
@@ -1661,7 +1661,7 @@
       "daily_activity_level": 1,
       "round_actions": 3,
       "is_page": 0,
-      "recsys_type": "rchrono",
+      "recsys_type": "ReverseChrono",
       "frecsys_type": "jaccard",
       "interests": [
         [
@@ -1701,7 +1701,7 @@
       "daily_activity_level": 3,
       "round_actions": 4,
       "is_page": 0,
-      "recsys_type": "rchrono_followers",
+      "recsys_type": "ReverseChronoFollowers",
       "frecsys_type": "jaccard",
       "interests": [
         [
@@ -1741,7 +1741,7 @@
       "daily_activity_level": 2,
       "round_actions": 4,
       "is_page": 0,
-      "recsys_type": "rchrono_followers",
+      "recsys_type": "ReverseChronoFollowers",
       "frecsys_type": "random",
       "interests": [
         [
@@ -1781,7 +1781,7 @@
       "daily_activity_level": 1,
       "round_actions": 5,
       "is_page": 0,
-      "recsys_type": "rchrono",
+      "recsys_type": "ReverseChrono",
       "frecsys_type": "random",
       "interests": [
         [
@@ -1821,7 +1821,7 @@
       "daily_activity_level": 2,
       "round_actions": 2,
       "is_page": 0,
-      "recsys_type": "rchrono",
+      "recsys_type": "ReverseChrono",
       "frecsys_type": "adamic_adar",
       "interests": [
         [
@@ -1861,7 +1861,7 @@
       "daily_activity_level": 1,
       "round_actions": 3,
       "is_page": 0,
-      "recsys_type": "rchrono_followers",
+      "recsys_type": "ReverseChronoFollowers",
       "frecsys_type": "preferential_attachment",
       "interests": [
         [
@@ -1901,7 +1901,7 @@
       "daily_activity_level": 1,
       "round_actions": 4,
       "is_page": 0,
-      "recsys_type": "rchrono_followers",
+      "recsys_type": "ReverseChronoFollowers",
       "frecsys_type": "jaccard",
       "interests": [
         [
@@ -1941,7 +1941,7 @@
       "daily_activity_level": 3,
       "round_actions": 3,
       "is_page": 0,
-      "recsys_type": "rchrono",
+      "recsys_type": "ReverseChrono",
       "frecsys_type": "preferential_attachment",
       "interests": [
         [
@@ -2021,7 +2021,7 @@
       "daily_activity_level": 2,
       "round_actions": 3,
       "is_page": 0,
-      "recsys_type": "rchrono",
+      "recsys_type": "ReverseChrono",
       "frecsys_type": "common_neighbors",
       "interests": [
         [
@@ -2061,7 +2061,7 @@
       "daily_activity_level": 2,
       "round_actions": 3,
       "is_page": 0,
-      "recsys_type": "rchrono_followers",
+      "recsys_type": "ReverseChronoFollowers",
       "frecsys_type": "common_neighbors",
       "interests": [
         [
@@ -2101,7 +2101,7 @@
       "daily_activity_level": 2,
       "round_actions": 4,
       "is_page": 0,
-      "recsys_type": "rchrono",
+      "recsys_type": "ReverseChrono",
       "frecsys_type": "common_neighbors",
       "interests": [
         [
@@ -2141,7 +2141,7 @@
       "daily_activity_level": 2,
       "round_actions": 3,
       "is_page": 0,
-      "recsys_type": "rchrono",
+      "recsys_type": "ReverseChrono",
       "frecsys_type": "adamic_adar",
       "interests": [
         [
@@ -2221,7 +2221,7 @@
       "daily_activity_level": 1,
       "round_actions": 2,
       "is_page": 0,
-      "recsys_type": "rchrono",
+      "recsys_type": "ReverseChrono",
       "frecsys_type": "adamic_adar",
       "interests": [
         [
@@ -2261,7 +2261,7 @@
       "daily_activity_level": 2,
       "round_actions": 2,
       "is_page": 0,
-      "recsys_type": "rchrono",
+      "recsys_type": "ReverseChrono",
       "frecsys_type": "jaccard",
       "interests": [
         [
@@ -2301,7 +2301,7 @@
       "daily_activity_level": 3,
       "round_actions": 3,
       "is_page": 0,
-      "recsys_type": "rchrono",
+      "recsys_type": "ReverseChrono",
       "frecsys_type": "random",
       "interests": [
         [
@@ -2341,7 +2341,7 @@
       "daily_activity_level": 3,
       "round_actions": 5,
       "is_page": 0,
-      "recsys_type": "rchrono_followers",
+      "recsys_type": "ReverseChronoFollowers",
       "frecsys_type": "preferential_attachment",
       "interests": [
         [
@@ -2381,7 +2381,7 @@
       "daily_activity_level": 3,
       "round_actions": 2,
       "is_page": 0,
-      "recsys_type": "rchrono",
+      "recsys_type": "ReverseChrono",
       "frecsys_type": "common_neighbors",
       "interests": [
         [
@@ -2421,7 +2421,7 @@
       "daily_activity_level": 2,
       "round_actions": 3,
       "is_page": 0,
-      "recsys_type": "rchrono",
+      "recsys_type": "ReverseChrono",
       "frecsys_type": "adamic_adar",
       "interests": [
         [
@@ -2581,7 +2581,7 @@
       "daily_activity_level": 3,
       "round_actions": 3,
       "is_page": 0,
-      "recsys_type": "rchrono_followers",
+      "recsys_type": "ReverseChronoFollowers",
       "frecsys_type": "jaccard",
       "interests": [
         [
@@ -2621,7 +2621,7 @@
       "daily_activity_level": 1,
       "round_actions": 4,
       "is_page": 0,
-      "recsys_type": "rchrono_followers",
+      "recsys_type": "ReverseChronoFollowers",
       "frecsys_type": "jaccard",
       "interests": [
         [
@@ -2661,7 +2661,7 @@
       "daily_activity_level": 1,
       "round_actions": 5,
       "is_page": 0,
-      "recsys_type": "rchrono",
+      "recsys_type": "ReverseChrono",
       "frecsys_type": "common_neighbors",
       "interests": [
         [
@@ -2821,7 +2821,7 @@
       "daily_activity_level": 3,
       "round_actions": 5,
       "is_page": 0,
-      "recsys_type": "rchrono_followers",
+      "recsys_type": "ReverseChronoFollowers",
       "frecsys_type": "adamic_adar",
       "interests": [
         [
@@ -2861,7 +2861,7 @@
       "daily_activity_level": 2,
       "round_actions": 3,
       "is_page": 0,
-      "recsys_type": "rchrono_followers",
+      "recsys_type": "ReverseChronoFollowers",
       "frecsys_type": "preferential_attachment",
       "interests": [
         [
@@ -2901,7 +2901,7 @@
       "daily_activity_level": 3,
       "round_actions": 4,
       "is_page": 0,
-      "recsys_type": "rchrono_followers",
+      "recsys_type": "ReverseChronoFollowers",
       "frecsys_type": "adamic_adar",
       "interests": [
         [
@@ -2941,7 +2941,7 @@
       "daily_activity_level": 1,
       "round_actions": 2,
       "is_page": 0,
-      "recsys_type": "rchrono_followers",
+      "recsys_type": "ReverseChronoFollowers",
       "frecsys_type": "preferential_attachment",
       "interests": [
         [
@@ -3061,7 +3061,7 @@
       "daily_activity_level": 1,
       "round_actions": 5,
       "is_page": 0,
-      "recsys_type": "rchrono",
+      "recsys_type": "ReverseChrono",
       "frecsys_type": "adamic_adar",
       "interests": [
         [
@@ -3141,7 +3141,7 @@
       "daily_activity_level": 1,
       "round_actions": 4,
       "is_page": 0,
-      "recsys_type": "rchrono",
+      "recsys_type": "ReverseChrono",
       "frecsys_type": "preferential_attachment",
       "interests": [
         [
@@ -3181,7 +3181,7 @@
       "daily_activity_level": 2,
       "round_actions": 5,
       "is_page": 0,
-      "recsys_type": "rchrono_followers",
+      "recsys_type": "ReverseChronoFollowers",
       "frecsys_type": "preferential_attachment",
       "interests": [
         [
@@ -3301,7 +3301,7 @@
       "daily_activity_level": 2,
       "round_actions": 2,
       "is_page": 0,
-      "recsys_type": "rchrono_followers",
+      "recsys_type": "ReverseChronoFollowers",
       "frecsys_type": "common_neighbors",
       "interests": [
         [
@@ -3381,7 +3381,7 @@
       "daily_activity_level": 1,
       "round_actions": 5,
       "is_page": 0,
-      "recsys_type": "rchrono_followers",
+      "recsys_type": "ReverseChronoFollowers",
       "frecsys_type": "preferential_attachment",
       "interests": [
         [
@@ -3421,7 +3421,7 @@
       "daily_activity_level": 3,
       "round_actions": 2,
       "is_page": 0,
-      "recsys_type": "rchrono",
+      "recsys_type": "ReverseChrono",
       "frecsys_type": "random",
       "interests": [
         [
@@ -3461,7 +3461,7 @@
       "daily_activity_level": 3,
       "round_actions": 2,
       "is_page": 0,
-      "recsys_type": "rchrono",
+      "recsys_type": "ReverseChrono",
       "frecsys_type": "preferential_attachment",
       "interests": [
         [
@@ -3501,7 +3501,7 @@
       "daily_activity_level": 1,
       "round_actions": 5,
       "is_page": 0,
-      "recsys_type": "rchrono",
+      "recsys_type": "ReverseChrono",
       "frecsys_type": "adamic_adar",
       "interests": [
         [
@@ -3541,7 +3541,7 @@
       "daily_activity_level": 1,
       "round_actions": 3,
       "is_page": 0,
-      "recsys_type": "rchrono_followers",
+      "recsys_type": "ReverseChronoFollowers",
       "frecsys_type": "adamic_adar",
       "interests": [
         [
@@ -3581,7 +3581,7 @@
       "daily_activity_level": 1,
       "round_actions": 4,
       "is_page": 0,
-      "recsys_type": "rchrono_followers",
+      "recsys_type": "ReverseChronoFollowers",
       "frecsys_type": "random",
       "interests": [
         [
@@ -3661,7 +3661,7 @@
       "daily_activity_level": 2,
       "round_actions": 5,
       "is_page": 0,
-      "recsys_type": "rchrono",
+      "recsys_type": "ReverseChrono",
       "frecsys_type": "preferential_attachment",
       "interests": [
         [
@@ -3701,7 +3701,7 @@
       "daily_activity_level": 1,
       "round_actions": 2,
       "is_page": 0,
-      "recsys_type": "rchrono_followers",
+      "recsys_type": "ReverseChronoFollowers",
       "frecsys_type": "jaccard",
       "interests": [
         [
@@ -3781,7 +3781,7 @@
       "daily_activity_level": 2,
       "round_actions": 5,
       "is_page": 0,
-      "recsys_type": "rchrono",
+      "recsys_type": "ReverseChrono",
       "frecsys_type": "jaccard",
       "interests": [
         [
@@ -3821,7 +3821,7 @@
       "daily_activity_level": 2,
       "round_actions": 5,
       "is_page": 0,
-      "recsys_type": "rchrono",
+      "recsys_type": "ReverseChrono",
       "frecsys_type": "common_neighbors",
       "interests": [
         [
@@ -3861,7 +3861,7 @@
       "daily_activity_level": 2,
       "round_actions": 3,
       "is_page": 0,
-      "recsys_type": "rchrono_followers",
+      "recsys_type": "ReverseChronoFollowers",
       "frecsys_type": "adamic_adar",
       "interests": [
         [
@@ -3901,7 +3901,7 @@
       "daily_activity_level": 1,
       "round_actions": 3,
       "is_page": 0,
-      "recsys_type": "rchrono",
+      "recsys_type": "ReverseChrono",
       "frecsys_type": "random",
       "interests": [
         [
@@ -3941,7 +3941,7 @@
       "daily_activity_level": 3,
       "round_actions": 3,
       "is_page": 0,
-      "recsys_type": "rchrono",
+      "recsys_type": "ReverseChrono",
       "frecsys_type": "jaccard",
       "interests": [
         [
@@ -3981,7 +3981,7 @@
       "daily_activity_level": 1,
       "round_actions": 4,
       "is_page": 0,
-      "recsys_type": "rchrono_followers",
+      "recsys_type": "ReverseChronoFollowers",
       "frecsys_type": "adamic_adar",
       "interests": [
         [
@@ -4021,7 +4021,7 @@
       "daily_activity_level": 1,
       "round_actions": 3,
       "is_page": 0,
-      "recsys_type": "rchrono_followers",
+      "recsys_type": "ReverseChronoFollowers",
       "frecsys_type": "random",
       "interests": [
         [
