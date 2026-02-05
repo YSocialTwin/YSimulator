@@ -469,7 +469,7 @@ def recommend_common_interests(
     if not post_ids:
         post_ids = recommend_random(session, agent_id, visibility_day, visibility_hour, limit)
         return post_ids, True
-    
+
     return post_ids, False
 
 
@@ -568,7 +568,7 @@ def recommend_common_user_interests(
     if not post_ids:
         post_ids = recommend_random(session, agent_id, visibility_day, visibility_hour, limit)
         return post_ids, True
-    
+
     return post_ids, False
 
 
@@ -620,12 +620,12 @@ def recommend_similar_users_react(
     )
 
     results = [row[0] for row in query.all()]
-    
+
     # Cold start fallback: if no results, return random posts
     if not results:
         results = recommend_random(session, agent_id, visibility_day, visibility_hour, limit)
         return results, True
-    
+
     return results, False
 
 
@@ -672,12 +672,12 @@ def recommend_similar_users_posts(
     )
 
     results = [row[0] for row in query.all()]
-    
+
     # Cold start fallback: if no results, return random posts
     if not results:
         results = recommend_random(session, agent_id, visibility_day, visibility_hour, limit)
         return results, True
-    
+
     return results, False
 
 
@@ -742,12 +742,12 @@ def recommend_collaborative_user_user(
     )
 
     results = [row[0] for row in query.all()]
-    
+
     # Cold start fallback: if no results, return random posts
     if not results:
         results = recommend_random(session, agent_id, visibility_day, visibility_hour, limit)
         return results, True
-    
+
     return results, False
 
 
@@ -807,12 +807,12 @@ def recommend_collaborative_item_item(
     )
 
     results = [row[0] for row in query.all()]
-    
+
     # Cold start fallback: if no results, return random posts
     if not results:
         results = recommend_random(session, agent_id, visibility_day, visibility_hour, limit)
         return results, True
-    
+
     return results, False
 
 
@@ -864,12 +864,12 @@ def recommend_content_based_features(
     )
 
     results = [row[0] for row in query.all()]
-    
+
     # Cold start fallback: if no results, return random posts
     if not results:
         results = recommend_random(session, agent_id, visibility_day, visibility_hour, limit)
         return results, True
-    
+
     return results, False
 
 
@@ -924,10 +924,10 @@ def recommend_content_based_vector(
     )
 
     results = [row[0] for row in query.all()]
-    
+
     # Cold start fallback: if no results, return random posts
     if not results:
         results = recommend_random(session, agent_id, visibility_day, visibility_hour, limit)
         return results, True
-    
+
     return results, False

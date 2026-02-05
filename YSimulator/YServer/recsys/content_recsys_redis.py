@@ -275,7 +275,7 @@ def recommend_common_interests_redis(
         if len(post_ids) < limit:
             additional = [p["id"] for p in valid_posts_with_data if p["id"] not in post_ids]
             post_ids.extend(additional[: limit - len(post_ids)])
-        
+
         return post_ids, False
     else:
         # Fallback to SQL query when Redis data not available yet
@@ -399,7 +399,7 @@ def recommend_common_user_interests_redis(
         if len(post_ids) < limit:
             additional = [p["id"] for p in valid_posts_with_data if p["id"] not in post_ids]
             post_ids.extend(additional[: limit - len(post_ids)])
-        
+
         return post_ids, False
     else:
         # Fallback to SQLAlchemy ORM
@@ -528,7 +528,7 @@ def recommend_similar_users_react_redis(
         if len(post_ids) < limit:
             additional = [p["id"] for p in valid_posts_with_data if p["id"] not in post_ids]
             post_ids.extend(additional[: limit - len(post_ids)])
-        
+
         return post_ids, False
     else:
         # Fallback to SQLAlchemy ORM query
@@ -660,7 +660,7 @@ def recommend_similar_users_posts_redis(
         if len(post_ids) < limit:
             additional = [p["id"] for p in valid_posts_with_data if p["id"] not in post_ids]
             post_ids.extend(additional[: limit - len(post_ids)])
-        
+
         return post_ids, False
     else:
         # Fallback to SQLAlchemy ORM query
