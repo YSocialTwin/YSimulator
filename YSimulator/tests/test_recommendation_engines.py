@@ -267,6 +267,69 @@ class TestFollowRecommender:
             assert len(result) == 2
             assert "user1" in result
 
+    @patch("YSimulator.YServer.recommendation.follow_recommender.follow_recsys_db")
+    def test_new_recommendation_modes_sql(self, mock_recsys_db, mock_db_adapter):
+        """Test new recommendation modes (SQL backend)."""
+        from unittest.mock import MagicMock
+
+        from sqlalchemy.orm import Session
+
+        # Mock session and query results
+        mock_session = MagicMock(spec=Session)
+        mock_session.__enter__ = Mock(return_value=mock_session)
+        mock_session.__exit__ = Mock(return_value=False)
+
+        # Mock User_mgmt query
+        mock_agent = Mock()
+        mock_agent.id = "agent1"
+        mock_session.query.return_value.filter_by.return_value.first.return_value = mock_agent
+
+        # Mock Follow query for following_ids
+        mock_session.query.return_value.filter.return_value.group_by.return_value.subquery.return_value = (
+            Mock()
+        )
+        mock_session.query.return_value.join.return_value.all.return_value = []
+
+        mock_recsys_db.apply_leaning_bias = Mock(side_effect=lambda sess, aid, sugg, bias, n: sugg)
+
+        with patch("sqlalchemy.orm.Session", return_value=mock_session):
+            recommender = FollowRecommender(mock_db_adapter)
+
+            # Test ResourceAllocation mode
+            mock_recsys_db.recommend_resource_allocation = Mock(return_value=["user1"])
+            result = recommender.get_follow_suggestions(
+                agent_id="agent1", mode="ResourceAllocation", n_neighbors=1
+            )
+            assert mock_recsys_db.recommend_resource_allocation.called
+
+            # Test CosineSimilarity mode
+            mock_recsys_db.recommend_cosine_similarity = Mock(return_value=["user2"])
+            result = recommender.get_follow_suggestions(
+                agent_id="agent1", mode="CosineSimilarity", n_neighbors=1
+            )
+            assert mock_recsys_db.recommend_cosine_similarity.called
+
+            # Test CoEngagement mode
+            mock_recsys_db.recommend_co_engagement = Mock(return_value=["user3"])
+            result = recommender.get_follow_suggestions(
+                agent_id="agent1", mode="CoEngagement", n_neighbors=1
+            )
+            assert mock_recsys_db.recommend_co_engagement.called
+
+            # Test RandomWalkRestart mode
+            mock_recsys_db.recommend_random_walk_with_restart = Mock(return_value=["user4"])
+            result = recommender.get_follow_suggestions(
+                agent_id="agent1", mode="RandomWalkRestart", n_neighbors=1
+            )
+            assert mock_recsys_db.recommend_random_walk_with_restart.called
+
+            # Test ReactionsOnContent mode
+            mock_recsys_db.recommend_reactions_on_content = Mock(return_value=["user5"])
+            result = recommender.get_follow_suggestions(
+                agent_id="agent1", mode="ReactionsOnContent", n_neighbors=1
+            )
+            assert mock_recsys_db.recommend_reactions_on_content.called
+
     @patch("YSimulator.YServer.recommendation.follow_recommender.follow_recsys_redis")
     def test_get_follow_suggestions_redis(self, mock_recsys_redis, mock_db_adapter_redis):
         """Test follow suggestions using Redis backend."""
