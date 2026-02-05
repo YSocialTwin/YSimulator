@@ -1025,11 +1025,6 @@ def recommend_two_hop_ego_sampling_redis(
                 (s["triangles"] for s in candidate_scores.values()), default=1
             )
 
-            # Avoid division by zero
-            max_posts = max(max_posts, 1)
-            max_interactions = max(max_interactions, 1)
-            max_triangles = max(max_triangles, 1)
-
             final_scores = {}
             for candidate_id, scores in candidate_scores.items():
                 normalized_posts = scores["posts"] / max_posts
