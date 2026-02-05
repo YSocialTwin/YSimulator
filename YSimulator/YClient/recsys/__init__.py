@@ -15,12 +15,20 @@ Exports:
     - CommonUserInterests: Posts by users with common interests
     - SimilarUsersReact: Posts from similar users (by reactions)
     - SimilarUsersPosts: Posts from similar users (by posting)
+    - CollaborativeUserUser: Collaborative filtering based on user similarity
+    - CollaborativeItemItem: Collaborative filtering based on item co-occurrence
+    - ContentBasedFeatures: Content-based filtering using feature extraction
+    - ContentBasedVector: Content-based filtering using vector space similarity
     - RandomOrder: Random post ordering
 """
 
 from .ContentRecSys import (
+    CollaborativeItemItem,
+    CollaborativeUserUser,
     CommonInterests,
     CommonUserInterests,
+    ContentBasedFeatures,
+    ContentBasedVector,
     ContentRecSys,
     RandomOrder,
     ReverseChrono,
@@ -43,5 +51,9 @@ __all__ = [
     "CommonUserInterests",
     "SimilarUsersReact",
     "SimilarUsersPosts",
+    "CollaborativeUserUser",
+    "CollaborativeItemItem",
+    "ContentBasedFeatures",
+    "ContentBasedVector",
     "RandomOrder",
 ]

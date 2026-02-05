@@ -68,19 +68,33 @@ class ContentRecommender:
                 day, slot, self.visibility_rounds
             )
 
+            used_fallback = False
             if self.db.use_redis:
-                post_ids = self._get_recommendations_redis(agent_id, mode, limit, followers_ratio)
+                result = self._get_recommendations_redis(agent_id, mode, limit, followers_ratio)
+                # Check if result is a tuple (new recommenders with fallback)
+                if isinstance(result, tuple):
+                    post_ids, used_fallback = result
+                else:
+                    post_ids = result
             else:
-                post_ids = self._get_recommendations_sql(
+                result = self._get_recommendations_sql(
                     agent_id, mode, limit, followers_ratio, visibility_day, visibility_hour
                 )
+                # Check if result is a tuple (new recommenders with fallback)
+                if isinstance(result, tuple):
+                    post_ids, used_fallback = result
+                else:
+                    post_ids = result
+
+            # Update mode name if fallback was used
+            log_mode = f"{mode}-Random" if used_fallback else mode
 
             self.logger.info(
-                f"Recommended {len(post_ids)} posts (mode={mode})",
+                f"Recommended {len(post_ids)} posts (mode={log_mode})",
                 extra={
                     "extra_data": {
                         "agent_id": agent_id,
-                        "mode": mode,
+                        "mode": log_mode,
                         "limit": limit,
                         "found": len(post_ids),
                     }
@@ -169,6 +183,14 @@ class ContentRecommender:
             return content_recsys_redis.recommend_similar_users_react_redis(**common_kwargs)
         elif mode == "SimilarUsersPosts":
             return content_recsys_redis.recommend_similar_users_posts_redis(**common_kwargs)
+        elif mode == "CollaborativeUserUser":
+            return content_recsys_redis.recommend_collaborative_user_user_redis(**common_kwargs)
+        elif mode == "CollaborativeItemItem":
+            return content_recsys_redis.recommend_collaborative_item_item_redis(**common_kwargs)
+        elif mode == "ContentBasedFeatures":
+            return content_recsys_redis.recommend_content_based_features_redis(**common_kwargs)
+        elif mode == "ContentBasedVector":
+            return content_recsys_redis.recommend_content_based_vector_redis(**common_kwargs)
         else:
             # Default: random ordering
             return content_recsys_redis.recommend_random_redis(**common_kwargs)
@@ -221,6 +243,22 @@ class ContentRecommender:
                 )
             elif mode == "SimilarUsersPosts":
                 return content_recsys_db.recommend_similar_users_posts(
+                    session, agent_id, visibility_day, visibility_hour, limit
+                )
+            elif mode == "CollaborativeUserUser":
+                return content_recsys_db.recommend_collaborative_user_user(
+                    session, agent_id, visibility_day, visibility_hour, limit
+                )
+            elif mode == "CollaborativeItemItem":
+                return content_recsys_db.recommend_collaborative_item_item(
+                    session, agent_id, visibility_day, visibility_hour, limit
+                )
+            elif mode == "ContentBasedFeatures":
+                return content_recsys_db.recommend_content_based_features(
+                    session, agent_id, visibility_day, visibility_hour, limit
+                )
+            elif mode == "ContentBasedVector":
+                return content_recsys_db.recommend_content_based_vector(
                     session, agent_id, visibility_day, visibility_hour, limit
                 )
             else:

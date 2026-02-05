@@ -1,0 +1,445 @@
+{
+  "agents": [
+    {
+      "id": "35bef2c5-ef73-4ced-af92-af753e811a0e",
+      "username": "NewsPage",
+      "email": "news@pages.local",
+      "leaning": "neutral",
+      "user_type": "page",
+      "age": 0,
+      "language": "en",
+      "education_level": "graduate",
+      "gender": "other",
+      "nationality": "US",
+      "profession": "News Publisher",
+      "activity_profile": "Always On",
+      "archetype": null,
+      "cluster": 0,
+      "llm": true,
+      "toxicity": "no",
+      "daily_activity_level": 4,
+      "round_actions": 6,
+      "is_page": 1,
+      "feed_url": "https://techcrunch.com/feed/",
+      "recsys_type": "random",
+      "frecsys_type": "random",
+      "interests": [
+        [
+          "News",
+          "Current Events",
+          "Information"
+        ],
+        [
+          10,
+          10,
+          8
+        ]
+      ],
+      "opinions": {
+        "News": 0.550613623613349,
+        "Current Events": 0.5517530208535428,
+        "Information": 0.2711089341648204
+      }
+    },
+    {
+      "id": "a3a7b895-8284-468d-bc43-ec31dd559e97",
+      "username": "agent_000",
+      "email": "agent_000@simulation.local",
+      "leaning": "right",
+      "user_type": "agent",
+      "age": 60,
+      "language": "en",
+      "education_level": "graduate",
+      "gender": "female",
+      "nationality": "US",
+      "profession": "Engineer",
+      "activity_profile": "Always On",
+      "archetype": "explorer",
+      "cluster": 0,
+      "llm": false,
+      "toxicity": "no",
+      "daily_activity_level": 3,
+      "round_actions": 5,
+      "is_page": 0,
+      "recsys_type": "ContentBasedVector",
+      "frecsys_type": "random",
+      "interests": [
+        [
+          "Discovery",
+          "Learning",
+          "Innovation"
+        ],
+        [
+          7,
+          6,
+          5
+        ]
+      ],
+      "opinions": {
+        "Discovery": 0.06325208974208163,
+        "Learning": 0.07102625356843018,
+        "Innovation": 0.6631607131490134
+      }
+    },
+    {
+      "id": "8f073d1d-648c-4095-8356-13ddc884a148",
+      "username": "agent_001",
+      "email": "agent_001@simulation.local",
+      "leaning": "left",
+      "user_type": "agent",
+      "age": 51,
+      "language": "en",
+      "education_level": "high_school",
+      "gender": "male",
+      "nationality": "UK",
+      "profession": "Artist",
+      "activity_profile": "Always On",
+      "archetype": "broadcaster",
+      "cluster": 2,
+      "llm": false,
+      "toxicity": "no",
+      "daily_activity_level": 4,
+      "round_actions": 3,
+      "is_page": 0,
+      "recsys_type": "ContentBasedVector",
+      "frecsys_type": "jaccard",
+      "interests": [
+        [
+          "Communication",
+          "News",
+          "Trends"
+        ],
+        [
+          8,
+          6,
+          5
+        ]
+      ],
+      "opinions": {
+        "Communication": 0.7267488256177569,
+        "News": 0.7898093884179456,
+        "Trends": 0.7032504235156789
+      }
+    },
+    {
+      "id": "cfbc0e9a-6d95-4357-a4c7-beade7d2f91e",
+      "username": "agent_002",
+      "email": "agent_002@simulation.local",
+      "leaning": "left",
+      "user_type": "agent",
+      "age": 70,
+      "language": "en",
+      "education_level": "graduate",
+      "gender": "female",
+      "nationality": "CA",
+      "profession": "Doctor",
+      "activity_profile": "Always On",
+      "archetype": "broadcaster",
+      "cluster": 2,
+      "llm": false,
+      "toxicity": "no",
+      "daily_activity_level": 4,
+      "round_actions": 3,
+      "is_page": 0,
+      "recsys_type": "ContentBasedVector",
+      "frecsys_type": "jaccard",
+      "interests": [
+        [
+          "Communication",
+          "News",
+          "Trends"
+        ],
+        [
+          8,
+          6,
+          5
+        ]
+      ],
+      "opinions": {
+        "Communication": 0.8589338260228446,
+        "News": 0.5294334899614352,
+        "Trends": 0.4728720106046629
+      }
+    },
+    {
+      "id": "3d98343a-b40c-428f-a986-a38b219d7f21",
+      "username": "agent_003",
+      "email": "agent_003@simulation.local",
+      "leaning": "right",
+      "user_type": "agent",
+      "age": 24,
+      "language": "en",
+      "education_level": "high_school",
+      "gender": "male",
+      "nationality": "CA",
+      "profession": "Student",
+      "activity_profile": "Always On",
+      "archetype": "explorer",
+      "cluster": 2,
+      "llm": false,
+      "toxicity": "no",
+      "daily_activity_level": 4,
+      "round_actions": 3,
+      "is_page": 0,
+      "recsys_type": "ContentBasedVector",
+      "frecsys_type": "common_neighbors",
+      "interests": [
+        [
+          "Discovery",
+          "Learning",
+          "Innovation"
+        ],
+        [
+          7,
+          6,
+          5
+        ]
+      ],
+      "opinions": {
+        "Discovery": 0.27922892413684264,
+        "Learning": 0.656090735603905,
+        "Innovation": 0.9613123029086111
+      }
+    },
+    {
+      "id": "17fbee72-3b2a-4315-85ca-ce3b3f2b7fcd",
+      "username": "agent_004",
+      "email": "agent_004@simulation.local",
+      "leaning": "left",
+      "user_type": "agent",
+      "age": 35,
+      "language": "en",
+      "education_level": "high_school",
+      "gender": "male",
+      "nationality": "US",
+      "profession": "Doctor",
+      "activity_profile": "Always On",
+      "archetype": "explorer",
+      "cluster": 0,
+      "llm": false,
+      "toxicity": "no",
+      "daily_activity_level": 4,
+      "round_actions": 5,
+      "is_page": 0,
+      "recsys_type": "ContentBasedVector",
+      "frecsys_type": "jaccard",
+      "interests": [
+        [
+          "Discovery",
+          "Learning",
+          "Innovation"
+        ],
+        [
+          7,
+          6,
+          5
+        ]
+      ],
+      "opinions": {
+        "Discovery": 0.9962892590317454,
+        "Learning": 0.35096294014514573,
+        "Innovation": 0.8453497054491754
+      }
+    },
+    {
+      "id": "22bb1fc5-0496-4ac8-85a9-2246c66a3059",
+      "username": "agent_005",
+      "email": "agent_005@simulation.local",
+      "leaning": "neutral",
+      "user_type": "agent",
+      "age": 64,
+      "language": "en",
+      "education_level": "high_school",
+      "gender": "female",
+      "nationality": "CA",
+      "profession": "Student",
+      "activity_profile": "Always On",
+      "archetype": "validator",
+      "cluster": 1,
+      "llm": false,
+      "toxicity": "no",
+      "daily_activity_level": 2,
+      "round_actions": 6,
+      "is_page": 0,
+      "recsys_type": "ContentBasedVector",
+      "frecsys_type": "random",
+      "interests": [
+        [
+          "Analysis",
+          "Facts",
+          "Verification"
+        ],
+        [
+          7,
+          5,
+          4
+        ]
+      ],
+      "opinions": {
+        "Analysis": 0.8805519489997359,
+        "Facts": 0.18459181233575594,
+        "Verification": 0.8183723125250707
+      }
+    },
+    {
+      "id": "a88fe6de-63a0-4496-8d68-0c41e1bd4830",
+      "username": "agent_006",
+      "email": "agent_006@simulation.local",
+      "leaning": "right",
+      "user_type": "agent",
+      "age": 70,
+      "language": "en",
+      "education_level": "high_school",
+      "gender": "female",
+      "nationality": "UK",
+      "profession": "Manager",
+      "activity_profile": "Always On",
+      "archetype": "broadcaster",
+      "cluster": 1,
+      "llm": false,
+      "toxicity": "no",
+      "daily_activity_level": 2,
+      "round_actions": 4,
+      "is_page": 0,
+      "recsys_type": "ContentBasedVector",
+      "frecsys_type": "random",
+      "interests": [
+        [
+          "Communication",
+          "News",
+          "Trends"
+        ],
+        [
+          8,
+          6,
+          5
+        ]
+      ],
+      "opinions": {
+        "Communication": 0.5162904768279497,
+        "News": 0.1497900876109559,
+        "Trends": 0.08143201439917103
+      }
+    },
+    {
+      "id": "7cb4a1ba-7939-4b9b-8013-2eeac41597e0",
+      "username": "agent_007",
+      "email": "agent_007@simulation.local",
+      "leaning": "neutral",
+      "user_type": "agent",
+      "age": 62,
+      "language": "en",
+      "education_level": "high_school",
+      "gender": "male",
+      "nationality": "US",
+      "profession": "Student",
+      "activity_profile": "Always On",
+      "archetype": "explorer",
+      "cluster": 1,
+      "llm": false,
+      "toxicity": "no",
+      "daily_activity_level": 4,
+      "round_actions": 3,
+      "is_page": 0,
+      "recsys_type": "ContentBasedVector",
+      "frecsys_type": "common_neighbors",
+      "interests": [
+        [
+          "Discovery",
+          "Learning",
+          "Innovation"
+        ],
+        [
+          7,
+          6,
+          5
+        ]
+      ],
+      "opinions": {
+        "Discovery": 0.07671693038062977,
+        "Learning": 0.7335975741932761,
+        "Innovation": 0.21741357615796852
+      }
+    },
+    {
+      "id": "4dc7bcbd-9b2c-4ac3-a131-b6d0cb020e07",
+      "username": "agent_008",
+      "email": "agent_008@simulation.local",
+      "leaning": "left",
+      "user_type": "agent",
+      "age": 52,
+      "language": "en",
+      "education_level": "high_school",
+      "gender": "other",
+      "nationality": "UK",
+      "profession": "Manager",
+      "activity_profile": "Always On",
+      "archetype": "broadcaster",
+      "cluster": 1,
+      "llm": false,
+      "toxicity": "no",
+      "daily_activity_level": 3,
+      "round_actions": 6,
+      "is_page": 0,
+      "recsys_type": "ContentBasedVector",
+      "frecsys_type": "common_neighbors",
+      "interests": [
+        [
+          "Communication",
+          "News",
+          "Trends"
+        ],
+        [
+          8,
+          6,
+          5
+        ]
+      ],
+      "opinions": {
+        "Communication": 0.3684496183640692,
+        "News": 0.7123200318285043,
+        "Trends": 0.23562893315027267
+      }
+    },
+    {
+      "id": "e51cf167-6902-425c-994f-ea735b26a89e",
+      "username": "agent_009",
+      "email": "agent_009@simulation.local",
+      "leaning": "neutral",
+      "user_type": "agent",
+      "age": 39,
+      "language": "en",
+      "education_level": "graduate",
+      "gender": "female",
+      "nationality": "UK",
+      "profession": "Doctor",
+      "activity_profile": "Always On",
+      "archetype": "explorer",
+      "cluster": 0,
+      "llm": false,
+      "toxicity": "no",
+      "daily_activity_level": 2,
+      "round_actions": 3,
+      "is_page": 0,
+      "recsys_type": "ContentBasedVector",
+      "frecsys_type": "adamic_adar",
+      "interests": [
+        [
+          "Discovery",
+          "Learning",
+          "Innovation"
+        ],
+        [
+          7,
+          6,
+          5
+        ]
+      ],
+      "opinions": {
+        "Discovery": 0.009729484659018905,
+        "Learning": 0.9490197858616598,
+        "Innovation": 0.9466157676658601
+      }
+    }
+  ]
+}

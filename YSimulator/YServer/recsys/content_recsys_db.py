@@ -377,7 +377,7 @@ def recommend_common_interests(
     visibility_hour: int,
     limit: int,
     followers_ratio: float,
-) -> List[str]:
+) -> tuple[List[str], bool]:
     """
     Posts with common topic interests (based on user_interest and post_topics).
     Prioritizes posts from followed users, then fills with other posts.
@@ -391,7 +391,7 @@ def recommend_common_interests(
         followers_ratio: Ratio of posts from followers
 
     Returns:
-        List of post UUIDs
+        Tuple of (List of post UUIDs, bool indicating if fallback was used)
     """
     follower_posts_limit = int(limit * followers_ratio)
     additional_posts_limit = limit - follower_posts_limit
@@ -465,7 +465,12 @@ def recommend_common_interests(
 
         post_ids.extend([row[0] for row in query_additional.all()])
 
-    return post_ids
+    # Cold start fallback: if no results, return random posts
+    if not post_ids:
+        post_ids = recommend_random(session, agent_id, visibility_day, visibility_hour, limit)
+        return post_ids, True
+    
+    return post_ids, False
 
 
 def recommend_common_user_interests(
@@ -475,7 +480,7 @@ def recommend_common_user_interests(
     visibility_hour: int,
     limit: int,
     followers_ratio: float,
-) -> List[str]:
+) -> tuple[List[str], bool]:
     """
     Posts by users with common interests (most interacted).
     Prioritizes posts from followed users with common interests.
@@ -489,7 +494,7 @@ def recommend_common_user_interests(
         followers_ratio: Ratio of posts from followers
 
     Returns:
-        List of post UUIDs
+        Tuple of (List of post UUIDs, bool indicating if fallback was used)
     """
     follower_posts_limit = int(limit * followers_ratio)
     additional_posts_limit = limit - follower_posts_limit
@@ -559,12 +564,17 @@ def recommend_common_user_interests(
 
             post_ids.extend([row[0] for row in query_additional.all()])
 
-    return post_ids
+    # Cold start fallback: if no results, return random posts
+    if not post_ids:
+        post_ids = recommend_random(session, agent_id, visibility_day, visibility_hour, limit)
+        return post_ids, True
+    
+    return post_ids, False
 
 
 def recommend_similar_users_react(
     session, agent_id: str, visibility_day: int, visibility_hour: int, limit: int
-) -> List[str]:
+) -> tuple[List[str], bool]:
     """
     Posts from similar users (based on demographics/personality) that they reacted to.
     Similarity defined by age_group, gender, or political leaning.
@@ -577,7 +587,7 @@ def recommend_similar_users_react(
         limit: Number of posts to recommend
 
     Returns:
-        List of post UUIDs
+        Tuple of (List of post UUIDs, bool indicating if fallback was used)
     """
     # Alias for user_mgmt to differentiate between reactor and target
     ReactorUser = aliased(User_mgmt)
@@ -597,7 +607,7 @@ def recommend_similar_users_react(
             ),
             Post.user_id != agent_id,
             ReactorUser.id != agent_id,
-            Reaction.type == "like",
+            Reaction.type == "LIKE",
             or_(
                 ReactorUser.age_group == TargetUser.age_group,
                 ReactorUser.gender == TargetUser.gender,
@@ -609,12 +619,19 @@ def recommend_similar_users_react(
         .limit(limit)
     )
 
-    return [row[0] for row in query.all()]
+    results = [row[0] for row in query.all()]
+    
+    # Cold start fallback: if no results, return random posts
+    if not results:
+        results = recommend_random(session, agent_id, visibility_day, visibility_hour, limit)
+        return results, True
+    
+    return results, False
 
 
 def recommend_similar_users_posts(
     session, agent_id: str, visibility_day: int, visibility_hour: int, limit: int
-) -> List[str]:
+) -> tuple[List[str], bool]:
     """
     Posts created by similar users (based on demographics/personality).
     Similarity defined by age_group, gender, or political leaning.
@@ -627,7 +644,7 @@ def recommend_similar_users_posts(
         limit: Number of posts to recommend
 
     Returns:
-        List of post UUIDs
+        Tuple of (List of post UUIDs, bool indicating if fallback was used)
     """
     # Alias for user_mgmt to differentiate between post author and target
     PostAuthor = aliased(User_mgmt)
@@ -654,4 +671,263 @@ def recommend_similar_users_posts(
         .limit(limit)
     )
 
-    return [row[0] for row in query.all()]
+    results = [row[0] for row in query.all()]
+    
+    # Cold start fallback: if no results, return random posts
+    if not results:
+        results = recommend_random(session, agent_id, visibility_day, visibility_hour, limit)
+        return results, True
+    
+    return results, False
+
+
+def recommend_collaborative_user_user(
+    session, agent_id: str, visibility_day: int, visibility_hour: int, limit: int
+) -> tuple[List[str], bool]:
+    """
+    Collaborative Filtering - User-User.
+    Finds users with a high overlap in liked posts and recommends posts they liked.
+
+    Args:
+        session: SQLAlchemy session object
+        agent_id: UUID of the agent requesting recommendations
+        visibility_day: Day threshold for post visibility
+        visibility_hour: Hour threshold for post visibility
+        limit: Number of posts to recommend
+
+    Returns:
+        Tuple of (List of post UUIDs, bool indicating if fallback was used)
+    """
+    # Get posts liked by the agent
+    agent_likes_subq = (
+        session.query(Reaction.post_id)
+        .filter(Reaction.user_id == agent_id, Reaction.type == "LIKE")
+        .subquery()
+    )
+
+    # Find users who liked similar posts (high overlap)
+    # Count how many posts each user has in common with the agent
+    similar_users_subq = (
+        session.query(Reaction.user_id, func.count(Reaction.post_id).label("common_likes_count"))
+        .filter(
+            Reaction.post_id.in_(agent_likes_subq),
+            Reaction.user_id != agent_id,
+            Reaction.type == "LIKE",
+        )
+        .group_by(Reaction.user_id)
+        .order_by(desc("common_likes_count"))
+        .limit(50)  # Top 50 similar users
+        .subquery()
+    )
+
+    # Get posts liked by similar users (but not by agent)
+    query = (
+        session.query(Post.id, func.count(Reaction.id).label("recommendation_score"))
+        .distinct()
+        .join(Round, Post.round == Round.id)
+        .join(Reaction, Post.id == Reaction.post_id)
+        .join(similar_users_subq, Reaction.user_id == similar_users_subq.c.user_id)
+        .filter(
+            or_(
+                Round.day > visibility_day,
+                and_(Round.day == visibility_day, Round.hour >= visibility_hour),
+            ),
+            Post.user_id != agent_id,
+            Reaction.type == "LIKE",
+            Post.id.notin_(agent_likes_subq),
+        )
+        .group_by(Post.id)
+        .order_by(desc("recommendation_score"), desc(Round.day), desc(Round.hour))
+        .limit(limit)
+    )
+
+    results = [row[0] for row in query.all()]
+    
+    # Cold start fallback: if no results, return random posts
+    if not results:
+        results = recommend_random(session, agent_id, visibility_day, visibility_hour, limit)
+        return results, True
+    
+    return results, False
+
+
+def recommend_collaborative_item_item(
+    session, agent_id: str, visibility_day: int, visibility_hour: int, limit: int
+) -> tuple[List[str], bool]:
+    """
+    Collaborative Filtering - Item-Item.
+    Finds posts that are often liked together by the same groups.
+
+    Args:
+        session: SQLAlchemy session object
+        agent_id: UUID of the agent requesting recommendations
+        visibility_day: Day threshold for post visibility
+        visibility_hour: Hour threshold for post visibility
+        limit: Number of posts to recommend
+
+    Returns:
+        Tuple of (List of post UUIDs, bool indicating if fallback was used)
+    """
+    # Get posts liked by the agent
+    agent_likes_subq = (
+        session.query(Reaction.post_id)
+        .filter(Reaction.user_id == agent_id, Reaction.type == "LIKE")
+        .subquery()
+    )
+
+    # For each post the agent liked, find other posts liked by the same users
+    # Alias for the second reaction
+    Reaction2 = aliased(Reaction)
+
+    query = (
+        session.query(Post.id, func.count(Reaction2.user_id).label("co_occurrence_score"))
+        .distinct()
+        .join(Round, Post.round == Round.id)
+        .join(Reaction2, Post.id == Reaction2.post_id)
+        .join(
+            Reaction,
+            and_(
+                Reaction.user_id == Reaction2.user_id,
+                Reaction.post_id.in_(agent_likes_subq),
+            ),
+        )
+        .filter(
+            or_(
+                Round.day > visibility_day,
+                and_(Round.day == visibility_day, Round.hour >= visibility_hour),
+            ),
+            Post.user_id != agent_id,
+            Reaction2.type == "LIKE",
+            Reaction.type == "LIKE",
+            Post.id.notin_(agent_likes_subq),
+        )
+        .group_by(Post.id)
+        .order_by(desc("co_occurrence_score"), desc(Round.day), desc(Round.hour))
+        .limit(limit)
+    )
+
+    results = [row[0] for row in query.all()]
+    
+    # Cold start fallback: if no results, return random posts
+    if not results:
+        results = recommend_random(session, agent_id, visibility_day, visibility_hour, limit)
+        return results, True
+    
+    return results, False
+
+
+def recommend_content_based_features(
+    session, agent_id: str, visibility_day: int, visibility_hour: int, limit: int
+) -> tuple[List[str], bool]:
+    """
+    Content Based Filtering - Feature Extraction.
+    Analyzes attributes of content the user has interacted with (hashtags, topics).
+
+    Args:
+        session: SQLAlchemy session object
+        agent_id: UUID of the agent requesting recommendations
+        visibility_day: Day threshold for post visibility
+        visibility_hour: Hour threshold for post visibility
+        limit: Number of posts to recommend
+
+    Returns:
+        Tuple of (List of post UUIDs, bool indicating if fallback was used)
+    """
+    # Get topics from posts the agent has liked
+    liked_topics_subq = (
+        session.query(PostTopic.topic_id, func.count(PostTopic.topic_id).label("topic_freq"))
+        .join(Reaction, PostTopic.post_id == Reaction.post_id)
+        .filter(Reaction.user_id == agent_id, Reaction.type == "LIKE")
+        .group_by(PostTopic.topic_id)
+        .subquery()
+    )
+
+    # Find new posts with matching topics
+    query = (
+        session.query(Post.id, func.count(PostTopic.topic_id).label("feature_match_score"))
+        .distinct()
+        .join(Round, Post.round == Round.id)
+        .join(PostTopic, Post.id == PostTopic.post_id)
+        .join(liked_topics_subq, PostTopic.topic_id == liked_topics_subq.c.topic_id)
+        .outerjoin(Reaction, and_(Reaction.post_id == Post.id, Reaction.user_id == agent_id))
+        .filter(
+            or_(
+                Round.day > visibility_day,
+                and_(Round.day == visibility_day, Round.hour >= visibility_hour),
+            ),
+            Post.user_id != agent_id,
+            Reaction.id.is_(None),  # Not already reacted to
+        )
+        .group_by(Post.id)
+        .order_by(desc("feature_match_score"), desc(Round.day), desc(Round.hour))
+        .limit(limit)
+    )
+
+    results = [row[0] for row in query.all()]
+    
+    # Cold start fallback: if no results, return random posts
+    if not results:
+        results = recommend_random(session, agent_id, visibility_day, visibility_hour, limit)
+        return results, True
+    
+    return results, False
+
+
+def recommend_content_based_vector(
+    session, agent_id: str, visibility_day: int, visibility_hour: int, limit: int
+) -> tuple[List[str], bool]:
+    """
+    Content Based Filtering - Vector Space Similarity.
+    Recommends new posts mathematically close to the user's "preference vector".
+    Uses topic distribution as a simple vector representation.
+
+    Args:
+        session: SQLAlchemy session object
+        agent_id: UUID of the agent requesting recommendations
+        visibility_day: Day threshold for post visibility
+        visibility_hour: Hour threshold for post visibility
+        limit: Number of posts to recommend
+
+    Returns:
+        Tuple of (List of post UUIDs, bool indicating if fallback was used)
+    """
+    # Build user preference vector from liked posts' topics
+    # Get all topics from posts the agent has liked, weighted by frequency
+    user_topics_subq = (
+        session.query(PostTopic.topic_id, func.count(PostTopic.topic_id).label("weight"))
+        .join(Reaction, PostTopic.post_id == Reaction.post_id)
+        .filter(Reaction.user_id == agent_id, Reaction.type == "LIKE")
+        .group_by(PostTopic.topic_id)
+        .subquery()
+    )
+
+    # Calculate similarity score for each candidate post
+    # Similarity = sum of weights for matching topics
+    query = (
+        session.query(Post.id, func.sum(user_topics_subq.c.weight).label("similarity_score"))
+        .distinct()
+        .join(Round, Post.round == Round.id)
+        .join(PostTopic, Post.id == PostTopic.post_id)
+        .join(user_topics_subq, PostTopic.topic_id == user_topics_subq.c.topic_id)
+        .outerjoin(Reaction, and_(Reaction.post_id == Post.id, Reaction.user_id == agent_id))
+        .filter(
+            or_(
+                Round.day > visibility_day,
+                and_(Round.day == visibility_day, Round.hour >= visibility_hour),
+            ),
+            Post.user_id != agent_id,
+            Reaction.id.is_(None),  # Not already reacted to
+        )
+        .group_by(Post.id)
+        .order_by(desc("similarity_score"), desc(Round.day), desc(Round.hour))
+        .limit(limit)
+    )
+
+    results = [row[0] for row in query.all()]
+    
+    # Cold start fallback: if no results, return random posts
+    if not results:
+        results = recommend_random(session, agent_id, visibility_day, visibility_hour, limit)
+        return results, True
+    
+    return results, False

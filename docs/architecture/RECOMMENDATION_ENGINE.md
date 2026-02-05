@@ -24,7 +24,7 @@ The Recommendation Engine is a modular system for content and follow recommendat
 │                 Recommendation Service Layer                │
 ├─────────────────────────────────────────────────────────────┤
 │  ContentRecommender                                         │
-│  • 10+ recommendation modes                                 │
+│  • 14 recommendation modes (including 4 new)                │
 │  • SQL and Redis backends                                   │
 │  • Visibility filtering                                     │
 │                                                             │
@@ -72,15 +72,19 @@ post_ids = recommender.get_recommended_posts(
 
 **Supported Modes:**
 - `random` - Random post ordering
-- `rchrono` - Reverse chronological (newest first)
-- `rchrono_popularity` - Chronological with popularity boost
-- `rchrono_followers` - Prioritize posts from followed users
-- `rchrono_followers_popularity` - Followers + popularity
-- `rchrono_comments` - Prioritize highly commented posts
-- `common_interests` - Posts with common topic interests
-- `common_user_interests` - Posts by users with common interests
-- `similar_users_react` - Posts from similar users (by reactions)
-- `similar_users_posts` - Posts from similar users (by posting)
+- `ReverseChrono` - Reverse chronological (newest first)
+- `ReverseChronoPopularity` - Chronological with popularity boost
+- `ReverseChronoFollowers` - Prioritize posts from followed users
+- `ReverseChronoFollowersPopularity` - Followers + popularity
+- `ReverseChronoComments` - Prioritize highly commented posts
+- `CommonInterests` - Posts with common topic interests
+- `CommonUserInterests` - Posts by users with common interests
+- `SimilarUsersReactions` - Posts from similar users (by reactions)
+- `SimilarUsersPosts` - Posts from similar users (by posting)
+- `CollaborativeUserUser` - **NEW**: Collaborative filtering based on user-user similarity (finds users with high overlap in liked posts)
+- `CollaborativeItemItem` - **NEW**: Collaborative filtering based on item-item similarity (finds posts often liked together)
+- `ContentBasedFeatures` - **NEW**: Content-based filtering using feature extraction (hashtags, topics)
+- `ContentBasedVector` - **NEW**: Content-based filtering using vector space similarity (preference vectors)
 
 **Features:**
 - Automatic visibility filtering based on simulation time
@@ -278,6 +282,118 @@ user_ids = follow_recommender.get_follow_suggestions(
 )
 ```
 
+## New Recommendation Systems (Feb 2026)
+
+### Collaborative Filtering
+
+#### 1. User-User Collaborative Filtering (`CollaborativeUserUser`)
+
+Finds users with a high overlap in liked posts and recommends posts they liked.
+
+**How it works:**
+1. Identifies the agent's liked posts
+2. Finds other users who liked similar posts (high overlap)
+3. Recommends posts liked by these similar users that the agent hasn't seen yet
+4. Uses temporal window to respect visibility constraints
+
+**Use Case**: "Users who like the same content as you also liked these posts"
+
+**Example:**
+```python
+post_ids = content_recommender.get_recommended_posts(
+    agent_id="agent123",
+    mode="CollaborativeUserUser",
+    limit=10,
+    day=5,
+    slot=12
+)
+```
+
+#### 2. Item-Item Collaborative Filtering (`CollaborativeItemItem`)
+
+Finds posts that are often liked together by the same groups of users.
+
+**How it works:**
+1. Identifies the agent's liked posts
+2. For each liked post, finds users who also liked it
+3. Discovers other posts those users liked (co-occurrence patterns)
+4. Recommends posts with highest co-occurrence scores
+5. Uses temporal window to respect visibility constraints
+
+**Use Case**: "Posts that are frequently liked together with content you enjoyed"
+
+**Example:**
+```python
+post_ids = content_recommender.get_recommended_posts(
+    agent_id="agent123",
+    mode="CollaborativeItemItem",
+    limit=10,
+    day=5,
+    slot=12
+)
+```
+
+### Content-Based Filtering
+
+#### 3. Feature Extraction (`ContentBasedFeatures`)
+
+Analyzes attributes of content the user has interacted with (topics, hashtags) and recommends similar posts.
+
+**How it works:**
+1. Extracts topics from posts the agent has liked
+2. Builds a profile of preferred topics
+3. Finds new posts with matching topics
+4. Ranks by number of topic matches
+5. Excludes already-reacted-to posts
+6. Uses temporal window to respect visibility constraints
+
+**Use Case**: "New posts about topics you're interested in"
+
+**Example:**
+```python
+post_ids = content_recommender.get_recommended_posts(
+    agent_id="agent123",
+    mode="ContentBasedFeatures",
+    limit=10,
+    day=5,
+    slot=12
+)
+```
+
+#### 4. Vector Space Similarity (`ContentBasedVector`)
+
+Recommends posts mathematically close to the user's "preference vector" using topic distributions.
+
+**How it works:**
+1. Builds a preference vector from liked posts' topics (weighted by frequency)
+2. For each candidate post, creates a topic vector
+3. Calculates similarity score (dot product of vectors)
+4. Ranks posts by similarity to preference vector
+5. Excludes already-reacted-to posts
+6. Uses temporal window to respect visibility constraints
+
+**Use Case**: "Posts that match your overall content preference profile"
+
+**Example:**
+```python
+post_ids = content_recommender.get_recommended_posts(
+    agent_id="agent123",
+    mode="ContentBasedVector",
+    limit=10,
+    day=5,
+    slot=12
+)
+```
+
+### Temporal Window Implementation
+
+All new recommender systems respect the temporal window pattern used throughout the system:
+
+- Posts are only recommended if they fall within the visibility window
+- Visibility is calculated as: `current_time - visibility_rounds`
+- Both SQL and Redis implementations maintain this constraint
+- This ensures realistic simulation of social media timelines
+
 ## Extension Points
 
 ### Adding New Recommendation Strategies
@@ -329,9 +445,11 @@ elif mode == "custom_strategy":
 | Version | Date | Changes |
 |---------|------|---------|
 | 1.0 | Jan 5, 2026 | Initial implementation (Phase 2) |
+| 1.1 | Feb 4, 2026 | Added 4 new recommendation systems: CollaborativeUserUser, CollaborativeItemItem, ContentBasedFeatures, ContentBasedVector |
 
 ---
 
 **Implementation Status**: ✅ Complete  
-**Test Coverage**: 15+ test cases  
+**Test Coverage**: 23+ test cases  
 **Code Reduction**: 355 lines from server.py
+**New Features**: 4 advanced recommendation algorithms (Collaborative & Content-Based Filtering)

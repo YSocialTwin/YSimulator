@@ -47,8 +47,12 @@ class CommentGenerator(BaseActionGenerator):
 
         # Get recommendation system for this agent
         from YSimulator.YClient.recsys import (
+            CollaborativeItemItem,
+            CollaborativeUserUser,
             CommonInterests,
             CommonUserInterests,
+            ContentBasedFeatures,
+            ContentBasedVector,
             RandomOrder,
             ReverseChrono,
             ReverseChronoComments,
@@ -61,6 +65,20 @@ class CommentGenerator(BaseActionGenerator):
 
         recsys_class_map = {
             "random": RandomOrder,
+            "ReverseChrono": ReverseChrono,
+            "ReverseChronoPopularity": ReverseChronoPopularity,
+            "ReverseChronoFollowers": ReverseChronoFollowers,
+            "ReverseChronoFollowersPopularity": ReverseChronoFollowersPopularity,
+            "ReverseChronoComments": ReverseChronoComments,
+            "CommonInterests": CommonInterests,
+            "CommonUserInterests": CommonUserInterests,
+            "SimilarUsersReactions": SimilarUsersReact,
+            "SimilarUsersPosts": SimilarUsersPosts,
+            "CollaborativeUserUser": CollaborativeUserUser,
+            "CollaborativeItemItem": CollaborativeItemItem,
+            "ContentBasedFeatures": ContentBasedFeatures,
+            "ContentBasedVector": ContentBasedVector,
+            # Legacy support for old naming pattern
             "rchrono": ReverseChrono,
             "rchrono_popularity": ReverseChronoPopularity,
             "rchrono_followers": ReverseChronoFollowers,
