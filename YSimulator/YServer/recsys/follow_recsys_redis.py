@@ -862,6 +862,213 @@ def recommend_reactions_on_content_redis(
         )
 
 
+def recommend_two_hop_ego_sampling_redis(
+    redis_client: Redis,
+    redis_key_func,
+    agent_id: str,
+    n_neighbors: int,
+    logger,
+    k_one_hop: int = 20,
+    k_two_hop: int = 50,
+    recent_posts_window: int = 10,
+    weight_posts: float = 0.3,
+    weight_interactions: float = 0.4,
+    weight_triangles: float = 0.3,
+) -> List[str]:
+    """
+    2-hop ego sampling follow recommendation (Redis).
+
+    Samples 1-hop and 2-hop neighbors, scores based on posts, interactions, triangles.
+
+    Args:
+        redis_client: Redis client instance
+        redis_key_func: Function to generate Redis keys
+        agent_id: ID of the agent requesting recommendations
+        n_neighbors: Number of recommendations to return
+        logger: Logger instance
+        k_one_hop: Maximum 1-hop neighbors to sample
+        k_two_hop: Maximum 2-hop neighbors per 1-hop neighbor
+        recent_posts_window: Rounds to consider for post counting
+        weight_posts: Weight for posts component
+        weight_interactions: Weight for interactions component
+        weight_triangles: Weight for triangles component
+
+    Returns:
+        List of recommended user IDs
+    """
+    try:
+        # Get users agent is following
+        follow_pattern = redis_key_func("follow", "*")
+        follow_keys = redis_client.keys(follow_pattern)
+
+        following_ids = set()
+        follow_graph = {}  # Map: follower_id -> list of user_ids they follow
+
+        for key in follow_keys:
+            follow_data = redis_client.hgetall(key)
+            if follow_data.get("action") == "follow":
+                follower_id = follow_data.get("follower_id")
+                user_id = follow_data.get("user_id")
+
+                if follower_id not in follow_graph:
+                    follow_graph[follower_id] = []
+                follow_graph[follower_id].append(user_id)
+
+                if follower_id == agent_id:
+                    following_ids.add(user_id)
+
+        if not following_ids:
+            return recommend_random_follows_redis(
+                redis_client, redis_key_func, agent_id, n_neighbors, logger
+            )
+
+        # Step 1: Sample up to k_one_hop 1-hop neighbors
+        following_list = list(following_ids)
+        if len(following_list) > k_one_hop:
+            sampled_one_hop = random.sample(following_list, k_one_hop)
+        else:
+            sampled_one_hop = following_list
+
+        # Step 2: Get 2-hop neighbors
+        two_hop_candidates = {}  # Map: 2-hop user -> list of connecting 1-hop neighbors
+
+        for one_hop_user in sampled_one_hop:
+            # Get users that this 1-hop neighbor follows
+            two_hop_users = follow_graph.get(one_hop_user, [])
+
+            # Sample and filter
+            if len(two_hop_users) > k_two_hop:
+                two_hop_users = random.sample(two_hop_users, k_two_hop)
+
+            for two_hop_user in two_hop_users:
+                if two_hop_user != agent_id and two_hop_user not in following_ids:
+                    if two_hop_user not in two_hop_candidates:
+                        two_hop_candidates[two_hop_user] = []
+                    two_hop_candidates[two_hop_user].append(one_hop_user)
+
+        if not two_hop_candidates:
+            return recommend_random_follows_redis(
+                redis_client, redis_key_func, agent_id, n_neighbors, logger
+            )
+
+        # Step 3: Score each 2-hop candidate
+        candidate_scores = {}
+
+        # Get recent rounds for post counting
+        round_pattern = redis_key_func("rounds", "*")
+        round_keys = redis_client.keys(round_pattern)
+
+        # Sort rounds by day/hour (approximate - use all for simplicity in Redis)
+        recent_round_ids = set()
+        for key in round_keys[:recent_posts_window] if len(round_keys) > recent_posts_window else round_keys:
+            round_data = redis_client.hgetall(key)
+            if round_data and "id" in round_data:
+                recent_round_ids.add(round_data["id"])
+
+        # Get all posts and reactions
+        post_pattern = redis_key_func("post", "*")
+        post_keys = redis_client.keys(post_pattern)
+
+        reaction_pattern = redis_key_func("reactions", "*")
+        reaction_keys = redis_client.keys(reaction_pattern)
+
+        for candidate_id, connecting_neighbors in two_hop_candidates.items():
+            # Component 1: Number of recent posts
+            post_count = 0
+            for key in post_keys:
+                post_data = redis_client.hgetall(key)
+                if post_data.get("user_id") == candidate_id:
+                    if not recent_round_ids or post_data.get("round") in recent_round_ids:
+                        post_count += 1
+
+            # Component 2: Number of interactions with 1-hop neighbors
+            # Count reactions by candidate on posts by 1-hop neighbors
+            interaction_count = 0
+
+            # Build map of post_id -> author
+            post_authors = {}
+            for key in post_keys:
+                post_data = redis_client.hgetall(key)
+                post_id = post_data.get("id")
+                author_id = post_data.get("user_id")
+                if post_id and author_id:
+                    post_authors[post_id] = author_id
+
+            # Count reactions
+            for key in reaction_keys:
+                reaction_data = redis_client.hgetall(key)
+                if reaction_data.get("user_id") == candidate_id:
+                    post_id = reaction_data.get("post_id")
+                    if post_id in post_authors and post_authors[post_id] in sampled_one_hop:
+                        interaction_count += 1
+
+            # Component 3: Number of triangles closed
+            triangle_count = len(connecting_neighbors)
+
+            candidate_scores[candidate_id] = {
+                "posts": post_count,
+                "interactions": interaction_count,
+                "triangles": triangle_count,
+            }
+
+        # Normalize and compute final scores
+        if candidate_scores:
+            max_posts = max((s["posts"] for s in candidate_scores.values()), default=1)
+            max_interactions = max(
+                (s["interactions"] for s in candidate_scores.values()), default=1
+            )
+            max_triangles = max(
+                (s["triangles"] for s in candidate_scores.values()), default=1
+            )
+
+            # Avoid division by zero
+            max_posts = max(max_posts, 1)
+            max_interactions = max(max_interactions, 1)
+            max_triangles = max(max_triangles, 1)
+
+            final_scores = {}
+            for candidate_id, scores in candidate_scores.items():
+                normalized_posts = scores["posts"] / max_posts
+                normalized_interactions = scores["interactions"] / max_interactions
+                normalized_triangles = scores["triangles"] / max_triangles
+
+                final_score = (
+                    weight_posts * normalized_posts
+                    + weight_interactions * normalized_interactions
+                    + weight_triangles * normalized_triangles
+                )
+                final_scores[candidate_id] = final_score
+
+            # Sort by score (highest first)
+            sorted_candidates = sorted(
+                final_scores.items(), key=lambda x: x[1], reverse=True
+            )
+            recommendations = [uid for uid, score in sorted_candidates[:n_neighbors]]
+        else:
+            recommendations = []
+
+        # Fill with random if needed
+        if len(recommendations) < n_neighbors:
+            remaining = n_neighbors - len(recommendations)
+            user_ids_key = redis_key_func("user_mgmt", "ids")
+            all_user_ids = list(redis_client.smembers(user_ids_key))
+            candidates = [
+                uid
+                for uid in all_user_ids
+                if uid != agent_id and uid not in following_ids and uid not in recommendations
+            ]
+            random.shuffle(candidates)
+            recommendations.extend(candidates[:remaining])
+
+        return recommendations[:n_neighbors]
+
+    except Exception as e:
+        logger.error(f"Error in recommend_two_hop_ego_sampling_redis: {e}")
+        return recommend_random_follows_redis(
+            redis_client, redis_key_func, agent_id, n_neighbors, logger
+        )
+
+
 def apply_leaning_bias_redis(
     redis_client: Redis,
     redis_key_func,

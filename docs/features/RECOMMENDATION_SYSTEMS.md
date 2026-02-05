@@ -41,7 +41,7 @@ Both systems support **hybrid Redis/SQL backends** with graceful fallback mechan
 ### Key Features
 
 - ✅ **14 Content Recommendation Modes**: From simple chronological to complex interest-based
-- ✅ **11 Follow Recommendation Modes**: From random to sophisticated social graph algorithms
+- ✅ **12 Follow Recommendation Modes**: From random to sophisticated social graph algorithms
 - ✅ **Hybrid Backend**: Redis for performance, SQL for complex queries
 - ✅ **Graceful Degradation**: Automatic fallback when Redis data unavailable
 - ✅ **Extensible Design**: Easy to add new recommendation strategies
@@ -533,7 +533,7 @@ recommended_posts = matching_posts[:limit]
 
 ## Follow Recommendation System
 
-The follow recommendation system suggests users to follow based on social graph analysis and similarity metrics. It implements 11 distinct strategies.
+The follow recommendation system suggests users to follow based on social graph analysis and similarity metrics. It implements 12 distinct strategies.
 
 ### Recommendation Modes
 
@@ -1062,6 +1062,94 @@ recommended_users = [user_id for user_id, score in sorted_candidates[:n_neighbor
 
 ---
 
+#### 12. **2-Hop Ego Sampling** (`two_hop_ego_sampling`)
+
+**Description:** Community detection based recommendation using 2-hop ego network sampling with multi-factor scoring.
+
+**Use Case:** Community-based discovery, triangle closure optimization, engagement-aware recommendations, local network structure exploitation.
+
+**Algorithm:**
+```python
+# Step 1: Sample 1-hop neighbors
+following_users = get_following(agent_id)
+sampled_1hop = random.sample(following_users, min(len(following_users), k_one_hop))
+
+# Step 2: Sample 2-hop neighbors
+two_hop_candidates = {}
+for one_hop_user in sampled_1hop:
+    friends_of_friend = get_following(one_hop_user)
+    sampled_2hop = random.sample(friends_of_friend, min(len(friends_of_friend), k_two_hop))
+    
+    for two_hop_user in sampled_2hop:
+        if two_hop_user not in following_users and two_hop_user != agent_id:
+            if two_hop_user not in two_hop_candidates:
+                two_hop_candidates[two_hop_user] = []
+            two_hop_candidates[two_hop_user].append(one_hop_user)
+
+# Step 3: Score each 2-hop candidate
+for candidate, connecting_neighbors in two_hop_candidates.items():
+    # Component 1: Recent posts (activity signal)
+    recent_posts = count_posts(candidate, recent_window=10_rounds)
+    
+    # Component 2: Interactions with 1-hop neighbors (engagement signal)
+    interactions = count_reactions(
+        by_user=candidate,
+        on_posts_by=sampled_1hop
+    )
+    
+    # Component 3: Triangles closed (network closure)
+    triangles = len(connecting_neighbors)
+    
+    # Normalize and combine (default weights: 0.3, 0.4, 0.3)
+    score = (
+        weight_posts * normalize(recent_posts) +
+        weight_interactions * normalize(interactions) +
+        weight_triangles * normalize(triangles)
+    )
+
+# Return top n_neighbors by score
+recommended_users = top_n(two_hop_candidates, n_neighbors)
+```
+
+**Characteristics:**
+- **Multi-hop sampling**: Explores 2-hop neighborhood for candidate discovery
+- **Composite scoring**: Combines activity, engagement, and topology
+- **Triangle closure**: Prioritizes candidates that close triangles
+- **Scalable**: Sampling limits prevent O(n²) complexity
+- **Community detection**: Implicit detection via local network structure
+
+**Redis Support:** ✅ Full
+**SQL Support:** ✅ Full
+
+**Cold Start:** Falls back to random recommendations when agent has no following
+
+**Scoring Components:**
+1. **Recent Posts (30% weight)**: Activity within last 10 rounds
+2. **Interactions (40% weight)**: Reactions on 1-hop neighbors' posts
+3. **Triangles (30% weight)**: Number of 1-hop neighbors connecting to candidate
+
+**Parameters:**
+- **k_one_hop** (default: 20): Maximum 1-hop neighbors to sample
+- **k_two_hop** (default: 50): Maximum 2-hop neighbors per 1-hop neighbor
+- **recent_posts_window** (default: 10): Rounds for post counting
+- **weight_posts** (default: 0.3): Weight for posts component
+- **weight_interactions** (default: 0.4): Weight for interactions component
+- **weight_triangles** (default: 0.3): Weight for triangles component
+
+**Network Properties:**
+- Exploits **transitive closure** (friend of friend)
+- Optimizes for **triangle completion** (high clustering coefficient)
+- Balances **topology** (triangles) with **behavior** (posts, interactions)
+- Efficient **O(k × k1)** complexity via sampling
+
+**Use Cases:**
+- Community-oriented platforms (Reddit, Discord-style)
+- Local network growth strategies
+- Engagement-aware friend suggestions
+- Structural hole bridging with engagement filters
+
+---
+
 ### Follow Recommendation Summary
 
 | Mode | Complexity | Basis | Redis Support | Best For |
@@ -1077,6 +1165,7 @@ recommended_users = [user_id for user_id, score in sorted_candidates[:n_neighbor
 | `random_walk_restart` | High | Graph Topology | ✅ Full | Multi-hop discovery, PageRank-style |
 | `reactions_on_content` | Medium | Content Engagement | ✅ Full | Audience building, reciprocal following |
 | `adamic_adar` | High | Social Graph + Log Degree | ✅ Full | Link prediction, hub penalization |
+| `two_hop_ego_sampling` | Very High | Ego Network + Engagement | ✅ Full | Community detection, triangle closure |
 
 ---
 

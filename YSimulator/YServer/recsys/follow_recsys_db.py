@@ -862,6 +862,188 @@ def recommend_reactions_on_content(
         return recommend_random_follows(session, agent_id, following_ids, n_neighbors)
 
 
+def recommend_two_hop_ego_sampling(
+    session: Session,
+    agent_id: str,
+    following_ids: set,
+    n_neighbors: int,
+    k_one_hop: int = 20,
+    k_two_hop: int = 50,
+    recent_posts_window: int = 10,
+    weight_posts: float = 0.3,
+    weight_interactions: float = 0.4,
+    weight_triangles: float = 0.3,
+) -> List[str]:
+    """
+    2-hop ego sampling follow recommendation strategy.
+
+    Samples 1-hop and 2-hop neighbors, then scores 2-hop neighbors based on:
+    - Number of recent posts
+    - Number of interactions with 1-hop neighbors
+    - Number of triangles closed if edge is established
+
+    Args:
+        session: SQLAlchemy database session
+        agent_id: ID of the agent requesting recommendations
+        following_ids: Set of user IDs the agent is already following
+        n_neighbors: Number of recommendations to return
+        k_one_hop: Maximum number of 1-hop neighbors to sample
+        k_two_hop: Maximum number of 2-hop neighbors to sample per 1-hop neighbor
+        recent_posts_window: Number of recent rounds to consider for post counting
+        weight_posts: Weight for recent posts score component
+        weight_interactions: Weight for interactions score component
+        weight_triangles: Weight for triangle closure score component
+
+    Returns:
+        List of recommended user IDs
+    """
+    try:
+        from YSimulator.YServer.classes.models import Post, Reaction, Round
+
+        if not following_ids:
+            return recommend_random_follows(session, agent_id, following_ids, n_neighbors)
+
+        following_list = list(following_ids)
+
+        # Step 1: Sample up to k_one_hop 1-hop neighbors
+        if len(following_list) > k_one_hop:
+            sampled_one_hop = random.sample(following_list, k_one_hop)
+        else:
+            sampled_one_hop = following_list
+
+        # Step 2: Get 2-hop neighbors (users that 1-hop neighbors follow)
+        # Exclude agent and users already following
+        Follow1 = aliased(Follow)
+        two_hop_candidates = {}  # Map 2-hop user -> list of 1-hop neighbors connecting them
+
+        for one_hop_user in sampled_one_hop:
+            # Get users that this 1-hop neighbor follows
+            two_hop_query = (
+                session.query(Follow1.user_id)
+                .filter(
+                    Follow1.follower_id == one_hop_user,
+                    Follow1.action == "follow",
+                    Follow1.user_id != agent_id,
+                    Follow1.user_id.notin_(following_list),
+                )
+                .limit(k_two_hop)
+            )
+
+            for row in two_hop_query.all():
+                two_hop_user = row[0]
+                if two_hop_user not in two_hop_candidates:
+                    two_hop_candidates[two_hop_user] = []
+                two_hop_candidates[two_hop_user].append(one_hop_user)
+
+        if not two_hop_candidates:
+            return recommend_random_follows(session, agent_id, following_ids, n_neighbors)
+
+        # Step 3: Score each 2-hop candidate
+        candidate_scores = {}
+
+        # Get recent round IDs for post counting
+        recent_rounds = (
+            session.query(Round.id)
+            .order_by(desc(Round.day), desc(Round.hour))
+            .limit(recent_posts_window)
+            .all()
+        )
+        recent_round_ids = [r.id for r in recent_rounds]
+
+        for candidate_id, connecting_neighbors in two_hop_candidates.items():
+            # Component 1: Number of recent posts
+            if recent_round_ids:
+                post_count = (
+                    session.query(func.count(Post.id))
+                    .filter(Post.user_id == candidate_id, Post.round.in_(recent_round_ids))
+                    .scalar()
+                    or 0
+                )
+            else:
+                post_count = 0
+
+            # Component 2: Number of interactions with 1-hop neighbors
+            # Count reactions by candidate on posts by 1-hop neighbors
+            interaction_count = (
+                session.query(func.count(Reaction.id))
+                .join(Post, Reaction.post_id == Post.id)
+                .filter(
+                    Reaction.user_id == candidate_id, Post.user_id.in_(sampled_one_hop)
+                )
+                .scalar()
+                or 0
+            )
+
+            # Component 3: Number of triangles closed
+            # A triangle is closed if candidate follows any of the 1-hop neighbors
+            # (who already follow the candidate or are followed by agent)
+            triangle_count = len(connecting_neighbors)
+
+            # Normalize scores (simple min-max style normalization across candidates)
+            candidate_scores[candidate_id] = {
+                "posts": post_count,
+                "interactions": interaction_count,
+                "triangles": triangle_count,
+            }
+
+        # Normalize each component
+        if candidate_scores:
+            max_posts = max((s["posts"] for s in candidate_scores.values()), default=1)
+            max_interactions = max(
+                (s["interactions"] for s in candidate_scores.values()), default=1
+            )
+            max_triangles = max(
+                (s["triangles"] for s in candidate_scores.values()), default=1
+            )
+
+            # Avoid division by zero
+            max_posts = max(max_posts, 1)
+            max_interactions = max(max_interactions, 1)
+            max_triangles = max(max_triangles, 1)
+
+            final_scores = {}
+            for candidate_id, scores in candidate_scores.items():
+                normalized_posts = scores["posts"] / max_posts
+                normalized_interactions = scores["interactions"] / max_interactions
+                normalized_triangles = scores["triangles"] / max_triangles
+
+                # Linear combination
+                final_score = (
+                    weight_posts * normalized_posts
+                    + weight_interactions * normalized_interactions
+                    + weight_triangles * normalized_triangles
+                )
+                final_scores[candidate_id] = final_score
+
+            # Sort by score (highest first)
+            sorted_candidates = sorted(
+                final_scores.items(), key=lambda x: x[1], reverse=True
+            )
+            suggestions = [uid for uid, score in sorted_candidates[:n_neighbors]]
+        else:
+            suggestions = []
+
+        # Fill with random if needed
+        if len(suggestions) < n_neighbors:
+            remaining = n_neighbors - len(suggestions)
+            candidates_query = session.query(User_mgmt).filter(User_mgmt.id != agent_id)
+            if following_ids:
+                candidates_query = candidates_query.filter(User_mgmt.id.notin_(following_ids))
+            extra_candidates = (
+                candidates_query.filter(User_mgmt.id.notin_(suggestions) if suggestions else True)
+                .limit(remaining * 2)
+                .all()
+            )
+            extra_ids = [c.id for c in extra_candidates]
+            random.shuffle(extra_ids)
+            suggestions.extend(extra_ids[:remaining])
+
+        return suggestions[:n_neighbors]
+
+    except Exception:
+        return recommend_random_follows(session, agent_id, following_ids, n_neighbors)
+
+
 def apply_leaning_bias(
     session: Session, agent_id: str, suggestions: List[str], leaning_bias: int, n_neighbors: int
 ) -> List[str]:

@@ -165,6 +165,10 @@ class FollowRecommender:
                     suggestions = follow_recsys_db.recommend_reactions_on_content(
                         session, agent_id, following_ids, n_neighbors
                     )
+                elif mode == "TwoHopEgoSampling":
+                    suggestions = follow_recsys_db.recommend_two_hop_ego_sampling(
+                        session, agent_id, following_ids, n_neighbors
+                    )
                 else:
                     # Unknown mode, fallback to random
                     self.logger.warning(f"Unknown follow mode: {mode}, using random")
@@ -235,6 +239,10 @@ class FollowRecommender:
                 )
             elif mode == "ReactionsOnContent":
                 recommendations = follow_recsys_redis.recommend_reactions_on_content_redis(
+                    self.db.redis_client, self.db._redis_key, agent_id, n_neighbors, self.logger
+                )
+            elif mode == "TwoHopEgoSampling":
+                recommendations = follow_recsys_redis.recommend_two_hop_ego_sampling_redis(
                     self.db.redis_client, self.db._redis_key, agent_id, n_neighbors, self.logger
                 )
             else:
