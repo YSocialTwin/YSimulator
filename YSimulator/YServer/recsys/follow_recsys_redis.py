@@ -960,7 +960,8 @@ def recommend_two_hop_ego_sampling_redis(
 
         # Sort rounds by day/hour (approximate - use all for simplicity in Redis)
         recent_round_ids = set()
-        for key in round_keys[:recent_posts_window] if len(round_keys) > recent_posts_window else round_keys:
+        selected_keys = round_keys[:recent_posts_window] if len(round_keys) > recent_posts_window else round_keys
+        for key in selected_keys:
             round_data = redis_client.hgetall(key)
             if round_data and "id" in round_data:
                 recent_round_ids.add(round_data["id"])
@@ -972,6 +973,26 @@ def recommend_two_hop_ego_sampling_redis(
         reaction_pattern = redis_key_func("reactions", "*")
         reaction_keys = redis_client.keys(reaction_pattern)
 
+        # Build post_id -> author map
+        post_authors = {}
+        for key in post_keys:
+            post_data = redis_client.hgetall(key)
+            post_id = post_data.get("id")
+            author_id = post_data.get("user_id")
+            if post_id and author_id:
+                post_authors[post_id] = author_id
+
+        # Build candidate -> interaction count map in single pass
+        candidate_interaction_counts = {candidate_id: 0 for candidate_id in two_hop_candidates}
+        for key in reaction_keys:
+            reaction_data = redis_client.hgetall(key)
+            user_id = reaction_data.get("user_id")
+            post_id = reaction_data.get("post_id")
+            
+            if user_id in candidate_interaction_counts and post_id in post_authors:
+                if post_authors[post_id] in sampled_one_hop:
+                    candidate_interaction_counts[user_id] += 1
+
         for candidate_id, connecting_neighbors in two_hop_candidates.items():
             # Component 1: Number of recent posts
             post_count = 0
@@ -982,25 +1003,8 @@ def recommend_two_hop_ego_sampling_redis(
                         post_count += 1
 
             # Component 2: Number of interactions with 1-hop neighbors
-            # Count reactions by candidate on posts by 1-hop neighbors
-            interaction_count = 0
-
-            # Build map of post_id -> author
-            post_authors = {}
-            for key in post_keys:
-                post_data = redis_client.hgetall(key)
-                post_id = post_data.get("id")
-                author_id = post_data.get("user_id")
-                if post_id and author_id:
-                    post_authors[post_id] = author_id
-
-            # Count reactions
-            for key in reaction_keys:
-                reaction_data = redis_client.hgetall(key)
-                if reaction_data.get("user_id") == candidate_id:
-                    post_id = reaction_data.get("post_id")
-                    if post_id in post_authors and post_authors[post_id] in sampled_one_hop:
-                        interaction_count += 1
+            # Use pre-computed counts
+            interaction_count = candidate_interaction_counts.get(candidate_id, 0)
 
             # Component 3: Number of triangles closed
             triangle_count = len(connecting_neighbors)
