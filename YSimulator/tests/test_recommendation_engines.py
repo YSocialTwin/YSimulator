@@ -320,6 +320,46 @@ class TestFollowRecommender:
         _ = recommender.get_follow_suggestions(agent_id="agent1", mode="Jaccard", n_neighbors=1)
         assert mock_recsys_redis.recommend_jaccard_redis.called
 
+    @patch("YSimulator.YServer.recommendation.follow_recommender.follow_recsys_redis")
+    def test_new_recommendation_modes(self, mock_recsys_redis, mock_db_adapter_redis):
+        """Test new recommendation modes (Resource Allocation, Cosine Similarity, etc.)."""
+        recommender = FollowRecommender(mock_db_adapter_redis)
+
+        # Test ResourceAllocation mode
+        mock_recsys_redis.recommend_resource_allocation_redis = Mock(return_value=["user1"])
+        _ = recommender.get_follow_suggestions(
+            agent_id="agent1", mode="ResourceAllocation", n_neighbors=1
+        )
+        assert mock_recsys_redis.recommend_resource_allocation_redis.called
+
+        # Test CosineSimilarity mode
+        mock_recsys_redis.recommend_cosine_similarity_redis = Mock(return_value=["user2"])
+        _ = recommender.get_follow_suggestions(
+            agent_id="agent1", mode="CosineSimilarity", n_neighbors=1
+        )
+        assert mock_recsys_redis.recommend_cosine_similarity_redis.called
+
+        # Test CoEngagement mode
+        mock_recsys_redis.recommend_co_engagement_redis = Mock(return_value=["user3"])
+        _ = recommender.get_follow_suggestions(
+            agent_id="agent1", mode="CoEngagement", n_neighbors=1
+        )
+        assert mock_recsys_redis.recommend_co_engagement_redis.called
+
+        # Test RandomWalkRestart mode
+        mock_recsys_redis.recommend_random_walk_with_restart_redis = Mock(return_value=["user4"])
+        _ = recommender.get_follow_suggestions(
+            agent_id="agent1", mode="RandomWalkRestart", n_neighbors=1
+        )
+        assert mock_recsys_redis.recommend_random_walk_with_restart_redis.called
+
+        # Test ReactionsOnContent mode
+        mock_recsys_redis.recommend_reactions_on_content_redis = Mock(return_value=["user5"])
+        _ = recommender.get_follow_suggestions(
+            agent_id="agent1", mode="ReactionsOnContent", n_neighbors=1
+        )
+        assert mock_recsys_redis.recommend_reactions_on_content_redis.called
+
 
 class TestRecommendationIntegration:
     """Integration tests for recommendation engines."""
