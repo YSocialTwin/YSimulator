@@ -5,11 +5,17 @@ This module provides a follow recommendation system interface that communicates
 with the Ray orchestrator server to fetch follow suggestions for agents.
 
 The server implements different recommendation strategies (modes):
-    - "random": Random user suggestions (default)
-    - "common_neighbors": Users with mutual connections
-    - "jaccard": Jaccard coefficient-based similarity
-    - "adamic_adar": Adamic/Adar index for link prediction
-    - "preferential_attachment": Rich-get-richer recommendation
+    - "FollowRecSys": Random user suggestions (default)
+    - "CommonNeighbors": Users with mutual connections
+    - "Jaccard": Jaccard coefficient-based similarity
+    - "AdamicAdar": Adamic/Adar index for link prediction
+    - "PreferentialAttachment": Rich-get-richer recommendation
+    - "ResourceAllocation": Resource allocation index
+    - "CosineSimilarity": Cosine similarity on profile vectors
+    - "CoEngagement": Users who interact with same content
+    - "RandomWalkRestart": Random walk with restart
+    - "ReactionsOnContent": Users who react to agent's content
+    - "TwoHopEgoSampling": 2-hop ego sampling with community detection
 """
 
 import logging
@@ -38,11 +44,17 @@ class FollowRecSysRay:
 
         Args:
             mode (str, optional): Recommendation mode. Options:
-                - "random": Random user suggestions (default)
-                - "common_neighbors": Users with mutual connections
-                - "jaccard": Jaccard coefficient-based similarity
-                - "adamic_adar": Adamic/Adar index for link prediction
-                - "preferential_attachment": Rich-get-richer recommendation
+                - "FollowRecSys": Random user suggestions (default)
+                - "CommonNeighbors": Users with mutual connections
+                - "Jaccard": Jaccard coefficient-based similarity
+                - "AdamicAdar": Adamic/Adar index for link prediction
+                - "PreferentialAttachment": Rich-get-richer recommendation
+                - "ResourceAllocation": Resource allocation index
+                - "CosineSimilarity": Cosine similarity on profile vectors
+                - "CoEngagement": Users who interact with same content
+                - "RandomWalkRestart": Random walk with restart
+                - "ReactionsOnContent": Users who react to agent's content
+                - "TwoHopEgoSampling": 2-hop ego sampling with community detection
             n_neighbors (int, optional): Number of users to suggest. Defaults to 10.
             leaning_bias (int, optional): Political leaning bias factor.
                                          1 = no bias, higher values increase homophily.
@@ -117,4 +129,56 @@ class PreferentialAttachmentFollowRecSys(FollowRecSysRay):
     def __init__(self, n_neighbors=10, leaning_bias=1):
         super().__init__(
             mode="PreferentialAttachment", n_neighbors=n_neighbors, leaning_bias=leaning_bias
+        )
+
+
+class ResourceAllocationFollowRecSys(FollowRecSysRay):
+    """Resource allocation index follow recommendation system."""
+
+    def __init__(self, n_neighbors=10, leaning_bias=1):
+        super().__init__(
+            mode="ResourceAllocation", n_neighbors=n_neighbors, leaning_bias=leaning_bias
+        )
+
+
+class CosineSimilarityFollowRecSys(FollowRecSysRay):
+    """Cosine similarity on profile vectors follow recommendation system."""
+
+    def __init__(self, n_neighbors=10, leaning_bias=1):
+        super().__init__(
+            mode="CosineSimilarity", n_neighbors=n_neighbors, leaning_bias=leaning_bias
+        )
+
+
+class CoEngagementFollowRecSys(FollowRecSysRay):
+    """Co-engagement based follow recommendation system."""
+
+    def __init__(self, n_neighbors=10, leaning_bias=1):
+        super().__init__(mode="CoEngagement", n_neighbors=n_neighbors, leaning_bias=leaning_bias)
+
+
+class RandomWalkRestartFollowRecSys(FollowRecSysRay):
+    """Random walk with restart follow recommendation system."""
+
+    def __init__(self, n_neighbors=10, leaning_bias=1):
+        super().__init__(
+            mode="RandomWalkRestart", n_neighbors=n_neighbors, leaning_bias=leaning_bias
+        )
+
+
+class ReactionsOnContentFollowRecSys(FollowRecSysRay):
+    """Reactions on agent content follow recommendation system."""
+
+    def __init__(self, n_neighbors=10, leaning_bias=1):
+        super().__init__(
+            mode="ReactionsOnContent", n_neighbors=n_neighbors, leaning_bias=leaning_bias
+        )
+
+
+class TwoHopEgoSamplingFollowRecSys(FollowRecSysRay):
+    """2-hop ego sampling with community detection follow recommendation system."""
+
+    def __init__(self, n_neighbors=10, leaning_bias=1):
+        super().__init__(
+            mode="TwoHopEgoSampling", n_neighbors=n_neighbors, leaning_bias=leaning_bias
         )
