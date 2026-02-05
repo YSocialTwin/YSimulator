@@ -862,6 +862,102 @@ def recommend_reactions_on_content_redis(
         )
 
 
+def recommend_activity_redis(
+    redis_client: Redis,
+    redis_key_func,
+    agent_id: str,
+    n_neighbors: int,
+    logger,
+    recent_rounds: int = 10,
+) -> List[str]:
+    """
+    Activity-based follow recommendation (Redis).
+
+    Recommends users based on recent posting activity.
+
+    Args:
+        redis_client: Redis client instance
+        redis_key_func: Function to generate Redis keys
+        agent_id: ID of the agent requesting recommendations
+        n_neighbors: Number of recommendations to return
+        logger: Logger instance
+        recent_rounds: Number of recent rounds to consider
+
+    Returns:
+        List of recommended user IDs
+    """
+    try:
+        # Get users agent is following
+        follow_pattern = redis_key_func("follow", "*")
+        follow_keys = redis_client.keys(follow_pattern)
+
+        following_ids = set()
+        for key in follow_keys:
+            follow_data = redis_client.hgetall(key)
+            if follow_data.get("follower_id") == agent_id and follow_data.get("action") == "follow":
+                following_ids.add(follow_data.get("user_id"))
+
+        # Get recent rounds
+        round_pattern = redis_key_func("rounds", "*")
+        round_keys = redis_client.keys(round_pattern)
+        
+        # Get recent round IDs (approximate - take last N)
+        recent_round_ids = set()
+        selected_keys = round_keys[:recent_rounds] if len(round_keys) > recent_rounds else round_keys
+        for key in selected_keys:
+            round_data = redis_client.hgetall(key)
+            if round_data and "id" in round_data:
+                recent_round_ids.add(round_data["id"])
+
+        # Count posts per user in recent rounds
+        post_pattern = redis_key_func("post", "*")
+        post_keys = redis_client.keys(post_pattern)
+
+        activity_counts = {}
+        for key in post_keys:
+            post_data = redis_client.hgetall(key)
+            user_id = post_data.get("user_id")
+            round_id = post_data.get("round")
+
+            if (
+                user_id
+                and user_id != agent_id
+                and user_id not in following_ids
+                and (not recent_round_ids or round_id in recent_round_ids)
+            ):
+                activity_counts[user_id] = activity_counts.get(user_id, 0) + 1
+
+        if not activity_counts:
+            return recommend_random_follows_redis(
+                redis_client, redis_key_func, agent_id, n_neighbors, logger
+            )
+
+        # Sort by activity count (highest first)
+        sorted_candidates = sorted(activity_counts.items(), key=lambda x: x[1], reverse=True)
+        recommendations = [uid for uid, count in sorted_candidates[:n_neighbors]]
+
+        # Fill with random if needed
+        if len(recommendations) < n_neighbors:
+            remaining = n_neighbors - len(recommendations)
+            user_ids_key = redis_key_func("user_mgmt", "ids")
+            all_user_ids = list(redis_client.smembers(user_ids_key))
+            candidates = [
+                uid
+                for uid in all_user_ids
+                if uid != agent_id and uid not in following_ids and uid not in recommendations
+            ]
+            random.shuffle(candidates)
+            recommendations.extend(candidates[:remaining])
+
+        return recommendations[:n_neighbors]
+
+    except Exception as e:
+        logger.error(f"Error in recommend_activity_redis: {e}")
+        return recommend_random_follows_redis(
+            redis_client, redis_key_func, agent_id, n_neighbors, logger
+        )
+
+
 def recommend_two_hop_ego_sampling_redis(
     redis_client: Redis,
     redis_key_func,

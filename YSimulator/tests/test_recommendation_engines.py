@@ -337,6 +337,13 @@ class TestFollowRecommender:
             )
             assert mock_recsys_db.recommend_two_hop_ego_sampling.called
 
+            # Test Activity mode
+            mock_recsys_db.recommend_activity = Mock(return_value=["user7"])
+            result = recommender.get_follow_suggestions(
+                agent_id="agent1", mode="Activity", n_neighbors=1
+            )
+            assert mock_recsys_db.recommend_activity.called
+
     @patch("YSimulator.YServer.recommendation.follow_recommender.follow_recsys_redis")
     def test_get_follow_suggestions_redis(self, mock_recsys_redis, mock_db_adapter_redis):
         """Test follow suggestions using Redis backend."""
@@ -436,6 +443,13 @@ class TestFollowRecommender:
             agent_id="agent1", mode="TwoHopEgoSampling", n_neighbors=1
         )
         assert mock_recsys_redis.recommend_two_hop_ego_sampling_redis.called
+
+        # Test Activity mode
+        mock_recsys_redis.recommend_activity_redis = Mock(return_value=["user7"])
+        _ = recommender.get_follow_suggestions(
+            agent_id="agent1", mode="Activity", n_neighbors=1
+        )
+        assert mock_recsys_redis.recommend_activity_redis.called
 
 
 class TestRecommendationIntegration:

@@ -29,6 +29,7 @@ Follow Recommendation Exports:
     - JaccardFollowRecSys: Jaccard similarity coefficient
     - AdamicAdarFollowRecSys: Adamic/Adar index
     - PreferentialAttachmentFollowRecSys: Popularity-based (rich-get-richer)
+    - ActivityFollowRecSys: Recently active users by post count
     - ResourceAllocationFollowRecSys: Resource allocation index
     - CosineSimilarityFollowRecSys: Cosine similarity on profile vectors
     - CoEngagementFollowRecSys: Co-engagement based recommendations
@@ -55,6 +56,7 @@ from .ContentRecSys import (
     SimilarUsersReact,
 )
 from .FollowRecSysRay import (
+    ActivityFollowRecSys,
     AdamicAdarFollowRecSys,
     CoEngagementFollowRecSys,
     CosineSimilarityFollowRecSys,
@@ -93,6 +95,7 @@ __all__ = [
     "JaccardFollowRecSys",
     "AdamicAdarFollowRecSys",
     "PreferentialAttachmentFollowRecSys",
+    "ActivityFollowRecSys",
     "ResourceAllocationFollowRecSys",
     "CosineSimilarityFollowRecSys",
     "CoEngagementFollowRecSys",

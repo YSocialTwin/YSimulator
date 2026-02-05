@@ -10,6 +10,7 @@ The server implements different recommendation strategies (modes):
     - "Jaccard": Jaccard coefficient-based similarity
     - "AdamicAdar": Adamic/Adar index for link prediction
     - "PreferentialAttachment": Rich-get-richer recommendation
+    - "Activity": Recently active users by post count
     - "ResourceAllocation": Resource allocation index
     - "CosineSimilarity": Cosine similarity on profile vectors
     - "CoEngagement": Users who interact with same content
@@ -49,6 +50,7 @@ class FollowRecSysRay:
                 - "Jaccard": Jaccard coefficient-based similarity
                 - "AdamicAdar": Adamic/Adar index for link prediction
                 - "PreferentialAttachment": Rich-get-richer recommendation
+                - "Activity": Recently active users by post count
                 - "ResourceAllocation": Resource allocation index
                 - "CosineSimilarity": Cosine similarity on profile vectors
                 - "CoEngagement": Users who interact with same content
@@ -130,6 +132,13 @@ class PreferentialAttachmentFollowRecSys(FollowRecSysRay):
         super().__init__(
             mode="PreferentialAttachment", n_neighbors=n_neighbors, leaning_bias=leaning_bias
         )
+
+
+class ActivityFollowRecSys(FollowRecSysRay):
+    """Activity-based follow recommendation system (recently active users)."""
+
+    def __init__(self, n_neighbors=10, leaning_bias=1):
+        super().__init__(mode="Activity", n_neighbors=n_neighbors, leaning_bias=leaning_bias)
 
 
 class ResourceAllocationFollowRecSys(FollowRecSysRay):

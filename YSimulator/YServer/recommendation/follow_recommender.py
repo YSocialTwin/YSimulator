@@ -145,6 +145,10 @@ class FollowRecommender:
                     suggestions = follow_recsys_db.recommend_preferential_attachment(
                         session, agent_id, following_ids, n_neighbors
                     )
+                elif mode == "Activity":
+                    suggestions = follow_recsys_db.recommend_activity(
+                        session, agent_id, following_ids, n_neighbors
+                    )
                 elif mode == "ResourceAllocation":
                     suggestions = follow_recsys_db.recommend_resource_allocation(
                         session, agent_id, following_ids, n_neighbors
@@ -219,6 +223,10 @@ class FollowRecommender:
                 )
             elif mode == "AdamicAdar":
                 recommendations = follow_recsys_redis.recommend_adamic_adar_redis(
+                    self.db.redis_client, self.db._redis_key, agent_id, n_neighbors, self.logger
+                )
+            elif mode == "Activity":
+                recommendations = follow_recsys_redis.recommend_activity_redis(
                     self.db.redis_client, self.db._redis_key, agent_id, n_neighbors, self.logger
                 )
             elif mode == "ResourceAllocation":

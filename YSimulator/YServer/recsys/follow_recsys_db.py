@@ -391,6 +391,82 @@ def recommend_preferential_attachment(
         return recommend_random_follows(session, agent_id, following_ids, n_neighbors)
 
 
+def recommend_activity(
+    session: Session,
+    agent_id: str,
+    following_ids: set,
+    n_neighbors: int,
+    recent_rounds: int = 10,
+) -> List[str]:
+    """
+    Activity-based follow recommendation strategy.
+
+    Recommends users based on recent posting activity. Users who post more
+    frequently are ranked higher.
+
+    Args:
+        session: SQLAlchemy database session
+        agent_id: ID of the agent requesting recommendations
+        following_ids: Set of user IDs the agent is already following
+        n_neighbors: Number of recommendations to return
+        recent_rounds: Number of recent rounds to consider for activity
+
+    Returns:
+        List of recommended user IDs
+    """
+    try:
+        from YSimulator.YServer.classes.models import Post, Round
+
+        following_list = list(following_ids) if following_ids else [agent_id]
+
+        # Get recent round IDs
+        recent_round_ids_query = (
+            session.query(Round.id)
+            .order_by(desc(Round.day), desc(Round.hour))
+            .limit(recent_rounds)
+        )
+        recent_round_ids = [r.id for r in recent_round_ids_query.all()]
+
+        if not recent_round_ids:
+            # No rounds available, fall back to random
+            return recommend_random_follows(session, agent_id, following_ids, n_neighbors)
+
+        # Count posts per user in recent rounds
+        activity_query = (
+            session.query(Post.user_id, func.count(Post.id).label("post_count"))
+            .filter(
+                Post.round.in_(recent_round_ids),
+                Post.user_id != agent_id,
+                Post.user_id.notin_(following_list),
+            )
+            .group_by(Post.user_id)
+            .order_by(desc("post_count"))
+            .limit(n_neighbors)
+        )
+
+        suggestions = [row[0] for row in activity_query.all()]
+
+        # Fill with random if needed
+        if len(suggestions) < n_neighbors:
+            remaining = n_neighbors - len(suggestions)
+            candidates_query = session.query(User_mgmt).filter(User_mgmt.id != agent_id)
+            if following_ids:
+                candidates_query = candidates_query.filter(User_mgmt.id.notin_(following_ids))
+            extra_candidates = (
+                candidates_query.filter(User_mgmt.id.notin_(suggestions) if suggestions else True)
+                .limit(remaining * 2)
+                .all()
+            )
+            extra_ids = [c.id for c in extra_candidates]
+            random.shuffle(extra_ids)
+            suggestions.extend(extra_ids[:remaining])
+
+        return suggestions[:n_neighbors]
+
+    except Exception:
+        return recommend_random_follows(session, agent_id, following_ids, n_neighbors)
+
+
 def recommend_resource_allocation(
     session: Session, agent_id: str, following_ids: set, n_neighbors: int
 ) -> List[str]:
