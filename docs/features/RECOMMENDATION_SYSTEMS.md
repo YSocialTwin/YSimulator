@@ -41,7 +41,7 @@ Both systems support **hybrid Redis/SQL backends** with graceful fallback mechan
 ### Key Features
 
 - ✅ **14 Content Recommendation Modes**: From simple chronological to complex interest-based
-- ✅ **5 Follow Recommendation Modes**: From random to sophisticated social graph algorithms
+- ✅ **11 Follow Recommendation Modes**: From random to sophisticated social graph algorithms
 - ✅ **Hybrid Backend**: Redis for performance, SQL for complex queries
 - ✅ **Graceful Degradation**: Automatic fallback when Redis data unavailable
 - ✅ **Extensible Design**: Easy to add new recommendation strategies
@@ -533,7 +533,7 @@ recommended_posts = matching_posts[:limit]
 
 ## Follow Recommendation System
 
-The follow recommendation system suggests users to follow based on social graph analysis and similarity metrics. It implements 5 distinct strategies.
+The follow recommendation system suggests users to follow based on social graph analysis and similarity metrics. It implements 11 distinct strategies.
 
 ### Recommendation Modes
 
@@ -737,6 +737,331 @@ recommended_users = [user_id for user_id, count in sorted_candidates[:n_neighbor
 
 ---
 
+#### 6. **Resource Allocation Index** (`resource_allocation`)
+
+**Description:** Similar to Adamic/Adar but uses direct inverse degree (1/degree) instead of logarithmic weighting.
+
+**Use Case:** Link prediction, social network analysis, balanced weight distribution among common neighbors.
+
+**Algorithm:**
+```python
+following_users = get_following(agent_id)
+
+candidate_scores = {}
+for candidate in all_users:
+    if candidate == agent_id or candidate in following_users:
+        continue
+    
+    # Find common neighbors
+    common_neighbors = set()
+    for friend in following_users:
+        friends_friends = get_following(friend)
+        if candidate in friends_friends:
+            common_neighbors.add(friend)
+    
+    # Calculate resource allocation score
+    score = 0.0
+    for neighbor in common_neighbors:
+        degree = count_following(neighbor)  # Out-degree of common neighbor
+        score += 1.0 / max(degree, 1)
+    
+    candidate_scores[candidate] = score
+
+sorted_candidates = sorted(candidate_scores.items(), key=lambda x: x[1], reverse=True)
+recommended_users = [user_id for user_id, score in sorted_candidates[:n_neighbors]]
+```
+
+**Characteristics:**
+- Linear weighting (1/degree) vs. logarithmic (1/log(degree))
+- Each common neighbor contributes inversely to their degree
+- More balanced than Adamic/Adar for high-degree nodes
+- Formula: `RA(x,y) = Σ(1/|Γ(z)|)` for all z in common neighbors
+
+**Redis Support:** ✅ Full
+**SQL Support:** ✅ Full
+
+**Cold Start:** Falls back to random recommendations when agent has no following
+
+---
+
+#### 7. **Cosine Similarity on Profile Vectors** (`cosine_similarity`)
+
+**Description:** Recommends users with similar profiles based on interests and personality traits (Big Five).
+
+**Use Case:** Personality-based matching, interest alignment, demographic similarity, deep user profiling.
+
+**Algorithm:**
+```python
+agent_profile = get_user_profile(agent_id)
+agent_interests = get_user_interests(agent_id)
+agent_traits = {
+    'openness': agent_profile.openness,
+    'conscientiousness': agent_profile.conscientiousness,
+    'extraversion': agent_profile.extraversion,
+    'agreeableness': agent_profile.agreeableness,
+    'neuroticism': agent_profile.neuroticism
+}
+
+# Sample candidates for efficiency
+candidates = random.sample(all_users - following_users - {agent_id}, sample_size)
+
+similarity_scores = {}
+for candidate in candidates:
+    candidate_interests = get_user_interests(candidate)
+    candidate_profile = get_user_profile(candidate)
+    
+    # Interest similarity (Jaccard coefficient)
+    interest_sim = jaccard(agent_interests, candidate_interests)
+    
+    # Personality trait similarity (cosine similarity)
+    candidate_traits = extract_traits(candidate_profile)
+    trait_sim = cosine_similarity(agent_traits, candidate_traits)
+    
+    # Combined similarity (weighted average: 70% interests, 30% traits)
+    combined_sim = 0.7 * interest_sim + 0.3 * trait_sim
+    similarity_scores[candidate] = combined_sim
+
+sorted_candidates = sorted(similarity_scores.items(), key=lambda x: x[1], reverse=True)
+recommended_users = [user_id for user_id, score in sorted_candidates[:n_neighbors]]
+```
+
+**Characteristics:**
+- Multi-dimensional user profiling
+- Combines explicit interests with personality traits
+- Uses random sampling (default: 100 candidates) for scalability
+- Weighted combination favors interests over traits
+- Enables psychographic targeting
+
+**Redis Support:** ✅ Full
+**SQL Support:** ✅ Full
+
+**Cold Start:** Falls back to random recommendations when agent has no profile data
+
+**Profile Components:**
+- **Interests (70% weight):** User's declared topics/interests
+- **Personality Traits (30% weight):** Big Five personality dimensions
+
+---
+
+#### 8. **Co-Engagement** (`co_engagement`)
+
+**Description:** Recommends users who interact with the same content (posts).
+
+**Use Case:** Content-based discovery, community building, shared interest networks, engagement clustering.
+
+**Algorithm:**
+```python
+# Get posts agent has reacted to
+agent_reactions = get_user_reactions(agent_id)
+agent_post_ids = [reaction.post_id for reaction in agent_reactions]
+
+# Include agent's own posts
+agent_posts = get_user_posts(agent_id)
+agent_post_ids.extend([post.id for post in agent_posts])
+
+# Find users who also engaged with these posts
+engagement_counts = {}
+for post_id in agent_post_ids:
+    post_reactions = get_post_reactions(post_id)
+    for reaction in post_reactions:
+        if reaction.user_id == agent_id:
+            continue
+        if reaction.user_id in following_users:
+            continue
+        
+        engagement_counts[reaction.user_id] = engagement_counts.get(reaction.user_id, 0) + 1
+
+sorted_candidates = sorted(engagement_counts.items(), key=lambda x: x[1], reverse=True)
+recommended_users = [user_id for user_id, count in sorted_candidates[:n_neighbors]]
+```
+
+**Characteristics:**
+- Implicit similarity signal (reactions)
+- Bidirectional: considers both agent's reactions and reactions to agent's content
+- Engagement-based clustering
+- Discovers users with overlapping content preferences
+
+**Redis Support:** ✅ Full
+**SQL Support:** ✅ Full
+
+**Cold Start:** Falls back to random recommendations when agent has no reactions/posts
+
+**Engagement Signals:**
+- Likes, comments, shares on same posts
+- Reactions to agent's own content
+- Creates implicit content-based communities
+
+---
+
+#### 9. **Random Walk with Restart** (`random_walk_restart`)
+
+**Description:** Performs k random walks of length l rooted at the agent, with restart probability.
+
+**Use Case:** Graph-based recommendations, PageRank-style exploration, network topology analysis, multi-hop discovery.
+
+**Algorithm:**
+```python
+k = 10  # Number of random walks
+walk_length = 3  # Maximum steps per walk
+restart_prob = 0.15  # Probability of returning to root
+
+visit_counts = {}
+for _ in range(k):
+    current_node = agent_id
+    
+    for step in range(walk_length):
+        # Restart with probability
+        if random.random() < restart_prob:
+            current_node = agent_id
+            continue
+        
+        # Get neighbors (users current_node follows)
+        neighbors = get_following(current_node)
+        if not neighbors:
+            current_node = agent_id  # Dead end, restart
+            continue
+        
+        # Random step
+        current_node = random.choice(neighbors)
+        
+        # Count visit (exclude self and already following)
+        if current_node != agent_id and current_node not in following_users:
+            visit_counts[current_node] = visit_counts.get(current_node, 0) + 1
+
+sorted_candidates = sorted(visit_counts.items(), key=lambda x: x[1], reverse=True)
+recommended_users = [user_id for user_id, count in sorted_candidates[:n_neighbors]]
+```
+
+**Characteristics:**
+- Explores multi-hop neighborhoods
+- Balances exploration (random walks) and exploitation (restart)
+- Similar to PageRank/Personalized PageRank
+- Discovers distant but structurally relevant nodes
+- Configurable: k (walks), l (length), restart probability
+
+**Redis Support:** ✅ Full
+**SQL Support:** ✅ Full
+
+**Cold Start:** Falls back to random recommendations when agent has no following
+
+**Parameters:**
+- **k:** Number of random walks (default: 10)
+- **walk_length:** Maximum steps per walk (default: 3)
+- **restart_prob:** Probability of returning to root (default: 0.15)
+
+**Network Properties:**
+- Captures higher-order proximity
+- Considers network topology beyond immediate neighbors
+- Probabilistic neighborhood sampling
+
+---
+
+#### 10. **Reactions on Agent Content** (`reactions_on_content`)
+
+**Description:** Recommends users who have reacted to (liked, commented on) the agent's posts.
+
+**Use Case:** Audience building, reciprocal following, engagement-based growth, fan discovery.
+
+**Algorithm:**
+```python
+# Get agent's posts
+agent_posts = get_user_posts(agent_id)
+agent_post_ids = [post.id for post in agent_posts]
+
+# Find users who reacted to agent's posts
+reaction_counts = {}
+for post_id in agent_post_ids:
+    post_reactions = get_post_reactions(post_id)
+    for reaction in post_reactions:
+        if reaction.user_id == agent_id:
+            continue
+        if reaction.user_id in following_users:
+            continue
+        
+        reaction_counts[reaction.user_id] = reaction_counts.get(reaction.user_id, 0) + 1
+
+sorted_candidates = sorted(reaction_counts.items(), key=lambda x: x[1], reverse=True)
+recommended_users = [user_id for user_id, count in sorted_candidates[:n_neighbors]]
+```
+
+**Characteristics:**
+- Reciprocity-based recommendations
+- Rewards engagement with agent's content
+- Natural audience-building strategy
+- Implicit social validation signal
+
+**Redis Support:** ✅ Full
+**SQL Support:** ✅ Full
+
+**Cold Start:** Falls back to random recommendations when agent has no posts
+
+**Use Cases:**
+- Content creators discovering their audience
+- Reciprocal follow strategies
+- Engagement-driven network growth
+- Fan/follower relationship building
+
+**Reaction Types Considered:**
+- Likes/hearts on posts
+- Comments on posts
+- Shares/retweets
+- Any interaction with agent's content
+
+---
+
+#### 11. **Adamic/Adar Index** (`adamic_adar`)
+
+**Description:** Recommends users based on Adamic/Adar scores computed from common neighbors using logarithmic weighting.
+
+**Use Case:** Link prediction, sophisticated social network analysis, preferential attachment with penalization for high-degree nodes.
+
+**Algorithm:**
+```python
+following_users = get_following(agent_id)
+
+candidate_scores = {}
+for candidate in all_users:
+    if candidate == agent_id or candidate in following_users:
+        continue
+    
+    # Find common neighbors
+    common_neighbors = set()
+    for friend in following_users:
+        friends_friends = get_following(friend)
+        if candidate in friends_friends:
+            common_neighbors.add(friend)
+    
+    # Calculate Adamic/Adar score
+    score = 0.0
+    for neighbor in common_neighbors:
+        degree = count_following(neighbor)
+        if degree > 1:
+            score += 1.0 / math.log(degree)
+    
+    candidate_scores[candidate] = score
+
+sorted_candidates = sorted(candidate_scores.items(), key=lambda x: x[1], reverse=True)
+recommended_users = [user_id for user_id, score in sorted_candidates[:n_neighbors]]
+```
+
+**Characteristics:**
+- Logarithmic weighting reduces impact of high-degree nodes
+- More sophisticated than common neighbors
+- Penalizes connections through "hubs"
+- Formula: `AA(x,y) = Σ(1/log|Γ(z)|)` for all z in common neighbors
+
+**Redis Support:** ✅ Full
+**SQL Support:** ✅ Full
+
+**Cold Start:** Falls back to random recommendations when agent has no following
+
+**Benefits:**
+- Higher engagement potential
+- Fresh content from recommended users
+- Rewards user activity
+
+---
+
 ### Follow Recommendation Summary
 
 | Mode | Complexity | Basis | Redis Support | Best For |
@@ -746,6 +1071,12 @@ recommended_users = [user_id for user_id, count in sorted_candidates[:n_neighbor
 | `jaccard` | High | Following Similarity | ✅ Full | Taste matching, interest alignment |
 | `preferential_attachment` | Low | Popularity | ✅ Full | Influencer discovery, power-law networks |
 | `activity` | Low | Engagement | ✅ Full | Active users, content creators |
+| `resource_allocation` | High | Social Graph + Degree | ✅ Full | Link prediction, balanced weighting |
+| `cosine_similarity` | High | Profile Vectors | ✅ Full | Personality matching, interest alignment |
+| `co_engagement` | Medium | Content Interaction | ✅ Full | Shared interests, engagement clustering |
+| `random_walk_restart` | High | Graph Topology | ✅ Full | Multi-hop discovery, PageRank-style |
+| `reactions_on_content` | Medium | Content Engagement | ✅ Full | Audience building, reciprocal following |
+| `adamic_adar` | High | Social Graph + Log Degree | ✅ Full | Link prediction, hub penalization |
 
 ---
 
