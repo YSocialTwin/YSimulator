@@ -931,3 +931,122 @@ def recommend_content_based_vector(
         return results, True
 
     return results, False
+
+
+def recommend_hybrid_linear_ranker(
+    session,
+    agent_id: str,
+    visibility_day: int,
+    visibility_hour: int,
+    limit: int,
+) -> tuple[List[str], bool]:
+    """
+    Hybrid content recommendation system with two-stage process (SQL backend).
+    
+    This is a simplified SQL implementation that combines multiple recommendation strategies.
+    The full feature extraction and scoring is complex in SQL, so we approximate it by:
+    1. Getting candidates from multiple sources
+    2. Using a simplified scoring based on recency, follows, and engagement
+    
+    Stage 1: Candidate Generation
+      - Combines rchrono_followers, rchrono_popularity, and collaborative_user_user
+      - Union and deduplicate results
+    
+    Stage 2: Simplified Ranker
+      - Orders by: followed authors first, then by recent engagement, then by recency
+    
+    Args:
+        session: SQLAlchemy session object
+        agent_id: UUID of the agent requesting recommendations
+        visibility_day: Day threshold for post visibility
+        visibility_hour: Hour threshold for post visibility
+        limit: Number of posts to recommend
+    
+    Returns:
+        Tuple of (List of post UUIDs, bool indicating if fallback was used)
+    """
+    used_fallback = False
+    
+    # Get more candidates than we need to allow for ranking
+    candidate_limit = min(limit * 10, 100)
+    
+    # Get candidates from multiple sources
+    candidates_set = set()
+    
+    # 1. rchrono_followers
+    try:
+        cand1, fb1 = recommend_rchrono_followers(
+            session, agent_id, visibility_day, visibility_hour, candidate_limit, followers_ratio=0.6
+        )
+        candidates_set.update(cand1)
+        used_fallback = used_fallback or fb1
+    except Exception:
+        pass
+    
+    # 2. rchrono_popularity
+    try:
+        cand2 = recommend_rchrono_popularity(
+            session, agent_id, visibility_day, visibility_hour, candidate_limit
+        )
+        candidates_set.update(cand2)
+    except Exception:
+        pass
+    
+    # 3. collaborative_user_user
+    try:
+        cand3, fb3 = recommend_collaborative_user_user(
+            session, agent_id, visibility_day, visibility_hour, candidate_limit
+        )
+        candidates_set.update(cand3)
+        used_fallback = used_fallback or fb3
+    except Exception:
+        pass
+    
+    # If no candidates, fall back to random
+    if not candidates_set:
+        results = recommend_random(session, agent_id, visibility_day, visibility_hour, limit)
+        return results, True
+    
+    # Rank candidates using SQL query with scoring
+    # Simplified scoring: prioritize followed authors and recent engagement
+    followed_users_subq = (
+        session.query(Follow.follower_id)
+        .filter(Follow.user_id == agent_id, Follow.action == "follow")
+        .subquery()
+    )
+    
+    # Get post details with scoring factors
+    from sqlalchemy import case
+    
+    query = (
+        session.query(
+            Post.id,
+            # Score components
+            case(
+                (Post.user_id.in_(followed_users_subq), 1.0),
+                else_=0.0
+            ).label("is_followed"),
+            Round.day.label("post_day"),
+            Round.hour.label("post_hour"),
+            Post.reaction_count.label("engagement")
+        )
+        .join(Round, Post.round == Round.id)
+        .filter(Post.id.in_(candidates_set))
+        .order_by(
+            desc("is_followed"),  # Followed authors first
+            desc("post_day"),     # Then recent posts
+            desc("post_hour"),
+            desc("engagement")    # Then engagement
+        )
+        .limit(limit)
+    )
+    
+    results = [row[0] for row in query.all()]
+    
+    # If not enough results, fill with random
+    if len(results) < limit:
+        additional = recommend_random(session, agent_id, visibility_day, visibility_hour, limit - len(results))
+        results.extend([p for p in additional if p not in results])
+        used_fallback = True
+    
+    return results, used_fallback

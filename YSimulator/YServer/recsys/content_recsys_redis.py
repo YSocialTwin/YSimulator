@@ -1295,3 +1295,479 @@ def recommend_content_based_vector_redis(
                     post_ids.extend(additional[: limit - len(post_ids)])
 
         return post_ids, False
+
+
+def recommend_hybrid_linear_ranker_redis(
+    valid_posts_with_data: List[Dict[str, Any]],
+    limit: int,
+    agent_id: str,
+    all_post_ids: List[str],
+    posts_data: List[Dict[str, bytes]],
+    redis_client,
+    redis_key_fn,
+    db_engine,
+    logger,
+    **kwargs,
+) -> tuple[List[str], bool]:
+    """
+    Hybrid content recommendation system with two-stage process:
+    
+    Stage 1: Candidate Generation
+      - Combines rchrono_followers, friends_of_friends, rchrono_popularity, 
+        and collaborative_user_user
+      - Union and deduplicate results
+    
+    Stage 2: Linear Ranker
+      - Extracts features for each candidate
+      - Scores with weighted linear combination:
+        score = 0.28 * recency_score +
+                0.25 * is_followed_author +
+                0.15 * user_author_affinity +
+                0.08 * recent_user_author_affinity +
+                0.16 * content_topic_similarity +
+                0.08 * similar_user_author
+    
+    Args:
+        valid_posts_with_data: List of post dictionaries
+        limit: Number of posts to recommend
+        agent_id: UUID of agent requesting recommendations
+        all_post_ids: All post IDs from Redis
+        posts_data: All post data from Redis
+        redis_client: Redis client instance
+        redis_key_fn: Function to generate Redis keys
+        db_engine: Database engine for SQL fallback
+        logger: Logger instance
+    
+    Returns:
+        Tuple of (List of post IDs ranked by score, bool indicating if fallback was used)
+    """
+    import math
+    
+    used_fallback = False
+    
+    # ==========================================
+    # STAGE 1: CANDIDATE GENERATION
+    # ==========================================
+    
+    # Get candidates from multiple sources
+    candidate_limit = min(limit * 10, 100)  # Get more candidates to rank
+    
+    # 1. rchrono_followers
+    candidates_followers, fallback1 = recommend_rchrono_followers_redis(
+        valid_posts_with_data=valid_posts_with_data,
+        limit=candidate_limit,
+        agent_id=agent_id,
+        followers_ratio=0.6,
+        all_post_ids=all_post_ids,
+        posts_data=posts_data,
+        db_engine=db_engine,
+        **kwargs
+    )
+    used_fallback = used_fallback or fallback1
+    
+    # 2. friends_of_friends (posts from users followed by users you follow)
+    candidates_fof, fallback2 = _get_friends_of_friends_candidates_redis(
+        valid_posts_with_data=valid_posts_with_data,
+        limit=candidate_limit,
+        agent_id=agent_id,
+        all_post_ids=all_post_ids,
+        posts_data=posts_data,
+        redis_client=redis_client,
+        redis_key_fn=redis_key_fn,
+        db_engine=db_engine,
+        logger=logger,
+    )
+    used_fallback = used_fallback or fallback2
+    
+    # 3. rchrono_popularity
+    candidates_popularity = recommend_rchrono_popularity_redis(
+        valid_posts_with_data=valid_posts_with_data,
+        limit=candidate_limit,
+        **kwargs
+    )
+    
+    # 4. collaborative_user_user
+    candidates_collab, fallback3 = recommend_collaborative_user_user_redis(
+        valid_posts_with_data=valid_posts_with_data,
+        limit=candidate_limit,
+        agent_id=agent_id,
+        all_post_ids=all_post_ids,
+        posts_data=posts_data,
+        redis_client=redis_client,
+        redis_key_fn=redis_key_fn,
+        db_engine=db_engine,
+        logger=logger,
+        **kwargs
+    )
+    used_fallback = used_fallback or fallback3
+    
+    # Union and deduplicate
+    candidate_set = set()
+    candidate_set.update(candidates_followers)
+    candidate_set.update(candidates_fof)
+    candidate_set.update(candidates_popularity)
+    candidate_set.update(candidates_collab)
+    
+    # If no candidates found, fall back to random
+    if not candidate_set:
+        result = recommend_random_redis(valid_posts_with_data, limit)
+        return result, True
+    
+    # ==========================================
+    # STAGE 2: FEATURE EXTRACTION & RANKING
+    # ==========================================
+    
+    # Get current round info for recency calculation
+    current_round = kwargs.get('current_round', 0)
+    tau = kwargs.get('tau', 10.0)  # Decay parameter for recency
+    
+    # Build post_id to data mapping for efficient lookup
+    post_id_to_data = {all_post_ids[i]: posts_data[i] for i in range(len(all_post_ids))}
+    
+    # Get followed users
+    followed_users = _get_followed_users_redis(agent_id, redis_client, redis_key_fn, db_engine)
+    
+    # Get user's topic interests
+    user_interests_key = redis_key_fn("user", agent_id) + ":interests"
+    user_interests = (
+        redis_client.smembers(user_interests_key) 
+        if redis_client.exists(user_interests_key) 
+        else set()
+    )
+    
+    # Score each candidate post
+    post_scores = []
+    for post_id in candidate_set:
+        post_data = post_id_to_data.get(post_id)
+        if not post_data:
+            continue
+        
+        # Extract features
+        author_id = post_data.get("user_id")
+        if author_id == agent_id:  # Skip own posts
+            continue
+        
+        # Feature 1: Recency score (exponential decay)
+        post_round = int(post_data.get("round", 0) or 0)
+        age_rounds = max(0, current_round - post_round)
+        recency_score = math.exp(-age_rounds / tau)
+        
+        # Feature 2: Is followed author
+        is_followed_author = 1.0 if author_id in followed_users else 0.0
+        
+        # Feature 3: User-author affinity (engagement count, log scale)
+        user_author_affinity = _calculate_user_author_affinity_redis(
+            agent_id, author_id, redis_client, redis_key_fn, db_engine
+        )
+        
+        # Feature 4: Recent user-author affinity (interactions in recent rounds)
+        recent_user_author_affinity = _calculate_recent_user_author_affinity_redis(
+            agent_id, author_id, current_round, redis_client, redis_key_fn, db_engine, tau
+        )
+        
+        # Feature 5: Content topic similarity (cosine similarity)
+        content_topic_similarity = _calculate_content_topic_similarity_redis(
+            agent_id, post_id, user_interests, redis_client, redis_key_fn
+        )
+        
+        # Feature 6: Similar user author score (people like you follow/like this author)
+        similar_user_author = _calculate_similar_user_author_score_redis(
+            agent_id, author_id, redis_client, redis_key_fn, db_engine
+        )
+        
+        # Calculate composite score with weights
+        composite_score = (
+            0.28 * recency_score +
+            0.25 * is_followed_author +
+            0.15 * user_author_affinity +
+            0.08 * recent_user_author_affinity +
+            0.16 * content_topic_similarity +
+            0.08 * similar_user_author
+        )
+        
+        post_scores.append({
+            "id": post_id,
+            "score": composite_score,
+            "features": {
+                "recency": recency_score,
+                "is_followed": is_followed_author,
+                "affinity": user_author_affinity,
+                "recent_affinity": recent_user_author_affinity,
+                "topic_sim": content_topic_similarity,
+                "similar_user": similar_user_author,
+            }
+        })
+    
+    # Sort by score descending
+    post_scores.sort(key=lambda x: -x["score"])
+    
+    # Return top N
+    result_ids = [p["id"] for p in post_scores[:limit]]
+    
+    # If not enough results, fill with random posts
+    if len(result_ids) < limit:
+        additional = [p["id"] for p in valid_posts_with_data if p["id"] not in result_ids]
+        result_ids.extend(additional[:limit - len(result_ids)])
+        used_fallback = True
+    
+    return result_ids, used_fallback
+
+
+# ==========================================
+# HELPER FUNCTIONS FOR HYBRID RECOMMENDER
+# ==========================================
+
+def _get_friends_of_friends_candidates_redis(
+    valid_posts_with_data: List[Dict[str, Any]],
+    limit: int,
+    agent_id: str,
+    all_post_ids: List[str],
+    posts_data: List[Dict[str, bytes]],
+    redis_client,
+    redis_key_fn,
+    db_engine,
+    logger,
+) -> tuple[List[str], bool]:
+    """
+    Get posts from friends-of-friends (users followed by users you follow).
+    
+    Returns:
+        Tuple of (List of post IDs, bool indicating if fallback was used)
+    """
+    from sqlalchemy.orm import Session
+    
+    # Get users that current agent follows
+    followed_users = _get_followed_users_redis(agent_id, redis_client, redis_key_fn, db_engine)
+    
+    if not followed_users:
+        # No follows, return random
+        result = recommend_random_redis(valid_posts_with_data, min(limit, len(valid_posts_with_data)))
+        return result, True
+    
+    # Get users followed by the agent's followed users (friends-of-friends)
+    fof_users = set()
+    
+    # Try Redis first
+    for followed_user_id in followed_users:
+        follows_key = redis_key_fn("user", followed_user_id) + ":follows"
+        if redis_client.exists(follows_key):
+            user_follows = redis_client.smembers(follows_key)
+            fof_users.update(user_follows)
+    
+    # Remove agent and direct follows
+    fof_users.discard(agent_id)
+    fof_users -= followed_users
+    
+    # If Redis didn't have data, fall back to SQL
+    if not fof_users:
+        with Session(db_engine) as session:
+            # Get follows of follows
+            fof_query = (
+                session.query(Follow.follower_id)
+                .filter(
+                    Follow.user_id.in_(followed_users),
+                    Follow.follower_id != agent_id,
+                    Follow.follower_id.notin_(followed_users),
+                    Follow.action == "follow"
+                )
+                .distinct()
+            )
+            fof_users = set(row[0] for row in fof_query.all())
+    
+    if not fof_users:
+        result = recommend_random_redis(valid_posts_with_data, min(limit, len(valid_posts_with_data)))
+        return result, True
+    
+    # Get posts from friends-of-friends
+    post_id_to_data = {all_post_ids[i]: posts_data[i] for i in range(len(all_post_ids))}
+    
+    fof_posts = []
+    for post in valid_posts_with_data:
+        post_data = post_id_to_data.get(post["id"])
+        if post_data and post_data.get("user_id") in fof_users:
+            fof_posts.append(post)
+    
+    # Sort by recency (index)
+    fof_posts.sort(key=lambda x: x["index"])
+    result_ids = [p["id"] for p in fof_posts[:limit]]
+    
+    # Fill with random if needed
+    if len(result_ids) < limit:
+        additional = [p["id"] for p in valid_posts_with_data if p["id"] not in result_ids]
+        result_ids.extend(additional[:limit - len(result_ids)])
+    
+    return result_ids, False
+
+
+def _get_followed_users_redis(agent_id: str, redis_client, redis_key_fn, db_engine) -> set:
+    """Get set of users that the agent follows."""
+    from sqlalchemy.orm import Session
+    
+    # Try Redis first
+    follows_key = redis_key_fn("user", agent_id) + ":follows"
+    if redis_client.exists(follows_key):
+        return redis_client.smembers(follows_key)
+    
+    # Fallback to SQL
+    with Session(db_engine) as session:
+        query = session.query(Follow.follower_id).filter(
+            Follow.user_id == agent_id, Follow.action == "follow"
+        )
+        return set(row[0] for row in query.all())
+
+
+def _calculate_user_author_affinity_redis(
+    agent_id: str, author_id: str, redis_client, redis_key_fn, db_engine
+) -> float:
+    """
+    Calculate user-author affinity based on engagement count (log scale).
+    affinity = log(1 + interactions_user_author)
+    """
+    import math
+    from sqlalchemy.orm import Session
+    
+    # Try Redis: count interactions (likes/comments)
+    interactions = 0
+    
+    # Check likes
+    user_likes_key = redis_key_fn("user", agent_id) + ":likes"
+    if redis_client.exists(user_likes_key):
+        user_likes = redis_client.smembers(user_likes_key)
+        # Count how many of these posts are by the author
+        for post_id in user_likes:
+            post_key = redis_key_fn("posts", post_id)
+            if redis_client.exists(post_key):
+                post_data = redis_client.hgetall(post_key)
+                if post_data.get("user_id") == author_id:
+                    interactions += 1
+    
+    # If Redis doesn't have data, fall back to SQL
+    if interactions == 0:
+        with Session(db_engine) as session:
+            from YSimulator.YServer.classes.models import Post, Reply
+            
+            # Count likes on author's posts
+            likes_count = (
+                session.query(Reaction)
+                .join(Post, Reaction.post_id == Post.id)
+                .filter(
+                    Reaction.user_id == agent_id,
+                    Post.user_id == author_id,
+                    Reaction.type == "LIKE"
+                )
+                .count()
+            )
+            
+            # Count comments on author's posts
+            comments_count = (
+                session.query(Reply)
+                .join(Post, Reply.post_id == Post.id)
+                .filter(
+                    Reply.user_id == agent_id,
+                    Post.user_id == author_id
+                )
+                .count()
+            )
+            
+            interactions = likes_count + comments_count
+    
+    # Log scale
+    return math.log(1 + interactions)
+
+
+def _calculate_recent_user_author_affinity_redis(
+    agent_id: str, author_id: str, current_round: int, 
+    redis_client, redis_key_fn, db_engine, tau: float = 10.0
+) -> float:
+    """
+    Calculate recent user-author affinity with time decay.
+    Similar to user_author_affinity but weighted by recency.
+    """
+    # This is a simplified version that returns a fraction of the overall affinity
+    # In a full implementation, you'd track interaction timestamps
+    # For now, we'll return a scaled-down version of the overall affinity
+    overall_affinity = _calculate_user_author_affinity_redis(
+        agent_id, author_id, redis_client, redis_key_fn, db_engine
+    )
+    
+    # Return a fraction to represent "recent" interactions
+    return overall_affinity * 0.5
+
+
+def _calculate_content_topic_similarity_redis(
+    agent_id: str, post_id: str, user_interests: set, 
+    redis_client, redis_key_fn
+) -> float:
+    """
+    Calculate content topic similarity using cosine similarity.
+    Simplified: Jaccard similarity (intersection / union) of topics.
+    """
+    # Get post topics
+    post_topics_key = redis_key_fn("post", post_id) + ":topics"
+    if not redis_client.exists(post_topics_key):
+        return 0.0
+    
+    post_topics = redis_client.smembers(post_topics_key)
+    
+    if not user_interests or not post_topics:
+        return 0.0
+    
+    # Jaccard similarity as proxy for cosine similarity
+    intersection = len(user_interests & post_topics)
+    union = len(user_interests | post_topics)
+    
+    if union == 0:
+        return 0.0
+    
+    return intersection / union
+
+
+def _calculate_similar_user_author_score_redis(
+    agent_id: str, author_id: str, redis_client, redis_key_fn, db_engine
+) -> float:
+    """
+    Calculate how many similar users follow/like this author (log scale).
+    Similar users = users with overlapping interests or liked posts.
+    """
+    import math
+    
+    # Get agent's likes
+    agent_likes_key = redis_key_fn("user", agent_id) + ":likes"
+    if not redis_client.exists(agent_likes_key):
+        return 0.0
+    
+    agent_likes = redis_client.smembers(agent_likes_key)
+    if not agent_likes:
+        return 0.0
+    
+    # Find similar users (users who liked similar posts)
+    similar_users = set()
+    user_ids_key = redis_key_fn("user_mgmt", "ids")
+    all_user_ids = (
+        redis_client.smembers(user_ids_key) 
+        if redis_client.exists(user_ids_key) 
+        else []
+    )
+    
+    # Calculate overlap for each user (simplified - take top N with overlap)
+    for uid in list(all_user_ids)[:100]:  # Limit for performance
+        if uid != agent_id:
+            user_likes_key = redis_key_fn("user", uid) + ":likes"
+            if redis_client.exists(user_likes_key):
+                user_likes = redis_client.smembers(user_likes_key)
+                overlap = len(agent_likes & user_likes)
+                if overlap > 0:
+                    similar_users.add(uid)
+    
+    # Count how many similar users follow or liked posts by this author
+    count = 0
+    for user_id in similar_users:
+        # Check if they follow the author
+        follows_key = redis_key_fn("user", user_id) + ":follows"
+        if redis_client.exists(follows_key):
+            user_follows = redis_client.smembers(follows_key)
+            if author_id in user_follows:
+                count += 1
+    
+    # Log scale
+    return math.log(1 + count)
