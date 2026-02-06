@@ -19,6 +19,7 @@ The server implements different recommendation strategies (modes):
     - "CollaborativeItemItem": Collaborative filtering - item co-occurrence
     - "ContentBasedFeatures": Content-based filtering - feature extraction
     - "ContentBasedVector": Content-based filtering - vector space similarity
+    - "HybridLinearRanker": Two-stage hybrid system with candidate generation and linear ranking
 """
 
 import logging
@@ -61,6 +62,7 @@ class ContentRecSys:
                 - "CollaborativeItemItem": Collaborative filtering - item co-occurrence
                 - "ContentBasedFeatures": Content-based filtering - feature extraction
                 - "ContentBasedVector": Content-based filtering - vector space similarity
+                - "HybridLinearRanker": Two-stage hybrid system with multi-signal ranking
             n_posts (int, optional): Number of posts to recommend. Defaults to 5.
             followers_ratio (float, optional): Ratio of posts from followers (0.0-1.0).
                                               Defaults to 0.6.
@@ -358,3 +360,40 @@ class ContentBasedVector(ContentRecSys):
             n_posts (int, optional): Number of posts to recommend. Defaults to 5.
         """
         super().__init__(mode="ContentBasedVector", n_posts=n_posts)
+
+
+class HybridLinearRanker(ContentRecSys):
+    """
+    Hybrid Linear Ranker Recommendation System.
+
+    Advanced two-stage hybrid recommendation combining multiple strategies with
+    machine learning-style feature engineering and weighted scoring.
+
+    Stage 1: Candidate Generation
+        - Combines rchrono_followers, friends_of_friends, rchrono_popularity,
+          and collaborative_user_user strategies
+        - Union and deduplicate candidates
+
+    Stage 2: Linear Ranker
+        - Extracts 6 features for each candidate post:
+            * Recency score (exponential decay)
+            * Is followed author (binary)
+            * User-author affinity (log scale of engagement)
+            * Recent user-author affinity
+            * Content topic similarity (Jaccard)
+            * Similar user author score (social proof)
+        - Scores with weighted linear combination:
+            score = 0.28*recency + 0.25*is_followed + 0.15*affinity +
+                    0.08*recent_affinity + 0.16*topic_sim + 0.08*similar_user
+
+    This is a production-grade recommendation system suitable for personalized feeds.
+    """
+
+    def __init__(self, n_posts=5):
+        """
+        Initialize hybrid linear ranker recommendation system.
+
+        Args:
+            n_posts (int, optional): Number of posts to recommend. Defaults to 5.
+        """
+        super().__init__(mode="HybridLinearRanker", n_posts=n_posts)
