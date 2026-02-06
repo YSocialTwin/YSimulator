@@ -52,11 +52,18 @@ class FollowGenerator(BaseActionGenerator):
 
         # Import recommendation system classes
         from YSimulator.YClient.recsys.FollowRecSysRay import (
+            ActivityFollowRecSys,
             AdamicAdarFollowRecSys,
+            CoEngagementFollowRecSys,
             CommonNeighborsFollowRecSys,
+            CosineSimilarityFollowRecSys,
             JaccardFollowRecSys,
             PreferentialAttachmentFollowRecSys,
             RandomFollowRecSys,
+            RandomWalkRestartFollowRecSys,
+            ReactionsOnContentFollowRecSys,
+            ResourceAllocationFollowRecSys,
+            TwoHopEgoSamplingFollowRecSys,
         )
 
         frecsys_class_map = {
@@ -65,6 +72,13 @@ class FollowGenerator(BaseActionGenerator):
             "jaccard": JaccardFollowRecSys,
             "adamic_adar": AdamicAdarFollowRecSys,
             "preferential_attachment": PreferentialAttachmentFollowRecSys,
+            "activity": ActivityFollowRecSys,
+            "resource_allocation": ResourceAllocationFollowRecSys,
+            "cosine_similarity": CosineSimilarityFollowRecSys,
+            "co_engagement": CoEngagementFollowRecSys,
+            "random_walk_restart": RandomWalkRestartFollowRecSys,
+            "reactions_on_content": ReactionsOnContentFollowRecSys,
+            "two_hop_ego_sampling": TwoHopEgoSamplingFollowRecSys,
             "default": CommonNeighborsFollowRecSys,
         }
 

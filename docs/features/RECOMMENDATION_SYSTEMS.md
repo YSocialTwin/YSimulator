@@ -79,9 +79,11 @@ recommended_posts = random.sample(filtered_posts, limit)
 
 ---
 
-#### 2. **Reverse Chronological** (`rchrono`)
+#### 2. **Reverse Chronological** (`ReverseChrono`)
 
 **Description:** Shows newest posts first (traditional Twitter-style timeline).
+
+**Configuration:** Use `"recsys_type": "ReverseChrono"` in agent population JSON (legacy: `"rchrono"` also supported).
 
 **Use Case:** News-focused feeds, real-time event discussions, time-sensitive content.
 
@@ -104,9 +106,11 @@ recommended_posts = sorted_posts[:limit]
 
 ---
 
-#### 3. **Reverse Chronological + Popularity** (`rchrono_popularity`)
+#### 3. **Reverse Chronological + Popularity** (`ReverseChronoPopularity`)
 
 **Description:** Chronological ordering with popularity boost (reaction count as tiebreaker).
+
+**Configuration:** Use `"recsys_type": "ReverseChronoPopularity"` in agent population JSON (legacy: `"rchrono_popularity"` also supported).
 
 **Use Case:** Hybrid feeds that balance recency with engagement signals.
 
@@ -129,9 +133,11 @@ recommended_posts = sorted_posts[:limit]
 
 ---
 
-#### 4. **Reverse Chronological + Followers** (`rchrono_followers`)
+#### 4. **Reverse Chronological + Followers** (`ReverseChronoFollowers`)
 
 **Description:** Prioritizes posts from users the agent follows.
+
+**Configuration:** Use `"recsys_type": "ReverseChronoFollowers"` in agent population JSON (legacy: `"rchrono_followers"` also supported).
 
 **Use Case:** Social feeds focused on personal connections, friend-based timelines.
 
@@ -169,9 +175,11 @@ recommended_posts = (
 
 ---
 
-#### 5. **Reverse Chronological + Followers + Popularity** (`rchrono_followers_popularity`)
+#### 5. **Reverse Chronological + Followers + Popularity** (`ReverseChronoFollowersPopularity`)
 
 **Description:** Combines follower prioritization with popularity signals.
+
+**Configuration:** Use `"recsys_type": "ReverseChronoFollowersPopularity"` in agent population JSON (legacy: `"rchrono_followers_popularity"` also supported).
 
 **Use Case:** Engagement-optimized social feeds.
 
@@ -207,9 +215,11 @@ recommended_posts = (
 
 ---
 
-#### 6. **Reverse Chronological + Comments** (`rchrono_comments`)
+#### 6. **Reverse Chronological + Comments** (`ReverseChronoComments`)
 
 **Description:** Prioritizes posts with many comments (discussion indicators).
+
+**Configuration:** Use `"recsys_type": "ReverseChronoComments"` in agent population JSON (legacy: `"rchrono_comments"` also supported).
 
 **Use Case:** Community-focused feeds, debate/discussion platforms.
 
@@ -238,9 +248,11 @@ recommended_posts = [p[0] for p in sorted_posts[:limit]]
 
 ---
 
-#### 7. **Common Interests** (`common_interests`)
+#### 7. **Common Interests** (`CommonInterests`)
 
 **Description:** Recommends posts about topics the agent is interested in.
+
+**Configuration:** Use `"recsys_type": "CommonInterests"` in agent population JSON (legacy: `"common_interests"` also supported).
 
 **Use Case:** Interest-based discovery, topic-focused feeds (e.g., Reddit, Pinterest).
 
@@ -314,9 +326,11 @@ recommended_posts = matching_posts[:limit]
 
 ---
 
-#### 9. **Similar Users by Reactions** (`similar_users_react`)
+#### 9. **Similar Users by Reactions** (`SimilarUsersReactions`)
 
 **Description:** Recommends posts by users with similar reaction patterns.
+
+**Configuration:** Use `"recsys_type": "SimilarUsersReactions"` in agent population JSON (legacy: `"similar_users_react"` also supported).
 
 **Use Case:** Behavioral collaborative filtering, taste-based recommendations.
 
@@ -354,9 +368,11 @@ recommended_posts = matching_posts[:limit]
 
 ---
 
-#### 10. **Similar Users by Posts** (`similar_users_posts`)
+#### 10. **Similar Users by Posts** (`SimilarUsersPosts`)
 
 **Description:** Recommends posts by users with similar posting behavior/demographics.
+
+**Configuration:** Use `"recsys_type": "SimilarUsersPosts"` in agent population JSON (legacy: `"similar_users_posts"` also supported).
 
 **Use Case:** Demographic-based filtering, homophily-driven recommendations.
 
@@ -635,26 +651,44 @@ score = (
 | Mode | Complexity | Personalization | Redis Support | Primary Signals |
 |------|------------|-----------------|---------------|-----------------|
 | `random` | Low | None | ✅ Full | Random |
-| `rchrono` | Low | None | ✅ Full | Time |
-| `rchrono_popularity` | Low | None | ✅ Full | Time + Engagement |
-| `rchrono_followers` | Medium | Social | ✅ Full | Time + Social Graph |
-| `rchrono_followers_popularity` | Medium | Social + Engagement | ✅ Full | Time + Social + Engagement |
-| `rchrono_comments` | Medium | None | ✅ Full | Time + Discussion |
-| `common_interests` | High | Content | 🔄 Ready | Interests + Topics |
-| `common_user_interests` | High | User Similarity | 🔄 Ready | User Interests |
-| `similar_users_react` | High | Behavioral | 🔄 Ready | Reactions + Demographics |
-| `similar_users_posts` | Medium | Demographic | 🔄 Ready | Demographics |
+| `ReverseChrono` | Low | None | ✅ Full | Time |
+| `ReverseChronoPopularity` | Low | None | ✅ Full | Time + Engagement |
+| `ReverseChronoFollowers` | Medium | Social | ✅ Full | Time + Social Graph |
+| `ReverseChronoFollowersPopularity` | Medium | Social + Engagement | ✅ Full | Time + Social + Engagement |
+| `ReverseChronoComments` | Medium | None | ✅ Full | Time + Discussion |
+| `CommonInterests` | High | Content | 🔄 Ready | Interests + Topics |
+| `CommonUserInterests` | High | User Similarity | 🔄 Ready | User Interests |
+| `SimilarUsersReactions` | High | Behavioral | 🔄 Ready | Reactions + Demographics |
+| `SimilarUsersPosts` | Medium | Demographic | 🔄 Ready | Demographics |
 | `CollaborativeUserUser` | High | Behavioral | ✅ Full | User-User Similarity + Likes |
 | `CollaborativeItemItem` | High | Behavioral | ✅ Full | Item-Item Co-occurrence |
 | `ContentBasedFeatures` | High | Content | ✅ Full | Topic Matching |
 | `ContentBasedVector` | High | Content | ✅ Full | Vector Similarity |
 | `HybridLinearRanker` 🆕 | Very High | Multi-Signal | ✅ Full | Hybrid (6 Features) |
 
+**Note:** Use **CamelCase** names (e.g., `ReverseChrono`, `ReverseChronoPopularity`) in agent population JSON configuration files. Legacy snake_case names (e.g., `rchrono`, `rchrono_popularity`) are still supported for backward compatibility.
+
 ---
 
 ## Follow Recommendation System
 
-The follow recommendation system suggests users to follow based on social graph analysis and similarity metrics. It implements 12 distinct strategies.
+The follow recommendation system suggests users to follow based on social graph analysis and similarity metrics. It implements **12 distinct modes**, all fully integrated and available for use.
+
+**Available Modes:** All 12 modes are fully integrated and can be used in agent configuration JSON files using **snake_case** names:
+- `random`: Random selection
+- `common_neighbors`: Friend-of-friend recommendations  
+- `jaccard`: Jaccard similarity coefficient
+- `adamic_adar`: Adamic/Adar index
+- `preferential_attachment`: Popularity-based (rich-get-richer)
+- `activity`: Recent posting activity
+- `resource_allocation`: Resource allocation index
+- `cosine_similarity`: Profile vector similarity
+- `co_engagement`: Shared content interactions
+- `random_walk_restart`: Random walk with restart algorithm
+- `reactions_on_content`: Users who engaged with agent's content
+- `two_hop_ego_sampling`: Community-based 2-hop ego network
+
+**Configuration:** Use **snake_case** names (e.g., `"frecsys_type": "common_neighbors"`) in agent population JSON files. The server processes these using PascalCase internally (e.g., `CommonNeighbors`).
 
 ### Recommendation Modes
 
