@@ -191,6 +191,8 @@ class ContentRecommender:
             return content_recsys_redis.recommend_content_based_features_redis(**common_kwargs)
         elif mode == "ContentBasedVector":
             return content_recsys_redis.recommend_content_based_vector_redis(**common_kwargs)
+        elif mode == "HybridLinearRanker":
+            return content_recsys_redis.recommend_hybrid_linear_ranker_redis(**common_kwargs)
         else:
             # Default: random ordering
             return content_recsys_redis.recommend_random_redis(**common_kwargs)
@@ -259,6 +261,10 @@ class ContentRecommender:
                 )
             elif mode == "ContentBasedVector":
                 return content_recsys_db.recommend_content_based_vector(
+                    session, agent_id, visibility_day, visibility_hour, limit
+                )
+            elif mode == "HybridLinearRanker":
+                return content_recsys_db.recommend_hybrid_linear_ranker(
                     session, agent_id, visibility_day, visibility_hour, limit
                 )
             else:

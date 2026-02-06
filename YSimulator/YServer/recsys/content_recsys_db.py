@@ -20,6 +20,10 @@ from YSimulator.YServer.classes.models import (
     UserInterest,
 )
 
+# Constants for hybrid linear ranker (shared with Redis implementation)
+RECENT_AFFINITY_DISCOUNT = 0.5  # Weight for recent interactions (50% of total affinity)
+SIMILAR_USERS_SAMPLE_LIMIT = 100  # Max users to consider for similarity calculation (performance)
+
 
 def recommend_random(
     session, agent_id: str, visibility_day: int, visibility_hour: int, limit: int
@@ -931,3 +935,303 @@ def recommend_content_based_vector(
         return results, True
 
     return results, False
+
+
+def recommend_hybrid_linear_ranker(
+    session,
+    agent_id: str,
+    visibility_day: int,
+    visibility_hour: int,
+    limit: int,
+) -> tuple[List[str], bool]:
+    """
+    Hybrid content recommendation system with two-stage process (SQL backend).
+    
+    Stage 1: Candidate Generation (SQL)
+      - Combines rchrono_followers, rchrono_popularity, and collaborative_user_user
+      - Union and deduplicate results
+    
+    Stage 2: Linear Ranker (Python)
+      - Fetches post metadata from SQL
+      - Computes features in Python
+      - Scores with weighted linear combination:
+        score = 0.28 * recency_score +
+                0.25 * is_followed_author +
+                0.15 * user_author_affinity +
+                0.08 * recent_user_author_affinity +
+                0.16 * content_topic_similarity +
+                0.08 * similar_user_author
+    
+    Args:
+        session: SQLAlchemy session object
+        agent_id: UUID of the agent requesting recommendations
+        visibility_day: Day threshold for post visibility
+        visibility_hour: Hour threshold for post visibility
+        limit: Number of posts to recommend
+    
+    Returns:
+        Tuple of (List of post UUIDs, bool indicating if fallback was used)
+    """
+    import math
+    
+    used_fallback = False
+    
+    # ==========================================
+    # STAGE 1: CANDIDATE GENERATION (SQL)
+    # ==========================================
+    
+    candidate_limit = min(limit * 10, 100)
+    candidates_set = set()
+    
+    # 1. rchrono_followers
+    try:
+        cand1, fb1 = recommend_rchrono_followers(
+            session, agent_id, visibility_day, visibility_hour, candidate_limit, followers_ratio=0.6
+        )
+        candidates_set.update(cand1)
+        used_fallback = used_fallback or fb1
+    except Exception:
+        pass
+    
+    # 2. rchrono_popularity
+    try:
+        cand2 = recommend_rchrono_popularity(
+            session, agent_id, visibility_day, visibility_hour, candidate_limit
+        )
+        candidates_set.update(cand2)
+    except Exception:
+        pass
+    
+    # 3. collaborative_user_user
+    try:
+        cand3, fb3 = recommend_collaborative_user_user(
+            session, agent_id, visibility_day, visibility_hour, candidate_limit
+        )
+        candidates_set.update(cand3)
+        used_fallback = used_fallback or fb3
+    except Exception:
+        pass
+    
+    # If no candidates, fall back to random
+    if not candidates_set:
+        results = recommend_random(session, agent_id, visibility_day, visibility_hour, limit)
+        return results, True
+    
+    # ==========================================
+    # STAGE 2: FEATURE EXTRACTION & RANKING (PYTHON)
+    # ==========================================
+    
+    # Get current round for recency calculation
+    current_round_query = session.query(Round).order_by(desc(Round.day), desc(Round.hour)).first()
+    if current_round_query:
+        current_day = current_round_query.day
+        current_hour = current_round_query.hour
+        current_round = current_day * 24 + current_hour  # Approximate round number
+    else:
+        current_round = 0
+    
+    tau = 10.0  # Decay parameter for recency
+    
+    # Get followed users
+    followed_users = set(
+        row[0] for row in session.query(Follow.follower_id)
+        .filter(Follow.user_id == agent_id, Follow.action == "follow")
+        .all()
+    )
+    
+    # Get user's topic interests
+    user_interests = set(
+        row[0] for row in session.query(UserInterest.interest_id)
+        .filter(UserInterest.user_id == agent_id)
+        .all()
+    )
+    
+    # Fetch post metadata for all candidates
+    posts_query = (
+        session.query(
+            Post.id,
+            Post.user_id,
+            Post.round,
+            Post.reaction_count,
+            Round.day,
+            Round.hour
+        )
+        .join(Round, Post.round == Round.id)
+        .filter(Post.id.in_(candidates_set))
+        .all()
+    )
+    
+    # Score each candidate in Python
+    post_scores = []
+    for post_id, author_id, round_id, reaction_count, post_day, post_hour in posts_query:
+        if author_id == agent_id:  # Skip own posts
+            continue
+        
+        # Feature 1: Recency score (exponential decay)
+        post_round_num = post_day * 24 + post_hour
+        age_rounds = max(0, current_round - post_round_num)
+        recency_score = math.exp(-age_rounds / tau)
+        
+        # Feature 2: Is followed author
+        is_followed_author = 1.0 if author_id in followed_users else 0.0
+        
+        # Feature 3: User-author affinity (engagement count, log scale)
+        user_author_affinity = _calculate_user_author_affinity_sql(
+            session, agent_id, author_id
+        )
+        
+        # Feature 4: Recent user-author affinity (simplified)
+        recent_user_author_affinity = user_author_affinity * RECENT_AFFINITY_DISCOUNT
+        
+        # Feature 5: Content topic similarity
+        content_topic_similarity = _calculate_content_topic_similarity_sql(
+            session, post_id, user_interests
+        )
+        
+        # Feature 6: Similar user author score
+        similar_user_author = _calculate_similar_user_author_score_sql(
+            session, agent_id, author_id
+        )
+        
+        # Calculate composite score with weights
+        composite_score = (
+            0.28 * recency_score +
+            0.25 * is_followed_author +
+            0.15 * user_author_affinity +
+            0.08 * recent_user_author_affinity +
+            0.16 * content_topic_similarity +
+            0.08 * similar_user_author
+        )
+        
+        post_scores.append((post_id, composite_score))
+    
+    # Sort by score descending
+    post_scores.sort(key=lambda x: -x[1])
+    
+    # Return top N
+    results = [post_id for post_id, score in post_scores[:limit]]
+    
+    # If not enough results, fill with random
+    if len(results) < limit:
+        additional = recommend_random(session, agent_id, visibility_day, visibility_hour, limit - len(results))
+        results.extend([p for p in additional if p not in results])
+        used_fallback = True
+    
+    return results, used_fallback
+
+
+# ==========================================
+# HELPER FUNCTIONS FOR HYBRID RECOMMENDER (SQL)
+# ==========================================
+
+def _calculate_user_author_affinity_sql(session, agent_id: str, author_id: str) -> float:
+    """
+    Calculate user-author affinity based on engagement count (log scale).
+    affinity = log(1 + interactions_user_author)
+    """
+    import math
+    
+    # Count likes on author's posts
+    likes_count = (
+        session.query(Reaction)
+        .join(Post, Reaction.post_id == Post.id)
+        .filter(
+            Reaction.user_id == agent_id,
+            Post.user_id == author_id,
+            Reaction.type == "LIKE"
+        )
+        .count()
+    )
+    
+    # Count comments on author's posts (if Reply table exists)
+    try:
+        from YSimulator.YServer.classes.models import Reply
+        comments_count = (
+            session.query(Reply)
+            .join(Post, Reply.post_id == Post.id)
+            .filter(
+                Reply.user_id == agent_id,
+                Post.user_id == author_id
+            )
+            .count()
+        )
+    except ImportError:
+        comments_count = 0
+    
+    interactions = likes_count + comments_count
+    return math.log(1 + interactions)
+
+
+def _calculate_content_topic_similarity_sql(session, post_id: str, user_interests: set) -> float:
+    """
+    Calculate content topic similarity using Jaccard similarity.
+    """
+    if not user_interests:
+        return 0.0
+    
+    # Get post topics
+    post_topics = set(
+        row[0] for row in session.query(PostTopic.topic_id)
+        .filter(PostTopic.post_id == post_id)
+        .all()
+    )
+    
+    if not post_topics:
+        return 0.0
+    
+    # Jaccard similarity
+    intersection = len(user_interests & post_topics)
+    union = len(user_interests | post_topics)
+    
+    if union == 0:
+        return 0.0
+    
+    return intersection / union
+
+
+def _calculate_similar_user_author_score_sql(session, agent_id: str, author_id: str) -> float:
+    """
+    Calculate how many similar users follow this author (log scale).
+    Similar users = users with overlapping liked posts.
+    """
+    import math
+    
+    # Get agent's liked posts
+    agent_likes = set(
+        row[0] for row in session.query(Reaction.post_id)
+        .filter(Reaction.user_id == agent_id, Reaction.type == "LIKE")
+        .all()
+    )
+    
+    if not agent_likes:
+        return 0.0
+    
+    # Find similar users (users who liked similar posts) - limit for performance
+    similar_users_query = (
+        session.query(Reaction.user_id, func.count(Reaction.post_id).label("overlap"))
+        .filter(
+            Reaction.post_id.in_(agent_likes),
+            Reaction.user_id != agent_id,
+            Reaction.type == "LIKE"
+        )
+        .group_by(Reaction.user_id)
+        .having(func.count(Reaction.post_id) > 0)
+        .limit(SIMILAR_USERS_SAMPLE_LIMIT)
+    )
+    similar_users = set(row[0] for row in similar_users_query.all())
+    
+    if not similar_users:
+        return 0.0
+    
+    # Count how many similar users follow this author
+    count = (
+        session.query(Follow)
+        .filter(
+            Follow.user_id.in_(similar_users),
+            Follow.follower_id == author_id,
+            Follow.action == "follow"
+        )
+        .count()
+    )
+    
+    return math.log(1 + count)

@@ -47,6 +47,7 @@ class ReadGenerator(BaseActionGenerator):
             CommonUserInterests,
             ContentBasedFeatures,
             ContentBasedVector,
+            HybridLinearRanker,
             RandomOrder,
             ReverseChrono,
             ReverseChronoComments,
@@ -72,6 +73,7 @@ class ReadGenerator(BaseActionGenerator):
             "CollaborativeItemItem": CollaborativeItemItem,
             "ContentBasedFeatures": ContentBasedFeatures,
             "ContentBasedVector": ContentBasedVector,
+            "HybridLinearRanker": HybridLinearRanker,
             # Legacy support for old naming pattern
             "rchrono": ReverseChrono,
             "rchrono_popularity": ReverseChronoPopularity,

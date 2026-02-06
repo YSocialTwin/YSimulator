@@ -875,3 +875,229 @@ class TestEdgeCases(unittest.TestCase):
 
         assert result == ["post1"]
         mock_query.limit.assert_called_once_with(1000000)
+
+
+class TestRecommendHybridLinearRanker(unittest.TestCase):
+    """Test hybrid linear ranker recommendations."""
+
+    @patch("YSimulator.YServer.recsys.content_recsys_db.recommend_rchrono_followers")
+    @patch("YSimulator.YServer.recsys.content_recsys_db.recommend_rchrono_popularity")
+    @patch("YSimulator.YServer.recsys.content_recsys_db.recommend_collaborative_user_user")
+    def test_hybrid_basic(self, mock_collab, mock_popularity, mock_followers):
+        """Test basic hybrid linear ranker functionality."""
+        from YSimulator.YServer.recsys.content_recsys_db import recommend_hybrid_linear_ranker
+
+        # Mock candidate generation returns
+        mock_followers.return_value = (["post1", "post2"], False)
+        mock_popularity.return_value = ["post2", "post3"]
+        mock_collab.return_value = (["post3", "post4"], False)
+
+        # Mock session for feature extraction
+        mock_session = Mock(spec=Session)
+        mock_query = Mock()
+        mock_session.query.return_value = mock_query
+
+        # Mock Round query for current round
+        mock_query.order_by.return_value = mock_query
+        mock_query.first.return_value = Mock(day=10, hour=5)
+
+        # Mock followed users query
+        mock_query.filter.return_value = mock_query
+        mock_query.all.return_value = [("user1",)]
+
+        # Mock user interests query
+        mock_query.all.return_value = [("topic1",)]
+
+        # Mock posts query with metadata
+        mock_query.join.return_value = mock_query
+        mock_posts = [
+            ("post1", "user1", "round1", 5, 10, 4),
+            ("post2", "user2", "round2", 3, 10, 3),
+            ("post3", "user3", "round3", 10, 10, 2),
+            ("post4", "user1", "round4", 2, 10, 1),
+        ]
+        mock_query.all.return_value = mock_posts
+
+        result, used_fallback = recommend_hybrid_linear_ranker(
+            mock_session, "agent1", 1, 0, 3
+        )
+
+        # Should return posts (union of candidates)
+        assert isinstance(result, list)
+        assert len(result) <= 3
+        assert isinstance(used_fallback, bool)
+
+    @patch("YSimulator.YServer.recsys.content_recsys_db.recommend_rchrono_followers")
+    @patch("YSimulator.YServer.recsys.content_recsys_db.recommend_rchrono_popularity")
+    @patch("YSimulator.YServer.recsys.content_recsys_db.recommend_collaborative_user_user")
+    @patch("YSimulator.YServer.recsys.content_recsys_db.recommend_random")
+    def test_hybrid_no_candidates_fallback(
+        self, mock_random, mock_collab, mock_popularity, mock_followers
+    ):
+        """Test hybrid with no candidates falls back to random."""
+        from YSimulator.YServer.recsys.content_recsys_db import recommend_hybrid_linear_ranker
+
+        # All strategies return empty
+        mock_followers.side_effect = Exception("No followers")
+        mock_popularity.side_effect = Exception("No popular")
+        mock_collab.side_effect = Exception("No collab")
+        mock_random.return_value = ["random1", "random2"]
+
+        mock_session = Mock(spec=Session)
+
+        result, used_fallback = recommend_hybrid_linear_ranker(
+            mock_session, "agent1", 1, 0, 5
+        )
+
+        # Should fallback to random
+        assert result == ["random1", "random2"]
+        assert used_fallback is True
+        mock_random.assert_called_once()
+
+    @patch("YSimulator.YServer.recsys.content_recsys_db.recommend_rchrono_followers")
+    @patch("YSimulator.YServer.recsys.content_recsys_db.recommend_rchrono_popularity")
+    @patch("YSimulator.YServer.recsys.content_recsys_db.recommend_collaborative_user_user")
+    def test_hybrid_feature_extraction(self, mock_collab, mock_popularity, mock_followers):
+        """Test that feature extraction helper functions are called."""
+        from YSimulator.YServer.recsys.content_recsys_db import recommend_hybrid_linear_ranker
+
+        # Mock candidate generation
+        mock_followers.return_value = (["post1"], False)
+        mock_popularity.return_value = ["post1"]
+        mock_collab.return_value = (["post1"], False)
+
+        mock_session = Mock(spec=Session)
+        mock_query = Mock()
+        mock_session.query.return_value = mock_query
+
+        # Mock current round
+        mock_query.order_by.return_value = mock_query
+        mock_query.first.return_value = Mock(day=5, hour=10)
+
+        # Mock followed users
+        mock_query.filter.return_value = mock_query
+        mock_query.all.return_value = [("user1",)]
+
+        # Mock user interests
+        mock_query.all.return_value = [("topic1",)]
+
+        # Mock post metadata
+        mock_query.join.return_value = mock_query
+        mock_query.all.return_value = [("post1", "user1", "round1", 5, 5, 9)]
+
+        result, used_fallback = recommend_hybrid_linear_ranker(
+            mock_session, "agent1", 1, 0, 1
+        )
+
+        # Should have called session.query multiple times for feature extraction
+        assert mock_session.query.call_count > 1
+        assert isinstance(result, list)
+
+    def test_helper_user_author_affinity(self):
+        """Test user-author affinity calculation helper."""
+        from YSimulator.YServer.recsys.content_recsys_db import (
+            _calculate_user_author_affinity_sql,
+        )
+        import math
+
+        mock_session = Mock(spec=Session)
+        mock_query = Mock()
+        mock_session.query.return_value = mock_query
+
+        # Mock chainable methods
+        mock_query.join.return_value = mock_query
+        mock_query.filter.return_value = mock_query
+        mock_query.count.return_value = 5  # 5 likes
+
+        affinity = _calculate_user_author_affinity_sql(
+            mock_session, "agent1", "author1"
+        )
+
+        # Should return log(1 + interactions)
+        expected = math.log(1 + 5)
+        assert abs(affinity - expected) < 0.01
+
+    def test_helper_content_topic_similarity(self):
+        """Test content topic similarity calculation helper."""
+        from YSimulator.YServer.recsys.content_recsys_db import (
+            _calculate_content_topic_similarity_sql,
+        )
+
+        mock_session = Mock(spec=Session)
+        mock_query = Mock()
+        mock_session.query.return_value = mock_query
+
+        # Mock post topics query
+        mock_query.filter.return_value = mock_query
+        mock_query.all.return_value = [("topic1",), ("topic2",)]
+
+        user_interests = {"topic1", "topic2", "topic3"}
+
+        similarity = _calculate_content_topic_similarity_sql(
+            mock_session, "post1", user_interests
+        )
+
+        # Jaccard similarity: |intersection| / |union|
+        # intersection: {topic1, topic2} = 2
+        # union: {topic1, topic2, topic3} = 3
+        # similarity = 2/3 = 0.667
+        assert abs(similarity - 0.667) < 0.01
+
+    def test_helper_content_topic_similarity_no_overlap(self):
+        """Test content topic similarity with no overlap."""
+        from YSimulator.YServer.recsys.content_recsys_db import (
+            _calculate_content_topic_similarity_sql,
+        )
+
+        mock_session = Mock(spec=Session)
+        mock_query = Mock()
+        mock_session.query.return_value = mock_query
+
+        # Mock post topics with no overlap
+        mock_query.filter.return_value = mock_query
+        mock_query.all.return_value = [("topic4",), ("topic5",)]
+
+        user_interests = {"topic1", "topic2", "topic3"}
+
+        similarity = _calculate_content_topic_similarity_sql(
+            mock_session, "post1", user_interests
+        )
+
+        # No overlap: intersection = 0, union = 5
+        assert similarity == 0.0
+
+    def test_helper_similar_user_author_score(self):
+        """Test similar user author score calculation helper."""
+        from YSimulator.YServer.recsys.content_recsys_db import (
+            _calculate_similar_user_author_score_sql,
+        )
+        import math
+
+        mock_session = Mock(spec=Session)
+        mock_query = Mock()
+        mock_session.query.return_value = mock_query
+
+        # Mock agent's likes
+        mock_query.filter.return_value = mock_query
+        mock_query.all.return_value = [("post1",), ("post2",)]
+
+        # Mock similar users query
+        mock_query.group_by.return_value = mock_query
+        mock_query.having.return_value = mock_query
+        mock_query.limit.return_value = mock_query
+        mock_query.all.return_value = [("user1",), ("user2",)]
+
+        # Mock count of similar users following the author
+        mock_query.count.return_value = 2
+
+        score = _calculate_similar_user_author_score_sql(
+            mock_session, "agent1", "author1"
+        )
+
+        # Should return log(1 + count)
+        expected = math.log(1 + 2)
+        assert abs(score - expected) < 0.01
+
+
+if __name__ == "__main__":
+    unittest.main()
