@@ -510,6 +510,126 @@ recommended_posts = matching_posts[:limit]
 
 ---
 
+#### 15. **Hybrid Linear Ranker** (`HybridLinearRanker`) 🆕
+
+**Description:** Advanced two-stage hybrid recommendation system combining multiple strategies with machine learning-style feature engineering and weighted scoring.
+
+**Use Case:** Production-grade recommendation system, personalized feeds, balanced multi-signal ranking.
+
+**Algorithm:**
+
+**Stage 1: Candidate Generation**
+1. Gather candidates from multiple sources:
+   - `rchrono_followers`: Posts from followed users (recent-first)
+   - `friends_of_friends`: Posts from users followed by your follows
+   - `rchrono_popularity`: Popular recent posts
+   - `CollaborativeUserUser`: Posts liked by similar users
+2. Union and deduplicate all candidates (typically 10× the final limit)
+
+**Stage 2: Linear Ranker with Feature Engineering**
+
+For each candidate post, extract 6 features and compute weighted score:
+
+```python
+# Feature 1: Recency (exponential decay)
+recency_score = exp(-age_rounds / tau)  # tau = 10.0 by default
+
+# Feature 2: Is Followed Author (binary)
+is_followed_author = 1.0 if author in followed_users else 0.0
+
+# Feature 3: User-Author Affinity (log scale)
+interactions = count_likes(user, author) + count_comments(user, author)
+user_author_affinity = log(1 + interactions)
+
+# Feature 4: Recent User-Author Affinity
+recent_user_author_affinity = user_author_affinity * 0.5
+
+# Feature 5: Content Topic Similarity (Jaccard)
+content_topic_similarity = |user_interests ∩ post_topics| / |user_interests ∪ post_topics|
+
+# Feature 6: Similar User Author Score
+similar_users = users_with_overlapping_likes(user)
+count = how_many_follow(similar_users, author)
+similar_user_author = log(1 + count)
+
+# Composite Score
+score = (
+    0.28 * recency_score +           # Favor fresh content
+    0.25 * is_followed_author +      # Strong signal for followed authors
+    0.15 * user_author_affinity +    # Historical engagement
+    0.08 * recent_user_author_affinity +  # Recent interactions
+    0.16 * content_topic_similarity +     # Interest matching
+    0.08 * similar_user_author           # Social proof
+)
+```
+
+3. Sort posts by composite score (descending)
+4. Return top N posts
+
+**Feature Descriptions:**
+
+- **Recency Score**: Exponential time decay (recent posts score higher)
+  - Formula: `e^(-age/τ)` where τ=10 rounds
+  - 10 rounds old ≈ 0.37 score
+  - 20 rounds old ≈ 0.14 score
+  
+- **Is Followed Author**: Binary indicator of social connection
+  - 1.0 if you follow the author
+  - 0.0 otherwise
+  
+- **User-Author Affinity**: Historical engagement with author (log scale)
+  - Counts likes + comments on author's posts
+  - Log scale prevents over-weighting prolific interactions
+  
+- **Recent User-Author Affinity**: Simplified recent interaction score
+  - Currently 50% of overall affinity (can be enhanced with timestamps)
+  
+- **Content Topic Similarity**: Interest-based matching
+  - Jaccard similarity of user interests vs post topics
+  - Perfect match = 1.0, no overlap = 0.0
+  
+- **Similar User Author**: Social proof signal
+  - Finds users with similar likes
+  - Counts how many follow this author
+  - Log scale for stability
+
+**Weight Rationale:**
+- **28%** Recency: Fresh content is critical
+- **25%** Followed Authors: Strong personalization signal
+- **15%** User-Author Affinity: Proven engagement history
+- **8%** Recent Affinity: Trending relationships
+- **16%** Topic Similarity: Interest alignment
+- **8%** Social Proof: Community validation
+
+**Expected Outcomes:**
+- Balanced feed with fresh, relevant, and engaging content
+- Personalized to user's follows, interests, and behavior
+- Diverse signals prevent filter bubbles
+- Graceful degradation with cold start users
+
+**Characteristics:**
+- Multi-stage pipeline (candidate generation → ranking)
+- Feature engineering with domain knowledge
+- Weighted linear combination (interpretable)
+- Hybrid approach combines collaborative + content-based + social signals
+- Production-ready design
+
+**Redis Support:** ✅ Full (with SQL fallback for missing keys)
+**SQL Support:** ✅ Full (Python-based scoring after SQL queries)
+
+**Performance:**
+- Candidate generation: O(k) where k = 10 × limit
+- Feature extraction: O(k) with SQL queries
+- Scoring: O(k) in Python
+- Overall: Suitable for real-time recommendation
+
+**Fallback Behavior:**
+- If no candidates: Falls back to random posts
+- If insufficient candidates: Fills with random posts
+- Each sub-strategy has its own fallback logic
+
+---
+
 ### Content Recommendation Summary
 
 | Mode | Complexity | Personalization | Redis Support | Primary Signals |
@@ -528,6 +648,7 @@ recommended_posts = matching_posts[:limit]
 | `CollaborativeItemItem` | High | Behavioral | ✅ Full | Item-Item Co-occurrence |
 | `ContentBasedFeatures` | High | Content | ✅ Full | Topic Matching |
 | `ContentBasedVector` | High | Content | ✅ Full | Vector Similarity |
+| `HybridLinearRanker` 🆕 | Very High | Multi-Signal | ✅ Full | Hybrid (6 Features) |
 
 ---
 
