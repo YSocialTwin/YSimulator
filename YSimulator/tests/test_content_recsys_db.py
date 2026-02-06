@@ -918,9 +918,7 @@ class TestRecommendHybridLinearRanker(unittest.TestCase):
         ]
         mock_query.all.return_value = mock_posts
 
-        result, used_fallback = recommend_hybrid_linear_ranker(
-            mock_session, "agent1", 1, 0, 3
-        )
+        result, used_fallback = recommend_hybrid_linear_ranker(mock_session, "agent1", 1, 0, 3)
 
         # Should return posts (union of candidates)
         assert isinstance(result, list)
@@ -945,9 +943,7 @@ class TestRecommendHybridLinearRanker(unittest.TestCase):
 
         mock_session = Mock(spec=Session)
 
-        result, used_fallback = recommend_hybrid_linear_ranker(
-            mock_session, "agent1", 1, 0, 5
-        )
+        result, used_fallback = recommend_hybrid_linear_ranker(mock_session, "agent1", 1, 0, 5)
 
         # Should fallback to random
         assert result == ["random1", "random2"]
@@ -985,9 +981,7 @@ class TestRecommendHybridLinearRanker(unittest.TestCase):
         mock_query.join.return_value = mock_query
         mock_query.all.return_value = [("post1", "user1", "round1", 5, 5, 9)]
 
-        result, used_fallback = recommend_hybrid_linear_ranker(
-            mock_session, "agent1", 1, 0, 1
-        )
+        result, used_fallback = recommend_hybrid_linear_ranker(mock_session, "agent1", 1, 0, 1)
 
         # Should have called session.query multiple times for feature extraction
         assert mock_session.query.call_count > 1
@@ -995,10 +989,11 @@ class TestRecommendHybridLinearRanker(unittest.TestCase):
 
     def test_helper_user_author_affinity(self):
         """Test user-author affinity calculation helper."""
+        import math
+
         from YSimulator.YServer.recsys.content_recsys_db import (
             _calculate_user_author_affinity_sql,
         )
-        import math
 
         mock_session = Mock(spec=Session)
         mock_query = Mock()
@@ -1009,9 +1004,7 @@ class TestRecommendHybridLinearRanker(unittest.TestCase):
         mock_query.filter.return_value = mock_query
         mock_query.count.return_value = 5  # 5 likes
 
-        affinity = _calculate_user_author_affinity_sql(
-            mock_session, "agent1", "author1"
-        )
+        affinity = _calculate_user_author_affinity_sql(mock_session, "agent1", "author1")
 
         # Should return log(1 + interactions)
         expected = math.log(1 + 5)
@@ -1033,9 +1026,7 @@ class TestRecommendHybridLinearRanker(unittest.TestCase):
 
         user_interests = {"topic1", "topic2", "topic3"}
 
-        similarity = _calculate_content_topic_similarity_sql(
-            mock_session, "post1", user_interests
-        )
+        similarity = _calculate_content_topic_similarity_sql(mock_session, "post1", user_interests)
 
         # Jaccard similarity: |intersection| / |union|
         # intersection: {topic1, topic2} = 2
@@ -1059,19 +1050,18 @@ class TestRecommendHybridLinearRanker(unittest.TestCase):
 
         user_interests = {"topic1", "topic2", "topic3"}
 
-        similarity = _calculate_content_topic_similarity_sql(
-            mock_session, "post1", user_interests
-        )
+        similarity = _calculate_content_topic_similarity_sql(mock_session, "post1", user_interests)
 
         # No overlap: intersection = 0, union = 5
         assert similarity == 0.0
 
     def test_helper_similar_user_author_score(self):
         """Test similar user author score calculation helper."""
+        import math
+
         from YSimulator.YServer.recsys.content_recsys_db import (
             _calculate_similar_user_author_score_sql,
         )
-        import math
 
         mock_session = Mock(spec=Session)
         mock_query = Mock()
@@ -1090,9 +1080,7 @@ class TestRecommendHybridLinearRanker(unittest.TestCase):
         # Mock count of similar users following the author
         mock_query.count.return_value = 2
 
-        score = _calculate_similar_user_author_score_sql(
-            mock_session, "agent1", "author1"
-        )
+        score = _calculate_similar_user_author_score_sql(mock_session, "agent1", "author1")
 
         # Should return log(1 + count)
         expected = math.log(1 + 2)

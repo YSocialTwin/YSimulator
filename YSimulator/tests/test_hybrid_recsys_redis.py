@@ -21,9 +21,7 @@ class TestHybridLinearRankerRedis:
         )
 
         # Mock data
-        posts = [
-            {"id": f"post{i}", "index": i, "reaction_count": i} for i in range(20)
-        ]
+        posts = [{"id": f"post{i}", "index": i, "reaction_count": i} for i in range(20)]
         all_post_ids = [p["id"] for p in posts]
         posts_data = [
             {
@@ -38,7 +36,7 @@ class TestHybridLinearRankerRedis:
         redis_client = Mock()
         redis_client.exists = Mock(return_value=False)
         redis_client.smembers = Mock(return_value=set())
-        
+
         redis_key_fn = Mock(side_effect=lambda *args: ":".join(args))
         db_engine = Mock()
         logger = Mock()
@@ -89,17 +87,18 @@ class TestHybridLinearRankerRedis:
         ]
 
         redis_client = Mock()
+
         # Mock that agent follows "followed_user"
         def mock_exists(key):
             if "follows" in key:
                 return True
             return False
-        
+
         def mock_smembers(key):
             if ":follows" in key:
                 return {"followed_user"}
             return set()
-        
+
         redis_client.exists = Mock(side_effect=mock_exists)
         redis_client.smembers = Mock(side_effect=mock_smembers)
         redis_key_fn = Mock(side_effect=lambda *args: ":".join(args))
@@ -180,18 +179,18 @@ class TestFriendsOfFriendsCandidates:
         ]
 
         redis_client = Mock()
-        
+
         # Mock: agent follows "friend1", friend1 follows "fof_user1" and "fof_user2"
         def mock_exists(key):
             return "follows" in key
-        
+
         def mock_smembers(key):
             if "agent1:follows" in key:
                 return {"friend1"}
             elif "friend1:follows" in key:
                 return {"fof_user1", "fof_user2"}
             return set()
-        
+
         redis_client.exists = Mock(side_effect=mock_exists)
         redis_client.smembers = Mock(side_effect=mock_smembers)
         redis_key_fn = Mock(side_effect=lambda *args: ":".join(args))
@@ -259,10 +258,10 @@ class TestFeatureCalculation:
         current_round = 100
         post_round = 90
         tau = 10.0
-        
+
         age_rounds = current_round - post_round  # 10
         expected_score = math.exp(-age_rounds / tau)  # exp(-1) ≈ 0.368
-        
+
         assert abs(expected_score - 0.368) < 0.01
 
     def test_user_author_affinity_calculation(self):
@@ -293,6 +292,7 @@ class TestFeatureCalculation:
 
         # Should return log(1 + interactions)
         import math
+
         expected = math.log(1 + 5)  # log(6) ≈ 1.79
         assert abs(affinity - expected) < 0.01
 
@@ -303,7 +303,7 @@ class TestFeatureCalculation:
         )
 
         user_interests = {"topic1", "topic2", "topic3"}
-        
+
         redis_client = Mock()
         redis_client.exists = Mock(return_value=True)
         redis_client.smembers = Mock(return_value={"topic2", "topic3", "topic4"})
@@ -328,7 +328,7 @@ class TestFeatureCalculation:
         )
 
         user_interests = {"topic1", "topic2"}
-        
+
         redis_client = Mock()
         redis_client.exists = Mock(return_value=True)
         redis_client.smembers = Mock(return_value={"topic3", "topic4"})
@@ -352,10 +352,10 @@ class TestFeatureCalculation:
         )
 
         redis_client = Mock()
-        
+
         def mock_exists(key):
             return "likes" in key or "ids" in key or "follows" in key
-        
+
         def mock_smembers(key):
             if "agent1:likes" in key:
                 return {"post1", "post2"}
@@ -370,7 +370,7 @@ class TestFeatureCalculation:
             elif "user2:follows" in key:
                 return {"other"}
             return set()
-        
+
         redis_client.exists = Mock(side_effect=mock_exists)
         redis_client.smembers = Mock(side_effect=mock_smembers)
         redis_key_fn = Mock(side_effect=lambda *args: ":".join(args))
@@ -399,7 +399,7 @@ class TestHybridSQLBackend:
 
         # Mock session
         session = Mock()
-        
+
         # Mock query results for different strategies
         mock_query = Mock()
         mock_query.all = Mock(return_value=[("post1",), ("post2",), ("post3",)])
