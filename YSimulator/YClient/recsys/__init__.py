@@ -2,9 +2,10 @@
 Recommendation Systems Module
 
 This module provides recommendation system implementations for the Y social network.
-It includes content-based recommendation for posts using Ray actor communication.
+It includes content-based recommendation for posts and follow recommendation for users
+using Ray actor communication.
 
-Exports:
+Content Recommendation Exports:
     - ContentRecSys: Base content recommendation system
     - ReverseChrono: Reverse chronological ordering
     - ReverseChronoPopularity: Chronological with popularity boost
@@ -20,6 +21,21 @@ Exports:
     - ContentBasedFeatures: Content-based filtering using feature extraction
     - ContentBasedVector: Content-based filtering using vector space similarity
     - RandomOrder: Random post ordering
+
+Follow Recommendation Exports:
+    - FollowRecSysRay: Base follow recommendation system
+    - RandomFollowRecSys: Random follow suggestions
+    - CommonNeighborsFollowRecSys: Common neighbors (friend-of-friend)
+    - JaccardFollowRecSys: Jaccard similarity coefficient
+    - AdamicAdarFollowRecSys: Adamic/Adar index
+    - PreferentialAttachmentFollowRecSys: Popularity-based (rich-get-richer)
+    - ActivityFollowRecSys: Recently active users by post count
+    - ResourceAllocationFollowRecSys: Resource allocation index
+    - CosineSimilarityFollowRecSys: Cosine similarity on profile vectors
+    - CoEngagementFollowRecSys: Co-engagement based recommendations
+    - RandomWalkRestartFollowRecSys: Random walk with restart
+    - ReactionsOnContentFollowRecSys: Users who react to agent's content
+    - TwoHopEgoSamplingFollowRecSys: 2-hop ego sampling with community detection
 """
 
 from .ContentRecSys import (
@@ -39,8 +55,24 @@ from .ContentRecSys import (
     SimilarUsersPosts,
     SimilarUsersReact,
 )
+from .FollowRecSysRay import (
+    ActivityFollowRecSys,
+    AdamicAdarFollowRecSys,
+    CoEngagementFollowRecSys,
+    CosineSimilarityFollowRecSys,
+    CommonNeighborsFollowRecSys,
+    FollowRecSysRay,
+    JaccardFollowRecSys,
+    PreferentialAttachmentFollowRecSys,
+    RandomFollowRecSys,
+    RandomWalkRestartFollowRecSys,
+    ReactionsOnContentFollowRecSys,
+    ResourceAllocationFollowRecSys,
+    TwoHopEgoSamplingFollowRecSys,
+)
 
 __all__ = [
+    # Content recommendation systems
     "ContentRecSys",
     "ReverseChrono",
     "ReverseChronoPopularity",
@@ -56,4 +88,18 @@ __all__ = [
     "ContentBasedFeatures",
     "ContentBasedVector",
     "RandomOrder",
+    # Follow recommendation systems
+    "FollowRecSysRay",
+    "RandomFollowRecSys",
+    "CommonNeighborsFollowRecSys",
+    "JaccardFollowRecSys",
+    "AdamicAdarFollowRecSys",
+    "PreferentialAttachmentFollowRecSys",
+    "ActivityFollowRecSys",
+    "ResourceAllocationFollowRecSys",
+    "CosineSimilarityFollowRecSys",
+    "CoEngagementFollowRecSys",
+    "RandomWalkRestartFollowRecSys",
+    "ReactionsOnContentFollowRecSys",
+    "TwoHopEgoSamplingFollowRecSys",
 ]

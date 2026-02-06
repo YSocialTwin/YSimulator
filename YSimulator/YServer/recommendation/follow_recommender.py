@@ -145,6 +145,34 @@ class FollowRecommender:
                     suggestions = follow_recsys_db.recommend_preferential_attachment(
                         session, agent_id, following_ids, n_neighbors
                     )
+                elif mode == "Activity":
+                    suggestions = follow_recsys_db.recommend_activity(
+                        session, agent_id, following_ids, n_neighbors
+                    )
+                elif mode == "ResourceAllocation":
+                    suggestions = follow_recsys_db.recommend_resource_allocation(
+                        session, agent_id, following_ids, n_neighbors
+                    )
+                elif mode == "CosineSimilarity":
+                    suggestions = follow_recsys_db.recommend_cosine_similarity(
+                        session, agent_id, following_ids, n_neighbors
+                    )
+                elif mode == "CoEngagement":
+                    suggestions = follow_recsys_db.recommend_co_engagement(
+                        session, agent_id, following_ids, n_neighbors
+                    )
+                elif mode == "RandomWalkRestart":
+                    suggestions = follow_recsys_db.recommend_random_walk_with_restart(
+                        session, agent_id, following_ids, n_neighbors
+                    )
+                elif mode == "ReactionsOnContent":
+                    suggestions = follow_recsys_db.recommend_reactions_on_content(
+                        session, agent_id, following_ids, n_neighbors
+                    )
+                elif mode == "TwoHopEgoSampling":
+                    suggestions = follow_recsys_db.recommend_two_hop_ego_sampling(
+                        session, agent_id, following_ids, n_neighbors
+                    )
                 else:
                     # Unknown mode, fallback to random
                     self.logger.warning(f"Unknown follow mode: {mode}, using random")
@@ -195,6 +223,34 @@ class FollowRecommender:
                 )
             elif mode == "AdamicAdar":
                 recommendations = follow_recsys_redis.recommend_adamic_adar_redis(
+                    self.db.redis_client, self.db._redis_key, agent_id, n_neighbors, self.logger
+                )
+            elif mode == "Activity":
+                recommendations = follow_recsys_redis.recommend_activity_redis(
+                    self.db.redis_client, self.db._redis_key, agent_id, n_neighbors, self.logger
+                )
+            elif mode == "ResourceAllocation":
+                recommendations = follow_recsys_redis.recommend_resource_allocation_redis(
+                    self.db.redis_client, self.db._redis_key, agent_id, n_neighbors, self.logger
+                )
+            elif mode == "CosineSimilarity":
+                recommendations = follow_recsys_redis.recommend_cosine_similarity_redis(
+                    self.db.redis_client, self.db._redis_key, agent_id, n_neighbors, self.logger
+                )
+            elif mode == "CoEngagement":
+                recommendations = follow_recsys_redis.recommend_co_engagement_redis(
+                    self.db.redis_client, self.db._redis_key, agent_id, n_neighbors, self.logger
+                )
+            elif mode == "RandomWalkRestart":
+                recommendations = follow_recsys_redis.recommend_random_walk_with_restart_redis(
+                    self.db.redis_client, self.db._redis_key, agent_id, n_neighbors, self.logger
+                )
+            elif mode == "ReactionsOnContent":
+                recommendations = follow_recsys_redis.recommend_reactions_on_content_redis(
+                    self.db.redis_client, self.db._redis_key, agent_id, n_neighbors, self.logger
+                )
+            elif mode == "TwoHopEgoSampling":
+                recommendations = follow_recsys_redis.recommend_two_hop_ego_sampling_redis(
                     self.db.redis_client, self.db._redis_key, agent_id, n_neighbors, self.logger
                 )
             else:

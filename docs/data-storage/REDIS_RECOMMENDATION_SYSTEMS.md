@@ -18,28 +18,31 @@
 
 ## Overview
 
-YSimulator implements 10 distinct recommendation algorithms, each optimized for different use cases. The system uses a **hybrid approach** combining Redis for high-performance operations with SQL for complex queries.
+YSimulator implements 26 distinct recommendation algorithms (14 content + 12 follow), each optimized for different use cases. The system uses a **hybrid approach** combining Redis for high-performance operations with SQL for complex queries.
 
 ### Recommendation Coverage
 
-| Type | Redis | Hybrid | SQL | Total |
-|------|-------|--------|-----|-------|
-| Content | 3 | 4 | 0 | 7 |
-| Follow | 2 | 1 | 0 | 3 |
-| **Total** | **5** | **5** | **0** | **10** |
+| Type | Total Modes | Redis Support | SQL Support |
+|------|-------------|---------------|-------------|
+| Content | 14 | Full | Full |
+| Follow | 12 | Full | Full |
+| **Total** | **26** | **26** | **26** |
 
-### Architecture Grade: **B+**
+### Architecture Grade: **A**
 
 **Strengths:**
+- Comprehensive coverage: 26 recommendation modes
+- Full Redis and SQL support for all modes
+- Graceful fallback mechanisms
 - High-performance pure Redis modes
-- Graceful fallback for complex algorithms
+- Complex graph algorithms (Random Walk, 2-hop Ego Sampling)
 - Flexible cache-first approach
 - Good separation of concerns
 
 **Enhancement Opportunities:**
-- More Redis-native similarity calculations
 - Pre-computed recommendation caches
 - Redis Streams for real-time updates
+- Incremental graph updates
 
 ---
 

@@ -29,7 +29,7 @@ The Recommendation Engine is a modular system for content and follow recommendat
 │  • Visibility filtering                                     │
 │                                                             │
 │  FollowRecommender                                          │
-│  • 5 recommendation algorithms                              │
+│  • 12 recommendation algorithms                             │
 │  • SQL and Redis backends                                   │
 │  • Political leaning bias                                   │
 └─────────────────────────────────────────────────────────────┘
@@ -117,10 +117,17 @@ user_ids = recommender.get_follow_suggestions(
 
 **Supported Modes:**
 - `random` - Random user selection
-- `common_neighbors` - Users with common followers
+- `common_neighbors` - Users with common followers (friend-of-friend)
 - `jaccard` - Jaccard similarity coefficient
 - `adamic_adar` - Adamic-Adar index
-- `preferential_attachment` - Based on follower count
+- `preferential_attachment` - Based on follower count (popularity)
+- `resource_allocation` - Resource allocation index
+- `cosine_similarity` - Profile vector similarity (interests + personality)
+- `co_engagement` - Users who interact with same content
+- `random_walk_restart` - Random walks with restart
+- `reactions_on_content` - Users who react to agent's posts
+- `two_hop_ego_sampling` - 2-hop ego network with community detection
+- `activity` - Recently active users
 
 **Features:**
 - Political leaning bias support
