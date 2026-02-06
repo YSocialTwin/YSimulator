@@ -549,8 +549,12 @@ class BatchProcessor:
             action_type_override = None
             if len(reaction_tuple) > 4:
                 fifth_element = reaction_tuple[4]
+                # Check if it's a dict (new metadata format)
+                if isinstance(fifth_element, dict):
+                    # Extract mention_id from metadata dict
+                    mention_id = fifth_element.get("mention_id")
                 # Check if it's a UUID (mention_id) or action type string
-                if fifth_element == "SHARE":
+                elif fifth_element == "SHARE":
                     action_type_override = "SHARE"
                 else:
                     # Assume it's a mention_id (UUID or other identifier)

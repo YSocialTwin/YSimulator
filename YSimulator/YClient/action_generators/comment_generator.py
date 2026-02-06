@@ -53,6 +53,7 @@ class CommentGenerator(BaseActionGenerator):
             CommonUserInterests,
             ContentBasedFeatures,
             ContentBasedVector,
+            HybridLinearRanker,
             RandomOrder,
             ReverseChrono,
             ReverseChronoComments,
@@ -78,6 +79,7 @@ class CommentGenerator(BaseActionGenerator):
             "CollaborativeItemItem": CollaborativeItemItem,
             "ContentBasedFeatures": ContentBasedFeatures,
             "ContentBasedVector": ContentBasedVector,
+            "HybridLinearRanker": HybridLinearRanker,
             # Legacy support for old naming pattern
             "rchrono": ReverseChrono,
             "rchrono_popularity": ReverseChronoPopularity,

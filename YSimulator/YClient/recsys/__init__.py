@@ -20,6 +20,7 @@ Content Recommendation Exports:
     - CollaborativeItemItem: Collaborative filtering based on item co-occurrence
     - ContentBasedFeatures: Content-based filtering using feature extraction
     - ContentBasedVector: Content-based filtering using vector space similarity
+    - HybridLinearRanker: Two-stage hybrid system with multi-signal ranking
     - RandomOrder: Random post ordering
 
 Follow Recommendation Exports:
@@ -46,6 +47,7 @@ from .ContentRecSys import (
     ContentBasedFeatures,
     ContentBasedVector,
     ContentRecSys,
+    HybridLinearRanker,
     RandomOrder,
     ReverseChrono,
     ReverseChronoComments,
@@ -87,6 +89,7 @@ __all__ = [
     "CollaborativeItemItem",
     "ContentBasedFeatures",
     "ContentBasedVector",
+    "HybridLinearRanker",
     "RandomOrder",
     # Follow recommendation systems
     "FollowRecSysRay",
