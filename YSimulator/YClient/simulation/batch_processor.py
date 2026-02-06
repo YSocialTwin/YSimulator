@@ -549,15 +549,15 @@ class BatchProcessor:
             action_type_override = None
             if len(reaction_tuple) > 4:
                 fifth_element = reaction_tuple[4]
-                # Check if it's a dict (new metadata format)
+                # Check if it's a dict (new metadata format from vLLM batching)
                 if isinstance(fifth_element, dict):
-                    # Extract mention_id from metadata dict
+                    # Extract mention_id from metadata dict if present
                     mention_id = fifth_element.get("mention_id")
-                # Check if it's a UUID (mention_id) or action type string
+                # Check if it's "SHARE" action type string (old format)
                 elif fifth_element == "SHARE":
                     action_type_override = "SHARE"
                 else:
-                    # Assume it's a mention_id (UUID or other identifier)
+                    # Backward compatibility: Assume it's a mention_id string (old format)
                     mention_id = fifth_element
 
             # Check if result is a comment/share commentary (text) or a reaction type
