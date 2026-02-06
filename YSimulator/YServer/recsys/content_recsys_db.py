@@ -1041,7 +1041,7 @@ def recommend_hybrid_linear_ranker(
     
     # Get user's topic interests
     user_interests = set(
-        row[0] for row in session.query(UserInterest.topic_id)
+        row[0] for row in session.query(UserInterest.interest_id)
         .filter(UserInterest.user_id == agent_id)
         .all()
     )
