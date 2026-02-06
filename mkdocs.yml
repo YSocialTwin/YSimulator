@@ -128,6 +128,7 @@ nav:
     - Adding Agent Knowledge Graphs: development/ADDING_AGENT_KNOWLEDGE_GRAPHS_GUIDE.md
     - Adding Moderator Agent: development/ADDING_MODERATOR_AGENT_GUIDE.md
     - Adding Recommendation Systems: development/ADDING_RECSYS_GUIDE.md
+    - GitHub Pages Setup: development/GITHUB_PAGES_SETUP.md
   - Logging:
     - logging/README.md
     - Logging Configuration: logging/LOGGING_CONFIG.md

@@ -19,7 +19,11 @@ A distributed social media simulation system using Ray for orchestration and LLM
 
 ## Documentation
 
-**📚 [Complete Documentation Index](docs/getting-started/INDEX.md)** - Navigate all documentation organized by topic and use case
+**📚 [Online Documentation](https://ysocialtwin.github.io/YSimulator/)** - Complete documentation hosted on GitHub Pages
+
+> **Tip**: Browse the full documentation online with search functionality, or explore the markdown files directly in the [docs/](docs/) directory.
+
+**[Complete Documentation Index](docs/getting-started/INDEX.md)** - Navigate all documentation organized by topic and use case
 
 > **New in 2.1**: Documentation has been reorganized into thematic subdirectories for better navigation and discoverability.
 
