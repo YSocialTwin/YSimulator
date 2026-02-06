@@ -446,9 +446,7 @@ class TestFollowRecommender:
 
         # Test Activity mode
         mock_recsys_redis.recommend_activity_redis = Mock(return_value=["user7"])
-        _ = recommender.get_follow_suggestions(
-            agent_id="agent1", mode="Activity", n_neighbors=1
-        )
+        _ = recommender.get_follow_suggestions(agent_id="agent1", mode="Activity", n_neighbors=1)
         assert mock_recsys_redis.recommend_activity_redis.called
 
 

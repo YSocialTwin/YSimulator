@@ -624,11 +624,7 @@ def recommend_co_engagement_redis(
             post_id = reaction_data.get("post_id")
             user_id = reaction_data.get("user_id")
 
-            if (
-                post_id in agent_post_ids
-                and user_id != agent_id
-                and user_id not in following_ids
-            ):
+            if post_id in agent_post_ids and user_id != agent_id and user_id not in following_ids:
                 engagement_counts[user_id] = engagement_counts.get(user_id, 0) + 1
 
         if not engagement_counts:
@@ -824,11 +820,7 @@ def recommend_reactions_on_content_redis(
             post_id = reaction_data.get("post_id")
             user_id = reaction_data.get("user_id")
 
-            if (
-                post_id in agent_post_ids
-                and user_id != agent_id
-                and user_id not in following_ids
-            ):
+            if post_id in agent_post_ids and user_id != agent_id and user_id not in following_ids:
                 reaction_counts[user_id] = reaction_counts.get(user_id, 0) + 1
 
         if not reaction_counts:
@@ -900,10 +892,12 @@ def recommend_activity_redis(
         # Get recent rounds
         round_pattern = redis_key_func("rounds", "*")
         round_keys = redis_client.keys(round_pattern)
-        
+
         # Get recent round IDs (approximate - take last N)
         recent_round_ids = set()
-        selected_keys = round_keys[:recent_rounds] if len(round_keys) > recent_rounds else round_keys
+        selected_keys = (
+            round_keys[:recent_rounds] if len(round_keys) > recent_rounds else round_keys
+        )
         for key in selected_keys:
             round_data = redis_client.hgetall(key)
             if round_data and "id" in round_data:
@@ -1056,7 +1050,11 @@ def recommend_two_hop_ego_sampling_redis(
 
         # Sort rounds by day/hour (approximate - use all for simplicity in Redis)
         recent_round_ids = set()
-        selected_keys = round_keys[:recent_posts_window] if len(round_keys) > recent_posts_window else round_keys
+        selected_keys = (
+            round_keys[:recent_posts_window]
+            if len(round_keys) > recent_posts_window
+            else round_keys
+        )
         for key in selected_keys:
             round_data = redis_client.hgetall(key)
             if round_data and "id" in round_data:
@@ -1084,7 +1082,7 @@ def recommend_two_hop_ego_sampling_redis(
             reaction_data = redis_client.hgetall(key)
             user_id = reaction_data.get("user_id")
             post_id = reaction_data.get("post_id")
-            
+
             if user_id in candidate_interaction_counts and post_id in post_authors:
                 if post_authors[post_id] in sampled_one_hop:
                     candidate_interaction_counts[user_id] += 1
@@ -1117,9 +1115,7 @@ def recommend_two_hop_ego_sampling_redis(
             max_interactions = max(
                 (s["interactions"] for s in candidate_scores.values()), default=1
             )
-            max_triangles = max(
-                (s["triangles"] for s in candidate_scores.values()), default=1
-            )
+            max_triangles = max((s["triangles"] for s in candidate_scores.values()), default=1)
 
             final_scores = {}
             for candidate_id, scores in candidate_scores.items():
@@ -1135,9 +1131,7 @@ def recommend_two_hop_ego_sampling_redis(
                 final_scores[candidate_id] = final_score
 
             # Sort by score (highest first)
-            sorted_candidates = sorted(
-                final_scores.items(), key=lambda x: x[1], reverse=True
-            )
+            sorted_candidates = sorted(final_scores.items(), key=lambda x: x[1], reverse=True)
             recommendations = [uid for uid, score in sorted_candidates[:n_neighbors]]
         else:
             recommendations = []

@@ -421,9 +421,7 @@ def recommend_activity(
 
         # Get recent round IDs
         recent_round_ids_query = (
-            session.query(Round.id)
-            .order_by(desc(Round.day), desc(Round.hour))
-            .limit(recent_rounds)
+            session.query(Round.id).order_by(desc(Round.day), desc(Round.hour)).limit(recent_rounds)
         )
         recent_round_ids = [r.id for r in recent_round_ids_query.all()]
 
@@ -599,9 +597,7 @@ def recommend_cosine_similarity(
 
         # Build agent's profile vector
         agent_interests = (
-            session.query(UserInterest.interest_id)
-            .filter(UserInterest.user_id == agent_id)
-            .all()
+            session.query(UserInterest.interest_id).filter(UserInterest.user_id == agent_id).all()
         )
         agent_interest_ids = set([i.interest_id for i in agent_interests])
 
@@ -725,10 +721,7 @@ def recommend_co_engagement(
 
         # Get posts that the agent has reacted to
         agent_reactions = (
-            session.query(Reaction.post_id)
-            .filter(Reaction.user_id == agent_id)
-            .distinct()
-            .all()
+            session.query(Reaction.post_id).filter(Reaction.user_id == agent_id).distinct().all()
         )
         agent_post_ids = [r.post_id for r in agent_reactions]
 
@@ -838,10 +831,7 @@ def recommend_random_walk_with_restart(
                 current_node = random.choice(neighbor_ids)
 
                 # Count visit (exclude self and already following)
-                if (
-                    current_node != agent_id
-                    and current_node not in following_ids
-                ):
+                if current_node != agent_id and current_node not in following_ids:
                     visit_counts[current_node] = visit_counts.get(current_node, 0) + 1
 
         if not visit_counts:
@@ -1043,9 +1033,7 @@ def recommend_two_hop_ego_sampling(
             interaction_count = (
                 session.query(func.count(Reaction.id))
                 .join(Post, Reaction.post_id == Post.id)
-                .filter(
-                    Reaction.user_id == candidate_id, Post.user_id.in_(sampled_one_hop)
-                )
+                .filter(Reaction.user_id == candidate_id, Post.user_id.in_(sampled_one_hop))
                 .scalar()
                 or 0
             )
@@ -1068,9 +1056,7 @@ def recommend_two_hop_ego_sampling(
             max_interactions = max(
                 (s["interactions"] for s in candidate_scores.values()), default=1
             )
-            max_triangles = max(
-                (s["triangles"] for s in candidate_scores.values()), default=1
-            )
+            max_triangles = max((s["triangles"] for s in candidate_scores.values()), default=1)
 
             final_scores = {}
             for candidate_id, scores in candidate_scores.items():
@@ -1087,9 +1073,7 @@ def recommend_two_hop_ego_sampling(
                 final_scores[candidate_id] = final_score
 
             # Sort by score (highest first)
-            sorted_candidates = sorted(
-                final_scores.items(), key=lambda x: x[1], reverse=True
-            )
+            sorted_candidates = sorted(final_scores.items(), key=lambda x: x[1], reverse=True)
             suggestions = [uid for uid, score in sorted_candidates[:n_neighbors]]
         else:
             suggestions = []
