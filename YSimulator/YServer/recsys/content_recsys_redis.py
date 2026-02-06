@@ -9,6 +9,10 @@ from typing import Any, Dict, List
 
 from YSimulator.YServer.classes.models import Follow, PostTopic, Reaction, User_mgmt, UserInterest
 
+# Constants for hybrid linear ranker
+RECENT_AFFINITY_DISCOUNT = 0.5  # Weight for recent interactions (50% of total affinity)
+SIMILAR_USERS_SAMPLE_LIMIT = 100  # Max users to consider for similarity calculation (performance)
+
 
 def recommend_rchrono_redis(
     valid_posts_with_data: List[Dict[str, Any]], limit: int, **kwargs
@@ -1465,7 +1469,7 @@ def recommend_hybrid_linear_ranker_redis(
             agent_id, author_id, current_round, redis_client, redis_key_fn, db_engine, tau
         )
         
-        # Feature 5: Content topic similarity (cosine similarity)
+        # Feature 5: Content topic similarity (Jaccard similarity as proxy for cosine)
         content_topic_similarity = _calculate_content_topic_similarity_redis(
             agent_id, post_id, user_interests, redis_client, redis_key_fn
         )
@@ -1691,7 +1695,7 @@ def _calculate_recent_user_author_affinity_redis(
     )
     
     # Return a fraction to represent "recent" interactions
-    return overall_affinity * 0.5
+    return overall_affinity * RECENT_AFFINITY_DISCOUNT
 
 
 def _calculate_content_topic_similarity_redis(
@@ -1750,7 +1754,7 @@ def _calculate_similar_user_author_score_redis(
     )
     
     # Calculate overlap for each user (simplified - take top N with overlap)
-    for uid in list(all_user_ids)[:100]:  # Limit for performance
+    for uid in list(all_user_ids)[:SIMILAR_USERS_SAMPLE_LIMIT]:
         if uid != agent_id:
             user_likes_key = redis_key_fn("user", uid) + ":likes"
             if redis_client.exists(user_likes_key):

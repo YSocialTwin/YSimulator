@@ -20,6 +20,10 @@ from YSimulator.YServer.classes.models import (
     UserInterest,
 )
 
+# Constants for hybrid linear ranker (shared with Redis implementation)
+RECENT_AFFINITY_DISCOUNT = 0.5  # Weight for recent interactions (50% of total affinity)
+SIMILAR_USERS_SAMPLE_LIMIT = 100  # Max users to consider for similarity calculation (performance)
+
 
 def recommend_random(
     session, agent_id: str, visibility_day: int, visibility_hour: int, limit: int
@@ -1077,7 +1081,7 @@ def recommend_hybrid_linear_ranker(
         )
         
         # Feature 4: Recent user-author affinity (simplified)
-        recent_user_author_affinity = user_author_affinity * 0.5
+        recent_user_author_affinity = user_author_affinity * RECENT_AFFINITY_DISCOUNT
         
         # Feature 5: Content topic similarity
         content_topic_similarity = _calculate_content_topic_similarity_sql(
@@ -1212,7 +1216,7 @@ def _calculate_similar_user_author_score_sql(session, agent_id: str, author_id: 
         )
         .group_by(Reaction.user_id)
         .having(func.count(Reaction.post_id) > 0)
-        .limit(100)
+        .limit(SIMILAR_USERS_SAMPLE_LIMIT)
     )
     similar_users = set(row[0] for row in similar_users_query.all())
     
