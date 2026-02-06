@@ -229,6 +229,7 @@ if __name__ == "__main__":
 
     # Build ray.init() arguments
     init_kwargs = {"include_dashboard": False, "namespace": namespace}
+    #  "num_cpus": 1, "object_store_memory": 1 * 1024 * 1024 * 1024 (OSX M1 limitation)
 
     # Handle address and port configuration
     # Ray behavior:
