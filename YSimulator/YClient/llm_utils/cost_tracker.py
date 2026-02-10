@@ -70,6 +70,7 @@ class CostTracker:
 
         # Create rotating file handler (10MB per file, keep 5 backups)
         handler = RotatingFileHandler(log_file_path, maxBytes=10 * 1024 * 1024, backupCount=5)
+        handler.setLevel(logging.INFO)  # Ensure handler level is set
 
         # Use JSON format for structured logging
         class UsageFormatter(logging.Formatter):
@@ -116,6 +117,9 @@ class CostTracker:
                 log_entry["cumulative_cost"] = self.get_estimated_cost(method)
 
             self.usage_logger.info(json.dumps(log_entry))
+            # Flush to ensure log is written immediately
+            for handler in self.usage_logger.handlers:
+                handler.flush()
 
     def log_gpu_selection(self, gpu_info: dict, model_name: str = None, backend: str = "vllm") -> None:
         """
@@ -141,6 +145,9 @@ class CostTracker:
                 log_entry["model"] = model_name
 
             self.usage_logger.info(json.dumps(log_entry))
+            # Flush to ensure log is written immediately
+            for handler in self.usage_logger.handlers:
+                handler.flush()
             self.logger.info(
                 f"GPU selection logged: method={gpu_info.get('assignment_method')}, "
                 f"physical_gpu={gpu_info.get('physical_gpu_id')}"
