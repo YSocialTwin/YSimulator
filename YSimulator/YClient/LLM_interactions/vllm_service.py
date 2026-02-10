@@ -85,7 +85,7 @@ class VLLMService:
             "assignment_method": "default",
             "cuda_visible_devices": os.environ.get("CUDA_VISIBLE_DEVICES"),
         }
-        
+
         if tensor_parallel_size == 1:
             # Only do dynamic GPU selection for single-GPU mode
             # Multi-GPU mode (tensor parallelism) is handled by vLLM internally
@@ -189,7 +189,7 @@ class VLLMService:
 
         # Store prompts configuration
         self.prompts_config = prompts_config
-        
+
         # Store GPU selection information for logging and diagnostics
         self.gpu_selection_info = gpu_selection_info
 

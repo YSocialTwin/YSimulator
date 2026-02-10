@@ -559,7 +559,7 @@ class SimulationClient:
                 enable_file_logging=True,
             )
             self.logger.info(f"LLM usage logging enabled: {llm_usage_log_file}")
-            
+
             # Log GPU selection information if using vLLM
             self._log_gpu_selection_info()
         else:
@@ -570,20 +570,20 @@ class SimulationClient:
         """Log GPU selection information to LLM usage log."""
         if not self.cost_tracker or not self.llm_manager:
             return
-        
+
         try:
             # Check if the LLM service has GPU selection info (vLLM only)
             llm_service = self.llm_manager.llm_service
-            
+
             # Check if this is a VLLMService with GPU info
             if hasattr(llm_service, 'get_gpu_selection_info'):
                 gpu_info = llm_service.get_gpu_selection_info()
-                
+
                 # Get model name from config
                 llm_config = self.simulation_config.get("llm", {})
                 model_name = llm_config.get("model", "unknown")
                 backend = llm_config.get("backend", "vllm")
-                
+
                 # Log to usage file
                 self.cost_tracker.log_gpu_selection(gpu_info, model_name, backend)
             # Check if it's a load balancer with multiple actors
@@ -595,16 +595,16 @@ class SimulationClient:
                     # Get GPU info from first actor (requires remote call)
                     try:
                         gpu_info = ray.get(first_actor.get_gpu_selection_info.remote())
-                        
+
                         llm_config = self.simulation_config.get("llm", {})
                         model_name = llm_config.get("model", "unknown")
                         backend = llm_config.get("backend", "vllm")
                         num_actors = len(actors)
-                        
+
                         # Add actor count to GPU info
                         gpu_info_with_actors = gpu_info.copy()
                         gpu_info_with_actors["num_actors"] = num_actors
-                        
+
                         self.cost_tracker.log_gpu_selection(gpu_info_with_actors, model_name, backend)
                         self.logger.info(f"GPU selection logged for {num_actors} vLLM actors")
                     except Exception as e:

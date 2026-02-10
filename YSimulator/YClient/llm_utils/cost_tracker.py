@@ -136,10 +136,10 @@ class CostTracker:
                 "assignment_method": gpu_info.get("assignment_method", "unknown"),
                 "cuda_visible_devices": gpu_info.get("cuda_visible_devices"),
             }
-            
+
             if model_name:
                 log_entry["model"] = model_name
-            
+
             self.usage_logger.info(json.dumps(log_entry))
             self.logger.info(
                 f"GPU selection logged: method={gpu_info.get('assignment_method')}, "
