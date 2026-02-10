@@ -323,6 +323,23 @@ Check the logs for GPU selection messages:
 [vLLM] Initializing vLLM engine with text model=meta-llama/Llama-3.2-3B...
 ```
 
+**GPU Selection Logging:**
+GPU selection information is automatically logged to `{client_name}_llm_usage.log` for traceability. Example log entry:
+```json
+{
+  "timestamp": "2026-02-10T14:50:00.000Z",
+  "event": "gpu_selection",
+  "backend": "vllm",
+  "physical_gpu_id": 1,
+  "logical_gpu_id": 0,
+  "assignment_method": "dynamic_selection",
+  "cuda_visible_devices": "1",
+  "model": "meta-llama/Llama-3.2-3B"
+}
+```
+
+This log entry appears once at initialization and helps verify which GPU was selected and how the selection was made.
+
 **Manual Solutions (if automatic selection fails):**
 1. Reduce `gpu_memory_utilization` to fit within available memory:
    ```json

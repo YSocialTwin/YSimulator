@@ -178,6 +178,18 @@ desired GPU memory utilization (0.15, 5.91 GiB)
 [vLLM] Set CUDA_VISIBLE_DEVICES=1 before vLLM initialization
 ```
 
+**GPU Selection Logging:**
+GPU selection is also logged to `logs/{client_name}_llm_usage.log` for traceability:
+```json
+{
+  "event": "gpu_selection",
+  "physical_gpu_id": 1,
+  "logical_gpu_id": 0,
+  "assignment_method": "dynamic_selection",
+  "model": "meta-llama/Llama-3.2-3B"
+}
+```
+
 **Manual GPU Selection** (optional - only needed if automatic selection fails):
 ```bash
 # Use specific GPU (e.g., GPU 1)
