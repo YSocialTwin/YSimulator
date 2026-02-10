@@ -1623,7 +1623,12 @@ class VLLMService:
                     author_opinion = req.get("author_opinion")
                     agent_opinion = req.get("agent_opinion")
 
-                    if topic is None or post_text is None or author_opinion is None or agent_opinion is None:
+                    if (
+                        topic is None
+                        or post_text is None
+                        or author_opinion is None
+                        or agent_opinion is None
+                    ):
                         logger.error(
                             f"[vLLM] Missing required fields in opinion evaluation "
                             f"request {idx}: {req}"
@@ -1652,7 +1657,9 @@ class VLLMService:
                     prompt = self._format_prompt(system_template, prompt_text)
                     prompts.append(prompt)
                 except Exception as e:
-                    logger.error(f"[vLLM] Failed to build prompt for opinion evaluation request {idx}: {e}")
+                    logger.error(
+                        f"[vLLM] Failed to build prompt for opinion evaluation request {idx}: {e}"
+                    )
                     logger.error(f"[vLLM] Request: {req}")
                     raise
 
