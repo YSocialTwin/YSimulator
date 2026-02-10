@@ -324,7 +324,7 @@ Check the logs for GPU selection messages:
 ```
 
 **GPU Selection Logging:**
-GPU selection information is automatically logged to `{client_name}_llm_usage.log` for traceability. Example log entry:
+GPU selection information is automatically logged to `{client_name}_llm_usage.log` for traceability. The log file is located in the `logs/` directory within your configuration folder. Example log entry:
 ```json
 {
   "timestamp": "2026-02-10T14:50:00.000Z",
@@ -338,7 +338,16 @@ GPU selection information is automatically logged to `{client_name}_llm_usage.lo
 }
 ```
 
-This log entry appears once at initialization and helps verify which GPU was selected and how the selection was made.
+This log entry appears once at initialization and helps verify which GPU was selected and how the selection was made. **Logs are written immediately** to disk (no buffering), so you can monitor them in real-time.
+
+To view the log:
+```bash
+# View the log file
+cat example/llm_population_100_vllm/logs/client_0_llm_usage.log
+
+# Monitor in real-time
+tail -f example/llm_population_100_vllm/logs/client_0_llm_usage.log
+```
 
 **Manual Solutions (if automatic selection fails):**
 1. Reduce `gpu_memory_utilization` to fit within available memory:
