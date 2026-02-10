@@ -79,6 +79,13 @@ class VLLMService:
         # This avoids the "Free memory on device cuda:0 is less than desired GPU memory utilization" error
         # Must set CUDA_VISIBLE_DEVICES before importing vllm or any CUDA-using library
         selected_gpu = None
+        gpu_selection_info = {
+            "physical_gpu_id": None,
+            "logical_gpu_id": None,
+            "assignment_method": "default",
+            "cuda_visible_devices": os.environ.get("CUDA_VISIBLE_DEVICES"),
+        }
+        
         if tensor_parallel_size == 1:
             # Only do dynamic GPU selection for single-GPU mode
             # Multi-GPU mode (tensor parallelism) is handled by vLLM internally
@@ -97,6 +104,9 @@ class VLLMService:
                         f"(CUDA_VISIBLE_DEVICES={os.environ.get('CUDA_VISIBLE_DEVICES')})"
                     )
                     selected_gpu = ray_gpu
+                    gpu_selection_info["physical_gpu_id"] = ray_gpu
+                    gpu_selection_info["logical_gpu_id"] = 0
+                    gpu_selection_info["assignment_method"] = "ray_assigned"
                 else:
                     # Ray hasn't assigned a specific GPU, select one with sufficient memory
                     logger.info(
@@ -119,6 +129,7 @@ class VLLMService:
                         )
                         # CRITICAL: Set CUDA_VISIBLE_DEVICES BEFORE any CUDA operations
                         # This must happen before importing vllm or torch.cuda
+                        physical_gpu_id = selected_gpu
                         os.environ["CUDA_VISIBLE_DEVICES"] = str(selected_gpu)
                         logger.info(
                             f"[vLLM] Set CUDA_VISIBLE_DEVICES={selected_gpu} before vLLM initialization"
@@ -128,6 +139,10 @@ class VLLMService:
                         # perspective within this process. All subsequent CUDA operations will
                         # see it as cuda:0, even though it's physically GPU 2 on the system.
                         selected_gpu = 0
+                        gpu_selection_info["physical_gpu_id"] = physical_gpu_id
+                        gpu_selection_info["logical_gpu_id"] = 0
+                        gpu_selection_info["assignment_method"] = "dynamic_selection"
+                        gpu_selection_info["cuda_visible_devices"] = str(physical_gpu_id)
                     else:
                         logger.warning(
                             f"[vLLM] No GPU found with sufficient memory ({required_memory_gb:.2f} GB). "
@@ -174,6 +189,9 @@ class VLLMService:
 
         # Store prompts configuration
         self.prompts_config = prompts_config
+        
+        # Store GPU selection information for logging and diagnostics
+        self.gpu_selection_info = gpu_selection_info
 
         # Disable FlashAttention by default (requires compute capability >= 8.0)
         # Can be enabled via config: "enable_flashattention": true
@@ -336,6 +354,19 @@ class VLLMService:
                 prompt_handler.setFormatter(PromptJsonFormatter())
                 self.prompt_logger.addHandler(prompt_handler)
                 logger.info("Prompt logging enabled in vLLM service")
+
+    def get_gpu_selection_info(self) -> dict:
+        """
+        Get GPU selection information for logging and diagnostics.
+
+        Returns:
+            Dictionary containing GPU selection details:
+            - physical_gpu_id: The physical GPU ID selected (if any)
+            - logical_gpu_id: The logical GPU ID within the process (usually 0)
+            - assignment_method: How the GPU was selected (ray_assigned, dynamic_selection, or default)
+            - cuda_visible_devices: Value of CUDA_VISIBLE_DEVICES environment variable
+        """
+        return self.gpu_selection_info.copy()
 
     def _log_prompt(
         self, method_name: str, system_msg: str, user_msg: str, agent_attrs: dict = None

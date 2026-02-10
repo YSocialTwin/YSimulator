@@ -117,6 +117,35 @@ class CostTracker:
 
             self.usage_logger.info(json.dumps(log_entry))
 
+    def log_gpu_selection(self, gpu_info: dict, model_name: str = None, backend: str = "vllm") -> None:
+        """
+        Log GPU selection information to the usage log.
+
+        Args:
+            gpu_info: Dictionary with GPU selection details
+            model_name: Optional model name being loaded
+            backend: Backend being used (default: vllm)
+        """
+        if self.usage_logger:
+            log_entry = {
+                "timestamp": datetime.utcnow().isoformat(),
+                "event": "gpu_selection",
+                "backend": backend,
+                "physical_gpu_id": gpu_info.get("physical_gpu_id"),
+                "logical_gpu_id": gpu_info.get("logical_gpu_id"),
+                "assignment_method": gpu_info.get("assignment_method", "unknown"),
+                "cuda_visible_devices": gpu_info.get("cuda_visible_devices"),
+            }
+            
+            if model_name:
+                log_entry["model"] = model_name
+            
+            self.usage_logger.info(json.dumps(log_entry))
+            self.logger.info(
+                f"GPU selection logged: method={gpu_info.get('assignment_method')}, "
+                f"physical_gpu={gpu_info.get('physical_gpu_id')}"
+            )
+
     def get_call_count(self, method: Optional[str] = None) -> int:
         """
         Get total number of calls.
