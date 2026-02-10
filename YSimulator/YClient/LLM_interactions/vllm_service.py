@@ -56,15 +56,7 @@ class VLLMService:
                 - max_model_len: Maximum sequence length (default: 40000)
             logging_config: Optional logging configuration dict
         """
-        try:
-            from vllm import LLM, SamplingParams
-        except ImportError as e:
-            raise ImportError(
-                "vLLM is not installed. Install it with: pip install vllm\n"
-                "Note: vLLM requires Linux and is not supported on macOS."
-            ) from e
-
-        # Load configuration with defaults
+        # Load configuration with defaults FIRST (before any imports)
         if llm_config is None:
             llm_config = {
                 "model": "meta-llama/Llama-3.2-3B",
@@ -74,47 +66,18 @@ class VLLMService:
                 "gpu_memory_utilization": 0.9,
             }
 
-        if prompts_config is None:
-            print("⚠ Warning: No prompts configuration provided. Using default fallback prompts.")
-            prompts_config = {
-                "personas": {
-                    "0": "You are a 'Validator'. Skeptical, brief, authentic.",
-                    "1": "You are a 'Broadcaster'. High energy, viral, controversial.",
-                    "2": "You are an 'Explorer'. Curious, asking questions.",
-                },
-                "generate_post": {
-                    "system_template": "{persona}",
-                    "user_template": "Write a tweet for Day {day} Slot {slot}. Max 15 words.",
-                },
-                "decide_reaction": {
-                    "system_template": "You are user type {cluster_id}. Read post. Reply ONLY: 'LIKE', 'COMMENT', 'IGNORE'.",
-                    "user_template": "{post_content}",
-                },
-            }
-
-        # Store prompts configuration
-        self.prompts_config = prompts_config
-
-        # Initialize vLLM engine for text generation
+        # Extract config values needed for GPU selection
         model_name = llm_config.get("model", "meta-llama/Llama-3.2-3B")
         tensor_parallel_size = llm_config.get("tensor_parallel_size", 1)
         gpu_memory_utilization = llm_config.get("gpu_memory_utilization", 0.9)
         max_model_len = llm_config.get("max_model_len", 40000)
 
-        # Disable FlashAttention by default (requires compute capability >= 8.0)
-        # Can be enabled via config: "enable_flashattention": true
-        enable_flashattention = llm_config.get("enable_flashattention", False)
-
-        logger.info(
-            f"[vLLM] Initializing vLLM engine with text model={model_name}, "
-            f"tensor_parallel_size={tensor_parallel_size}, "
-            f"gpu_memory_utilization={gpu_memory_utilization}, "
-            f"max_model_len={max_model_len}, "
-            f"enable_flashattention={enable_flashattention}"
-        )
-
+        # ============================================================================
+        # CRITICAL: GPU SELECTION MUST HAPPEN BEFORE ANY CUDA/VLLM IMPORTS
+        # ============================================================================
         # Dynamic GPU selection for multi-GPU systems
         # This avoids the "Free memory on device cuda:0 is less than desired GPU memory utilization" error
+        # Must set CUDA_VISIBLE_DEVICES before importing vllm or any CUDA-using library
         selected_gpu = None
         if tensor_parallel_size == 1:
             # Only do dynamic GPU selection for single-GPU mode
@@ -154,8 +117,12 @@ class VLLMService:
                         logger.info(
                             f"[vLLM] Dynamically selected GPU {selected_gpu} with sufficient memory"
                         )
-                        # Set CUDA_VISIBLE_DEVICES to use the selected GPU
+                        # CRITICAL: Set CUDA_VISIBLE_DEVICES BEFORE any CUDA operations
+                        # This must happen before importing vllm or torch.cuda
                         os.environ["CUDA_VISIBLE_DEVICES"] = str(selected_gpu)
+                        logger.info(
+                            f"[vLLM] Set CUDA_VISIBLE_DEVICES={selected_gpu} before vLLM initialization"
+                        )
                         # After setting CUDA_VISIBLE_DEVICES, the selected GPU becomes device 0
                         selected_gpu = 0
                     else:
@@ -171,6 +138,51 @@ class VLLMService:
                 import traceback
 
                 logger.debug(f"[vLLM] GPU selection error traceback:\n{traceback.format_exc()}")
+
+        # ============================================================================
+        # NOW it's safe to import vLLM (after GPU selection)
+        # ============================================================================
+        try:
+            from vllm import LLM, SamplingParams
+        except ImportError as e:
+            raise ImportError(
+                "vLLM is not installed. Install it with: pip install vllm\n"
+                "Note: vLLM requires Linux and is not supported on macOS."
+            ) from e
+
+        # Configure prompts
+        if prompts_config is None:
+            print("⚠ Warning: No prompts configuration provided. Using default fallback prompts.")
+            prompts_config = {
+                "personas": {
+                    "0": "You are a 'Validator'. Skeptical, brief, authentic.",
+                    "1": "You are a 'Broadcaster'. High energy, viral, controversial.",
+                    "2": "You are an 'Explorer'. Curious, asking questions.",
+                },
+                "generate_post": {
+                    "system_template": "{persona}",
+                    "user_template": "Write a tweet for Day {day} Slot {slot}. Max 15 words.",
+                },
+                "decide_reaction": {
+                    "system_template": "You are user type {cluster_id}. Read post. Reply ONLY: 'LIKE', 'COMMENT', 'IGNORE'.",
+                    "user_template": "{post_content}",
+                },
+            }
+
+        # Store prompts configuration
+        self.prompts_config = prompts_config
+
+        # Disable FlashAttention by default (requires compute capability >= 8.0)
+        # Can be enabled via config: "enable_flashattention": true
+        enable_flashattention = llm_config.get("enable_flashattention", False)
+
+        logger.info(
+            f"[vLLM] Initializing vLLM engine with text model={model_name}, "
+            f"tensor_parallel_size={tensor_parallel_size}, "
+            f"gpu_memory_utilization={gpu_memory_utilization}, "
+            f"max_model_len={max_model_len}, "
+            f"enable_flashattention={enable_flashattention}"
+        )
 
         try:
             # Build vLLM initialization parameters

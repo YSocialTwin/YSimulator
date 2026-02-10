@@ -301,15 +301,27 @@ or reduce GPU memory used by other processes.
 ```
 
 **Cause:**
-This error occurs on multi-GPU systems when cuda:0 doesn't have enough free memory, even though other GPUs might have sufficient memory available.
+This error occurs on multi-GPU systems when cuda:0 doesn't have enough free memory, even though other GPUs might have sufficient memory available. vLLM defaults to using cuda:0 if not instructed otherwise.
 
 **Automatic Solution (v1.x+):**
 YSimulator now automatically handles this by:
-1. Detecting Ray-assigned GPUs via `CUDA_VISIBLE_DEVICES`
-2. Dynamically selecting a GPU with sufficient free memory
-3. Setting the environment to use the selected GPU
+1. **BEFORE any CUDA initialization**: Checks available memory on all GPUs
+2. **Detects Ray-assigned GPUs**: Reads `CUDA_VISIBLE_DEVICES` if Ray assigned specific GPUs
+3. **Dynamically selects GPU**: Chooses a GPU with sufficient free memory based on model requirements
+4. **Sets environment early**: Sets `CUDA_VISIBLE_DEVICES` BEFORE importing vLLM/PyTorch to avoid locking to cuda:0
+5. **Falls back gracefully**: Warns if no GPU has sufficient memory but still attempts initialization
 
-No configuration changes are needed - the system will automatically select an appropriate GPU.
+The GPU selection happens at the very beginning of VLLMService initialization, before any CUDA operations, ensuring the correct GPU is used.
+
+**Verification:**
+Check the logs for GPU selection messages:
+```
+[vLLM] Ray has not assigned a specific GPU, selecting based on available memory
+[vLLM] Estimated memory for meta-llama/Llama-3.2-3B: 11.70 GB (requires 13.00 GB free with utilization=0.9)
+[vLLM] Dynamically selected GPU 1 with 35.20 GB free (required: 13.00 GB)
+[vLLM] Set CUDA_VISIBLE_DEVICES=1 before vLLM initialization
+[vLLM] Initializing vLLM engine with text model=meta-llama/Llama-3.2-3B...
+```
 
 **Manual Solutions (if automatic selection fails):**
 1. Reduce `gpu_memory_utilization` to fit within available memory:
@@ -328,6 +340,8 @@ No configuration changes are needed - the system will automatically select an ap
    ```
 
 3. Close processes using GPU memory on cuda:0, or use a smaller model
+
+4. If automatic selection is not working, check the logs for error messages and report the issue
 
 ### Model Download Issues
 

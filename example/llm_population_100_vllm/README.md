@@ -158,10 +158,11 @@ Or remove the `backend` field entirely (defaults to "ollama").
 
 YSimulator automatically handles GPU selection on multi-GPU systems. When vLLM is initialized:
 
-1. **Ray Assignment**: First checks if Ray has assigned a specific GPU via `CUDA_VISIBLE_DEVICES`
-2. **Memory Estimation**: Estimates required GPU memory based on model size
-3. **Dynamic Selection**: Selects a GPU with sufficient free memory
-4. **Automatic Fallback**: Falls back gracefully if no GPU has enough memory
+1. **Early Selection**: GPU selection happens BEFORE any CUDA initialization to prevent locking to cuda:0
+2. **Ray Assignment**: First checks if Ray has assigned a specific GPU via `CUDA_VISIBLE_DEVICES`
+3. **Memory Estimation**: Estimates required GPU memory based on model size and configuration
+4. **Dynamic Selection**: Selects a GPU with sufficient free memory from all available GPUs
+5. **Automatic Fallback**: Falls back gracefully with warnings if no GPU has enough memory
 
 This prevents the common error:
 ```
@@ -169,7 +170,15 @@ ValueError: Free memory on device cuda:0 (3.71/39.39 GiB) on startup is less tha
 desired GPU memory utilization (0.15, 5.91 GiB)
 ```
 
-**Manual GPU Selection** (optional):
+**What to look for in logs:**
+```
+[vLLM] Ray has not assigned a specific GPU, selecting based on available memory
+[GPU Selection] Estimated memory for meta-llama/Llama-3.2-3B: 11.70 GB
+[GPU Selection] Selected GPU 1 with 35.20 GB free (required: 13.00 GB)
+[vLLM] Set CUDA_VISIBLE_DEVICES=1 before vLLM initialization
+```
+
+**Manual GPU Selection** (optional - only needed if automatic selection fails):
 ```bash
 # Use specific GPU (e.g., GPU 1)
 CUDA_VISIBLE_DEVICES=1 python run_client.py --config example/llm_population_100_vllm
