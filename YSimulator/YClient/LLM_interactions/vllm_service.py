@@ -577,13 +577,22 @@ class VLLMService:
                         raise ValueError(f"Missing cluster_id in request {idx}")
                     post_content = req.get("post_content", "")
 
+                    # Build persona
+                    persona = self._build_persona(cluster_id, None)
+
                     # Get prompt templates
                     system_template = self.prompts_config["decide_reaction"]["system_template"]
                     user_template = self.prompts_config["decide_reaction"]["user_template"]
 
                     # Format templates
-                    system_msg = system_template.format(cluster_id=cluster_id)
-                    user_msg = user_template.format(post_content=post_content)
+                    system_msg = (
+                        system_template.format(cluster_id=cluster_id, persona=persona)
+                        if system_template
+                        else ""
+                    )
+                    user_msg = user_template.format(
+                        cluster_id=cluster_id, persona=persona, post_content=post_content
+                    )
 
                     # Create formatted prompt
                     prompt = self._format_prompt(system_msg, user_msg)
@@ -669,8 +678,17 @@ class VLLMService:
                     user_template = self.prompts_config["decide_reaction"]["user_template"]
 
                     # Format templates with persona and opinion instruction
-                    system_msg = system_template.format(cluster_id=cluster_id, persona=persona)
-                    user_msg = user_template.format(post_content=post_content) + opinion_instruction
+                    system_msg = (
+                        system_template.format(cluster_id=cluster_id, persona=persona)
+                        if system_template
+                        else ""
+                    )
+                    user_msg = (
+                        user_template.format(
+                            cluster_id=cluster_id, persona=persona, post_content=post_content
+                        )
+                        + opinion_instruction
+                    )
 
                     # Create formatted prompt
                     prompt = self._format_prompt(system_msg, user_msg)
