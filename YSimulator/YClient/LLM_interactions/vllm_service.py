@@ -1619,11 +1619,11 @@ class VLLMService:
             for idx, req in enumerate(requests):
                 try:
                     topic = req.get("topic")
-                    post_text = req.get("post_text", "")
-                    author_opinion = req.get("author_opinion", "")
-                    agent_opinion = req.get("agent_opinion", "")
+                    post_text = req.get("post_text")
+                    author_opinion = req.get("author_opinion")
+                    agent_opinion = req.get("agent_opinion")
 
-                    if not all([topic, post_text, author_opinion, agent_opinion]):
+                    if topic is None or post_text is None or author_opinion is None or agent_opinion is None:
                         logger.error(
                             f"[vLLM] Missing required fields in opinion evaluation "
                             f"request {idx}: {req}"
