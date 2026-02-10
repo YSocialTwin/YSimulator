@@ -7,6 +7,7 @@ The interface is designed to be compatible with the existing LLMService pattern.
 """
 
 import logging
+import os
 from typing import Any, Dict, List, Optional
 
 import ray
@@ -111,6 +112,65 @@ class VLLMService:
             f"max_model_len={max_model_len}, "
             f"enable_flashattention={enable_flashattention}"
         )
+
+        # Dynamic GPU selection for multi-GPU systems
+        # This avoids the "Free memory on device cuda:0 is less than desired GPU memory utilization" error
+        selected_gpu = None
+        if tensor_parallel_size == 1:
+            # Only do dynamic GPU selection for single-GPU mode
+            # Multi-GPU mode (tensor parallelism) is handled by vLLM internally
+            try:
+                from YSimulator.YClient.llm_utils.gpu_utils import (
+                    estimate_required_vllm_memory,
+                    get_ray_assigned_gpu,
+                    select_gpu_with_sufficient_memory,
+                )
+
+                # First, check if Ray has already assigned a specific GPU
+                ray_gpu = get_ray_assigned_gpu()
+                if ray_gpu is not None:
+                    logger.info(
+                        f"[vLLM] Using Ray-assigned GPU device {ray_gpu} "
+                        f"(CUDA_VISIBLE_DEVICES={os.environ.get('CUDA_VISIBLE_DEVICES')})"
+                    )
+                    selected_gpu = ray_gpu
+                else:
+                    # Ray hasn't assigned a specific GPU, select one with sufficient memory
+                    logger.info(
+                        "[vLLM] Ray has not assigned a specific GPU, selecting based on available memory"
+                    )
+
+                    # Estimate required memory
+                    required_memory_gb = estimate_required_vllm_memory(
+                        model_name=model_name,
+                        max_model_len=max_model_len,
+                        gpu_memory_utilization=gpu_memory_utilization,
+                    )
+
+                    # Select a GPU with sufficient memory
+                    selected_gpu = select_gpu_with_sufficient_memory(required_memory_gb)
+
+                    if selected_gpu is not None:
+                        logger.info(
+                            f"[vLLM] Dynamically selected GPU {selected_gpu} with sufficient memory"
+                        )
+                        # Set CUDA_VISIBLE_DEVICES to use the selected GPU
+                        os.environ["CUDA_VISIBLE_DEVICES"] = str(selected_gpu)
+                        # After setting CUDA_VISIBLE_DEVICES, the selected GPU becomes device 0
+                        selected_gpu = 0
+                    else:
+                        logger.warning(
+                            f"[vLLM] No GPU found with sufficient memory ({required_memory_gb:.2f} GB). "
+                            f"Will attempt initialization with default GPU, but it may fail."
+                        )
+            except Exception as e:
+                logger.warning(
+                    f"[vLLM] Failed to perform dynamic GPU selection: {e}. "
+                    f"Will use default GPU assignment."
+                )
+                import traceback
+
+                logger.debug(f"[vLLM] GPU selection error traceback:\n{traceback.format_exc()}")
 
         try:
             # Build vLLM initialization parameters
