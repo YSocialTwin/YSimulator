@@ -442,9 +442,18 @@ class VLLMService:
             prompts = []
             for idx, req in enumerate(requests):
                 try:
-                    cluster_id = req["cluster_id"]
-                    day = req["day"]
-                    slot = req["slot"]
+                    cluster_id = req.get("cluster_id")
+                    if cluster_id is None:
+                        logger.error(f"[vLLM] Missing cluster_id in request {idx}: {req}")
+                        raise ValueError(f"Missing cluster_id in request {idx}")
+                    day = req.get("day")
+                    if day is None:
+                        logger.error(f"[vLLM] Missing day in request {idx}: {req}")
+                        raise ValueError(f"Missing day in request {idx}")
+                    slot = req.get("slot")
+                    if slot is None:
+                        logger.error(f"[vLLM] Missing slot in request {idx}: {req}")
+                        raise ValueError(f"Missing slot in request {idx}")
                     agent_attrs = req.get("agent_attrs")
 
                     # Build persona
@@ -562,8 +571,11 @@ class VLLMService:
             prompts = []
             for idx, req in enumerate(requests):
                 try:
-                    cluster_id = req["cluster_id"]
-                    post_content = req["post_content"]
+                    cluster_id = req.get("cluster_id")
+                    if cluster_id is None:
+                        logger.error(f"[vLLM] Missing cluster_id in request {idx}: {req}")
+                        raise ValueError(f"Missing cluster_id in request {idx}")
+                    post_content = req.get("post_content", "")
 
                     # Get prompt templates
                     system_template = self.prompts_config["decide_reaction"]["system_template"]
@@ -626,8 +638,11 @@ class VLLMService:
             prompts = []
             for idx, req in enumerate(requests):
                 try:
-                    cluster_id = req["cluster_id"]
-                    post_content = req["post_content"]
+                    cluster_id = req.get("cluster_id")
+                    if cluster_id is None:
+                        logger.error(f"[vLLM] Missing cluster_id in request {idx}: {req}")
+                        raise ValueError(f"Missing cluster_id in request {idx}")
+                    post_content = req.get("post_content", "")
                     agent_attrs = req.get("agent_attrs")
 
                     # Build persona using attributes or fallback
@@ -828,8 +843,11 @@ class VLLMService:
             prompts = []
             for idx, req in enumerate(requests):
                 try:
-                    cluster_id = req["cluster_id"]
-                    post_content = req["post_content"]
+                    cluster_id = req.get("cluster_id")
+                    if cluster_id is None:
+                        logger.error(f"[vLLM] Missing cluster_id in request {idx}: {req}")
+                        raise ValueError(f"Missing cluster_id in request {idx}")
+                    post_content = req.get("post_content", "")
                     agent_attrs = req.get("agent_attrs")
                     author_name = req.get("author_name", "Someone")
                     thread_context = req.get("thread_context")
@@ -1598,26 +1616,45 @@ class VLLMService:
 
             # Build prompts for all evaluations
             prompts = []
-            for req in requests:
-                prompt_text = (
-                    f"Read the following text on the topic '{req['topic'].upper()}': '{req['post_text']}'.\n"
-                    f"The author has opinion '{req['author_opinion']}' on the topic.\n"
-                    f"Your initial opinion is '{req['agent_opinion']}'"
-                )
+            for idx, req in enumerate(requests):
+                try:
+                    topic = req.get("topic")
+                    post_text = req.get("post_text")
+                    author_opinion = req.get("author_opinion")
+                    agent_opinion = req.get("agent_opinion")
 
-                peers_opinions = req.get("peers_opinions")
-                if peers_opinions and len(peers_opinions) > 0:
-                    prompt_text += "\n\nThe following are the opinions of your friends:\n"
-                    for op, count in peers_opinions:
-                        prompt_text += f"Opinion: '{op}' ({count})\n"
+                    if topic is None or post_text is None or author_opinion is None or agent_opinion is None:
+                        logger.error(
+                            f"[vLLM] Missing required fields in opinion evaluation "
+                            f"request {idx}: {req}"
+                        )
+                        raise ValueError(
+                            f"Missing required fields in opinion evaluation request {idx}"
+                        )
 
-                prompt_text += (
-                    "\nWhat do you think about the expressed opinion? "
-                    "Answer with a single word among the options: AGREE|DISAGREE|NEUTRAL."
-                )
+                    prompt_text = (
+                        f"Read the following text on the topic '{topic.upper()}': '{post_text}'.\n"
+                        f"The author has opinion '{author_opinion}' on the topic.\n"
+                        f"Your initial opinion is '{agent_opinion}'"
+                    )
 
-                prompt = self._format_prompt(system_template, prompt_text)
-                prompts.append(prompt)
+                    peers_opinions = req.get("peers_opinions")
+                    if peers_opinions and len(peers_opinions) > 0:
+                        prompt_text += "\n\nThe following are the opinions of your friends:\n"
+                        for op, count in peers_opinions:
+                            prompt_text += f"Opinion: '{op}' ({count})\n"
+
+                    prompt_text += (
+                        "\nWhat do you think about the expressed opinion? "
+                        "Answer with a single word among the options: AGREE|DISAGREE|NEUTRAL."
+                    )
+
+                    prompt = self._format_prompt(system_template, prompt_text)
+                    prompts.append(prompt)
+                except Exception as e:
+                    logger.error(f"[vLLM] Failed to build prompt for opinion evaluation request {idx}: {e}")
+                    logger.error(f"[vLLM] Request: {req}")
+                    raise
 
             # Batch generate using vLLM
             logger.debug(f"[vLLM] Executing batch inference for {len(prompts)} opinion evaluations")
@@ -1677,8 +1714,11 @@ class VLLMService:
             prompts = []
             for i, req in enumerate(requests):
                 try:
-                    cluster_id = req["cluster_id"]
-                    post_content = req["post_content"]
+                    cluster_id = req.get("cluster_id")
+                    if cluster_id is None:
+                        logger.error(f"[vLLM] Missing cluster_id in request {i}: {req}")
+                        raise ValueError(f"Missing cluster_id in request {i}")
+                    post_content = req.get("post_content", "")
                     agent_attrs = req.get("agent_attrs", {})
 
                     # Build persona (same as individual search action)
