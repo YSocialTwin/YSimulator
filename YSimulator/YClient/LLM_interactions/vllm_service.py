@@ -56,6 +56,31 @@ class VLLMService:
                 - max_model_len: Maximum sequence length (default: 40000)
             logging_config: Optional logging configuration dict
         """
+        import sys
+        
+        try:
+            self._initialize(llm_config, prompts_config, llm_v_config, logging_config)
+        except Exception as e:
+            # Print to stderr so error is visible in Ray logs
+            error_msg = f"\n{'='*70}\n"
+            error_msg += "❌ VLLMService Initialization Failed\n"
+            error_msg += f"{'='*70}\n"
+            error_msg += f"Error: {type(e).__name__}: {str(e)}\n"
+            error_msg += f"{'='*70}\n"
+            
+            print(error_msg, file=sys.stderr, flush=True)
+            
+            # Re-raise to let Ray know the actor failed
+            raise
+    
+    def _initialize(
+        self,
+        llm_config: Optional[Dict[str, Any]] = None,
+        prompts_config: Optional[Dict[str, Any]] = None,
+        llm_v_config: Optional[Dict[str, Any]] = None,
+        logging_config: Optional[Dict[str, Any]] = None,
+    ):
+        """Internal initialization method with error handling."""
         # Load configuration with defaults FIRST (before any imports)
         if llm_config is None:
             llm_config = {
@@ -160,9 +185,47 @@ class VLLMService:
         # ============================================================================
         # NOW it's safe to import vLLM (after GPU selection)
         # ============================================================================
+        # First, validate that dependencies are available
+        import sys
+        
+        try:
+            import torch
+        except ImportError:
+            error_msg = (
+                "\n❌ PyTorch is not installed.\n"
+                "vLLM requires PyTorch with CUDA support.\n"
+                "Install with: pip install torch\n"
+                "See: https://pytorch.org/get-started/locally/\n"
+            )
+            print(error_msg, file=sys.stderr, flush=True)
+            raise ImportError("PyTorch is required for vLLM but is not installed") from None
+        
+        # Check CUDA availability
+        if not torch.cuda.is_available():
+            error_msg = (
+                "\n❌ CUDA is not available.\n"
+                "vLLM requires CUDA-enabled GPU(s).\n"
+                "Check:\n"
+                "  - GPU drivers are installed\n"
+                "  - CUDA toolkit is installed\n"
+                "  - PyTorch was installed with CUDA support\n"
+                "Run: python -c 'import torch; print(torch.cuda.is_available())'\n"
+            )
+            print(error_msg, file=sys.stderr, flush=True)
+            raise RuntimeError("CUDA is not available but is required for vLLM") from None
+        
+        logger.info(f"[vLLM] CUDA is available. Found {torch.cuda.device_count()} GPU(s)")
+        
         try:
             from vllm import LLM, SamplingParams
         except ImportError as e:
+            error_msg = (
+                "\n❌ vLLM is not installed.\n"
+                "Install with: pip install vllm\n"
+                "Note: vLLM requires Linux and is not supported on macOS.\n"
+                f"Import error: {str(e)}\n"
+            )
+            print(error_msg, file=sys.stderr, flush=True)
             raise ImportError(
                 "vLLM is not installed. Install it with: pip install vllm\n"
                 "Note: vLLM requires Linux and is not supported on macOS."
@@ -253,8 +316,25 @@ class VLLMService:
 
             # Log full traceback for debugging
             import traceback
+            import sys
 
-            logger.error(f"[vLLM] Full traceback:\n{traceback.format_exc()}")
+            traceback_str = traceback.format_exc()
+            logger.error(f"[vLLM] Full traceback:\n{traceback_str}")
+            
+            # Also print to stderr so it's visible in Ray logs
+            error_msg = (
+                f"\n{'='*70}\n"
+                f"❌ vLLM Text Model Initialization Failed\n"
+                f"{'='*70}\n"
+                f"Error: {type(e).__name__}: {str(e)}\n"
+                f"Model: {model_name}\n"
+                f"GPU Memory Utilization: {gpu_memory_utilization}\n"
+                f"Max Model Length: {max_model_len}\n"
+                f"{'='*70}\n"
+                f"Traceback:\n{traceback_str}\n"
+                f"{'='*70}\n"
+            )
+            print(error_msg, file=sys.stderr, flush=True)
 
             # Re-raise with more context but preserve original exception
             raise RuntimeError(
