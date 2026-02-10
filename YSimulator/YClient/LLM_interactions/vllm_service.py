@@ -123,7 +123,10 @@ class VLLMService:
                         logger.info(
                             f"[vLLM] Set CUDA_VISIBLE_DEVICES={selected_gpu} before vLLM initialization"
                         )
-                        # After setting CUDA_VISIBLE_DEVICES, the selected GPU becomes device 0
+                        # After setting CUDA_VISIBLE_DEVICES to a specific GPU (e.g., "2"),
+                        # that physical GPU becomes logically remapped to device 0 from CUDA's
+                        # perspective within this process. All subsequent CUDA operations will
+                        # see it as cuda:0, even though it's physically GPU 2 on the system.
                         selected_gpu = 0
                     else:
                         logger.warning(

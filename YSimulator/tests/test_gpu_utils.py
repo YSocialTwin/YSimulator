@@ -17,6 +17,9 @@ from unittest.mock import MagicMock, patch
 sys.modules["torch"] = MagicMock()
 sys.modules["torch.cuda"] = MagicMock()
 
+# Test tolerance for memory estimation (10% tolerance for rounding and estimation errors)
+MEMORY_ESTIMATION_TOLERANCE = 0.1
+
 
 class TestGPUMemoryInfo(unittest.TestCase):
     """Test GPU memory information functions."""
@@ -213,8 +216,8 @@ class TestMemoryEstimation(unittest.TestCase):
         # required = 11.7 / 0.9 = 13.0 GB
         expected_gb = ((3 * 2) * 1.5) * (1.0 + (40000 / 40000) * 0.3) / 0.9
         
-        # Allow 10% tolerance for rounding
-        self.assertAlmostEqual(required_gb, expected_gb, delta=expected_gb * 0.1)
+        # Allow tolerance for rounding
+        self.assertAlmostEqual(required_gb, expected_gb, delta=expected_gb * MEMORY_ESTIMATION_TOLERANCE)
 
     def test_estimate_required_vllm_memory_7b(self):
         """Test memory estimation for 7B model."""
@@ -233,8 +236,8 @@ class TestMemoryEstimation(unittest.TestCase):
         # required = 27.3 / 0.9 = 30.33 GB
         expected_gb = ((7 * 2) * 1.5) * (1.0 + (40000 / 40000) * 0.3) / 0.9
         
-        # Allow 10% tolerance for rounding
-        self.assertAlmostEqual(required_gb, expected_gb, delta=expected_gb * 0.1)
+        # Allow tolerance for rounding
+        self.assertAlmostEqual(required_gb, expected_gb, delta=expected_gb * MEMORY_ESTIMATION_TOLERANCE)
 
     def test_estimate_required_vllm_memory_unknown_model(self):
         """Test memory estimation for unknown model (should use conservative default)."""
@@ -253,8 +256,8 @@ class TestMemoryEstimation(unittest.TestCase):
         # required = 27.3 / 0.9 = 30.33 GB
         expected_gb = ((7 * 2) * 1.5) * (1.0 + (40000 / 40000) * 0.3) / 0.9
         
-        # Allow 10% tolerance for rounding
-        self.assertAlmostEqual(required_gb, expected_gb, delta=expected_gb * 0.1)
+        # Allow tolerance for rounding
+        self.assertAlmostEqual(required_gb, expected_gb, delta=expected_gb * MEMORY_ESTIMATION_TOLERANCE)
 
 
 if __name__ == "__main__":

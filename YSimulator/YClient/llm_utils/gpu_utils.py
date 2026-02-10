@@ -11,6 +11,11 @@ from typing import List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
+# Constants for memory estimation
+BASELINE_SEQUENCE_LENGTH = 40000  # Standard sequence length for memory calculation
+SEQUENCE_SCALING_FACTOR = 0.3  # Memory scaling factor per additional sequence length
+KV_CACHE_OVERHEAD_MULTIPLIER = 1.5  # Overhead multiplier for KV cache (50% additional)
+
 
 def get_gpu_memory_info(device_id: int = 0) -> Tuple[float, float]:
     """
@@ -244,13 +249,13 @@ def estimate_required_vllm_memory(
 
     # Rough estimate: ~2 bytes per parameter (FP16) + KV cache + overhead
     # Model weights: params * 2 bytes
-    # KV cache and overhead: roughly 50% additional (represented by 1.5 multiplier)
-    base_memory_gb = (params_billions * 2) * 1.5
+    # KV cache and overhead: roughly 50% additional (represented by multiplier)
+    base_memory_gb = (params_billions * 2) * KV_CACHE_OVERHEAD_MULTIPLIER
 
     # Account for max_model_len - longer sequences need more KV cache
     # Rough scaling: every 10k tokens adds ~10% memory for 7B model
-    # 40000 is the baseline sequence length, 0.3 is the scaling factor
-    length_factor = 1.0 + (max_model_len / 40000) * 0.3
+    # Uses baseline sequence length and scaling factor as constants
+    length_factor = 1.0 + (max_model_len / BASELINE_SEQUENCE_LENGTH) * SEQUENCE_SCALING_FACTOR
 
     estimated_memory = base_memory_gb * length_factor
 
