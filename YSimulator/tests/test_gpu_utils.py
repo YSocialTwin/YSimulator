@@ -206,10 +206,15 @@ class TestMemoryEstimation(unittest.TestCase):
             gpu_memory_utilization=0.9,
         )
 
-        # 3B model should require roughly 4-12 GB depending on sequence length
-        # With utilization=0.9, required free memory should be roughly 5-14 GB
-        self.assertGreater(required_gb, 4.0)
-        self.assertLess(required_gb, 15.0)
+        # Expected calculation for 3B model:
+        # params = 3B, base_memory = (3 * 2) * 1.5 = 9 GB
+        # length_factor = 1.0 + (40000/40000) * 0.3 = 1.3
+        # estimated = 9 * 1.3 = 11.7 GB
+        # required = 11.7 / 0.9 = 13.0 GB
+        expected_gb = ((3 * 2) * 1.5) * (1.0 + (40000 / 40000) * 0.3) / 0.9
+        
+        # Allow 10% tolerance for rounding
+        self.assertAlmostEqual(required_gb, expected_gb, delta=expected_gb * 0.1)
 
     def test_estimate_required_vllm_memory_7b(self):
         """Test memory estimation for 7B model."""
@@ -221,9 +226,15 @@ class TestMemoryEstimation(unittest.TestCase):
             gpu_memory_utilization=0.9,
         )
 
-        # 7B model should require roughly 10-31 GB depending on sequence length
-        self.assertGreater(required_gb, 8.0)
-        self.assertLess(required_gb, 32.0)
+        # Expected calculation for 7B model:
+        # params = 7B, base_memory = (7 * 2) * 1.5 = 21 GB
+        # length_factor = 1.0 + (40000/40000) * 0.3 = 1.3
+        # estimated = 21 * 1.3 = 27.3 GB
+        # required = 27.3 / 0.9 = 30.33 GB
+        expected_gb = ((7 * 2) * 1.5) * (1.0 + (40000 / 40000) * 0.3) / 0.9
+        
+        # Allow 10% tolerance for rounding
+        self.assertAlmostEqual(required_gb, expected_gb, delta=expected_gb * 0.1)
 
     def test_estimate_required_vllm_memory_unknown_model(self):
         """Test memory estimation for unknown model (should use conservative default)."""
@@ -236,8 +247,14 @@ class TestMemoryEstimation(unittest.TestCase):
         )
 
         # Should default to 7B estimate
-        self.assertGreater(required_gb, 8.0)
-        self.assertLess(required_gb, 32.0)
+        # params = 7B, base_memory = (7 * 2) * 1.5 = 21 GB
+        # length_factor = 1.0 + (40000/40000) * 0.3 = 1.3
+        # estimated = 21 * 1.3 = 27.3 GB
+        # required = 27.3 / 0.9 = 30.33 GB
+        expected_gb = ((7 * 2) * 1.5) * (1.0 + (40000 / 40000) * 0.3) / 0.9
+        
+        # Allow 10% tolerance for rounding
+        self.assertAlmostEqual(required_gb, expected_gb, delta=expected_gb * 0.1)
 
 
 if __name__ == "__main__":

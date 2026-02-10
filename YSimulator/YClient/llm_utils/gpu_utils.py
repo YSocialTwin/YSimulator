@@ -244,11 +244,12 @@ def estimate_required_vllm_memory(
 
     # Rough estimate: ~2 bytes per parameter (FP16) + KV cache + overhead
     # Model weights: params * 2 bytes
-    # KV cache and overhead: roughly 50% additional
+    # KV cache and overhead: roughly 50% additional (represented by 1.5 multiplier)
     base_memory_gb = (params_billions * 2) * 1.5
 
     # Account for max_model_len - longer sequences need more KV cache
     # Rough scaling: every 10k tokens adds ~10% memory for 7B model
+    # 40000 is the baseline sequence length, 0.3 is the scaling factor
     length_factor = 1.0 + (max_model_len / 40000) * 0.3
 
     estimated_memory = base_memory_gb * length_factor

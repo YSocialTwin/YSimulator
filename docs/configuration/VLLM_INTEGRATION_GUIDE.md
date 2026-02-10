@@ -291,6 +291,44 @@ torch.cuda.OutOfMemoryError: CUDA out of memory
 3. Reduce `max_tokens`
 4. Close other GPU-using applications
 
+### GPU Memory Allocation Error (Multi-GPU Systems)
+
+**Error:**
+```
+ValueError: Free memory on device cuda:0 (3.71/39.39 GiB) on startup is less than 
+desired GPU memory utilization (0.15, 5.91 GiB). Decrease GPU memory utilization 
+or reduce GPU memory used by other processes.
+```
+
+**Cause:**
+This error occurs on multi-GPU systems when cuda:0 doesn't have enough free memory, even though other GPUs might have sufficient memory available.
+
+**Automatic Solution (v1.x+):**
+YSimulator now automatically handles this by:
+1. Detecting Ray-assigned GPUs via `CUDA_VISIBLE_DEVICES`
+2. Dynamically selecting a GPU with sufficient free memory
+3. Setting the environment to use the selected GPU
+
+No configuration changes are needed - the system will automatically select an appropriate GPU.
+
+**Manual Solutions (if automatic selection fails):**
+1. Reduce `gpu_memory_utilization` to fit within available memory:
+   ```json
+   {
+     "llm": {
+       "backend": "vllm",
+       "gpu_memory_utilization": 0.5
+     }
+   }
+   ```
+
+2. Manually specify which GPU to use by setting `CUDA_VISIBLE_DEVICES`:
+   ```bash
+   CUDA_VISIBLE_DEVICES=1 python run_client.py --config example/llm_population_100_vllm
+   ```
+
+3. Close processes using GPU memory on cuda:0, or use a smaller model
+
 ### Model Download Issues
 
 **Error:**
