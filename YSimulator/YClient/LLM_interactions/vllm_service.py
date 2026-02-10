@@ -577,7 +577,7 @@ class VLLMService:
                         raise ValueError(f"Missing cluster_id in request {idx}")
                     post_content = req.get("post_content", "")
 
-                    # Build persona
+                    # Build persona (no agent_attrs in basic batch)
                     persona = self._build_persona(cluster_id, None)
 
                     # Get prompt templates
