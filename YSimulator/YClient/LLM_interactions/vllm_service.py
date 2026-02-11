@@ -422,7 +422,6 @@ class VLLMService:
 
         if enable_prompt_log:
             # Set up prompt logger with file handler
-            import os
             from logging.handlers import RotatingFileHandler
             from pathlib import Path
 
