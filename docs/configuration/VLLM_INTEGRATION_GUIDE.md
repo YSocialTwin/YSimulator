@@ -317,9 +317,9 @@ The GPU selection happens at the very beginning of VLLMService initialization, b
 
 **How It Works with vLLM v1 Engine:**
 vLLM v1 uses multiprocessing to spawn EngineCore subprocesses. To ensure these subprocesses use the correct GPU:
-- `CUDA_VISIBLE_DEVICES` is set in parent process
+- `CUDA_VISIBLE_DEVICES` is set using both `os.environ` and `os.putenv` for reliable subprocess inheritance
+- Multiprocessing start method is configured to 'fork' or 'forkserver' for better environment propagation
 - `torch.cuda.set_device(0)` is called before vLLM initialization (after GPU remapping)
-- Environment variables are explicitly propagated to subprocesses
 - Physical GPU 2 becomes logical device 0 within the process context
 
 **Verification:**
@@ -329,6 +329,8 @@ Check the logs for GPU selection messages:
 [vLLM] Estimated memory for meta-llama/Llama-3.2-3B: 11.70 GB (requires 13.00 GB free with utilization=0.9)
 [vLLM] Dynamically selected GPU 2 with 35.20 GB free (required: 13.00 GB)
 [vLLM] Set CUDA_VISIBLE_DEVICES=2 before vLLM initialization
+[vLLM] Current multiprocessing start method: None
+[vLLM] Set multiprocessing start method to 'fork'
 [vLLM] CUDA is available. Found 6 GPU(s)
 [vLLM] Setting torch.cuda default device to 0 (physical GPU: 2)
 [vLLM] Current CUDA device: 0 (NVIDIA A100-SXM4-40GB)

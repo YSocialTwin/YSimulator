@@ -129,14 +129,17 @@ On multi-GPU systems, cuda:0 may already be in use by other processes, but vLLM 
 YSimulator automatically:
 1. Detects available GPUs and their memory
 2. Selects a GPU with sufficient free memory
-3. Sets `CUDA_VISIBLE_DEVICES` to use the selected GPU
-4. Configures torch to use the correct device
-5. Ensures vLLM subprocesses inherit the GPU selection
+3. Sets `CUDA_VISIBLE_DEVICES` using both `os.environ` and `os.putenv` for reliable subprocess inheritance
+4. Configures multiprocessing start method ('fork' or 'forkserver') for better environment propagation
+5. Configures torch to use the correct device
+6. Ensures vLLM subprocesses inherit the GPU selection
 
 Check logs for GPU selection confirmation:
 ```
 [vLLM] Dynamically selected GPU 2 with sufficient memory
 [vLLM] Set CUDA_VISIBLE_DEVICES=2 before vLLM initialization
+[vLLM] Current multiprocessing start method: None
+[vLLM] Set multiprocessing start method to 'fork'
 [vLLM] Setting torch.cuda default device to 0 (physical GPU: 2)
 [vLLM] Current CUDA device: 0 (NVIDIA A100-SXM4-40GB)
 [vLLM] GPU memory: 35.20 GB free / 39.39 GB total
