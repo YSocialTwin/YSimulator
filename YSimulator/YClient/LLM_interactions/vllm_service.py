@@ -156,16 +156,11 @@ class VLLMService:
                         # This must happen before importing vllm or torch.cuda
                         physical_gpu_id = selected_gpu
                         
-                        # Set the environment variable
+                        # Set the environment variable in multiple ways to ensure subprocess inheritance
                         os.environ["CUDA_VISIBLE_DEVICES"] = str(selected_gpu)
-                        
-                        # IMPORTANT: For vLLM v1 engine with multiprocessing, we need to ensure
-                        # the environment variable is propagated to child processes
-                        # Export it to ensure subprocesses inherit it
-                        import sys
-                        if hasattr(sys, 'frozen'):
-                            # For frozen executables
-                            os.putenv("CUDA_VISIBLE_DEVICES", str(selected_gpu))
+                        # Also use putenv to ensure it's exported to child processes
+                        # This is critical for vLLM v1 multiprocessing subprocesses
+                        os.putenv("CUDA_VISIBLE_DEVICES", str(selected_gpu))
                         
                         logger.info(
                             f"[vLLM] Set CUDA_VISIBLE_DEVICES={selected_gpu} before vLLM initialization"
@@ -194,7 +189,36 @@ class VLLMService:
                 logger.debug(f"[vLLM] GPU selection error traceback:\n{traceback.format_exc()}")
 
         # ============================================================================
-        # NOW it's safe to import vLLM (after GPU selection)
+        # Configure multiprocessing for vLLM subprocesses
+        # ============================================================================
+        # vLLM v1 uses multiprocessing to spawn EngineCore subprocesses
+        # We need to ensure these subprocesses inherit the correct environment
+        try:
+            import multiprocessing
+            # Get current start method
+            current_method = multiprocessing.get_start_method(allow_none=True)
+            logger.info(f"[vLLM] Current multiprocessing start method: {current_method}")
+            
+            # Try to set start method to 'fork' or 'forkserver' for better environment inheritance
+            # 'spawn' doesn't inherit environment well on some systems
+            # Note: start method can only be set once, so we check if it's already set
+            if current_method is None:
+                try:
+                    # 'fork' is best for environment inheritance but not available on Windows
+                    multiprocessing.set_start_method('fork', force=False)
+                    logger.info("[vLLM] Set multiprocessing start method to 'fork'")
+                except (RuntimeError, ValueError):
+                    # 'fork' not available or already set, try forkserver
+                    try:
+                        multiprocessing.set_start_method('forkserver', force=False)
+                        logger.info("[vLLM] Set multiprocessing start method to 'forkserver'")
+                    except (RuntimeError, ValueError):
+                        logger.warning("[vLLM] Could not set multiprocessing start method")
+        except Exception as e:
+            logger.warning(f"[vLLM] Failed to configure multiprocessing: {e}")
+
+        # ============================================================================
+        # NOW it's safe to import vLLM (after GPU selection and multiprocessing config)
         # ============================================================================
         # First, validate that dependencies are available
         import sys
