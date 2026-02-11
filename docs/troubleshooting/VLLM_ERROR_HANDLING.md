@@ -103,7 +103,7 @@ python -c "import vllm; print(f'vLLM version: {vllm.__version__}')"
 
 ---
 
-### Error: vLLM Model Initialization Failed
+### Error: vLLM Model Initialization Failed (Multi-GPU Systems)
 
 **Error Message:**
 ```
@@ -115,9 +115,34 @@ Model: meta-llama/Llama-3.2-3B
 GPU Memory Utilization: 0.9
 Max Model Length: 40000
 ======================================================================
+
+OR
+
+(EngineCore_DP0 pid=16535) ValueError: Free memory on device cuda:0 (3.65/39.39 GiB) 
+on startup is less than desired GPU memory utilization (0.15, 5.91 GiB)
 ```
 
-**Solutions:**
+**Cause:**
+On multi-GPU systems, cuda:0 may already be in use by other processes, but vLLM tries to use it by default.
+
+**Automatic Solution:**
+YSimulator automatically:
+1. Detects available GPUs and their memory
+2. Selects a GPU with sufficient free memory
+3. Sets `CUDA_VISIBLE_DEVICES` to use the selected GPU
+4. Configures torch to use the correct device
+5. Ensures vLLM subprocesses inherit the GPU selection
+
+Check logs for GPU selection confirmation:
+```
+[vLLM] Dynamically selected GPU 2 with sufficient memory
+[vLLM] Set CUDA_VISIBLE_DEVICES=2 before vLLM initialization
+[vLLM] Setting torch.cuda default device to 0 (physical GPU: 2)
+[vLLM] Current CUDA device: 0 (NVIDIA A100-SXM4-40GB)
+[vLLM] GPU memory: 35.20 GB free / 39.39 GB total
+```
+
+**Manual Solutions:**
 
 1. **Reduce GPU memory utilization:**
    ```json

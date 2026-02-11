@@ -309,19 +309,35 @@ YSimulator now automatically handles this by:
 2. **Detects Ray-assigned GPUs**: Reads `CUDA_VISIBLE_DEVICES` if Ray assigned specific GPUs
 3. **Dynamically selects GPU**: Chooses a GPU with sufficient free memory based on model requirements
 4. **Sets environment early**: Sets `CUDA_VISIBLE_DEVICES` BEFORE importing vLLM/PyTorch to avoid locking to cuda:0
-5. **Falls back gracefully**: Warns if no GPU has sufficient memory but still attempts initialization
+5. **Configures torch device**: Sets `torch.cuda.set_device()` to ensure vLLM subprocesses use correct GPU
+6. **Ensures subprocess inheritance**: Properly propagates environment variables to vLLM v1 engine subprocesses
+7. **Falls back gracefully**: Warns if no GPU has sufficient memory but still attempts initialization
 
-The GPU selection happens at the very beginning of VLLMService initialization, before any CUDA operations, ensuring the correct GPU is used.
+The GPU selection happens at the very beginning of VLLMService initialization, before any CUDA operations, ensuring the correct GPU is used even when vLLM spawns subprocesses.
+
+**How It Works with vLLM v1 Engine:**
+vLLM v1 uses multiprocessing to spawn EngineCore subprocesses. To ensure these subprocesses use the correct GPU:
+- `CUDA_VISIBLE_DEVICES` is set in parent process
+- `torch.cuda.set_device(0)` is called before vLLM initialization (after GPU remapping)
+- Environment variables are explicitly propagated to subprocesses
+- Physical GPU 2 becomes logical device 0 within the process context
 
 **Verification:**
 Check the logs for GPU selection messages:
 ```
 [vLLM] Ray has not assigned a specific GPU, selecting based on available memory
 [vLLM] Estimated memory for meta-llama/Llama-3.2-3B: 11.70 GB (requires 13.00 GB free with utilization=0.9)
-[vLLM] Dynamically selected GPU 1 with 35.20 GB free (required: 13.00 GB)
-[vLLM] Set CUDA_VISIBLE_DEVICES=1 before vLLM initialization
+[vLLM] Dynamically selected GPU 2 with 35.20 GB free (required: 13.00 GB)
+[vLLM] Set CUDA_VISIBLE_DEVICES=2 before vLLM initialization
+[vLLM] CUDA is available. Found 6 GPU(s)
+[vLLM] Setting torch.cuda default device to 0 (physical GPU: 2)
+[vLLM] Current CUDA device: 0 (NVIDIA A100-SXM4-40GB)
+[vLLM] GPU memory: 35.20 GB free / 39.39 GB total
+[vLLM] CUDA_VISIBLE_DEVICES: 2
 [vLLM] Initializing vLLM engine with text model=meta-llama/Llama-3.2-3B...
 ```
+
+Note: After setting `CUDA_VISIBLE_DEVICES=2`, the physical GPU 2 becomes logical device 0 within the process. This is normal CUDA behavior.
 
 **GPU Selection Logging:**
 GPU selection information is automatically logged to `{client_name}_llm_usage.log` for traceability. The log file is located in the `logs/` directory within your configuration folder. Example log entry:
