@@ -21,6 +21,12 @@ pip install vllm>=0.6.0
 - CUDA-compatible GPU with adequate VRAM
 - Python 3.8 or higher
 
+**Recommended for Multi-GPU Systems:**
+```bash
+pip install nvidia-ml-py
+```
+This enables GPU detection without CUDA initialization, improving GPU selection on multi-GPU systems.
+
 ### 2. Configure Backend
 
 In your `simulation_config.json`, set the LLM backend:
@@ -305,18 +311,27 @@ This error occurs on multi-GPU systems when cuda:0 doesn't have enough free memo
 
 **Automatic Solution (v1.x+):**
 YSimulator now automatically handles this by:
-1. **BEFORE any CUDA initialization**: Checks available memory on all GPUs
+1. **Early GPU detection (without CUDA init)**: Uses nvidia-ml-py (pynvml) to query GPU memory WITHOUT initializing CUDA
 2. **Detects Ray-assigned GPUs**: Reads `CUDA_VISIBLE_DEVICES` if Ray assigned specific GPUs
 3. **Dynamically selects GPU**: Chooses a GPU with sufficient free memory based on model requirements
-4. **Sets environment early**: Sets `CUDA_VISIBLE_DEVICES` BEFORE importing vLLM/PyTorch to avoid locking to cuda:0
-5. **Configures torch device**: Sets `torch.cuda.set_device()` to ensure vLLM subprocesses use correct GPU
-6. **Ensures subprocess inheritance**: Properly propagates environment variables to vLLM v1 engine subprocesses
+4. **Sets environment FIRST**: Sets `CUDA_VISIBLE_DEVICES` at the very start of `__init__()` before ANY operations
+5. **Then imports vLLM/PyTorch**: CUDA initializes on the correct GPU from the start
+6. **Subprocess inheritance**: Environment variables properly propagate to vLLM v1 engine subprocesses (even with 'spawn')
 7. **Falls back gracefully**: Warns if no GPU has sufficient memory but still attempts initialization
 
-The GPU selection happens at the very beginning of VLLMService initialization, before any CUDA operations, ensuring the correct GPU is used even when vLLM spawns subprocesses.
+**Key Innovation: pynvml for GPU Detection**
+
+Using nvidia-ml-py (pynvml) instead of torch for GPU queries:
+- ✅ No CUDA initialization during GPU detection
+- ✅ Can query all GPUs before setting CUDA_VISIBLE_DEVICES  
+- ✅ Lightweight and fast
+- ✅ Works perfectly in Docker with nvidia-container-toolkit
+
+The GPU selection happens at the absolute beginning of VLLMService `__init__()`, before any CUDA operations, ensuring the correct GPU is used even when vLLM spawns subprocesses.
 
 **How It Works with vLLM v1 Engine:**
 vLLM v1 uses multiprocessing to spawn EngineCore subprocesses. To ensure these subprocesses use the correct GPU:
+- GPU selection happens FIRST in `__init__()`, before any imports
 - `CUDA_VISIBLE_DEVICES` is set using both `os.environ` and `os.putenv` for reliable subprocess inheritance
 - When running as a Ray actor (the normal case), vLLM uses 'spawn' multiprocessing method (required by Ray)
 - When not in Ray, multiprocessing start method is configured to 'fork' or 'forkserver' for better environment propagation
