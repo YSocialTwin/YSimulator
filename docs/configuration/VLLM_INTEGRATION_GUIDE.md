@@ -318,9 +318,18 @@ The GPU selection happens at the very beginning of VLLMService initialization, b
 **How It Works with vLLM v1 Engine:**
 vLLM v1 uses multiprocessing to spawn EngineCore subprocesses. To ensure these subprocesses use the correct GPU:
 - `CUDA_VISIBLE_DEVICES` is set using both `os.environ` and `os.putenv` for reliable subprocess inheritance
-- Multiprocessing start method is configured to 'fork' or 'forkserver' for better environment propagation
+- When running as a Ray actor (the normal case), vLLM uses 'spawn' multiprocessing method (required by Ray)
+- When not in Ray, multiprocessing start method is configured to 'fork' or 'forkserver' for better environment propagation
 - `torch.cuda.set_device(0)` is called before vLLM initialization (after GPU remapping)
 - Physical GPU 2 becomes logical device 0 within the process context
+
+**Note on Ray Actors:**
+VLLMService runs as a Ray actor (`@ray.remote`). In this context, vLLM automatically uses the 'spawn' multiprocessing method because:
+- Ray actors require 'spawn' for safety and isolation
+- CUDA is already initialized when the actor starts
+- vLLM detects this and enforces 'spawn' internally
+
+Despite using 'spawn', GPU selection works correctly because `os.putenv()` ensures `CUDA_VISIBLE_DEVICES` is inherited by spawned subprocesses.
 
 **Verification:**
 Check the logs for GPU selection messages:
@@ -330,7 +339,7 @@ Check the logs for GPU selection messages:
 [vLLM] Dynamically selected GPU 2 with 35.20 GB free (required: 13.00 GB)
 [vLLM] Set CUDA_VISIBLE_DEVICES=2 before vLLM initialization
 [vLLM] Current multiprocessing start method: None
-[vLLM] Set multiprocessing start method to 'fork'
+[vLLM] Running in Ray actor - vLLM will use 'spawn' multiprocessing method (this is expected and required for Ray actors)
 [vLLM] CUDA is available. Found 6 GPU(s)
 [vLLM] Setting torch.cuda default device to 0 (physical GPU: 2)
 [vLLM] Current CUDA device: 0 (NVIDIA A100-SXM4-40GB)

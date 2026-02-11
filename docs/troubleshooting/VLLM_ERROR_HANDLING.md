@@ -130,7 +130,7 @@ YSimulator automatically:
 1. Detects available GPUs and their memory
 2. Selects a GPU with sufficient free memory
 3. Sets `CUDA_VISIBLE_DEVICES` using both `os.environ` and `os.putenv` for reliable subprocess inheritance
-4. Configures multiprocessing start method ('fork' or 'forkserver') for better environment propagation
+4. Detects Ray actor context and handles multiprocessing appropriately (vLLM uses 'spawn' in Ray actors)
 5. Configures torch to use the correct device
 6. Ensures vLLM subprocesses inherit the GPU selection
 
@@ -139,11 +139,14 @@ Check logs for GPU selection confirmation:
 [vLLM] Dynamically selected GPU 2 with sufficient memory
 [vLLM] Set CUDA_VISIBLE_DEVICES=2 before vLLM initialization
 [vLLM] Current multiprocessing start method: None
-[vLLM] Set multiprocessing start method to 'fork'
+[vLLM] Running in Ray actor - vLLM will use 'spawn' multiprocessing method
+       (this is expected and required for Ray actors)
 [vLLM] Setting torch.cuda default device to 0 (physical GPU: 2)
 [vLLM] Current CUDA device: 0 (NVIDIA A100-SXM4-40GB)
 [vLLM] GPU memory: 35.20 GB free / 39.39 GB total
 ```
+
+**Note:** When running as a Ray actor (the normal case), vLLM automatically uses 'spawn' multiprocessing method. This is required by Ray and is expected behavior. GPU selection still works correctly via `os.putenv()` environment inheritance.
 
 **Manual Solutions:**
 
