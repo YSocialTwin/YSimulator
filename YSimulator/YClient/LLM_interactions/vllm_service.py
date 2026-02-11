@@ -155,7 +155,18 @@ class VLLMService:
                         # CRITICAL: Set CUDA_VISIBLE_DEVICES BEFORE any CUDA operations
                         # This must happen before importing vllm or torch.cuda
                         physical_gpu_id = selected_gpu
+                        
+                        # Set the environment variable
                         os.environ["CUDA_VISIBLE_DEVICES"] = str(selected_gpu)
+                        
+                        # IMPORTANT: For vLLM v1 engine with multiprocessing, we need to ensure
+                        # the environment variable is propagated to child processes
+                        # Export it to ensure subprocesses inherit it
+                        import sys
+                        if hasattr(sys, 'frozen'):
+                            # For frozen executables
+                            os.putenv("CUDA_VISIBLE_DEVICES", str(selected_gpu))
+                        
                         logger.info(
                             f"[vLLM] Set CUDA_VISIBLE_DEVICES={selected_gpu} before vLLM initialization"
                         )
@@ -215,6 +226,25 @@ class VLLMService:
             raise RuntimeError("CUDA is not available but is required for vLLM") from None
         
         logger.info(f"[vLLM] CUDA is available. Found {torch.cuda.device_count()} GPU(s)")
+        
+        # CRITICAL: Set the default CUDA device to ensure vLLM subprocesses use the correct GPU
+        # This is necessary because vLLM v1 engine spawns subprocesses that need to know which GPU to use
+        if selected_gpu is not None and tensor_parallel_size == 1:
+            # After setting CUDA_VISIBLE_DEVICES, the selected GPU is remapped to device 0
+            # But we need to explicitly set it for torch before vLLM creates subprocesses
+            logger.info(f"[vLLM] Setting torch.cuda default device to 0 (physical GPU: {gpu_selection_info.get('physical_gpu_id')})")
+            torch.cuda.set_device(0)
+            # Verify the device is set correctly
+            current_device = torch.cuda.current_device()
+            device_name = torch.cuda.get_device_name(current_device)
+            free_mem, total_mem = torch.cuda.mem_get_info(current_device)
+            logger.info(f"[vLLM] Current CUDA device: {current_device} ({device_name})")
+            logger.info(f"[vLLM] GPU memory: {free_mem / 1024**3:.2f} GB free / {total_mem / 1024**3:.2f} GB total")
+            logger.info(f"[vLLM] CUDA_VISIBLE_DEVICES: {os.environ.get('CUDA_VISIBLE_DEVICES')}")
+        elif selected_gpu is None:
+            # No GPU was selected, log the default device
+            logger.info(f"[vLLM] Using default CUDA device (no dynamic selection)")
+            logger.info(f"[vLLM] CUDA_VISIBLE_DEVICES: {os.environ.get('CUDA_VISIBLE_DEVICES', 'not set')}")
         
         try:
             from vllm import LLM, SamplingParams
