@@ -3,6 +3,8 @@ GPU utility functions for vLLM service.
 
 This module provides utilities for GPU memory checking and device selection
 to support dynamic GPU allocation on multi-GPU systems.
+
+Uses nvidia-ml-py (pynvml) for GPU queries to avoid CUDA initialization.
 """
 
 import logging
@@ -20,6 +22,9 @@ KV_CACHE_OVERHEAD_MULTIPLIER = 1.5  # Overhead multiplier for KV cache (50% addi
 def get_gpu_memory_info(device_id: int = 0) -> Tuple[float, float]:
     """
     Get memory information for a specific GPU device.
+    
+    Uses pynvml (nvidia-ml-py) to query GPU without initializing CUDA.
+    This is critical for early GPU selection before CUDA context creation.
 
     Args:
         device_id: CUDA device ID to query
@@ -31,33 +36,58 @@ def get_gpu_memory_info(device_id: int = 0) -> Tuple[float, float]:
         RuntimeError: If unable to query GPU memory
     """
     try:
-        import torch
+        # Try pynvml first (preferred - no CUDA initialization)
+        import pynvml
+        
+        pynvml.nvmlInit()
+        try:
+            handle = pynvml.nvmlDeviceGetHandleByIndex(device_id)
+            info = pynvml.nvmlDeviceGetMemoryInfo(handle)
+            
+            free_gb = info.free / (1024**3)
+            total_gb = info.total / (1024**3)
+            
+            return free_gb, total_gb
+        finally:
+            try:
+                pynvml.nvmlShutdown()
+            except:
+                pass
+                
+    except (ImportError, Exception) as e:
+        logger.debug(f"pynvml not available or failed ({e}), falling back to torch")
+        
+        # Fallback to torch (initializes CUDA - not ideal for early detection)
+        try:
+            import torch
 
-        if not torch.cuda.is_available():
-            raise RuntimeError("CUDA is not available")
+            if not torch.cuda.is_available():
+                raise RuntimeError("CUDA is not available")
 
-        if device_id >= torch.cuda.device_count():
-            raise RuntimeError(
-                f"Invalid device_id {device_id}. Only {torch.cuda.device_count()} GPUs available"
-            )
+            if device_id >= torch.cuda.device_count():
+                raise RuntimeError(
+                    f"Invalid device_id {device_id}. Only {torch.cuda.device_count()} GPUs available"
+                )
 
-        # Get memory stats for the device
-        free_memory = torch.cuda.mem_get_info(device_id)[0]
-        total_memory = torch.cuda.mem_get_info(device_id)[1]
+            # Get memory stats for the device
+            free_memory = torch.cuda.mem_get_info(device_id)[0]
+            total_memory = torch.cuda.mem_get_info(device_id)[1]
 
-        free_gb = free_memory / (1024**3)
-        total_gb = total_memory / (1024**3)
-
-        return free_gb, total_gb
-    except ImportError:
-        raise RuntimeError("PyTorch is not installed. Cannot query GPU memory.")
-    except Exception as e:
-        raise RuntimeError(f"Failed to query GPU memory: {e}")
+            free_gb = free_memory / (1024**3)
+            total_gb = total_memory / (1024**3)
+            
+            return free_gb, total_gb
+        except ImportError:
+            raise RuntimeError("Neither pynvml nor PyTorch is available. Cannot query GPU memory.")
+        except Exception as e:
+            raise RuntimeError(f"Failed to query GPU memory: {e}")
 
 
 def get_all_gpu_memory_info() -> List[Tuple[int, float, float]]:
     """
     Get memory information for all available GPUs.
+    
+    Uses pynvml (nvidia-ml-py) to query GPUs without initializing CUDA.
 
     Returns:
         List of tuples (device_id, free_memory_gb, total_memory_gb)
@@ -66,19 +96,43 @@ def get_all_gpu_memory_info() -> List[Tuple[int, float, float]]:
         RuntimeError: If unable to query GPU memory
     """
     try:
-        import torch
+        # Try pynvml first (preferred - no CUDA initialization)
+        import pynvml
+        
+        pynvml.nvmlInit()
+        try:
+            device_count = pynvml.nvmlDeviceGetCount()
+            gpu_info = []
+            
+            for device_id in range(device_count):
+                free_gb, total_gb = get_gpu_memory_info(device_id)
+                gpu_info.append((device_id, free_gb, total_gb))
+            
+            return gpu_info
+        finally:
+            try:
+                pynvml.nvmlShutdown()
+            except:
+                pass
+                
+    except (ImportError, Exception) as e:
+        logger.debug(f"pynvml not available or failed ({e}), falling back to torch")
+        
+        # Fallback to torch
+        try:
+            import torch
 
-        if not torch.cuda.is_available():
-            raise RuntimeError("CUDA is not available")
+            if not torch.cuda.is_available():
+                raise RuntimeError("CUDA is not available")
 
-        gpu_info = []
-        for device_id in range(torch.cuda.device_count()):
-            free_gb, total_gb = get_gpu_memory_info(device_id)
-            gpu_info.append((device_id, free_gb, total_gb))
+            gpu_info = []
+            for device_id in range(torch.cuda.device_count()):
+                free_gb, total_gb = get_gpu_memory_info(device_id)
+                gpu_info.append((device_id, free_gb, total_gb))
 
-        return gpu_info
-    except ImportError:
-        raise RuntimeError("PyTorch is not installed. Cannot query GPU memory.")
+            return gpu_info
+        except ImportError:
+            raise RuntimeError("Neither pynvml nor PyTorch is available. Cannot query GPU memory.")
 
 
 def select_gpu_with_most_free_memory() -> int:
