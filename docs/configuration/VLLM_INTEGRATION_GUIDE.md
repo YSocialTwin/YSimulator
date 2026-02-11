@@ -391,6 +391,65 @@ cat example/llm_population_100_vllm/logs/client_0_llm_usage.log
 tail -f example/llm_population_100_vllm/logs/client_0_llm_usage.log
 ```
 
+### GPU Fallback Strategy (Automatic Retry)
+
+**What It Does:**
+YSimulator implements an automatic GPU fallback strategy. If vLLM initialization fails on the first selected GPU, the system automatically tries the next available GPU until one works or all GPUs are exhausted.
+
+**How It Works:**
+1. **Get ordered GPU list**: Queries all GPUs sorted by free memory (most free → least free)
+2. **Filter by requirements**: Only includes GPUs with sufficient memory for the model
+3. **Try each GPU**: Attempts vLLM initialization on each GPU in sequence
+4. **Return on success**: Stops retrying as soon as one GPU works
+5. **Fail after exhaustion**: Only raises error after trying all available GPUs
+
+**Example Success Log (2nd GPU works):**
+```
+[GPU Selection] Found 3 candidate GPU(s) with >= 13.00 GB free
+[GPU Attempt 1/3] Trying GPU 2 (35.20 GB free)
+[GPU Attempt 1/3] ❌ Failed on GPU 2 (35.20 GB free): ValueError: Free memory...
+[GPU Attempt 2/3] Trying GPU 1 (28.30 GB free)
+[GPU Attempt 2/3] ✅ Success! vLLM initialized on GPU 1
+```
+
+**Example Exhaustion Log (all GPUs fail):**
+```
+[GPU Selection] Found 3 candidate GPU(s) with >= 13.00 GB free
+[GPU Attempt 1/3] Trying GPU 2 (35.20 GB free)
+[GPU Attempt 1/3] ❌ Failed on GPU 2: ValueError...
+[GPU Attempt 2/3] Trying GPU 1 (28.30 GB free)  
+[GPU Attempt 2/3] ❌ Failed on GPU 1: ValueError...
+[GPU Attempt 3/3] Trying GPU 0 (25.10 GB free)
+[GPU Attempt 3/3] ❌ Failed on GPU 0: ValueError...
+
+======================================================================
+❌ VLLMService Initialization Failed - All GPUs Exhausted
+======================================================================
+Attempted 3 GPU(s):
+  - GPU 2 (35.20 GB free): ValueError: Free memory on device...
+  - GPU 1 (28.30 GB free): ValueError: Free memory on device...
+  - GPU 0 (25.10 GB free): ValueError: Free memory on device...
+
+Last error: RuntimeError: Engine core initialization failed...
+======================================================================
+```
+
+**When Fallback Applies:**
+- ✅ Single-GPU mode (`tensor_parallel_size=1`)
+- ✅ No Ray GPU assignment (dynamic GPU selection enabled)
+- ✅ Multiple GPUs with sufficient memory available
+
+**When Fallback is Disabled:**
+- Ray has assigned specific GPU → respects assignment, no retry
+- Multi-GPU mode (`tensor_parallel_size>1`) → vLLM handles GPU assignment
+- Only one suitable GPU found → tries that GPU only
+
+**Benefits:**
+- **Resilient**: Automatically recovers from transient allocation failures
+- **Efficient**: Uses any available GPU instead of failing immediately
+- **Transparent**: Clear logging shows all attempts and results
+- **Automatic**: No user intervention needed
+
 **Manual Solutions (if automatic selection fails):**
 1. Reduce `gpu_memory_utilization` to fit within available memory:
    ```json
