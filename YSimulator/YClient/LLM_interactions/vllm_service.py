@@ -195,14 +195,32 @@ class VLLMService:
         # We need to ensure these subprocesses inherit the correct environment
         try:
             import multiprocessing
-            # Get current start method
+            
+            # Check if we're running in a Ray actor
+            # Ray actors force 'spawn' method, so vLLM will override any setting we make
+            in_ray_actor = False
+            try:
+                import ray
+                # ray.get_runtime_context() throws if not in Ray context
+                ray.get_runtime_context()
+                in_ray_actor = True
+            except Exception:
+                # Not in Ray context, or Ray not initialized
+                pass
+            
             current_method = multiprocessing.get_start_method(allow_none=True)
             logger.info(f"[vLLM] Current multiprocessing start method: {current_method}")
             
-            # Try to set start method to 'fork' or 'forkserver' for better environment inheritance
-            # 'spawn' doesn't inherit environment well on some systems
-            # Note: start method can only be set once, so we check if it's already set
-            if current_method is None:
+            if in_ray_actor:
+                # When running as a Ray actor, vLLM will override to 'spawn' regardless
+                # of what we set. This is because Ray actors require 'spawn' for safety.
+                logger.info(
+                    "[vLLM] Running in Ray actor - vLLM will use 'spawn' multiprocessing method "
+                    "(this is expected and required for Ray actors)"
+                )
+                # Note: os.putenv() still ensures CUDA_VISIBLE_DEVICES is inherited even with 'spawn'
+            elif current_method is None:
+                # Not in Ray actor, try to set method for better environment inheritance
                 try:
                     # 'fork' is best for environment inheritance but not available on Windows
                     multiprocessing.set_start_method('fork', force=False)
@@ -214,6 +232,8 @@ class VLLMService:
                         logger.info("[vLLM] Set multiprocessing start method to 'forkserver'")
                     except (RuntimeError, ValueError):
                         logger.warning("[vLLM] Could not set multiprocessing start method")
+            else:
+                logger.info(f"[vLLM] Multiprocessing start method already set to '{current_method}'")
         except Exception as e:
             logger.warning(f"[vLLM] Failed to configure multiprocessing: {e}")
 
