@@ -56,6 +56,15 @@ class VLLMService:
                 - max_model_len: Maximum sequence length (default: 40000)
             logging_config: Optional logging configuration dict
         """
+        # ============================================================================
+        # CRITICAL: GPU selection MUST happen FIRST, before ANY other operations
+        # ============================================================================
+        # This MUST be the absolute first thing in __init__ because:
+        # 1. vLLM spawns subprocesses that need to inherit CUDA_VISIBLE_DEVICES
+        # 2. Setting it after CUDA initialization is too late
+        # 3. The environment must be set before ANY imports that might touch CUDA
+        self._set_gpu_env_early(llm_config)
+        
         import sys
         
         try:
@@ -72,6 +81,79 @@ class VLLMService:
             
             # Re-raise to let Ray know the actor failed
             raise
+    
+    def _set_gpu_env_early(self, llm_config: Optional[Dict[str, Any]] = None):
+        """
+        Set CUDA_VISIBLE_DEVICES environment variable as early as possible.
+        
+        This MUST run before any CUDA operations to ensure subprocesses inherit
+        the correct GPU selection. With multiprocessing 'spawn' mode (required by
+        Ray actors), environment variables must be set before subprocess creation.
+        """
+        # Only do dynamic GPU selection for single-GPU mode
+        if llm_config is None:
+            return
+            
+        tensor_parallel_size = llm_config.get("tensor_parallel_size", 1)
+        if tensor_parallel_size != 1:
+            # Multi-GPU mode - let vLLM/Ray handle GPU assignment
+            return
+        
+        # Check if Ray has already assigned a specific GPU via CUDA_VISIBLE_DEVICES
+        cuda_visible = os.environ.get("CUDA_VISIBLE_DEVICES", "")
+        if cuda_visible and cuda_visible != "":
+            # Ray has assigned a GPU, respect it
+            return
+        
+        # Dynamic GPU selection needed
+        try:
+            # Import GPU utilities (minimal imports to avoid CUDA initialization)
+            from YSimulator.YClient.llm_utils.gpu_utils import (
+                select_gpu_with_sufficient_memory,
+                estimate_required_vllm_memory,
+            )
+            
+            # Extract config for memory estimation
+            model_name = llm_config.get("model", "")
+            gpu_memory_util = llm_config.get("gpu_memory_utilization", 0.9)
+            max_model_len = llm_config.get("max_model_len", 40000)
+            
+            # Estimate required memory
+            required_memory_gb = estimate_required_vllm_memory(
+                model_name=model_name,
+                gpu_memory_utilization=gpu_memory_util,
+                max_model_len=max_model_len,
+                tensor_parallel_size=tensor_parallel_size,
+            )
+            
+            # Select GPU with sufficient memory
+            selected_gpu = select_gpu_with_sufficient_memory(
+                required_memory_gb=required_memory_gb
+            )
+            
+            if selected_gpu is not None:
+                # CRITICAL: Set environment variable in multiple ways
+                # This MUST happen before any CUDA operations
+                os.environ["CUDA_VISIBLE_DEVICES"] = str(selected_gpu)
+                os.putenv("CUDA_VISIBLE_DEVICES", str(selected_gpu))
+                
+                # Also print to stderr for immediate visibility
+                import sys
+                print(
+                    f"[VLLMService Early Init] Set CUDA_VISIBLE_DEVICES={selected_gpu} "
+                    f"(required: {required_memory_gb:.2f} GB)",
+                    file=sys.stderr,
+                    flush=True
+                )
+        except Exception as e:
+            # If GPU selection fails, continue with default
+            # Error will be logged in _initialize
+            import sys
+            print(
+                f"[VLLMService Early Init] GPU selection failed: {e}. Using default GPU.",
+                file=sys.stderr,
+                flush=True
+            )
     
     def _initialize(
         self,
@@ -114,79 +196,98 @@ class VLLMService:
         if tensor_parallel_size == 1:
             # Only do dynamic GPU selection for single-GPU mode
             # Multi-GPU mode (tensor parallelism) is handled by vLLM internally
-            try:
-                from YSimulator.YClient.llm_utils.gpu_utils import (
-                    estimate_required_vllm_memory,
-                    get_ray_assigned_gpu,
-                    select_gpu_with_sufficient_memory,
+            
+            # Check if GPU was already selected in early init (via _set_gpu_env_early)
+            cuda_visible = os.environ.get("CUDA_VISIBLE_DEVICES", "")
+            if cuda_visible and cuda_visible != "":
+                logger.info(
+                    f"[vLLM] Using GPU from early initialization: "
+                    f"CUDA_VISIBLE_DEVICES={cuda_visible}"
                 )
-
-                # First, check if Ray has already assigned a specific GPU
-                ray_gpu = get_ray_assigned_gpu()
-                if ray_gpu is not None:
-                    logger.info(
-                        f"[vLLM] Using Ray-assigned GPU device {ray_gpu} "
-                        f"(CUDA_VISIBLE_DEVICES={os.environ.get('CUDA_VISIBLE_DEVICES')})"
-                    )
-                    selected_gpu = ray_gpu
-                    gpu_selection_info["physical_gpu_id"] = ray_gpu
+                try:
+                    physical_gpu_id = int(cuda_visible.split(",")[0])
+                    gpu_selection_info["physical_gpu_id"] = physical_gpu_id
                     gpu_selection_info["logical_gpu_id"] = 0
-                    gpu_selection_info["assignment_method"] = "ray_assigned"
-                else:
-                    # Ray hasn't assigned a specific GPU, select one with sufficient memory
-                    logger.info(
-                        "[vLLM] Ray has not assigned a specific GPU, selecting based on available memory"
+                    gpu_selection_info["assignment_method"] = "dynamic_selection_early"
+                    gpu_selection_info["cuda_visible_devices"] = cuda_visible
+                except (ValueError, IndexError):
+                    pass
+            else:
+                # CUDA_VISIBLE_DEVICES not set in early init, try now (fallback)
+                logger.info("[vLLM] CUDA_VISIBLE_DEVICES not set, attempting fallback GPU selection")
+                try:
+                    from YSimulator.YClient.llm_utils.gpu_utils import (
+                        estimate_required_vllm_memory,
+                        get_ray_assigned_gpu,
+                        select_gpu_with_sufficient_memory,
                     )
 
-                    # Estimate required memory
-                    required_memory_gb = estimate_required_vllm_memory(
-                        model_name=model_name,
-                        max_model_len=max_model_len,
-                        gpu_memory_utilization=gpu_memory_utilization,
-                    )
-
-                    # Select a GPU with sufficient memory
-                    selected_gpu = select_gpu_with_sufficient_memory(required_memory_gb)
-
-                    if selected_gpu is not None:
+                    # First, check if Ray has already assigned a specific GPU
+                    ray_gpu = get_ray_assigned_gpu()
+                    if ray_gpu is not None:
                         logger.info(
-                            f"[vLLM] Dynamically selected GPU {selected_gpu} with sufficient memory"
+                            f"[vLLM] Using Ray-assigned GPU device {ray_gpu}"
                         )
-                        # CRITICAL: Set CUDA_VISIBLE_DEVICES BEFORE any CUDA operations
-                        # This must happen before importing vllm or torch.cuda
-                        physical_gpu_id = selected_gpu
-                        
-                        # Set the environment variable in multiple ways to ensure subprocess inheritance
-                        os.environ["CUDA_VISIBLE_DEVICES"] = str(selected_gpu)
-                        # Also use putenv to ensure it's exported to child processes
-                        # This is critical for vLLM v1 multiprocessing subprocesses
-                        os.putenv("CUDA_VISIBLE_DEVICES", str(selected_gpu))
-                        
-                        logger.info(
-                            f"[vLLM] Set CUDA_VISIBLE_DEVICES={selected_gpu} before vLLM initialization"
-                        )
-                        # After setting CUDA_VISIBLE_DEVICES to a specific GPU (e.g., "2"),
-                        # that physical GPU becomes logically remapped to device 0 from CUDA's
-                        # perspective within this process. All subsequent CUDA operations will
-                        # see it as cuda:0, even though it's physically GPU 2 on the system.
-                        selected_gpu = 0
-                        gpu_selection_info["physical_gpu_id"] = physical_gpu_id
+                        selected_gpu = ray_gpu
+                        gpu_selection_info["physical_gpu_id"] = ray_gpu
                         gpu_selection_info["logical_gpu_id"] = 0
-                        gpu_selection_info["assignment_method"] = "dynamic_selection"
-                        gpu_selection_info["cuda_visible_devices"] = str(physical_gpu_id)
+                        gpu_selection_info["assignment_method"] = "ray_assigned"
                     else:
-                        logger.warning(
-                            f"[vLLM] No GPU found with sufficient memory ({required_memory_gb:.2f} GB). "
-                            f"Will attempt initialization with default GPU, but it may fail."
+                        # Ray hasn't assigned a specific GPU, select one with sufficient memory
+                        logger.info(
+                            "[vLLM] Ray has not assigned a specific GPU, selecting based on available memory"
                         )
-            except Exception as e:
-                logger.warning(
-                    f"[vLLM] Failed to perform dynamic GPU selection: {e}. "
-                    f"Will use default GPU assignment."
-                )
-                import traceback
 
-                logger.debug(f"[vLLM] GPU selection error traceback:\n{traceback.format_exc()}")
+                        # Estimate required memory
+                        required_memory_gb = estimate_required_vllm_memory(
+                            model_name=model_name,
+                            max_model_len=max_model_len,
+                            gpu_memory_utilization=gpu_memory_utilization,
+                        )
+
+                        # Select a GPU with sufficient memory
+                        selected_gpu = select_gpu_with_sufficient_memory(required_memory_gb)
+
+                        if selected_gpu is not None:
+                            logger.warning(
+                                f"[vLLM] Late GPU selection (GPU {selected_gpu}). "
+                                f"Note: Early GPU selection in __init__ is preferred for subprocess inheritance."
+                            )
+                            # CRITICAL: Set CUDA_VISIBLE_DEVICES BEFORE any CUDA operations
+                            # This must happen before importing vllm or torch.cuda
+                            physical_gpu_id = selected_gpu
+                            
+                            # Set the environment variable in multiple ways to ensure subprocess inheritance
+                            os.environ["CUDA_VISIBLE_DEVICES"] = str(selected_gpu)
+                            # Also use putenv to ensure it's exported to child processes
+                            # This is critical for vLLM v1 multiprocessing subprocesses
+                            os.putenv("CUDA_VISIBLE_DEVICES", str(selected_gpu))
+                            
+                            logger.info(
+                                f"[vLLM] Set CUDA_VISIBLE_DEVICES={selected_gpu} before vLLM initialization"
+                            )
+                            # After setting CUDA_VISIBLE_DEVICES to a specific GPU (e.g., "2"),
+                            # that physical GPU becomes logically remapped to device 0 from CUDA's
+                            # perspective within this process. All subsequent CUDA operations will
+                            # see it as cuda:0, even though it's physically GPU 2 on the system.
+                            selected_gpu = 0
+                            gpu_selection_info["physical_gpu_id"] = physical_gpu_id
+                            gpu_selection_info["logical_gpu_id"] = 0
+                            gpu_selection_info["assignment_method"] = "dynamic_selection_late"
+                            gpu_selection_info["cuda_visible_devices"] = str(physical_gpu_id)
+                        else:
+                            logger.warning(
+                                f"[vLLM] No GPU found with sufficient memory ({required_memory_gb:.2f} GB). "
+                                f"Will attempt initialization with default GPU, but it may fail."
+                            )
+                except Exception as e:
+                    logger.warning(
+                        f"[vLLM] Failed to perform dynamic GPU selection: {e}. "
+                        f"Will use default GPU assignment."
+                    )
+                    import traceback
+
+                    logger.debug(f"[vLLM] GPU selection error traceback:\n{traceback.format_exc()}")
 
         # ============================================================================
         # Configure multiprocessing for vLLM subprocesses
