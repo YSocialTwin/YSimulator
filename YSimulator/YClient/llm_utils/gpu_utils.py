@@ -19,6 +19,35 @@ SEQUENCE_SCALING_FACTOR = 0.3  # Memory scaling factor per additional sequence l
 KV_CACHE_OVERHEAD_MULTIPLIER = 1.5  # Overhead multiplier for KV cache (50% additional)
 
 
+def _get_gpu_device_name(device_id: int) -> str:
+    """
+    Get the device name for a specific GPU.
+    
+    Args:
+        device_id: CUDA device ID to query
+        
+    Returns:
+        GPU device name (e.g., 'NVIDIA A100-SXM4-40GB') or 'Unknown GPU' if unavailable
+    """
+    try:
+        import pynvml
+        pynvml.nvmlInit()
+        try:
+            handle = pynvml.nvmlDeviceGetHandleByIndex(device_id)
+            name = pynvml.nvmlDeviceGetName(handle)
+            # Handle both bytes and str return types
+            if isinstance(name, bytes):
+                return name.decode('utf-8')
+            return name
+        finally:
+            try:
+                pynvml.nvmlShutdown()
+            except:
+                pass
+    except:
+        return "Unknown GPU"
+
+
 def get_gpu_memory_info(device_id: int = 0) -> Tuple[float, float]:
     """
     Get memory information for a specific GPU device.
@@ -176,7 +205,14 @@ def get_all_gpu_memory_info() -> List[Tuple[int, float, float]]:
         gpu_info = []
         for device_id in range(device_count):
             free_gb, total_gb = get_gpu_memory_info(device_id)
+            gpu_name = _get_gpu_device_name(device_id)
             gpu_info.append((device_id, free_gb, total_gb))
+            
+            # Log detailed information for each GPU
+            logger.info(
+                f"[GPU Query]   GPU {device_id}: {gpu_name} - "
+                f"{free_gb:.2f} GB free / {total_gb:.2f} GB total"
+            )
         
         logger.info(f"[GPU Query] Found {len(gpu_info)} physical GPU(s) on host")
         
@@ -322,28 +358,38 @@ def get_ordered_gpus_by_memory(
             logger.warning("[GPU Selection] No GPUs available")
             return []
         
+        logger.info(f"[GPU Selection] Found {len(gpu_info)} GPU(s) before filtering")
+        
         # Filter by required memory if specified
         if required_memory_gb is not None:
-            gpu_info = [
-                (device_id, free_gb, total_gb)
-                for device_id, free_gb, total_gb in gpu_info
-                if free_gb >= required_memory_gb
-            ]
+            logger.info(f"[GPU Selection] Filtering GPUs with >= {required_memory_gb:.2f} GB free memory")
+            
+            # Keep original list for logging
+            original_gpu_info = list(gpu_info)
+            gpu_info = []
+            
+            for device_id, free_gb, total_gb in original_gpu_info:
+                if free_gb >= required_memory_gb:
+                    gpu_info.append((device_id, free_gb, total_gb))
+                    logger.info(f"[GPU Selection]   GPU {device_id}: {free_gb:.2f} GB free ✅")
+                else:
+                    logger.info(f"[GPU Selection]   GPU {device_id}: {free_gb:.2f} GB free ❌ (insufficient)")
             
             if not gpu_info:
                 logger.warning(
                     f"[GPU Selection] No GPU found with {required_memory_gb:.2f} GB free memory"
                 )
-                # Log what's available
-                all_gpus = get_all_gpu_memory_info()
-                for device_id, free_gb, total_gb in all_gpus:
-                    logger.warning(
-                        f"[GPU Selection]   GPU {device_id}: {free_gb:.2f}/{total_gb:.2f} GB free"
-                    )
                 return []
+            
+            logger.info(f"[GPU Selection] Found {len(gpu_info)} candidate GPU(s) after filtering")
         
         # Sort by free memory (descending)
         gpu_info.sort(key=lambda x: x[1], reverse=True)
+        
+        # Log final candidate list
+        logger.info("[GPU Selection] Candidate GPUs (sorted by free memory):")
+        for idx, (device_id, free_gb, total_gb) in enumerate(gpu_info, 1):
+            logger.info(f"[GPU Selection]   {idx}. GPU {device_id}: {free_gb:.2f} GB free")
         
         return gpu_info
         
