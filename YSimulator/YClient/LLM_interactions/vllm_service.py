@@ -8,7 +8,7 @@ The interface is designed to be compatible with the existing LLMService pattern.
 
 import logging
 import os
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 import ray
 
@@ -65,7 +65,7 @@ class VLLMService:
         # 3. The environment must be set before ANY imports that might touch CUDA
         
         # Get list of candidate GPUs for retry logic
-        candidate_gpus = self._get_candidate_gpus(llm_config)
+        candidate_gpus = VLLMService._get_candidate_gpus_static(llm_config)
         
         import sys
         
@@ -76,7 +76,7 @@ class VLLMService:
         for attempt_num, (gpu_id, free_gb, total_gb) in enumerate(candidate_gpus, 1):
             try:
                 # Set GPU environment for this attempt
-                self._set_gpu_env_for_attempt(gpu_id, attempt_num, len(candidate_gpus), free_gb)
+                VLLMService._set_gpu_env_for_attempt_static(gpu_id, attempt_num, len(candidate_gpus), free_gb)
                 
                 # Try to initialize with this GPU
                 self._initialize(llm_config, prompts_config, llm_v_config, logging_config)
@@ -128,7 +128,8 @@ class VLLMService:
             f"Last error: {type(last_error).__name__}: {str(last_error)}"
         ) from last_error
     
-    def _get_candidate_gpus(self, llm_config: Optional[Dict[str, Any]] = None) -> List[Tuple[int, float, float]]:
+    @staticmethod
+    def _get_candidate_gpus_static(llm_config: Optional[Dict[str, Any]] = None) -> List[Tuple[int, float, float]]:
         """
         Get list of candidate GPUs for retry logic.
         
@@ -202,8 +203,8 @@ class VLLMService:
             )
             return [(None, 0.0, 0.0)]
     
-    def _set_gpu_env_for_attempt(
-        self,
+    @staticmethod
+    def _set_gpu_env_for_attempt_static(
         gpu_id: Optional[int],
         attempt_num: int,
         total_attempts: int,
