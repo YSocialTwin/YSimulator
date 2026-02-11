@@ -63,53 +63,97 @@ class VLLMService:
         # 1. vLLM spawns subprocesses that need to inherit CUDA_VISIBLE_DEVICES
         # 2. Setting it after CUDA initialization is too late
         # 3. The environment must be set before ANY imports that might touch CUDA
-        self._set_gpu_env_early(llm_config)
+        
+        # Get list of candidate GPUs for retry logic
+        candidate_gpus = self._get_candidate_gpus(llm_config)
         
         import sys
         
-        try:
-            self._initialize(llm_config, prompts_config, llm_v_config, logging_config)
-        except Exception as e:
-            # Print to stderr so error is visible in Ray logs
-            error_msg = f"\n{'='*70}\n"
-            error_msg += "❌ VLLMService Initialization Failed\n"
-            error_msg += f"{'='*70}\n"
-            error_msg += f"Error: {type(e).__name__}: {str(e)}\n"
-            error_msg += f"{'='*70}\n"
-            
-            print(error_msg, file=sys.stderr, flush=True)
-            
-            # Re-raise to let Ray know the actor failed
-            raise
-    
-    def _set_gpu_env_early(self, llm_config: Optional[Dict[str, Any]] = None):
-        """
-        Set CUDA_VISIBLE_DEVICES environment variable as early as possible.
+        # Try each GPU in order until one works
+        last_error = None
+        gpu_attempts = []
         
-        This MUST run before any CUDA operations to ensure subprocesses inherit
-        the correct GPU selection. With multiprocessing 'spawn' mode (required by
-        Ray actors), environment variables must be set before subprocess creation.
+        for attempt_num, (gpu_id, free_gb, total_gb) in enumerate(candidate_gpus, 1):
+            try:
+                # Set GPU environment for this attempt
+                self._set_gpu_env_for_attempt(gpu_id, attempt_num, len(candidate_gpus), free_gb)
+                
+                # Try to initialize with this GPU
+                self._initialize(llm_config, prompts_config, llm_v_config, logging_config)
+                
+                # Success! Log and return
+                print(
+                    f"[GPU Attempt {attempt_num}/{len(candidate_gpus)}] ✅ Success! "
+                    f"vLLM initialized on GPU {gpu_id}",
+                    file=sys.stderr,
+                    flush=True
+                )
+                return
+                
+            except Exception as e:
+                last_error = e
+                gpu_attempts.append((gpu_id, free_gb, str(e)))
+                
+                # Log this failed attempt
+                error_summary = str(e).split('\n')[0] if '\n' in str(e) else str(e)
+                error_summary = error_summary[:100]  # Limit length
+                print(
+                    f"[GPU Attempt {attempt_num}/{len(candidate_gpus)}] ❌ Failed on GPU {gpu_id} "
+                    f"({free_gb:.2f} GB free): {error_summary}",
+                    file=sys.stderr,
+                    flush=True
+                )
+                
+                # If this isn't the last GPU, continue to next
+                if attempt_num < len(candidate_gpus):
+                    continue
+        
+        # All GPUs exhausted - build comprehensive error message
+        error_msg = f"\n{'='*70}\n"
+        error_msg += "❌ VLLMService Initialization Failed - All GPUs Exhausted\n"
+        error_msg += f"{'='*70}\n"
+        error_msg += f"Attempted {len(gpu_attempts)} GPU(s):\n"
+        for gpu_id, free_gb, error in gpu_attempts:
+            error_summary = error.split('\n')[0] if '\n' in error else error
+            error_summary = error_summary[:80]
+            error_msg += f"  - GPU {gpu_id} ({free_gb:.2f} GB free): {error_summary}\n"
+        error_msg += f"\nLast error: {type(last_error).__name__}: {str(last_error)[:200]}\n"
+        error_msg += f"{'='*70}\n"
+        
+        print(error_msg, file=sys.stderr, flush=True)
+        
+        # Re-raise the last error
+        raise RuntimeError(
+            f"Failed to initialize vLLM on any of {len(gpu_attempts)} available GPU(s). "
+            f"Last error: {type(last_error).__name__}: {str(last_error)}"
+        ) from last_error
+    
+    def _get_candidate_gpus(self, llm_config: Optional[Dict[str, Any]] = None) -> List[Tuple[int, float, float]]:
         """
-        # Only do dynamic GPU selection for single-GPU mode
+        Get list of candidate GPUs for retry logic.
+        
+        Returns list of (gpu_id, free_gb, total_gb) tuples sorted by free memory.
+        Returns list with single None entry if GPU selection not applicable.
+        """
+        # If no config, use default (no specific GPU selection)
         if llm_config is None:
-            return
-            
+            return [(None, 0.0, 0.0)]
+        
         tensor_parallel_size = llm_config.get("tensor_parallel_size", 1)
         if tensor_parallel_size != 1:
-            # Multi-GPU mode - let vLLM/Ray handle GPU assignment
-            return
+            # Multi-GPU mode - let vLLM/Ray handle it, no retry
+            return [(None, 0.0, 0.0)]
         
-        # Check if Ray has already assigned a specific GPU via CUDA_VISIBLE_DEVICES
+        # Check if Ray has already assigned a specific GPU
         cuda_visible = os.environ.get("CUDA_VISIBLE_DEVICES", "")
         if cuda_visible and cuda_visible != "":
-            # Ray has assigned a GPU, respect it
-            return
+            # Ray has assigned a GPU, respect it, no retry
+            return [(None, 0.0, 0.0)]
         
-        # Dynamic GPU selection needed
+        # Dynamic GPU selection - get ordered list of suitable GPUs
         try:
-            # Import GPU utilities (minimal imports to avoid CUDA initialization)
             from YSimulator.YClient.llm_utils.gpu_utils import (
-                select_gpu_with_sufficient_memory,
+                get_ordered_gpus_by_memory,
                 estimate_required_vllm_memory,
             )
             
@@ -126,34 +170,67 @@ class VLLMService:
                 tensor_parallel_size=tensor_parallel_size,
             )
             
-            # Select GPU with sufficient memory
-            selected_gpu = select_gpu_with_sufficient_memory(
-                required_memory_gb=required_memory_gb
-            )
+            # Get ordered list of GPUs with sufficient memory
+            candidate_gpus = get_ordered_gpus_by_memory(required_memory_gb=required_memory_gb)
             
-            if selected_gpu is not None:
-                # CRITICAL: Set environment variable in multiple ways
-                # This MUST happen before any CUDA operations
-                os.environ["CUDA_VISIBLE_DEVICES"] = str(selected_gpu)
-                os.putenv("CUDA_VISIBLE_DEVICES", str(selected_gpu))
-                
-                # Also print to stderr for immediate visibility
+            if candidate_gpus:
                 import sys
                 print(
-                    f"[VLLMService Early Init] Set CUDA_VISIBLE_DEVICES={selected_gpu} "
-                    f"(required: {required_memory_gb:.2f} GB)",
+                    f"[GPU Selection] Found {len(candidate_gpus)} candidate GPU(s) "
+                    f"with >= {required_memory_gb:.2f} GB free",
                     file=sys.stderr,
                     flush=True
                 )
+                return candidate_gpus
+            else:
+                # No GPUs with sufficient memory, but still try default
+                import sys
+                print(
+                    f"[GPU Selection] No GPUs found with {required_memory_gb:.2f} GB free. "
+                    f"Will try default GPU.",
+                    file=sys.stderr,
+                    flush=True
+                )
+                return [(None, 0.0, 0.0)]
+                
         except Exception as e:
-            # If GPU selection fails, continue with default
-            # Error will be logged in _initialize
             import sys
             print(
-                f"[VLLMService Early Init] GPU selection failed: {e}. Using default GPU.",
+                f"[GPU Selection] Failed to get candidate GPUs: {e}. Will try default GPU.",
                 file=sys.stderr,
                 flush=True
             )
+            return [(None, 0.0, 0.0)]
+    
+    def _set_gpu_env_for_attempt(
+        self,
+        gpu_id: Optional[int],
+        attempt_num: int,
+        total_attempts: int,
+        free_gb: float
+    ):
+        """Set CUDA_VISIBLE_DEVICES for a specific GPU attempt."""
+        import sys
+        
+        if gpu_id is None:
+            # No specific GPU selection (Ray-assigned or default)
+            print(
+                f"[GPU Attempt {attempt_num}/{total_attempts}] Using default/assigned GPU",
+                file=sys.stderr,
+                flush=True
+            )
+            return
+        
+        # Set environment variable for this specific GPU
+        os.environ["CUDA_VISIBLE_DEVICES"] = str(gpu_id)
+        os.putenv("CUDA_VISIBLE_DEVICES", str(gpu_id))
+        
+        print(
+            f"[GPU Attempt {attempt_num}/{total_attempts}] Trying GPU {gpu_id} "
+            f"({free_gb:.2f} GB free)",
+            file=sys.stderr,
+            flush=True
+        )
     
     def _initialize(
         self,

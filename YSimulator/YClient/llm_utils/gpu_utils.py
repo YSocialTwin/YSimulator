@@ -219,6 +219,61 @@ def select_gpu_with_sufficient_memory(required_memory_gb: float) -> Optional[int
         raise
 
 
+def get_ordered_gpus_by_memory(
+    required_memory_gb: Optional[float] = None
+) -> List[Tuple[int, float, float]]:
+    """
+    Get list of GPUs ordered by free memory (descending).
+    
+    Args:
+        required_memory_gb: Optional minimum required free memory in GB.
+                          If specified, only GPUs with sufficient memory are returned.
+    
+    Returns:
+        List of tuples: (device_id, free_gb, total_gb) sorted by free_gb descending
+        Returns empty list if no suitable GPUs found.
+    
+    Example:
+        >>> gpus = get_ordered_gpus_by_memory(required_memory_gb=10.0)
+        >>> # [(2, 35.2, 40.0), (1, 28.3, 40.0), (0, 15.1, 40.0)]
+    """
+    try:
+        gpu_info = get_all_gpu_memory_info()
+        
+        if not gpu_info:
+            logger.warning("[GPU Selection] No GPUs available")
+            return []
+        
+        # Filter by required memory if specified
+        if required_memory_gb is not None:
+            gpu_info = [
+                (device_id, free_gb, total_gb)
+                for device_id, free_gb, total_gb in gpu_info
+                if free_gb >= required_memory_gb
+            ]
+            
+            if not gpu_info:
+                logger.warning(
+                    f"[GPU Selection] No GPU found with {required_memory_gb:.2f} GB free memory"
+                )
+                # Log what's available
+                all_gpus = get_all_gpu_memory_info()
+                for device_id, free_gb, total_gb in all_gpus:
+                    logger.warning(
+                        f"[GPU Selection]   GPU {device_id}: {free_gb:.2f}/{total_gb:.2f} GB free"
+                    )
+                return []
+        
+        # Sort by free memory (descending)
+        gpu_info.sort(key=lambda x: x[1], reverse=True)
+        
+        return gpu_info
+        
+    except Exception as e:
+        logger.error(f"[GPU Selection] Failed to get GPU list: {e}")
+        return []
+
+
 def get_ray_assigned_gpu() -> Optional[int]:
     """
     Get the GPU device ID assigned by Ray to this actor.
