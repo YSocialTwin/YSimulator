@@ -319,13 +319,52 @@ YSimulator now automatically handles this by:
 6. **Subprocess inheritance**: Environment variables properly propagate to vLLM v1 engine subprocesses (even with 'spawn')
 7. **Falls back gracefully**: Warns if no GPU has sufficient memory but still attempts initialization
 
-**Key Innovation: pynvml for GPU Detection**
+**Key Innovation: pynvml for GPU Detection + Ray GPU Unmasking**
 
 Using nvidia-ml-py (pynvml) instead of torch for GPU queries:
 - ✅ No CUDA initialization during GPU detection
 - ✅ Can query all GPUs before setting CUDA_VISIBLE_DEVICES  
 - ✅ Lightweight and fast
 - ✅ Works perfectly in Docker with nvidia-container-toolkit
+
+**Critical: Ray GPU Unmasking**
+
+When running as a Ray actor, Ray often sets `CUDA_VISIBLE_DEVICES` to limit which GPUs the actor can see (e.g., only GPU 0). This masked GPU might be full, while other GPUs on the host have plenty of free memory.
+
+YSimulator now **temporarily unmasks all GPUs** during GPU detection:
+1. **Saves Ray's CUDA_VISIBLE_DEVICES** (e.g., "0")
+2. **Uses pynvml to get physical GPU count** on the host (e.g., 6 GPUs)
+3. **Temporarily sets CUDA_VISIBLE_DEVICES="0,1,2,3,4,5"** to unmask all physical GPUs
+4. **Queries memory on ALL physical GPUs** (not just Ray's assignment)
+5. **Selects best GPU** from complete list (e.g., GPU 2 with 35GB free)
+6. **Sets CUDA_VISIBLE_DEVICES to selected GPU** (e.g., "2")
+7. **vLLM initializes on the selected GPU** successfully
+
+This is critical for multi-GPU hosts where Ray might assign a full GPU but other GPUs are available.
+
+**Example Scenario:**
+```
+Host: 6 GPUs (GPU 0-5)
+Ray assigns: GPU 0 (CUDA_VISIBLE_DEVICES=0)
+GPU 0: 3GB free ❌ not enough for vLLM
+GPU 2: 35GB free ✅ plenty of space!
+
+WITHOUT unmasking: Can only see GPU 0 → Fails
+WITH unmasking: Discovers all 6 GPUs → Selects GPU 2 → Success!
+```
+
+**Logs showing unmasking:**
+```
+[GPU Query] Original CUDA_VISIBLE_DEVICES from Ray: 0
+[GPU Query] Physical GPU count on host: 6
+[GPU Query] Temporarily unmasking all GPUs: 0,1,2,3,4,5
+[GPU Query] Querying all 6 physical GPU(s)...
+[GPU Query] Found 6 physical GPU(s) on host
+[GPU Query] Restored original CUDA_VISIBLE_DEVICES: 0
+[GPU Selection] Found 3 candidate GPU(s) with >= 13.00 GB free
+[GPU Attempt 1/3] Trying GPU 2 (35.20 GB free)
+[GPU Attempt 1/3] ✅ Success! vLLM initialized on GPU 2
+```
 
 The GPU selection happens at the absolute beginning of VLLMService `__init__()`, before any CUDA operations, ensuring the correct GPU is used even when vLLM spawns subprocesses.
 
