@@ -213,8 +213,10 @@ class BatchProcessor:
 
             # Phase 3: Validate response
             res_txt = self.response_parser.parse_text_response(res_txt, default="")
-            if not res_txt:
-                self.logger.warning(f"Empty LLM post response for agent {a_id}, skipping")
+            if not res_txt or not res_txt.strip():
+                self.logger.warning(
+                    f"Empty or whitespace-only LLM post response for agent {a_id}, skipping"
+                )
                 continue
 
             # Phase 3: Track LLM usage (estimate tokens from content length)
@@ -370,9 +372,9 @@ class BatchProcessor:
 
             # Validate response
             res_txt = self.response_parser.parse_text_response(res_txt, default="")
-            if not res_txt:
+            if not res_txt or not res_txt.strip():
                 self.logger.warning(
-                    f"Empty vLLM batch post response for agent {agent_id}, skipping"
+                    f"Empty or whitespace-only vLLM batch post response for agent {agent_id}, skipping"
                 )
                 continue
 
@@ -562,6 +564,13 @@ class BatchProcessor:
 
             # Check if result is a comment/share commentary (text) or a reaction type
             if res_act and res_act.upper() not in REACTION_TYPES:
+                # Validate content is not empty or whitespace-only
+                if not res_act.strip():
+                    self.logger.warning(
+                        f"Empty or whitespace-only LLM comment/share for agent {a_id}, skipping"
+                    )
+                    continue
+                
                 # This is comment/share commentary text from LLM
                 # Determine action type: SHARE (with commentary) or COMMENT
                 determined_action_type = action_type_override if action_type_override else "COMMENT"
@@ -877,6 +886,13 @@ class BatchProcessor:
             cluster_id = item[1]
             target_post = item[2]
 
+            # Validate comment text is not empty or whitespace-only
+            if not comment_text or not comment_text.strip():
+                self.logger.warning(
+                    f"Empty or whitespace-only vLLM batch comment for agent {agent_id}, skipping"
+                )
+                continue
+
             # Track LLM usage
             if self.cost_tracker:
                 output_tokens = len(comment_text) // CHARS_PER_TOKEN
@@ -1030,6 +1046,13 @@ class BatchProcessor:
             agent_id = item[0]
             cluster_id = item[1]
             target_post = item[2]
+
+            # Validate share text is not empty or whitespace-only
+            if not share_text or not share_text.strip():
+                self.logger.warning(
+                    f"Empty or whitespace-only vLLM batch share commentary for agent {agent_id}, skipping"
+                )
+                continue
 
             # Track LLM usage
             if self.cost_tracker:
