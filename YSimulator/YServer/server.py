@@ -846,6 +846,22 @@ class OrchestratorServer:
         """
         return self.interest_manager.get_article_topics(article_id)
 
+    def get_article(self, article_id: str, client_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
+        """
+        Get article by ID.
+        
+        This method is used by batch_processor to fetch article content for news commentary generation.
+        
+        Args:
+            article_id: Article UUID
+            client_id: Client identifier (optional, for logging/routing)
+            
+        Returns:
+            Dict[str, Any]: Article data dictionary with keys: id, title, summary, etc.
+                           Returns None if article not found.
+        """
+        return self.article_service.get_article(article_id)
+
     def get_topic_id_by_name(self, topic_name: str) -> Optional[str]:
         """
         Get topic ID by topic name.
