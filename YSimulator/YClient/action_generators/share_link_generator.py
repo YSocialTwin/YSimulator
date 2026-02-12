@@ -112,7 +112,7 @@ class ShareLinkGenerator(BaseActionGenerator):
             if agent_type == "llm":
                 # LLM page posts news with commentary
                 self.context.logger.info(f"LLM Page {agent.username} generating news post async")
-                future, article_id = generate_news_post_async(
+                future, article_id, article_content = generate_news_post_async(
                     self.context.news_service,
                     self.context.llm,
                     agent.cluster,
@@ -137,6 +137,18 @@ class ShareLinkGenerator(BaseActionGenerator):
 
                 # Extract agent attributes for vLLM batch processing
                 agent_attrs = self._extract_agent_attrs(agent)
+                
+                # OPTIMIZATION: Add article content to agent_attrs to avoid DB re-fetch
+                # This passes the article content directly to batch processor
+                if article_content:
+                    agent_attrs["article"] = {
+                        "id": article_id,
+                        "title": article_content.get("title", ""),
+                        "summary": article_content.get("summary", article_content.get("content", ""))
+                    }
+                    self.context.logger.info(
+                        f"✅ Article content added to agent_attrs: title='{article_content.get('title', '')[:50]}...'"
+                    )
 
                 # Store pending call with full metadata for vLLM batch processing
                 # Format: (agent_id, cluster_id, future, article_id, day, slot, agent_attrs)

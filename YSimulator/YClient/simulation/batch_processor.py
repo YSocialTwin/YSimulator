@@ -362,18 +362,23 @@ class BatchProcessor:
         for item in batchable_posts:
             agent_id, cluster_id, future, topic, item_day, item_slot, agent_attrs = item
             
-            # Check if topic is an article_id (UUID) - if so, fetch article for proper commentary
+            # Check if article content is already in agent_attrs (optimization to avoid DB fetch)
             article_content = None
-            if topic:
+            if agent_attrs and "article" in agent_attrs:
+                # Article content was passed directly through agent_attrs
+                article_content = agent_attrs["article"]
+                self.logger.info(f"✅ Using article from agent_attrs (no DB fetch needed): '{article_content.get('title', '')[:50]}...'")
+            elif topic:
+                # Fallback: Fetch article from DB if not in agent_attrs
                 self.logger.debug(f"Processing batch post with topic: {topic}, type: {type(topic)}")
                 try:
                     uuid.UUID(topic)  # Validate it's a UUID
                     # This is an article_id - fetch article for news commentary
-                    self.logger.info(f"Topic {topic} is UUID - fetching article for news commentary")
+                    self.logger.info(f"Topic {topic} is UUID - fetching article from DB (fallback)")
                     article_data = ray.get(self.server.get_article.remote(topic, client_id=self.client_id))
                     
                     if article_data:
-                        self.logger.info(f"✅ Article fetched successfully: {article_data.get('title', 'NO TITLE')[:100]}")
+                        self.logger.info(f"✅ Article fetched from DB: {article_data.get('title', 'NO TITLE')[:100]}")
                         article_content = {
                             "id": topic,
                             "title": article_data.get("title", ""),
@@ -389,10 +394,10 @@ class BatchProcessor:
                     # Fetch failed
                     self.logger.error(f"❌ Failed to fetch article {topic}: {type(e).__name__}: {e}")
             else:
-                self.logger.debug(f"No topic provided for batch post")
+                self.logger.debug(f"No topic or article in agent_attrs")
             
             if article_content:
-                self.logger.info(f"✅ Adding batch request WITH article: {article_content['title'][:30]}...")
+                self.logger.info(f"✅ Adding batch request WITH article: {article_content.get('title', '')[:30]}...")
             else:
                 self.logger.debug(f"Adding batch request WITHOUT article (regular post)")
             

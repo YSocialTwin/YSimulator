@@ -201,7 +201,8 @@ def generate_news_post_async(
         llm_service, agent_cluster, article, website_name
     )
 
-    return commentary_future, article_id
+    # Return article content along with article_id to avoid re-fetching from DB
+    return commentary_future, article_id, article
 
 
 def generate_llm_read_async(
