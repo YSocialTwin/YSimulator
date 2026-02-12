@@ -637,7 +637,11 @@ class VLLMService:
                             # Template doesn't have {website_name} placeholder
                             system_msg = system_template
                         
-                        user_msg = user_template.format(article_title=article_title, article_text=article_text)
+                        user_msg = user_template.format(
+                            website_name="this website",
+                            article_title=article_title,
+                            article_text=article_text
+                        )
                         
                         logger.info(f"[vLLM Batch {idx}] News commentary prompt: user_msg='{user_msg[:100]}...'")
                         prompt = self._format_prompt(system_msg, user_msg)
@@ -1184,7 +1188,11 @@ class VLLMService:
                 system_msg = system_template
             
             try:
-                user_msg = user_template.format(article_title=article_title, article_text=article_text)
+                user_msg = user_template.format(
+                    website_name=website_name,
+                    article_title=article_title,
+                    article_text=article_text
+                )
             except KeyError:
                 # Template doesn't have expected placeholders, use as-is or try minimal formatting
                 logger.debug("[vLLM] user_template doesn't have expected placeholders")
