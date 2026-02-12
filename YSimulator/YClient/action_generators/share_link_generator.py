@@ -121,6 +121,16 @@ class ShareLinkGenerator(BaseActionGenerator):
                 )
                 self.context.logger.info(f"LLM Page {agent.username} got article_id: {article_id}")
 
+                # CRITICAL: Check if article_id is None (database save failed)
+                if not article_id:
+                    self.context.logger.error(
+                        f"LLM Page {agent.username}: article_id is None! Article save to DB failed. "
+                        f"Cannot create news post without article reference. Skipping action."
+                    )
+                    result.metadata["error"] = "article_save_failed"
+                    result.metadata["article_id"] = None
+                    return result
+
                 # Extract and store article topics (if we have article_id)
                 if article_id:
                     self._process_article_topics(agent, article, article_id)
@@ -137,6 +147,16 @@ class ShareLinkGenerator(BaseActionGenerator):
                 self.context.logger.info(
                     f"Rule-based Page {agent.username} got article_id: {article_id}"
                 )
+
+                # CRITICAL: Check if article_id is None (database save failed)
+                if not article_id:
+                    self.context.logger.error(
+                        f"Rule-based Page {agent.username}: article_id is None! Article save to DB failed. "
+                        f"Cannot create news post without article reference. Skipping action."
+                    )
+                    result.metadata["error"] = "article_save_failed"
+                    result.metadata["article_id"] = None
+                    return result
 
                 # Extract and store article topics
                 if article_id:
