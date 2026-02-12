@@ -622,12 +622,43 @@ class BatchProcessor:
 
                 # Special handling for SHARE - generate share commentary
                 if res_act.upper() == "SHARE":
-                    # For SHARE actions, use cluster-specific share content (similar to rule-based)
-                    share_content = f"Sharing from cluster {cid}"
-                    # Calculate opinion updates for the share
+                    # Get post data for context and opinion updates
                     post_data = ray.get(
                         self.server.get_post.remote(target, client_id=self.client_id)
                     )
+                    
+                    # Generate LLM commentary for the share (synchronous call since we're in gather phase)
+                    post_content = post_data.get("tweet", "") if post_data else ""
+                    author_id = post_data.get("user_id") if post_data else None
+                    
+                    # Get author username for context
+                    author_name = "Someone"
+                    if author_id:
+                        author_user = ray.get(
+                            self.server.get_user.remote(author_id, client_id=self.client_id)
+                        )
+                        if author_user:
+                            author_name = author_user.get("username", "Someone")
+                    
+                    # Build agent attributes for persona-based commentary
+                    agent_attrs = {"name": f"Agent_{a_id}"}
+                    
+                    # Call LLM to generate share commentary synchronously
+                    try:
+                        llm_actor = self._get_llm_actor()
+                        share_content = ray.get(
+                            llm_actor.generate_share_commentary.remote(
+                                cid, post_content, agent_attrs, author_name
+                            )
+                        )
+                    except Exception as e:
+                        # Fallback to generic content if LLM call fails
+                        self.logger.warning(
+                            f"Failed to generate LLM share commentary for agent {a_id}: {e}. Using fallback."
+                        )
+                        share_content = f"Sharing from cluster {cid}"
+                    
+                    # Calculate opinion updates for the share
                     updated_opinions = None
                     if post_data:
                         updated_opinions = calculate_opinion_updates_fn(a_id, target, post_data)
