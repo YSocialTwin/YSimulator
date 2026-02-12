@@ -16,7 +16,7 @@ import ray
 logger = logging.getLogger(__name__)
 
 
-@ray.remote
+@ray.remote(num_gpus=1)
 class VLLMService:
     """
     vLLM-based LLM service with batch inference support.
