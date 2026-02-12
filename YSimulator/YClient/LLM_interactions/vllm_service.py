@@ -35,6 +35,8 @@ class VLLMService:
         prompts_config: Optional[Dict[str, Any]] = None,
         llm_v_config: Optional[Dict[str, Any]] = None,
         logging_config: Optional[Dict[str, Any]] = None,
+        server=None,
+        client_id: Optional[str] = None,
     ):
         """
         Initialize vLLM service with configuration.
@@ -55,6 +57,8 @@ class VLLMService:
                 - max_tokens: Maximum tokens to generate (default: 300)
                 - max_model_len: Maximum sequence length (default: 40000)
             logging_config: Optional logging configuration dict
+            server: Optional server reference for fetching articles
+            client_id: Optional client ID for server requests
         """
         # ============================================================================
         # CRITICAL: GPU selection MUST happen FIRST, before ANY other operations
@@ -67,6 +71,9 @@ class VLLMService:
         # Get list of candidate GPUs for retry logic
         candidate_gpus = VLLMService._get_candidate_gpus_static(llm_config)
 
+        # Store server and client_id early for use in _initialize
+        self.server = server
+        self.client_id = client_id
         
         import sys
 
@@ -601,6 +608,30 @@ class VLLMService:
                         raise ValueError(f"Missing slot in request {idx}")
                     agent_attrs = req.get("agent_attrs")
                     article = req.get("article")  # Article content for news posts
+                    
+                    # FALLBACK: If article is None but we have a topic that looks like article_id, try to fetch
+                    if not article and agent_attrs and self.server and self.client_id:
+                        topic = agent_attrs.get("topic")
+                        if topic:
+                            try:
+                                import uuid
+                                uuid.UUID(topic)  # Validate it's a UUID (article_id)
+                                logger.info(f"[vLLM Batch {idx}] Article is None but topic looks like UUID - attempting fallback fetch for {topic}")
+                                article_data = ray.get(self.server.get_article.remote(topic, client_id=self.client_id))
+                                if article_data:
+                                    article = {
+                                        "id": topic,
+                                        "title": article_data.get("title", ""),
+                                        "summary": article_data.get("summary", article_data.get("description", ""))
+                                    }
+                                    logger.info(f"[vLLM Batch {idx}] ✅ Fallback fetch successful: '{article['title'][:50]}...'")
+                                else:
+                                    logger.warning(f"[vLLM Batch {idx}] ❌ Fallback fetch returned None for article_id {topic}")
+                            except ValueError:
+                                # Not a UUID - regular topic
+                                logger.debug(f"[vLLM Batch {idx}] Topic '{topic}' is not UUID - skipping fallback fetch")
+                            except Exception as e:
+                                logger.warning(f"[vLLM Batch {idx}] ❌ Fallback fetch failed: {type(e).__name__}: {e}")
                     
                     # DETAILED DIAGNOSTIC LOGGING - Improved for robustness
                     logger.info(f"[vLLM Batch {idx}] article type: {type(article).__name__}")
