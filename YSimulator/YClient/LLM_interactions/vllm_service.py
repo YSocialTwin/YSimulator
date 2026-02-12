@@ -602,11 +602,15 @@ class VLLMService:
                     agent_attrs = req.get("agent_attrs")
                     article = req.get("article")  # Article content for news posts
                     
-                    # Log what we received
+                    # DETAILED DIAGNOSTIC LOGGING
+                    logger.info(f"[vLLM Batch {idx}] article type: {type(article)}, article is None: {article is None}")
                     if article:
-                        logger.info(f"[vLLM Batch {idx}] Received article: title='{article.get('title', 'NO_TITLE')[:50]}...', has_summary={bool(article.get('summary'))}")
+                        logger.info(f"[vLLM Batch {idx}] article keys: {list(article.keys()) if isinstance(article, dict) else 'NOT A DICT'}")
+                        article_title_value = article.get('title') if isinstance(article, dict) else None
+                        logger.info(f"[vLLM Batch {idx}] article['title'] = '{article_title_value}', bool(title) = {bool(article_title_value)}")
+                        logger.info(f"[vLLM Batch {idx}] Received article: title='{article.get('title', 'NO_TITLE')[:50] if isinstance(article, dict) else 'N/A'}...', has_summary={bool(article.get('summary')) if isinstance(article, dict) else False}")
                     else:
-                        logger.debug(f"[vLLM Batch {idx}] No article content - generating regular post")
+                        logger.info(f"[vLLM Batch {idx}] No article content - generating regular post")
 
                     # Check if this is a news post (page sharing article)
                     if article and article.get("title"):
