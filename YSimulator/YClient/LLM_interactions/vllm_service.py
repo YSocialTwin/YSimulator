@@ -1175,8 +1175,20 @@ class VLLMService:
                 'Article: "{article_title}"\n\nSummary: {article_text}\n\nWrite a brief engaging social media post about this article (max 280 characters).'
             )
 
-            system_msg = system_template.format(website_name=website_name)
-            user_msg = user_template.format(article_title=article_title, article_text=article_text)
+            # Safe template formatting - handle missing placeholders
+            try:
+                system_msg = system_template.format(website_name=website_name)
+            except KeyError:
+                # Template doesn't have {website_name} placeholder, use as-is
+                logger.debug("[vLLM] system_template doesn't have {website_name} placeholder")
+                system_msg = system_template
+            
+            try:
+                user_msg = user_template.format(article_title=article_title, article_text=article_text)
+            except KeyError:
+                # Template doesn't have expected placeholders, use as-is or try minimal formatting
+                logger.debug("[vLLM] user_template doesn't have expected placeholders")
+                user_msg = user_template
 
             prompt = self._format_prompt(system_msg, user_msg)
 
