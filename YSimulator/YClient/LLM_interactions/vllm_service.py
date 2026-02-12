@@ -574,6 +574,10 @@ class VLLMService:
                 - day: Day number
                 - slot: Slot number
                 - agent_attrs: Agent attributes dict (optional)
+                - article: Article dict for news posts (optional) with keys:
+                    - id: Article ID
+                    - title: Article title
+                    - summary: Article summary/description
 
         Returns:
             List of generated post strings in the same order as requests
@@ -596,43 +600,72 @@ class VLLMService:
                         logger.error(f"[vLLM] Missing slot in request {idx}: {req}")
                         raise ValueError(f"Missing slot in request {idx}")
                     agent_attrs = req.get("agent_attrs")
+                    article = req.get("article")  # Article content for news posts
 
-                    # Build persona
-                    persona = self._build_persona(cluster_id, agent_attrs)
-                    toxicity = agent_attrs.get("toxicity", "no") if agent_attrs else "no"
-                    topic = agent_attrs.get("topic") if agent_attrs else None
-                    topic_opinion = agent_attrs.get("topic_opinion") if agent_attrs else None
-
-                    # Get prompt templates
-                    system_template = self.prompts_config["generate_post"]["system_template"]
-                    user_template = self.prompts_config["generate_post"]["user_template"]
-
-                    # Format templates
-                    system_msg = (
-                        system_template.format(persona=persona, toxicity=toxicity)
-                        if system_template
-                        else ""
-                    )
-
-                    # Build topic instruction
-                    if topic and topic_opinion:
-                        topic_instruction = f" You MUST write about the topic: {topic}. Your stance is: {topic_opinion}. Express this viewpoint clearly."
-                    elif topic:
-                        topic_instruction = f" You MUST write about the topic: {topic}."
+                    # Check if this is a news post (page sharing article)
+                    if article and article.get("title"):
+                        # Use news commentary generation for article posts
+                        article_title = article.get("title", "News Article")
+                        article_text = article.get("summary", "")
+                        
+                        if len(article_text) > 500:
+                            article_text = article_text[:500] + "..."
+                        
+                        # Get news commentary prompt templates
+                        news_commentary_config = self.prompts_config.get("generate_news_commentary", {})
+                        system_template = news_commentary_config.get(
+                            "system_template",
+                            "You are a social media content creator. Create engaging posts about news articles."
+                        )
+                        user_template = news_commentary_config.get(
+                            "user_template",
+                            'Article: "{article_title}"\n\nSummary: {article_text}\n\nWrite a brief engaging social media post about this article (max 280 characters).'
+                        )
+                        
+                        system_msg = system_template.format(website_name="this website")
+                        user_msg = user_template.format(article_title=article_title, article_text=article_text)
+                        
+                        logger.info(f"[vLLM Batch] Generating news commentary for article: {article_title[:50]}...")
+                        prompt = self._format_prompt(system_msg, user_msg)
+                        prompts.append(prompt)
                     else:
-                        topic_instruction = ""
+                        # Regular post generation
+                        # Build persona
+                        persona = self._build_persona(cluster_id, agent_attrs)
+                        toxicity = agent_attrs.get("toxicity", "no") if agent_attrs else "no"
+                        topic = agent_attrs.get("topic") if agent_attrs else None
+                        topic_opinion = agent_attrs.get("topic_opinion") if agent_attrs else None
 
-                    user_msg = user_template.format(
-                        persona=persona,
-                        toxicity=toxicity,
-                        day=day,
-                        slot=slot,
-                        topic_instruction=topic_instruction,
-                    )
+                        # Get prompt templates
+                        system_template = self.prompts_config["generate_post"]["system_template"]
+                        user_template = self.prompts_config["generate_post"]["user_template"]
 
-                    # Create formatted prompt
-                    prompt = self._format_prompt(system_msg, user_msg)
-                    prompts.append(prompt)
+                        # Format templates
+                        system_msg = (
+                            system_template.format(persona=persona, toxicity=toxicity)
+                            if system_template
+                            else ""
+                        )
+
+                        # Build topic instruction
+                        if topic and topic_opinion:
+                            topic_instruction = f" You MUST write about the topic: {topic}. Your stance is: {topic_opinion}. Express this viewpoint clearly."
+                        elif topic:
+                            topic_instruction = f" You MUST write about the topic: {topic}."
+                        else:
+                            topic_instruction = ""
+
+                        user_msg = user_template.format(
+                            persona=persona,
+                            toxicity=toxicity,
+                            day=day,
+                            slot=slot,
+                            topic_instruction=topic_instruction,
+                        )
+
+                        # Create formatted prompt
+                        prompt = self._format_prompt(system_msg, user_msg)
+                        prompts.append(prompt)
                 except Exception as e:
                     logger.error(f"[vLLM] Failed to build prompt for batch request {idx}: {e}")
                     logger.error(f"[vLLM] Request: {req}")

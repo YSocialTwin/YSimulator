@@ -361,12 +361,33 @@ class BatchProcessor:
         batch_requests = []
         for item in batchable_posts:
             agent_id, cluster_id, future, topic, item_day, item_slot, agent_attrs = item
+            
+            # Check if topic is an article_id (UUID) - if so, fetch article for proper commentary
+            article_content = None
+            if topic:
+                try:
+                    uuid.UUID(topic)  # Validate it's a UUID
+                    # This is an article_id - fetch article for news commentary
+                    article_data = ray.get(self.server.get_article.remote(topic, client_id=self.client_id))
+                    if article_data:
+                        article_content = {
+                            "id": topic,
+                            "title": article_data.get("title", ""),
+                            "summary": article_data.get("summary", article_data.get("description", ""))
+                        }
+                        self.logger.info(f"Fetched article for batch post: {article_content['title'][:50]}...")
+                except (ValueError, Exception) as e:
+                    # Not a UUID or fetch failed - treat as regular topic
+                    if not isinstance(e, ValueError):
+                        self.logger.warning(f"Failed to fetch article {topic}: {e}")
+            
             batch_requests.append(
                 {
                     "cluster_id": cluster_id,
                     "day": item_day,
                     "slot": item_slot,
                     "agent_attrs": agent_attrs,
+                    "article": article_content,  # Include article for news posts
                 }
             )
 
