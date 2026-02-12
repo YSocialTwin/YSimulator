@@ -135,8 +135,20 @@ class ShareLinkGenerator(BaseActionGenerator):
                 if article_id:
                     self._process_article_topics(agent, article, article_id)
 
-                # Store pending call: (agent_id, cluster_id, future, article_id)
-                result.pending_llm_calls.append((agent.id, agent.cluster, future, article_id))
+                # Extract agent attributes for vLLM batch processing
+                agent_attrs = self._extract_agent_attrs(agent)
+
+                # Store pending call with full metadata for vLLM batch processing
+                # Format: (agent_id, cluster_id, future, article_id, day, slot, agent_attrs)
+                result.pending_llm_calls.append((
+                    agent.id,
+                    agent.cluster,
+                    future,
+                    article_id,
+                    self.context.day,
+                    self.context.slot,
+                    agent_attrs
+                ))
                 result.metadata["article_id"] = article_id
             else:
                 # Rule-based page posts news directly
