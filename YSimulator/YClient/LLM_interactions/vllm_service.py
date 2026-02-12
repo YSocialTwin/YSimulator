@@ -318,7 +318,78 @@ class VLLMService:
             "cuda_visible_devices": os.environ.get("CUDA_VISIBLE_DEVICES"),
             "backend": vllm_params.get("distributed_executor_backend")
         }
+        
+        # Configure logger to write to file if logging_config provided
+        self._setup_logger(logging_config)
 
+    def _setup_logger(self, logging_config: Optional[Dict[str, Any]] = None):
+        """
+        Configure the module-level logger to write to {client_id}_actor.log file.
+        
+        Args:
+            logging_config: Dictionary with:
+                - log_dir: Directory for log files (default: "./logs")
+                - client_id: Client identifier for log filename (default: "vllm")
+                - enable_actor_log: Whether to enable file logging (default: True)
+        """
+        global logger
+        
+        if logging_config is None:
+            logging_config = {}
+        
+        # Check if file logging is enabled
+        enable_actor_log = logging_config.get("enable_actor_log", True)
+        if not enable_actor_log:
+            return
+        
+        # Get configuration
+        from pathlib import Path
+        log_dir = Path(logging_config.get("log_dir", "./logs"))
+        client_id = logging_config.get("client_id", "vllm")
+        
+        # Create log directory
+        log_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Configure logger
+        logger.setLevel(logging.INFO)
+        
+        # Remove existing handlers to avoid duplicates
+        logger.handlers = []
+        
+        # Create file handler with rotation
+        from logging.handlers import RotatingFileHandler
+        log_file = log_dir / f"{client_id}_actor.log"
+        handler = RotatingFileHandler(
+            log_file,
+            maxBytes=10 * 1024 * 1024,  # 10MB
+            backupCount=5
+        )
+        
+        # Create JSON formatter matching client.py pattern
+        import json
+        from datetime import datetime
+        
+        class JsonFormatter(logging.Formatter):
+            def format(self, record: logging.LogRecord) -> str:
+                log_data = {
+                    "timestamp": datetime.utcnow().isoformat(),
+                    "level": record.levelname,
+                    "message": record.getMessage(),
+                    "module": record.module,
+                    "function": record.funcName,
+                    "line": record.lineno,
+                }
+                if hasattr(record, "execution_time"):
+                    log_data["execution_time_ms"] = record.execution_time
+                if hasattr(record, "extra_data"):
+                    log_data.update(record.extra_data)
+                return json.dumps(log_data)
+        
+        handler.setFormatter(JsonFormatter())
+        logger.addHandler(handler)
+        
+        logger.info(f"[vLLM] Logger configured to write to {log_file}")
+    
     def get_gpu_selection_info(self) -> dict:
         """
         Get GPU selection information for logging and diagnostics.
