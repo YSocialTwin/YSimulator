@@ -609,6 +609,14 @@ class VLLMService:
                     agent_attrs = req.get("agent_attrs")
                     article = req.get("article")  # Article content for news posts
                     
+                    # Log agent_attrs for debugging
+                    if agent_attrs:
+                        logger.info(f"[vLLM Batch {idx}] agent_attrs keys: {list(agent_attrs.keys())}")
+                        topic_value = agent_attrs.get("topic")
+                        logger.info(f"[vLLM Batch {idx}] topic from agent_attrs: {topic_value}")
+                    else:
+                        logger.info(f"[vLLM Batch {idx}] agent_attrs is None or empty")
+                    
                     # FALLBACK: If article is None but we have a topic that looks like article_id, try to fetch
                     if not article and agent_attrs and self.server and self.client_id:
                         topic = agent_attrs.get("topic")
