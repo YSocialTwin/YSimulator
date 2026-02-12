@@ -241,6 +241,14 @@ class BatchProcessor:
                 topic_or_article = pending_item[3] if len(pending_item) > 3 else None
                 action = ActionDTO(a_id, cid, "POST", content=res_txt)
 
+                # DEBUG: Log the pending_item structure for page agents
+                if topic_or_article:
+                    self.logger.debug(
+                        f"Agent {a_id} post: pending_item length={len(pending_item)}, "
+                        f"position[3]={topic_or_article}, type={type(topic_or_article)}, "
+                        f"content preview={res_txt[:50]}..."
+                    )
+
                 # Check if the fourth element is an article_id (UUID format) or a topic (string)
                 if topic_or_article:
                     # Try to parse as UUID - if successful, it's an article_id
@@ -248,7 +256,7 @@ class BatchProcessor:
                         uuid.UUID(topic_or_article)
                         action.article_id = topic_or_article
                         self.logger.info(
-                            f"LLM post for agent {a_id}: article_id={topic_or_article}, content_len={len(res_txt)}"
+                            f"LLM post for agent {a_id}: ✅ article_id={topic_or_article}, content_len={len(res_txt)}"
                         )
                     except ValueError:
                         # Not a valid UUID, treat as topic string
@@ -256,10 +264,28 @@ class BatchProcessor:
                         self.logger.info(
                             f"LLM post for agent {a_id}: topic={topic_or_article}, content_len={len(res_txt)}"
                         )
+                    except Exception as e:
+                        # Unexpected error during UUID validation
+                        self.logger.error(
+                            f"Agent {a_id} post: Error validating UUID for '{topic_or_article}': {e}"
+                        )
+                        # Still try to set it as article_id if it looks like a UUID
+                        if isinstance(topic_or_article, str) and len(topic_or_article) == 36 and topic_or_article.count('-') == 4:
+                            self.logger.warning(
+                                f"Agent {a_id}: Setting article_id despite UUID validation error"
+                            )
+                            action.article_id = topic_or_article
                 else:
-                    self.logger.info(
-                        f"LLM post for agent {a_id}: NO article_id/topic, content_len={len(res_txt)}"
-                    )
+                    # Log when there's NO article_id/topic but content mentions article
+                    if "check out this article" in res_txt.lower():
+                        self.logger.warning(
+                            f"Agent {a_id}: Post mentions article but NO article_id/topic in pending_item! "
+                            f"Content: {res_txt[:100]}..."
+                        )
+                    else:
+                        self.logger.info(
+                            f"LLM post for agent {a_id}: NO article_id/topic, content_len={len(res_txt)}"
+                        )
 
             # Annotate the post text
             annotations = annotate_text(
