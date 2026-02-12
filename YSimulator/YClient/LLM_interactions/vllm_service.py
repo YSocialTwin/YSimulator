@@ -623,14 +623,20 @@ class VLLMService:
                         news_commentary_config = self.prompts_config.get("generate_news_commentary", {})
                         system_template = news_commentary_config.get(
                             "system_template",
-                            "You are a social media content creator. Create engaging posts about news articles."
+                            "You are a social media content creator for {website_name}. Create engaging posts about news articles."
                         )
                         user_template = news_commentary_config.get(
                             "user_template",
                             'Article: "{article_title}"\n\nSummary: {article_text}\n\nWrite a brief engaging social media post about this article (max 280 characters).'
                         )
                         
-                        system_msg = system_template.format(website_name="this website")
+                        # Safely format templates - only replace placeholders that exist
+                        try:
+                            system_msg = system_template.format(website_name="this website")
+                        except KeyError:
+                            # Template doesn't have {website_name} placeholder
+                            system_msg = system_template
+                        
                         user_msg = user_template.format(article_title=article_title, article_text=article_text)
                         
                         logger.info(f"[vLLM Batch {idx}] News commentary prompt: user_msg='{user_msg[:100]}...'")
