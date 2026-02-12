@@ -110,6 +110,7 @@ class SimulationClient:
         config_path: str = ".",
         parent_logger=None,
         news_service_handle=None,
+        agent_config_file_path: str = None,
     ):
         """
         Initialize the simulation client.
@@ -122,11 +123,14 @@ class SimulationClient:
             config_path: Path to configuration directory for logs
             parent_logger: Parent logger (not used in Ray actor, we create our own)
             news_service_handle: Ray actor handle for NewsFeedService (optional)
+            agent_config_file_path: Optional path to agent_population.json file
+                                    (overrides default config_path lookup)
         """
         self.client_id = client_id
         self.llm = llm_handle
         self.news_service = news_service_handle
         self.config_path = Path(config_path)
+        self.agent_config_file_path = Path(agent_config_file_path) if agent_config_file_path else None
 
         # Phase 3: Initialize LLM Manager for consistent LLM interface
         # Import here to avoid circular dependencies during initial setup
@@ -232,6 +236,7 @@ class SimulationClient:
             actions_likelihood=self.actions_likelihood,
             logger=self.logger,
             follow_action_decay_config=self.follow_action_decay_config,
+            agent_config_file_path=self.agent_config_file_path,
         )
 
         # Create agents from configuration
