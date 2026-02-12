@@ -273,6 +273,45 @@ class VLLMService:
             top_p=0.95,
         )
 
+        # Initialize vision LLM if config provided
+        self.llm_v = None
+        self.sampling_params_v = None
+        if llm_v_config:
+            try:
+                logger.info("[vLLM] Initializing vision LLM (llm_v)...")
+                v_model_name = llm_v_config.get("model", "meta-llama/Llama-3.2-11B-Vision")
+                v_tensor_parallel_size = llm_v_config.get("tensor_parallel_size", 1)
+                v_gpu_memory_utilization = llm_v_config.get("gpu_memory_utilization", 0.9)
+                v_max_model_len = llm_v_config.get("max_model_len", 4096)
+                
+                vllm_v_params = {
+                    "model": v_model_name,
+                    "tensor_parallel_size": v_tensor_parallel_size,
+                    "gpu_memory_utilization": v_gpu_memory_utilization,
+                    "max_model_len": v_max_model_len,
+                    "trust_remote_code": True,
+                    "enforce_eager": True,
+                    "disable_custom_all_reduce": True,
+                }
+                
+                if v_tensor_parallel_size == 1:
+                    vllm_v_params["distributed_executor_backend"] = "mp"
+                else:
+                    vllm_v_params["distributed_executor_backend"] = "ray"
+                
+                self.llm_v = LLM(**vllm_v_params)
+                
+                self.sampling_params_v = SamplingParams(
+                    temperature=llm_v_config.get("temperature", 0.5),
+                    max_tokens=llm_v_config.get("max_tokens", 256),
+                    top_p=0.95,
+                )
+                logger.info(f"[vLLM] Vision LLM initialized successfully with model: {v_model_name}")
+            except Exception as e:
+                logger.error(f"[vLLM] Failed to initialize vision LLM: {e}")
+                self.llm_v = None
+                self.sampling_params_v = None
+
         # Store prompts and metadata
         self.prompts_config = prompts_config or {}
         self.gpu_selection_info = {
@@ -1003,8 +1042,16 @@ class VLLMService:
             if not website_name:
                 website_name = "this website"
 
-            system_template = self.prompts_config["generate_news_commentary"]["system_template"]
-            user_template = self.prompts_config["generate_news_commentary"]["user_template"]
+            # Get prompt templates with fallback defaults
+            news_commentary_config = self.prompts_config.get("generate_news_commentary", {})
+            system_template = news_commentary_config.get(
+                "system_template",
+                "You are a social media content creator for {website_name}. Create engaging posts about news articles."
+            )
+            user_template = news_commentary_config.get(
+                "user_template",
+                'Article: "{article_title}"\n\nSummary: {article_text}\n\nWrite a brief engaging social media post about this article (max 280 characters).'
+            )
 
             system_msg = system_template.format(website_name=website_name)
             user_msg = user_template.format(article_title=article_title, article_text=article_text)
