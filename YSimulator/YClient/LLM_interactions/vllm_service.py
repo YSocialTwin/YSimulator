@@ -16,7 +16,7 @@ import ray
 logger = logging.getLogger(__name__)
 
 
-@ray.remote(num_gpus=1)
+@ray.remote
 class VLLMService:
     """
     vLLM-based LLM service with batch inference support.
@@ -66,8 +66,16 @@ class VLLMService:
         
         # Get list of candidate GPUs for retry logic
         candidate_gpus = VLLMService._get_candidate_gpus_static(llm_config)
+
         
         import sys
+
+
+        print(
+            f"####################\n{candidate_gpus}\n########################",
+            file=sys.stdout,
+            flush=True
+        )
         
         # Try each GPU in order until one works
         last_error = None
@@ -85,7 +93,7 @@ class VLLMService:
                 print(
                     f"[GPU Attempt {attempt_num}/{len(candidate_gpus)}] ✅ Success! "
                     f"vLLM initialized on GPU {gpu_id}",
-                    file=sys.stderr,
+                    file=sys.stdout,
                     flush=True
                 )
                 return
@@ -100,7 +108,7 @@ class VLLMService:
                 print(
                     f"[GPU Attempt {attempt_num}/{len(candidate_gpus)}] ❌ Failed on GPU {gpu_id} "
                     f"({free_gb:.2f} GB free): {error_summary}",
-                    file=sys.stderr,
+                    file=sys.stdout,
                     flush=True
                 )
                 
@@ -128,81 +136,53 @@ class VLLMService:
             f"Last error: {type(last_error).__name__}: {str(last_error)}"
         ) from last_error
     
+ 
     @staticmethod
     def _get_candidate_gpus_static(llm_config: Optional[Dict[str, Any]] = None) -> List[Tuple[int, float, float]]:
         """
-        Get list of candidate GPUs for retry logic.
-        
-        Returns list of (gpu_id, free_gb, total_gb) tuples sorted by free memory.
-        Returns list with single None entry if GPU selection not applicable.
+        Dynamically discovers all physical GPUs and returns them sorted by free memory.
         """
-        # If no config, use default (no specific GPU selection)
-        if llm_config is None:
-            return [(None, 0.0, 0.0)]
-        
-        tensor_parallel_size = llm_config.get("tensor_parallel_size", 1)
-        if tensor_parallel_size != 1:
-            # Multi-GPU mode - let vLLM/Ray handle it, no retry
-            return [(None, 0.0, 0.0)]
-        
-        # Check if Ray has already assigned a specific GPU
-        cuda_visible = os.environ.get("CUDA_VISIBLE_DEVICES", "")
-        if cuda_visible and cuda_visible != "":
-            # Ray has assigned a GPU, respect it, no retry
-            return [(None, 0.0, 0.0)]
-        
-        # Dynamic GPU selection - get ordered list of suitable GPUs
+        import os
+        # Save the original mask Ray gave us to restore it later if needed
+        original_mask = os.environ.get("CUDA_VISIBLE_DEVICES", "")
+
         try:
-            from YSimulator.YClient.llm_utils.gpu_utils import (
-                get_ordered_gpus_by_memory,
-                estimate_required_vllm_memory,
-            )
+            import pynvml
+            # 1. Temporarily clear the mask so we can see all hardware on the host
+            os.environ["CUDA_VISIBLE_DEVICES"] = "" 
             
-            # Extract config for memory estimation
-            model_name = llm_config.get("model", "")
-            gpu_memory_util = llm_config.get("gpu_memory_utilization", 0.9)
-            max_model_len = llm_config.get("max_model_len", 40000)
+            pynvml.nvmlInit()
+            device_count = pynvml.nvmlDeviceGetCount()
+            candidates = []
+
+            for i in range(device_count):
+                handle = pynvml.nvmlDeviceGetHandleByIndex(i)
+                info = pynvml.nvmlDeviceGetMemoryInfo(handle)
+                free_gb = info.free / (1024**3)
+                total_gb = info.total / (1024**3)
+                
+                # Minimum threshold: skip cards that can't even hold the model weights
+                # A 3B model (FP16/AWQ) usually needs at least 3-4GB free
+                if free_gb > 2.0:
+                    candidates.append((i, free_gb, total_gb))
+
+            pynvml.nvmlShutdown()
+
+            # 2. Sort by free memory (Highest first) 
+            # This pushes the busy GPU 0 to the bottom of the list automatically
+            candidates.sort(key=lambda x: x[1], reverse=True)
             
-            # Estimate required memory
-            required_memory_gb = estimate_required_vllm_memory(
-                model_name=model_name,
-                gpu_memory_utilization=gpu_memory_util,
-                max_model_len=max_model_len,
-                tensor_parallel_size=tensor_parallel_size,
-            )
+            # Restore the original mask (for safety) before returning the list
+            os.environ["CUDA_VISIBLE_DEVICES"] = original_mask
             
-            # Get ordered list of GPUs with sufficient memory
-            candidate_gpus = get_ordered_gpus_by_memory(required_memory_gb=required_memory_gb)
-            
-            if candidate_gpus:
-                import sys
-                print(
-                    f"[GPU Selection] Found {len(candidate_gpus)} candidate GPU(s) "
-                    f"with >= {required_memory_gb:.2f} GB free",
-                    file=sys.stderr,
-                    flush=True
-                )
-                return candidate_gpus
-            else:
-                # No GPUs with sufficient memory, but still try default
-                import sys
-                print(
-                    f"[GPU Selection] No GPUs found with {required_memory_gb:.2f} GB free. "
-                    f"Will try default GPU.",
-                    file=sys.stderr,
-                    flush=True
-                )
-                return [(None, 0.0, 0.0)]
+            return candidates if candidates else [(0, 0.0, 0.0)]
                 
         except Exception as e:
-            import sys
-            print(
-                f"[GPU Selection] Failed to get candidate GPUs: {e}. Will try default GPU.",
-                file=sys.stderr,
-                flush=True
-            )
-            return [(None, 0.0, 0.0)]
-    
+            # Always restore the mask on error
+            os.environ["CUDA_VISIBLE_DEVICES"] = original_mask
+            print(f"[GPU Selection] Discovery failed: {e}. Falling back to default.")
+            return [(0, 0.0, 0.0)]
+
     @staticmethod
     def _set_gpu_env_for_attempt_static(
         gpu_id: Optional[int],
@@ -210,26 +190,29 @@ class VLLMService:
         total_attempts: int,
         free_gb: float
     ):
-        """Set CUDA_VISIBLE_DEVICES for a specific GPU attempt."""
+        """Set CUDA_VISIBLE_DEVICES and order for a specific GPU attempt."""
+        import os
         import sys
         
         if gpu_id is None:
-            # No specific GPU selection (Ray-assigned or default)
-            print(
-                f"[GPU Attempt {attempt_num}/{total_attempts}] Using default/assigned GPU",
-                file=sys.stderr,
-                flush=True
-            )
             return
+
+        # 1. PCI_BUS_ID ensures index 4 is physically card 4 from nvidia-smi
+        os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
         
-        # Set environment variable for this specific GPU
-        os.environ["CUDA_VISIBLE_DEVICES"] = str(gpu_id)
-        os.putenv("CUDA_VISIBLE_DEVICES", str(gpu_id))
+        # 2. Set the mask for this process
+        gpu_str = str(gpu_id)
+        os.environ["CUDA_VISIBLE_DEVICES"] = gpu_str
+        
+        # 3. FORCE the environment variable into the actual C-level environment
+        # This is critical for vLLM V1 because it uses the 'spawn' start method
+        # for subprocesses, which often ignores standard os.environ updates.
+        os.putenv("CUDA_VISIBLE_DEVICES", gpu_str)
         
         print(
-            f"[GPU Attempt {attempt_num}/{total_attempts}] Trying GPU {gpu_id} "
-            f"({free_gb:.2f} GB free)",
-            file=sys.stderr,
+            f"[GPU Attempt {attempt_num}/{total_attempts}] 🚀 Selected Physical GPU {gpu_id} "
+            f"({free_gb:.2f} GB free). Remapping to logical cuda:0",
+            file=sys.stdout,
             flush=True
         )
     
@@ -240,452 +223,62 @@ class VLLMService:
         llm_v_config: Optional[Dict[str, Any]] = None,
         logging_config: Optional[Dict[str, Any]] = None,
     ):
-        """Internal initialization method with error handling."""
-        # Load configuration with defaults FIRST (before any imports)
-        if llm_config is None:
-            llm_config = {
-                "model": "meta-llama/Llama-3.2-3B",
-                "temperature": 0.7,
-                "max_tokens": 256,
-                "tensor_parallel_size": 1,
-                "gpu_memory_utilization": 0.9,
-            }
+        """Internal initialization method with specific fixes for Ray worker isolation."""
+        import os
+        import torch
+        from vllm import LLM, SamplingParams
 
-        # Extract config values needed for GPU selection
+        # Load defaults
+        if llm_config is None:
+            llm_config = {}
+
         model_name = llm_config.get("model", "meta-llama/Llama-3.2-3B")
         tensor_parallel_size = llm_config.get("tensor_parallel_size", 1)
         gpu_memory_utilization = llm_config.get("gpu_memory_utilization", 0.9)
-        max_model_len = llm_config.get("max_model_len", 40000)
+        max_model_len = llm_config.get("max_model_len", 4096)
+        
+        # Verify CUDA is seeing the masked device
+        if not torch.cuda.is_available():
+            raise RuntimeError("Torch reports CUDA is not available after masking.")
 
         # ============================================================================
-        # CRITICAL: GPU SELECTION MUST HAPPEN BEFORE ANY CUDA/VLLM IMPORTS
+        # CRITICAL: vLLM Parameter Tuning for Shared Machines
         # ============================================================================
-        # Dynamic GPU selection for multi-GPU systems
-        # This avoids the "Free memory on device cuda:0 is less than desired GPU memory utilization" error
-        # Must set CUDA_VISIBLE_DEVICES before importing vllm or any CUDA-using library
-        selected_gpu = None
-        gpu_selection_info = {
-            "physical_gpu_id": None,
-            "logical_gpu_id": None,
-            "assignment_method": "default",
-            "cuda_visible_devices": os.environ.get("CUDA_VISIBLE_DEVICES"),
+        vllm_params = {
+            "model": model_name,
+            "tensor_parallel_size": tensor_parallel_size,
+            "gpu_memory_utilization": gpu_memory_utilization,
+            "max_model_len": max_model_len,
+            "trust_remote_code": True,
+            "enforce_eager": True, # Skips CUDA Graph capture to save VRAM and avoid crashes
+            "disable_custom_all_reduce": True,
         }
 
+        # FIX: The "Ray Worker Trap"
+        # If we are only using 1 GPU, use 'mp' (multiprocessing) instead of 'ray' backend.
+        # 'mp' is much more likely to inherit the CUDA_VISIBLE_DEVICES we set above.
         if tensor_parallel_size == 1:
-            # Only do dynamic GPU selection for single-GPU mode
-            # Multi-GPU mode (tensor parallelism) is handled by vLLM internally
-            
-            # Check if GPU was already selected in early init (via _set_gpu_env_early)
-            cuda_visible = os.environ.get("CUDA_VISIBLE_DEVICES", "")
-            if cuda_visible and cuda_visible != "":
-                logger.info(
-                    f"[vLLM] Using GPU from early initialization: "
-                    f"CUDA_VISIBLE_DEVICES={cuda_visible}"
-                )
-                try:
-                    physical_gpu_id = int(cuda_visible.split(",")[0])
-                    gpu_selection_info["physical_gpu_id"] = physical_gpu_id
-                    gpu_selection_info["logical_gpu_id"] = 0
-                    gpu_selection_info["assignment_method"] = "dynamic_selection_early"
-                    gpu_selection_info["cuda_visible_devices"] = cuda_visible
-                except (ValueError, IndexError):
-                    pass
-            else:
-                # CUDA_VISIBLE_DEVICES not set in early init, try now (fallback)
-                logger.info("[vLLM] CUDA_VISIBLE_DEVICES not set, attempting fallback GPU selection")
-                try:
-                    from YSimulator.YClient.llm_utils.gpu_utils import (
-                        estimate_required_vllm_memory,
-                        get_ray_assigned_gpu,
-                        select_gpu_with_sufficient_memory,
-                    )
+            vllm_params["distributed_executor_backend"] = "mp"
+            logger.info("[vLLM] Using 'mp' backend to ensure CUDA_VISIBLE_DEVICES inheritance.")
+        else:
+            vllm_params["distributed_executor_backend"] = "ray"
 
-                    # First, check if Ray has already assigned a specific GPU
-                    ray_gpu = get_ray_assigned_gpu()
-                    if ray_gpu is not None:
-                        logger.info(
-                            f"[vLLM] Using Ray-assigned GPU device {ray_gpu}"
-                        )
-                        selected_gpu = ray_gpu
-                        gpu_selection_info["physical_gpu_id"] = ray_gpu
-                        gpu_selection_info["logical_gpu_id"] = 0
-                        gpu_selection_info["assignment_method"] = "ray_assigned"
-                    else:
-                        # Ray hasn't assigned a specific GPU, select one with sufficient memory
-                        logger.info(
-                            "[vLLM] Ray has not assigned a specific GPU, selecting based on available memory"
-                        )
+        # Initialize the engine
+        self.llm = LLM(**vllm_params)
 
-                        # Estimate required memory
-                        required_memory_gb = estimate_required_vllm_memory(
-                            model_name=model_name,
-                            max_model_len=max_model_len,
-                            gpu_memory_utilization=gpu_memory_utilization,
-                        )
-
-                        # Select a GPU with sufficient memory
-                        selected_gpu = select_gpu_with_sufficient_memory(required_memory_gb)
-
-                        if selected_gpu is not None:
-                            logger.warning(
-                                f"[vLLM] Late GPU selection (GPU {selected_gpu}). "
-                                f"Note: Early GPU selection in __init__ is preferred for subprocess inheritance."
-                            )
-                            # CRITICAL: Set CUDA_VISIBLE_DEVICES BEFORE any CUDA operations
-                            # This must happen before importing vllm or torch.cuda
-                            physical_gpu_id = selected_gpu
-                            
-                            # Set the environment variable in multiple ways to ensure subprocess inheritance
-                            os.environ["CUDA_VISIBLE_DEVICES"] = str(selected_gpu)
-                            # Also use putenv to ensure it's exported to child processes
-                            # This is critical for vLLM v1 multiprocessing subprocesses
-                            os.putenv("CUDA_VISIBLE_DEVICES", str(selected_gpu))
-                            
-                            logger.info(
-                                f"[vLLM] Set CUDA_VISIBLE_DEVICES={selected_gpu} before vLLM initialization"
-                            )
-                            # After setting CUDA_VISIBLE_DEVICES to a specific GPU (e.g., "2"),
-                            # that physical GPU becomes logically remapped to device 0 from CUDA's
-                            # perspective within this process. All subsequent CUDA operations will
-                            # see it as cuda:0, even though it's physically GPU 2 on the system.
-                            selected_gpu = 0
-                            gpu_selection_info["physical_gpu_id"] = physical_gpu_id
-                            gpu_selection_info["logical_gpu_id"] = 0
-                            gpu_selection_info["assignment_method"] = "dynamic_selection_late"
-                            gpu_selection_info["cuda_visible_devices"] = str(physical_gpu_id)
-                        else:
-                            logger.warning(
-                                f"[vLLM] No GPU found with sufficient memory ({required_memory_gb:.2f} GB). "
-                                f"Will attempt initialization with default GPU, but it may fail."
-                            )
-                except Exception as e:
-                    logger.warning(
-                        f"[vLLM] Failed to perform dynamic GPU selection: {e}. "
-                        f"Will use default GPU assignment."
-                    )
-                    import traceback
-
-                    logger.debug(f"[vLLM] GPU selection error traceback:\n{traceback.format_exc()}")
-
-        # ============================================================================
-        # Configure multiprocessing for vLLM subprocesses
-        # ============================================================================
-        # vLLM v1 uses multiprocessing to spawn EngineCore subprocesses
-        # We need to ensure these subprocesses inherit the correct environment
-        try:
-            import multiprocessing
-            
-            # Check if we're running in a Ray actor
-            # Ray actors force 'spawn' method, so vLLM will override any setting we make
-            in_ray_actor = False
-            try:
-                import ray
-                # ray.get_runtime_context() throws if not in Ray context
-                ray.get_runtime_context()
-                in_ray_actor = True
-            except Exception:
-                # Not in Ray context, or Ray not initialized
-                pass
-            
-            current_method = multiprocessing.get_start_method(allow_none=True)
-            logger.info(f"[vLLM] Current multiprocessing start method: {current_method}")
-            
-            if in_ray_actor:
-                # When running as a Ray actor, vLLM will override to 'spawn' regardless
-                # of what we set. This is because Ray actors require 'spawn' for safety.
-                logger.info(
-                    "[vLLM] Running in Ray actor - vLLM will use 'spawn' multiprocessing method "
-                    "(this is expected and required for Ray actors)"
-                )
-                # Note: os.putenv() still ensures CUDA_VISIBLE_DEVICES is inherited even with 'spawn'
-            elif current_method is None:
-                # Not in Ray actor, try to set method for better environment inheritance
-                try:
-                    # 'fork' is best for environment inheritance but not available on Windows
-                    multiprocessing.set_start_method('fork', force=False)
-                    logger.info("[vLLM] Set multiprocessing start method to 'fork'")
-                except (RuntimeError, ValueError):
-                    # 'fork' not available or already set, try forkserver
-                    try:
-                        multiprocessing.set_start_method('forkserver', force=False)
-                        logger.info("[vLLM] Set multiprocessing start method to 'forkserver'")
-                    except (RuntimeError, ValueError):
-                        logger.warning("[vLLM] Could not set multiprocessing start method")
-            else:
-                logger.info(f"[vLLM] Multiprocessing start method already set to '{current_method}'")
-        except Exception as e:
-            logger.warning(f"[vLLM] Failed to configure multiprocessing: {e}")
-
-        # ============================================================================
-        # NOW it's safe to import vLLM (after GPU selection and multiprocessing config)
-        # ============================================================================
-        # First, validate that dependencies are available
-        import sys
-        
-        try:
-            import torch
-        except ImportError:
-            error_msg = (
-                "\n❌ PyTorch is not installed.\n"
-                "vLLM requires PyTorch with CUDA support.\n"
-                "Install with: pip install torch\n"
-                "See: https://pytorch.org/get-started/locally/\n"
-            )
-            print(error_msg, file=sys.stderr, flush=True)
-            raise ImportError("PyTorch is required for vLLM but is not installed") from None
-        
-        # Check CUDA availability
-        if not torch.cuda.is_available():
-            error_msg = (
-                "\n❌ CUDA is not available.\n"
-                "vLLM requires CUDA-enabled GPU(s).\n"
-                "Check:\n"
-                "  - GPU drivers are installed\n"
-                "  - CUDA toolkit is installed\n"
-                "  - PyTorch was installed with CUDA support\n"
-                "Run: python -c 'import torch; print(torch.cuda.is_available())'\n"
-            )
-            print(error_msg, file=sys.stderr, flush=True)
-            raise RuntimeError("CUDA is not available but is required for vLLM") from None
-        
-        logger.info(f"[vLLM] CUDA is available. Found {torch.cuda.device_count()} GPU(s)")
-        
-        # CRITICAL: Set the default CUDA device to ensure vLLM subprocesses use the correct GPU
-        # This is necessary because vLLM v1 engine spawns subprocesses that need to know which GPU to use
-        if selected_gpu is not None and tensor_parallel_size == 1:
-            # After setting CUDA_VISIBLE_DEVICES, the selected GPU is remapped to device 0
-            # But we need to explicitly set it for torch before vLLM creates subprocesses
-            logger.info(f"[vLLM] Setting torch.cuda default device to 0 (physical GPU: {gpu_selection_info.get('physical_gpu_id')})")
-            torch.cuda.set_device(0)
-            # Verify the device is set correctly
-            current_device = torch.cuda.current_device()
-            device_name = torch.cuda.get_device_name(current_device)
-            free_mem, total_mem = torch.cuda.mem_get_info(current_device)
-            logger.info(f"[vLLM] Current CUDA device: {current_device} ({device_name})")
-            logger.info(f"[vLLM] GPU memory: {free_mem / 1024**3:.2f} GB free / {total_mem / 1024**3:.2f} GB total")
-            logger.info(f"[vLLM] CUDA_VISIBLE_DEVICES: {os.environ.get('CUDA_VISIBLE_DEVICES')}")
-        elif selected_gpu is None:
-            # No GPU was selected, log the default device
-            logger.info(f"[vLLM] Using default CUDA device (no dynamic selection)")
-            logger.info(f"[vLLM] CUDA_VISIBLE_DEVICES: {os.environ.get('CUDA_VISIBLE_DEVICES', 'not set')}")
-        
-        try:
-            from vllm import LLM, SamplingParams
-        except ImportError as e:
-            error_msg = (
-                "\n❌ vLLM is not installed.\n"
-                "Install with: pip install vllm\n"
-                "Note: vLLM requires Linux and is not supported on macOS.\n"
-                f"Import error: {str(e)}\n"
-            )
-            print(error_msg, file=sys.stderr, flush=True)
-            raise ImportError(
-                "vLLM is not installed. Install it with: pip install vllm\n"
-                "Note: vLLM requires Linux and is not supported on macOS."
-            ) from e
-
-        # Configure prompts
-        if prompts_config is None:
-            print("⚠ Warning: No prompts configuration provided. Using default fallback prompts.")
-            prompts_config = {
-                "personas": {
-                    "0": "You are a 'Validator'. Skeptical, brief, authentic.",
-                    "1": "You are a 'Broadcaster'. High energy, viral, controversial.",
-                    "2": "You are an 'Explorer'. Curious, asking questions.",
-                },
-                "generate_post": {
-                    "system_template": "{persona}",
-                    "user_template": "Write a tweet for Day {day} Slot {slot}. Max 15 words.",
-                },
-                "decide_reaction": {
-                    "system_template": "You are user type {cluster_id}. Read post. Reply ONLY: 'LIKE', 'COMMENT', 'IGNORE'.",
-                    "user_template": "{post_content}",
-                },
-            }
-
-        # Store prompts configuration
-        self.prompts_config = prompts_config
-
-        # Store GPU selection information for logging and diagnostics
-        self.gpu_selection_info = gpu_selection_info
-
-        # Disable FlashAttention by default (requires compute capability >= 8.0)
-        # Can be enabled via config: "enable_flashattention": true
-        enable_flashattention = llm_config.get("enable_flashattention", False)
-
-        logger.info(
-            f"[vLLM] Initializing vLLM engine with text model={model_name}, "
-            f"tensor_parallel_size={tensor_parallel_size}, "
-            f"gpu_memory_utilization={gpu_memory_utilization}, "
-            f"max_model_len={max_model_len}, "
-            f"enable_flashattention={enable_flashattention}"
+        # Sampling Setup
+        self.sampling_params = SamplingParams(
+            temperature=llm_config.get("temperature", 0.7),
+            max_tokens=llm_config.get("max_tokens", 256),
+            top_p=0.95,
         )
 
-        try:
-            # Build vLLM initialization parameters
-            vllm_params = {
-                "model": model_name,
-                "tensor_parallel_size": tensor_parallel_size,
-                "gpu_memory_utilization": gpu_memory_utilization,
-                "max_model_len": max_model_len,
-                "trust_remote_code": True,
-            }
-
-            # Disable FlashAttention if not explicitly enabled
-            # This is required for GPUs with compute capability < 8.0 (e.g., RTX 2080 Ti)
-            # vLLM will automatically fall back to a compatible attention implementation
-            if not enable_flashattention:
-                vllm_params["disable_custom_all_reduce"] = True
-                # Don't set VLLM_ATTENTION_BACKEND - let vLLM auto-select compatible backend
-                logger.info(
-                    "[vLLM] FlashAttention disabled, vLLM will auto-select compatible attention backend"
-                )
-
-            self.llm = LLM(**vllm_params)
-
-            # Set up sampling parameters for text generation
-            temperature = llm_config.get("temperature", 0.7)
-            max_tokens = llm_config.get("max_tokens", 256)
-
-            self.sampling_params = SamplingParams(
-                temperature=temperature,
-                max_tokens=max_tokens,
-                top_p=0.95,
-            )
-
-            logger.info("[vLLM] vLLM text generation engine initialized successfully")
-        except Exception as e:
-            # Log detailed error information
-            logger.error(f"[vLLM] ========== vLLM Text Model Initialization Failed ==========")
-            logger.error(f"[vLLM] Error type: {type(e).__name__}")
-            logger.error(f"[vLLM] Error message: {str(e)}")
-            logger.error(f"[vLLM] Configuration:")
-            logger.error(f"[vLLM]   - Model: {model_name}")
-            logger.error(f"[vLLM]   - Tensor parallel size: {tensor_parallel_size}")
-            logger.error(f"[vLLM]   - GPU memory utilization: {gpu_memory_utilization}")
-            logger.error(f"[vLLM]   - Max model length: {max_model_len}")
-            logger.error(f"[vLLM]   - FlashAttention enabled: {enable_flashattention}")
-            logger.error(f"[vLLM] ============================================================")
-
-            # Log full traceback for debugging
-            import traceback
-            import sys
-
-            traceback_str = traceback.format_exc()
-            logger.error(f"[vLLM] Full traceback:\n{traceback_str}")
-            
-            # Also print to stderr so it's visible in Ray logs
-            error_msg = (
-                f"\n{'='*70}\n"
-                f"❌ vLLM Text Model Initialization Failed\n"
-                f"{'='*70}\n"
-                f"Error: {type(e).__name__}: {str(e)}\n"
-                f"Model: {model_name}\n"
-                f"GPU Memory Utilization: {gpu_memory_utilization}\n"
-                f"Max Model Length: {max_model_len}\n"
-                f"{'='*70}\n"
-                f"Traceback:\n{traceback_str}\n"
-                f"{'='*70}\n"
-            )
-            print(error_msg, file=sys.stderr, flush=True)
-
-            # Re-raise with more context but preserve original exception
-            raise RuntimeError(
-                f"vLLM text model initialization failed. "
-                f"Model: {model_name}, Error: {type(e).__name__}: {str(e)}"
-            ) from e
-
-        # Initialize vision LLM if config provided
-        self.llm_v = None
-        self.sampling_params_v = None
-        if llm_v_config:
-            vision_model = llm_v_config.get("model", "openbmb/MiniCPM-V-2_6")
-            vision_temp = llm_v_config.get("temperature", 0.5)
-            vision_max_tokens = llm_v_config.get("max_tokens", 300)
-            vision_max_model_len = llm_v_config.get("max_model_len", 40000)
-
-            logger.info(
-                f"[vLLM] Initializing vLLM vision engine with model={vision_model}, "
-                f"temperature={vision_temp}, max_tokens={vision_max_tokens}, "
-                f"max_model_len={vision_max_model_len}"
-            )
-
-            try:
-                # Initialize vision model with vLLM
-                # Note: Vision models in vLLM require trust_remote_code=True
-                self.llm_v = LLM(
-                    model=vision_model,
-                    tensor_parallel_size=tensor_parallel_size,
-                    gpu_memory_utilization=gpu_memory_utilization,
-                    max_model_len=vision_max_model_len,
-                    trust_remote_code=True,
-                )
-
-                # Set up sampling parameters for vision model
-                self.sampling_params_v = SamplingParams(
-                    temperature=vision_temp,
-                    max_tokens=vision_max_tokens,
-                    top_p=0.95,
-                )
-
-                logger.info("[vLLM] vLLM vision engine initialized successfully")
-            except Exception as e:
-                logger.error(f"[vLLM] Failed to initialize vLLM vision engine: {e}")
-                logger.error(f"[vLLM] Vision model: {vision_model}")
-                logger.warning("[vLLM] Vision model functionality will be disabled")
-                self.llm_v = None
-                self.sampling_params_v = None
-
-        # Set up prompt logging if enabled
-        if logging_config is None:
-            logging_config = {}
-
-        enable_prompt_log = logging_config.get("enable_prompt_log", False)
-        self.prompt_logger = None
-
-        if enable_prompt_log:
-            # Set up prompt logger with file handler
-            from logging.handlers import RotatingFileHandler
-            from pathlib import Path
-
-            # Get log directory from logging_config or use default
-            log_dir = logging_config.get("log_dir", "./logs")
-            log_dir = Path(log_dir)
-            log_dir.mkdir(exist_ok=True)
-
-            # Create prompt logger
-            self.prompt_logger = logging.getLogger(f"{logger.name}.prompts")
-            self.prompt_logger.setLevel(logging.DEBUG)
-            self.prompt_logger.propagate = False
-
-            # Only add handler if it doesn't exist
-            if not self.prompt_logger.handlers:
-                prompt_log_file = log_dir / "vllm_prompts.log"
-
-                # Create rotating file handler
-                prompt_handler = RotatingFileHandler(
-                    prompt_log_file, maxBytes=50 * 1024 * 1024, backupCount=3
-                )
-                prompt_handler.setLevel(logging.DEBUG)
-
-                # Create formatter
-                import json
-                from datetime import datetime
-
-                class PromptJsonFormatter(logging.Formatter):
-                    def format(self, record):
-                        log_data = {
-                            "timestamp": datetime.utcnow().isoformat(),
-                            "level": record.levelname,
-                            "message": record.getMessage(),
-                        }
-                        if hasattr(record, "extra_data"):
-                            log_data.update(record.extra_data)
-                        return json.dumps(log_data, indent=2)
-
-                prompt_handler.setFormatter(PromptJsonFormatter())
-                self.prompt_logger.addHandler(prompt_handler)
-                logger.info("Prompt logging enabled in vLLM service")
+        # Store prompts and metadata
+        self.prompts_config = prompts_config or {}
+        self.gpu_selection_info = {
+            "cuda_visible_devices": os.environ.get("CUDA_VISIBLE_DEVICES"),
+            "backend": vllm_params.get("distributed_executor_backend")
+        }
 
     def get_gpu_selection_info(self) -> dict:
         """
