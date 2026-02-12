@@ -392,6 +392,12 @@ class SQLPostRepository(PostRepository):
                 "thread_id": thread_id,
                 "reaction_count": post_data.get("num_reactions")
                 or post_data.get("reaction_count", 0),
+                # CRITICAL: Include news_id and shared_from for proper post referencing
+                "news_id": post_data.get("news_id"),
+                "shared_from": post_data.get("shared_from"),
+                # Include image-related fields
+                "image_id": post_data.get("image_id"),
+                "post_img": post_data.get("post_img"),
             }
             # Filter out None values
             mapped_data = {k: v for k, v in mapped_data.items() if v is not None}
