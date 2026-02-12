@@ -365,21 +365,36 @@ class BatchProcessor:
             # Check if topic is an article_id (UUID) - if so, fetch article for proper commentary
             article_content = None
             if topic:
+                self.logger.debug(f"Processing batch post with topic: {topic}, type: {type(topic)}")
                 try:
                     uuid.UUID(topic)  # Validate it's a UUID
                     # This is an article_id - fetch article for news commentary
+                    self.logger.info(f"Topic {topic} is UUID - fetching article for news commentary")
                     article_data = ray.get(self.server.get_article.remote(topic, client_id=self.client_id))
+                    
                     if article_data:
+                        self.logger.info(f"✅ Article fetched successfully: {article_data.get('title', 'NO TITLE')[:100]}")
                         article_content = {
                             "id": topic,
                             "title": article_data.get("title", ""),
                             "summary": article_data.get("summary", article_data.get("description", ""))
                         }
-                        self.logger.info(f"Fetched article for batch post: {article_content['title'][:50]}...")
-                except (ValueError, Exception) as e:
-                    # Not a UUID or fetch failed - treat as regular topic
-                    if not isinstance(e, ValueError):
-                        self.logger.warning(f"Failed to fetch article {topic}: {e}")
+                        self.logger.info(f"✅ Article content prepared for batch: title='{article_content['title'][:50]}...', summary_len={len(article_content['summary'])}")
+                    else:
+                        self.logger.warning(f"❌ Article fetch returned None for article_id {topic}")
+                except ValueError:
+                    # Not a UUID - regular topic
+                    self.logger.debug(f"Topic {topic} is not UUID - treating as regular topic")
+                except Exception as e:
+                    # Fetch failed
+                    self.logger.error(f"❌ Failed to fetch article {topic}: {type(e).__name__}: {e}")
+            else:
+                self.logger.debug(f"No topic provided for batch post")
+            
+            if article_content:
+                self.logger.info(f"✅ Adding batch request WITH article: {article_content['title'][:30]}...")
+            else:
+                self.logger.debug(f"Adding batch request WITHOUT article (regular post)")
             
             batch_requests.append(
                 {

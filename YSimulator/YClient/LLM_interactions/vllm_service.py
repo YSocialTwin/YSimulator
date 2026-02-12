@@ -601,12 +601,20 @@ class VLLMService:
                         raise ValueError(f"Missing slot in request {idx}")
                     agent_attrs = req.get("agent_attrs")
                     article = req.get("article")  # Article content for news posts
+                    
+                    # Log what we received
+                    if article:
+                        logger.info(f"[vLLM Batch {idx}] Received article: title='{article.get('title', 'NO_TITLE')[:50]}...', has_summary={bool(article.get('summary'))}")
+                    else:
+                        logger.debug(f"[vLLM Batch {idx}] No article content - generating regular post")
 
                     # Check if this is a news post (page sharing article)
                     if article and article.get("title"):
                         # Use news commentary generation for article posts
                         article_title = article.get("title", "News Article")
                         article_text = article.get("summary", "")
+                        
+                        logger.info(f"[vLLM Batch {idx}] ✅ USING NEWS COMMENTARY PATH for: '{article_title[:50]}...'")
                         
                         if len(article_text) > 500:
                             article_text = article_text[:500] + "..."
@@ -625,16 +633,20 @@ class VLLMService:
                         system_msg = system_template.format(website_name="this website")
                         user_msg = user_template.format(article_title=article_title, article_text=article_text)
                         
-                        logger.info(f"[vLLM Batch] Generating news commentary for article: {article_title[:50]}...")
+                        logger.info(f"[vLLM Batch {idx}] News commentary prompt: user_msg='{user_msg[:100]}...'")
                         prompt = self._format_prompt(system_msg, user_msg)
                         prompts.append(prompt)
                     else:
                         # Regular post generation
+                        logger.info(f"[vLLM Batch {idx}] ❌ USING REGULAR POST PATH (no article or no title)")
+                        
                         # Build persona
                         persona = self._build_persona(cluster_id, agent_attrs)
                         toxicity = agent_attrs.get("toxicity", "no") if agent_attrs else "no"
                         topic = agent_attrs.get("topic") if agent_attrs else None
                         topic_opinion = agent_attrs.get("topic_opinion") if agent_attrs else None
+                        
+                        logger.debug(f"[vLLM Batch {idx}] Regular post - persona: {persona[:50]}..., topic: {topic}")
 
                         # Get prompt templates
                         system_template = self.prompts_config["generate_post"]["system_template"]
