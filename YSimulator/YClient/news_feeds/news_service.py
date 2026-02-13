@@ -13,6 +13,7 @@ import datetime
 import logging
 import random
 import time
+import uuid
 from typing import Any, Dict, List, Optional
 
 import feedparser
@@ -567,7 +568,6 @@ class NewsFeedService:
         Returns:
             Dictionary with image data ready for database insertion
         """
-        import uuid
         return {
             "id": str(uuid.uuid4()),
             "url": image_url,
