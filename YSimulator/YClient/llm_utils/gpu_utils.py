@@ -518,11 +518,11 @@ def estimate_required_vllm_memory(
     # Extract parameter count from model name if possible
     # This is a heuristic and may not work for all model names
     model_name_lower = model_name.lower()
-    
+
     # Detect quantization format and set bytes per parameter
     bytes_per_param = 2.0  # Default: FP16
     quantization_type = "FP16"
-    
+
     if "int4" in model_name_lower or "4bit" in model_name_lower:
         bytes_per_param = 0.5
         quantization_type = "int4"
