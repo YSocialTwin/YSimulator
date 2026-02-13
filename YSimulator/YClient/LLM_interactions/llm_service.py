@@ -89,11 +89,9 @@ class LLMService:
             llm_config["address"] = llm_config["address"].replace("http://", "").replace("https://", "")
         if ":" in llm_config["address"]:
             logger.warning(f"LLM config address include port.")
-            base_url = f"http://{llm_config['address']}"
+            base_url = f"http://{llm_config['address']}".replace("/v1", "")
         else:
-            base_url = f"http://{llm_config['address']}:{llm_config['port']}"
-
-        print(f"\n\n\n\n\n\n########################\n\n\n\n{base_url}\n\n\n\n########################\n\n\n\n")
+            base_url = f"http://{llm_config['address']}:{llm_config['port']}".replace("/v1", "")  # Ensure no duplicate /v1 in URL
 
         # Initialize LLM with configuration
         self.llm = ChatOllama(
@@ -110,9 +108,9 @@ class LLMService:
                 llm_v_config["address"] = llm_v_config["address"].replace("http://", "").replace("https://", "")
             if ":" in llm_v_config["address"]:
                 logger.warning(f"LLM config address include port.")
-                base_url_v = f"http://{llm_v_config['address']}"
+                base_url_v = f"http://{llm_v_config['address']}".replace("/v1", "")
             else:
-                base_url_v = f"http://{llm_v_config['address']}:{llm_v_config['port']}"
+                base_url_v = f"http://{llm_v_config['address']}:{llm_v_config['port']}".replace("/v1", "")
 
             self.llm_v = ChatOllama(
                 model=llm_v_config["model"],
