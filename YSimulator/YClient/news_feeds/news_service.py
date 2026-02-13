@@ -95,6 +95,9 @@ class NewsFeedService:
         self.feeds_config = feeds_config.get("feeds", [])
         self.cache_duration = feeds_config.get("cache_duration", 3600)
         self.llm_service = llm_service  # Store LLM service reference for image descriptions
+        
+        # Configuration for image processing
+        self.max_images_per_article = 3  # Limit images per article for performance
 
         # Get server actor reference
         try:
@@ -552,6 +555,26 @@ class NewsFeedService:
             traceback.print_exc()
             return None
 
+    def _create_image_data(self, image_url: str, description: str, article_id: str) -> Dict[str, Any]:
+        """
+        Create image data dictionary for database insertion.
+
+        Args:
+            image_url: URL of the image
+            description: Description text for the image
+            article_id: UUID of the article this image belongs to
+
+        Returns:
+            Dictionary with image data ready for database insertion
+        """
+        import uuid
+        return {
+            "id": str(uuid.uuid4()),
+            "url": image_url,
+            "description": description,
+            "article_id": article_id,
+        }
+
     def _process_and_save_images(self, article_id: str, image_urls: List[str]):
         """
         Process images by getting descriptions from LLM and saving to database.
@@ -564,20 +587,17 @@ class NewsFeedService:
             article_id: UUID of the article these images belong to
             image_urls: List of image URLs to process
         """
-        import uuid
-
         # Check if LLM service is available
         if not self.llm_service:
             self.logger.warning("LLM service not available, skipping image descriptions")
             return
 
-        # Limit to 3 images per article
-        MAX_IMAGES_PER_ARTICLE = 3
-        if len(image_urls) > MAX_IMAGES_PER_ARTICLE:
+        # Limit to configured max images per article
+        if len(image_urls) > self.max_images_per_article:
             self.logger.info(
-                f"Article has {len(image_urls)} images, limiting to {MAX_IMAGES_PER_ARTICLE}"
+                f"Article has {len(image_urls)} images, limiting to {self.max_images_per_article}"
             )
-            image_urls = image_urls[:MAX_IMAGES_PER_ARTICLE]
+            image_urls = image_urls[:self.max_images_per_article]
 
         self.logger.info(f"Processing {len(image_urls)} image(s) for article {article_id}")
         successful_saves = 0
@@ -601,12 +621,9 @@ class NewsFeedService:
                     )
                     
                     # Create new image entry for this article with the existing description
-                    image_data = {
-                        "id": str(uuid.uuid4()),
-                        "url": image_url,
-                        "description": existing_image["description"],
-                        "article_id": article_id,
-                    }
+                    image_data = self._create_image_data(
+                        image_url, existing_image["description"], article_id
+                    )
                     
                     self.logger.info(f"[{idx}/{len(image_urls)}] Saving reused image to database...")
                     image_id = ray.get(self.server.add_image.remote(image_data))
@@ -637,13 +654,8 @@ class NewsFeedService:
                         f"[{idx}/{len(image_urls)}] Got description ({len(description)} chars): {description[:100]}..."
                     )
 
-                    # Save image to database
-                    image_data = {
-                        "id": str(uuid.uuid4()),
-                        "url": image_url,
-                        "description": description,
-                        "article_id": article_id,
-                    }
+                    # Save image to database using helper method
+                    image_data = self._create_image_data(image_url, description, article_id)
 
                     self.logger.info(f"[{idx}/{len(image_urls)}] Saving new image to database...")
                     image_id = ray.get(self.server.add_image.remote(image_data))

@@ -521,7 +521,13 @@ def generate_image_post_async(
     """
     llm_actor = _get_llm_actor(llm_handle, agent_id)
 
+    # For vLLM batching: Don't create individual futures, return None as placeholder
+    # The batch processor will create a single batch call instead
+    if _should_use_vllm_batching(llm_handle):
+        return None  # Placeholder - batch processor will handle this
+
+    # For Ollama/standard: Create individual future (standard scatter/gather)
     # Generate post content (image will be attached later during action processing)
-    future = llm_actor.generate_post.remote(cluster_id, agent_attrs)
+    future = llm_actor.generate_post.remote(cluster_id, day, slot, agent_attrs)
 
     return future
