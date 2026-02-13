@@ -82,6 +82,7 @@ class VLLMService:
         self.llm_v = None
         self.sampling_params_v = None
         self.vision_gpu_id = None
+        self.vision_init_status = None  # Track why vision LLM is unavailable
         self.gpu_selection_info = {}
 
         import sys
@@ -295,6 +296,8 @@ class VLLMService:
         self.llm_v = None
         self.sampling_params_v = None
         self.vision_gpu_id = None
+        self.vision_init_status = None  # Track why vision LLM is unavailable
+        
         if llm_v_config:
             # Check if we're in a multi-GPU environment
             from YSimulator.YClient.llm_utils.gpu_utils import (
@@ -305,6 +308,7 @@ class VLLMService:
 
             total_gpus = get_total_gpu_count()
             logger.info(f"[vLLM] Total GPUs available: {total_gpus}")
+            logger.info(f"[vLLM] Vision LLM config provided: model={llm_v_config.get('model', 'default')}")
 
             # Only allocate dedicated GPU for vision if we have multiple GPUs
             if total_gpus > 1:
@@ -384,35 +388,50 @@ class VLLMService:
                                 top_p=0.95,
                             )
                             self.vision_gpu_id = vision_gpu_id
+                            self.vision_init_status = f"dedicated_gpu_success_gpu_{vision_gpu_id}"
                             logger.info(
                                 f"[vLLM] Vision LLM initialized successfully on dedicated GPU {vision_gpu_id} "
                                 f"with model: {v_model_name}"
                             )
+                            logger.info(f"[vLLM] Vision service status: {self.vision_init_status}")
                         finally:
                             # Restore original GPU setting
                             # Note: Both os.environ and os.putenv are set intentionally (see comment above)
                             os.environ["CUDA_VISIBLE_DEVICES"] = original_cuda_visible
                             os.putenv("CUDA_VISIBLE_DEVICES", original_cuda_visible)
                     else:
+                        self.vision_init_status = f"no_suitable_gpu_multi_gpu_env"
                         logger.warning(
                             "[vLLM] No suitable GPU found for vision LLM. "
                             "Skipping vision LLM initialization to avoid memory issues."
+                        )
+                        logger.info(
+                            f"[vLLM] Vision service unavailable: {self.vision_init_status}. "
+                            f"Current GPU(s): {current_gpu_ids}, Total GPUs: {total_gpus}"
                         )
                         self.llm_v = None
                         self.sampling_params_v = None
 
                 except Exception as e:
+                    self.vision_init_status = f"dedicated_gpu_allocation_failed: {str(e)[:100]}"
                     logger.error(f"[vLLM] Failed to allocate dedicated GPU for vision LLM: {e}")
+                    logger.error(f"[vLLM] Vision service status: {self.vision_init_status}")
                     logger.info("[vLLM] Falling back to shared GPU initialization")
                     # Fall through to shared GPU initialization below
                     self._initialize_vision_llm_shared_gpu(llm_v_config)
             else:
+                self.vision_init_status = "single_gpu_environment_skipped"
                 logger.info(
                     "[vLLM] Single GPU environment detected. "
                     "Skipping vision LLM initialization to avoid memory issues."
                 )
+                logger.info(f"[vLLM] Vision service unavailable: {self.vision_init_status}")
                 self.llm_v = None
                 self.sampling_params_v = None
+        else:
+            self.vision_init_status = "llm_v_config_not_provided"
+            logger.info("[vLLM] Vision LLM config (llm_v_config) not provided in configuration")
+            logger.info(f"[vLLM] Vision service unavailable: {self.vision_init_status}")
 
     def _initialize_vision_llm_shared_gpu(self, llm_v_config: Dict[str, Any]):
         """
@@ -452,11 +471,15 @@ class VLLMService:
                 max_tokens=llm_v_config.get("max_tokens", 256),
                 top_p=0.95,
             )
+            self.vision_init_status = "shared_gpu_success"
             logger.info(
                 f"[vLLM] Vision LLM initialized successfully on shared GPU with model: {v_model_name}"
             )
+            logger.info(f"[vLLM] Vision service status: {self.vision_init_status}")
         except Exception as e:
+            self.vision_init_status = f"shared_gpu_failed: {str(e)[:100]}"
             logger.error(f"[vLLM] Failed to initialize vision LLM on shared GPU: {e}")
+            logger.error(f"[vLLM] Vision service status: {self.vision_init_status}")
             self.llm_v = None
             self.sampling_params_v = None
 
@@ -1850,7 +1873,15 @@ class VLLMService:
         """
         # Check if vision LLM is available
         if not self.llm_v:
-            logger.warning("[vLLM] Vision LLM (llm_v) not configured, cannot describe image")
+            status_msg = self.vision_init_status or "unknown"
+            logger.warning(
+                f"[vLLM] Vision LLM (llm_v) not available for image description. "
+                f"Status: {status_msg}"
+            )
+            logger.info(
+                f"[vLLM] Vision service unavailable - cannot describe image. "
+                f"Reason: {status_msg}"
+            )
             return None
 
         try:
