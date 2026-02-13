@@ -270,7 +270,11 @@ class BatchProcessor:
                             f"Agent {a_id} post: Error validating UUID for '{topic_or_article}': {e}"
                         )
                         # Still try to set it as article_id if it looks like a UUID
-                        if isinstance(topic_or_article, str) and len(topic_or_article) == 36 and topic_or_article.count('-') == 4:
+                        if (
+                            isinstance(topic_or_article, str)
+                            and len(topic_or_article) == 36
+                            and topic_or_article.count("-") == 4
+                        ):
                             self.logger.warning(
                                 f"Agent {a_id}: Setting article_id despite UUID validation error"
                             )
@@ -361,13 +365,15 @@ class BatchProcessor:
         batch_requests = []
         for item in batchable_posts:
             agent_id, cluster_id, future, topic, item_day, item_slot, agent_attrs = item
-            
+
             # Check if article content is already in agent_attrs (optimization to avoid DB fetch)
             article_content = None
             if agent_attrs and "article" in agent_attrs:
                 # Article content was passed directly through agent_attrs
                 article_content = agent_attrs["article"]
-                self.logger.info(f"✅ Using article from agent_attrs (no DB fetch needed): '{article_content.get('title', '')[:50]}...'")
+                self.logger.info(
+                    f"✅ Using article from agent_attrs (no DB fetch needed): '{article_content.get('title', '')[:50]}...'"
+                )
             elif topic:
                 # Fallback: Fetch article from DB if not in agent_attrs
                 self.logger.debug(f"Processing batch post with topic: {topic}, type: {type(topic)}")
@@ -375,32 +381,46 @@ class BatchProcessor:
                     uuid.UUID(topic)  # Validate it's a UUID
                     # This is an article_id - fetch article for news commentary
                     self.logger.info(f"Topic {topic} is UUID - fetching article from DB (fallback)")
-                    article_data = ray.get(self.server.get_article.remote(topic, client_id=self.client_id))
-                    
+                    article_data = ray.get(
+                        self.server.get_article.remote(topic, client_id=self.client_id)
+                    )
+
                     if article_data:
-                        self.logger.info(f"✅ Article fetched from DB: {article_data.get('title', 'NO TITLE')[:100]}")
+                        self.logger.info(
+                            f"✅ Article fetched from DB: {article_data.get('title', 'NO TITLE')[:100]}"
+                        )
                         article_content = {
                             "id": topic,
                             "title": article_data.get("title", ""),
-                            "summary": article_data.get("summary", article_data.get("description", ""))
+                            "summary": article_data.get(
+                                "summary", article_data.get("description", "")
+                            ),
                         }
-                        self.logger.info(f"✅ Article content prepared for batch: title='{article_content['title'][:50]}...', summary_len={len(article_content['summary'])}")
+                        self.logger.info(
+                            f"✅ Article content prepared for batch: title='{article_content['title'][:50]}...', summary_len={len(article_content['summary'])}"
+                        )
                     else:
-                        self.logger.warning(f"❌ Article fetch returned None for article_id {topic}")
+                        self.logger.warning(
+                            f"❌ Article fetch returned None for article_id {topic}"
+                        )
                 except ValueError:
                     # Not a UUID - regular topic
                     self.logger.debug(f"Topic {topic} is not UUID - treating as regular topic")
                 except Exception as e:
                     # Fetch failed
-                    self.logger.error(f"❌ Failed to fetch article {topic}: {type(e).__name__}: {e}")
+                    self.logger.error(
+                        f"❌ Failed to fetch article {topic}: {type(e).__name__}: {e}"
+                    )
             else:
                 self.logger.debug(f"No topic or article in agent_attrs")
-            
+
             if article_content:
-                self.logger.info(f"✅ Adding batch request WITH article: {article_content.get('title', '')[:30]}...")
+                self.logger.info(
+                    f"✅ Adding batch request WITH article: {article_content.get('title', '')[:30]}..."
+                )
             else:
                 self.logger.debug(f"Adding batch request WITHOUT article (regular post)")
-            
+
             batch_requests.append(
                 {
                     "cluster_id": cluster_id,
@@ -637,7 +657,7 @@ class BatchProcessor:
                         f"Empty or whitespace-only LLM comment/share for agent {a_id}, skipping"
                     )
                     continue
-                
+
                 # This is comment/share commentary text from LLM
                 # Determine action type: SHARE (with commentary) or COMMENT
                 determined_action_type = action_type_override if action_type_override else "COMMENT"
@@ -702,11 +722,11 @@ class BatchProcessor:
                     post_data = ray.get(
                         self.server.get_post.remote(target, client_id=self.client_id)
                     )
-                    
+
                     # Generate LLM commentary for the share (synchronous call since we're in gather phase)
                     post_content = post_data.get("tweet", "") if post_data else ""
                     author_id = post_data.get("user_id") if post_data else None
-                    
+
                     # Get author username for context
                     author_name = "Someone"
                     if author_id:
@@ -715,10 +735,10 @@ class BatchProcessor:
                         )
                         if author_user:
                             author_name = author_user.get("username", "Someone")
-                    
+
                     # Build agent attributes for persona-based commentary
                     agent_attrs = {"name": f"Agent_{a_id}"}
-                    
+
                     # Call LLM to generate share commentary synchronously
                     try:
                         llm_actor = self._get_llm_actor()
@@ -733,7 +753,7 @@ class BatchProcessor:
                             f"Failed to generate LLM share commentary for agent {a_id}: {e}. Using fallback."
                         )
                         share_content = f"Sharing from cluster {cid}"
-                    
+
                     # Calculate opinion updates for the share
                     updated_opinions = None
                     if post_data:

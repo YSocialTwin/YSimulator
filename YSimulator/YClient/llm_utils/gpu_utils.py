@@ -22,22 +22,23 @@ KV_CACHE_OVERHEAD_MULTIPLIER = 1.5  # Overhead multiplier for KV cache (50% addi
 def _get_gpu_device_name(device_id: int) -> str:
     """
     Get the device name for a specific GPU.
-    
+
     Args:
         device_id: CUDA device ID to query
-        
+
     Returns:
         GPU device name (e.g., 'NVIDIA A100-SXM4-40GB') or 'Unknown GPU' if unavailable
     """
     try:
         import pynvml
+
         pynvml.nvmlInit()
         try:
             handle = pynvml.nvmlDeviceGetHandleByIndex(device_id)
             name = pynvml.nvmlDeviceGetName(handle)
             # Handle both bytes and str return types
             if isinstance(name, bytes):
-                return name.decode('utf-8')
+                return name.decode("utf-8")
             return name
         finally:
             try:
@@ -51,7 +52,7 @@ def _get_gpu_device_name(device_id: int) -> str:
 def get_gpu_memory_info(device_id: int = 0) -> Tuple[float, float]:
     """
     Get memory information for a specific GPU device.
-    
+
     Uses pynvml (nvidia-ml-py) to query GPU without initializing CUDA.
     This is critical for early GPU selection before CUDA context creation.
 
@@ -67,25 +68,25 @@ def get_gpu_memory_info(device_id: int = 0) -> Tuple[float, float]:
     try:
         # Try pynvml first (preferred - no CUDA initialization)
         import pynvml
-        
+
         pynvml.nvmlInit()
         try:
             handle = pynvml.nvmlDeviceGetHandleByIndex(device_id)
             info = pynvml.nvmlDeviceGetMemoryInfo(handle)
-            
+
             free_gb = info.free / (1024**3)
             total_gb = info.total / (1024**3)
-            
+
             return free_gb, total_gb
         finally:
             try:
                 pynvml.nvmlShutdown()
             except:
                 pass
-                
+
     except (ImportError, Exception) as e:
         logger.debug(f"pynvml not available or failed ({e}), falling back to torch")
-        
+
         # Fallback to torch (initializes CUDA - not ideal for early detection)
         try:
             import torch
@@ -104,7 +105,7 @@ def get_gpu_memory_info(device_id: int = 0) -> Tuple[float, float]:
 
             free_gb = free_memory / (1024**3)
             total_gb = total_memory / (1024**3)
-            
+
             return free_gb, total_gb
         except ImportError:
             raise RuntimeError("Neither pynvml nor PyTorch is available. Cannot query GPU memory.")
@@ -115,51 +116,56 @@ def get_gpu_memory_info(device_id: int = 0) -> Tuple[float, float]:
 def _get_physical_gpu_count_and_unmask() -> Tuple[int, Optional[str]]:
     """
     Get the actual number of physical GPUs on the host and temporarily unmask all.
-    
+
     Ray assigns GPUs by setting CUDA_VISIBLE_DEVICES, which masks other GPUs.
     This function temporarily unmasks ALL physical GPUs to enable complete discovery.
-    
+
     Returns:
         Tuple of (physical_gpu_count, original_cuda_visible_devices)
-        
+
     Raises:
         RuntimeError: If unable to query physical GPU count
     """
     try:
         import pynvml
-        
+
         # Save Ray's CUDA_VISIBLE_DEVICES assignment (if any)
         original_cuda_visible_devices = os.environ.get("CUDA_VISIBLE_DEVICES")
-        
-        logger.info(f"[GPU Query] Original CUDA_VISIBLE_DEVICES from Ray: {original_cuda_visible_devices}")
-        
+
+        logger.info(
+            f"[GPU Query] Original CUDA_VISIBLE_DEVICES from Ray: {original_cuda_visible_devices}"
+        )
+
         # Initialize NVML to talk to NVIDIA drivers
         pynvml.nvmlInit()
         try:
             # Get the actual number of physical GPUs on this host (not masked count)
             device_count = pynvml.nvmlDeviceGetCount()
             logger.info(f"[GPU Query] Physical GPU count on host: {device_count}")
-            
+
             # Create a portable visibility string for all physical GPUs (e.g., "0,1,2,3,4,5")
             all_gpu_ids = ",".join([str(i) for i in range(device_count)])
-            
+
             # Temporarily unmask ALL physical GPUs to perform memory check
             logger.info(f"[GPU Query] Temporarily unmasking all GPUs: {all_gpu_ids}")
             os.environ["CUDA_VISIBLE_DEVICES"] = all_gpu_ids
             os.putenv("CUDA_VISIBLE_DEVICES", all_gpu_ids)
-            
+
             return device_count, original_cuda_visible_devices
         finally:
             try:
                 pynvml.nvmlShutdown()
             except:
                 pass
-                
+
     except Exception as e:
-        logger.warning(f"[GPU Query] Failed to unmask GPUs: {e}. Using current CUDA_VISIBLE_DEVICES.")
+        logger.warning(
+            f"[GPU Query] Failed to unmask GPUs: {e}. Using current CUDA_VISIBLE_DEVICES."
+        )
         # If unmasking fails, return current device count (masked view)
         try:
             import pynvml
+
             pynvml.nvmlInit()
             try:
                 device_count = pynvml.nvmlDeviceGetCount()
@@ -173,6 +179,7 @@ def _get_physical_gpu_count_and_unmask() -> Tuple[int, Optional[str]]:
             # Last resort - use torch
             try:
                 import torch
+
                 return torch.cuda.device_count(), os.environ.get("CUDA_VISIBLE_DEVICES")
             except:
                 raise RuntimeError("Unable to query GPU count")
@@ -181,7 +188,7 @@ def _get_physical_gpu_count_and_unmask() -> Tuple[int, Optional[str]]:
 def get_all_gpu_memory_info() -> List[Tuple[int, float, float]]:
     """
     Get memory information for all available GPUs.
-    
+
     Uses pynvml (nvidia-ml-py) to query GPUs without initializing CUDA.
     Temporarily unmasks Ray-hidden GPUs to discover all physical GPUs on the host.
 
@@ -192,35 +199,35 @@ def get_all_gpu_memory_info() -> List[Tuple[int, float, float]]:
         RuntimeError: If unable to query GPU memory
     """
     original_cuda_visible_devices = None
-    
+
     try:
         # Try pynvml first (preferred - no CUDA initialization)
         import pynvml
-        
+
         # Unmask all GPUs to see the complete picture
         device_count, original_cuda_visible_devices = _get_physical_gpu_count_and_unmask()
-        
+
         logger.info(f"[GPU Query] Querying all {device_count} physical GPU(s)...")
-        
+
         gpu_info = []
         for device_id in range(device_count):
             free_gb, total_gb = get_gpu_memory_info(device_id)
             gpu_name = _get_gpu_device_name(device_id)
             gpu_info.append((device_id, free_gb, total_gb))
-            
+
             # Log detailed information for each GPU
             logger.info(
                 f"[GPU Query]   GPU {device_id}: {gpu_name} - "
                 f"{free_gb:.2f} GB free / {total_gb:.2f} GB total"
             )
-        
+
         logger.info(f"[GPU Query] Found {len(gpu_info)} physical GPU(s) on host")
-        
+
         return gpu_info
-                
+
     except (ImportError, Exception) as e:
         logger.debug(f"pynvml not available or failed ({e}), falling back to torch")
-        
+
         # Fallback to torch
         try:
             import torch
@@ -236,11 +243,13 @@ def get_all_gpu_memory_info() -> List[Tuple[int, float, float]]:
             return gpu_info
         except ImportError:
             raise RuntimeError("Neither pynvml nor PyTorch is available. Cannot query GPU memory.")
-    
+
     finally:
         # Restore original CUDA_VISIBLE_DEVICES (Ray's assignment)
         if original_cuda_visible_devices is not None:
-            logger.info(f"[GPU Query] Restored original CUDA_VISIBLE_DEVICES: {original_cuda_visible_devices}")
+            logger.info(
+                f"[GPU Query] Restored original CUDA_VISIBLE_DEVICES: {original_cuda_visible_devices}"
+            )
             os.environ["CUDA_VISIBLE_DEVICES"] = original_cuda_visible_devices
             os.putenv("CUDA_VISIBLE_DEVICES", original_cuda_visible_devices)
         elif "CUDA_VISIBLE_DEVICES" in os.environ and original_cuda_visible_devices is None:
@@ -334,65 +343,69 @@ def select_gpu_with_sufficient_memory(required_memory_gb: float) -> Optional[int
 
 
 def get_ordered_gpus_by_memory(
-    required_memory_gb: Optional[float] = None
+    required_memory_gb: Optional[float] = None,
 ) -> List[Tuple[int, float, float]]:
     """
     Get list of GPUs ordered by free memory (descending).
-    
+
     Args:
         required_memory_gb: Optional minimum required free memory in GB.
                           If specified, only GPUs with sufficient memory are returned.
-    
+
     Returns:
         List of tuples: (device_id, free_gb, total_gb) sorted by free_gb descending
         Returns empty list if no suitable GPUs found.
-    
+
     Example:
         >>> gpus = get_ordered_gpus_by_memory(required_memory_gb=10.0)
         >>> # [(2, 35.2, 40.0), (1, 28.3, 40.0), (0, 15.1, 40.0)]
     """
     try:
         gpu_info = get_all_gpu_memory_info()
-        
+
         if not gpu_info:
             logger.warning("[GPU Selection] No GPUs available")
             return []
-        
+
         logger.info(f"[GPU Selection] Found {len(gpu_info)} GPU(s) before filtering")
-        
+
         # Filter by required memory if specified
         if required_memory_gb is not None:
-            logger.info(f"[GPU Selection] Filtering GPUs with >= {required_memory_gb:.2f} GB free memory")
-            
+            logger.info(
+                f"[GPU Selection] Filtering GPUs with >= {required_memory_gb:.2f} GB free memory"
+            )
+
             # Keep original list for logging
             original_gpu_info = list(gpu_info)
             gpu_info = []
-            
+
             for device_id, free_gb, total_gb in original_gpu_info:
                 if free_gb >= required_memory_gb:
                     gpu_info.append((device_id, free_gb, total_gb))
                     logger.info(f"[GPU Selection]   GPU {device_id}: {free_gb:.2f} GB free ✅")
                 else:
-                    logger.info(f"[GPU Selection]   GPU {device_id}: {free_gb:.2f} GB free ❌ (insufficient)")
-            
+                    logger.info(
+                        f"[GPU Selection]   GPU {device_id}: {free_gb:.2f} GB free ❌ (insufficient)"
+                    )
+
             if not gpu_info:
                 logger.warning(
                     f"[GPU Selection] No GPU found with {required_memory_gb:.2f} GB free memory"
                 )
                 return []
-            
+
             logger.info(f"[GPU Selection] Found {len(gpu_info)} candidate GPU(s) after filtering")
-        
+
         # Sort by free memory (descending)
         gpu_info.sort(key=lambda x: x[1], reverse=True)
-        
+
         # Log final candidate list
         logger.info("[GPU Selection] Candidate GPUs (sorted by free memory):")
         for idx, (device_id, free_gb, total_gb) in enumerate(gpu_info, 1):
             logger.info(f"[GPU Selection]   {idx}. GPU {device_id}: {free_gb:.2f} GB free")
-        
+
         return gpu_info
-        
+
     except Exception as e:
         logger.error(f"[GPU Selection] Failed to get GPU list: {e}")
         return []

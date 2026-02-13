@@ -21,7 +21,9 @@ class TestVLLMServiceErrorHandling(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         """Load the source code once for all tests."""
-        source_path = Path(__file__).parent.parent / "YClient" / "LLM_interactions" / "vllm_service.py"
+        source_path = (
+            Path(__file__).parent.parent / "YClient" / "LLM_interactions" / "vllm_service.py"
+        )
         with open(source_path, "r") as f:
             cls.source_code = f.read()
 

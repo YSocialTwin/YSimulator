@@ -96,7 +96,7 @@ def recommend_rchrono_popularity(
 ) -> List[str]:
     """
     Reverse chronological with popularity boost (reaction count).
-    
+
     Now ensures that the full `limit` of posts is returned by including posts
     with 0 popularity if needed, and falling back to reverse chrono if still insufficient.
 
@@ -130,7 +130,7 @@ def recommend_rchrono_popularity(
     )
 
     post_ids = [row[0] for row in query.all()]
-    
+
     # If we got fewer than requested, fill with reverse chrono fallback
     if len(post_ids) < limit:
         remaining = limit - len(post_ids)
@@ -152,7 +152,7 @@ def recommend_rchrono_popularity(
             .limit(remaining)
         )
         post_ids.extend([row[0] for row in fallback_query.all()])
-    
+
     return post_ids
 
 
@@ -250,7 +250,7 @@ def recommend_rchrono_followers_popularity(
 ) -> List[str]:
     """
     Followers with popularity boost (combines following and reaction count).
-    
+
     Now ensures that the full `limit` of posts is returned by:
     1. Getting follower posts (prioritized by popularity)
     2. Filling remaining slots with non-follower posts (by popularity)
@@ -268,7 +268,7 @@ def recommend_rchrono_followers_popularity(
         List of post UUIDs (always `limit` items or all available posts if fewer exist)
     """
     follower_posts_limit = int(limit * followers_ratio)
-    
+
     # Query 1: Get posts from followers (ordered by popularity)
     query_followers = (
         session.query(Post.id)
@@ -296,7 +296,7 @@ def recommend_rchrono_followers_popularity(
     # Query 2: Fill remaining slots with non-follower posts (ordered by popularity)
     if len(post_ids) < limit:
         remaining = limit - len(post_ids)
-        
+
         if post_ids:
             query_additional = (
                 session.query(Post.id)
@@ -334,7 +334,7 @@ def recommend_rchrono_followers_popularity(
             )
 
         post_ids.extend([row[0] for row in query_additional.all()])
-    
+
     # Query 3: Final fallback to reverse chrono if still not enough
     if len(post_ids) < limit:
         remaining = limit - len(post_ids)

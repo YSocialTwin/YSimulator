@@ -328,7 +328,7 @@ class PopulationLoader:
     def _get_agent_config_file(self) -> Optional[Path]:
         """
         Get the agent population configuration file path.
-        
+
         Priority order:
         1. Custom agent_config_file_path if provided (from --agents parameter)
         2. Client-specific file in config_path
@@ -337,7 +337,7 @@ class PopulationLoader:
         # If a custom path was provided (e.g., via --agents parameter), use it
         if self.agent_config_file_path is not None:
             return self.agent_config_file_path
-        
+
         # Otherwise, fall back to looking in config_path
         client_specific = self.config_path / f"{self.client_id}_agent_population.json"
         generic = self.config_path / "agent_population.json"

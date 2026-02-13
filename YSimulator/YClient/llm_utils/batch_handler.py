@@ -58,7 +58,7 @@ class BatchHandler:
             # Ray task execution error - log full details
             self.logger.error(f"Ray task error gathering futures: {type(e).__name__}: {str(e)}")
             self.logger.error(f"Full traceback:\n{traceback.format_exc()}")
-            
+
             # Try to get individual results to identify which future failed
             results = []
             for i, future in enumerate(futures):
@@ -66,7 +66,9 @@ class BatchHandler:
                     result = ray.get(future)
                     results.append(result)
                 except Exception as individual_error:
-                    self.logger.error(f"Future {i} failed: {type(individual_error).__name__}: {str(individual_error)}")
+                    self.logger.error(
+                        f"Future {i} failed: {type(individual_error).__name__}: {str(individual_error)}"
+                    )
                     results.append(None)
             return results
         except ray.exceptions.RayActorError as e:
@@ -83,7 +85,7 @@ class BatchHandler:
             self.logger.error(f"Unexpected error gathering futures: {type(e).__name__}: {str(e)}")
             self.logger.error(f"Full traceback:\n{traceback.format_exc()}")
             self.logger.error(f"Number of futures: {len(futures)}")
-            
+
             # Try to get individual results to identify which future failed
             results = []
             for i, future in enumerate(futures):
@@ -91,7 +93,9 @@ class BatchHandler:
                     result = ray.get(future)
                     results.append(result)
                 except Exception as individual_error:
-                    self.logger.error(f"Future {i} failed: {type(individual_error).__name__}: {str(individual_error)}")
+                    self.logger.error(
+                        f"Future {i} failed: {type(individual_error).__name__}: {str(individual_error)}"
+                    )
                     results.append(None)
             return results
 
@@ -198,16 +202,20 @@ class BatchHandler:
                     try:
                         results.append(ray.get(future, timeout=0))
                     except Exception as individual_error:
-                        self.logger.error(f"Future {i} failed even though ready: {type(individual_error).__name__}: {str(individual_error)}")
+                        self.logger.error(
+                            f"Future {i} failed even though ready: {type(individual_error).__name__}: {str(individual_error)}"
+                        )
                         results.append(None)
                 else:
                     self.logger.debug(f"Future {i} not ready after timeout")
                     results.append(None)
             return results
         except ray.exceptions.RayTaskError as e:
-            self.logger.error(f"Ray task error gathering futures with timeout: {type(e).__name__}: {str(e)}")
+            self.logger.error(
+                f"Ray task error gathering futures with timeout: {type(e).__name__}: {str(e)}"
+            )
             self.logger.error(f"Full traceback:\n{traceback.format_exc()}")
-            
+
             # Try to get individual results
             results = []
             for i, future in enumerate(futures):
@@ -215,14 +223,20 @@ class BatchHandler:
                     result = ray.get(future)
                     results.append(result)
                 except Exception as individual_error:
-                    self.logger.error(f"Future {i} failed: {type(individual_error).__name__}: {str(individual_error)}")
+                    self.logger.error(
+                        f"Future {i} failed: {type(individual_error).__name__}: {str(individual_error)}"
+                    )
                     results.append(None)
             return results
         except ray.exceptions.RayActorError as e:
-            self.logger.error(f"Ray actor error gathering futures with timeout: {type(e).__name__}: {str(e)}")
+            self.logger.error(
+                f"Ray actor error gathering futures with timeout: {type(e).__name__}: {str(e)}"
+            )
             self.logger.error(f"Full traceback:\n{traceback.format_exc()}")
             return [None] * len(futures)
         except Exception as e:
-            self.logger.error(f"Unexpected error gathering futures with timeout: {type(e).__name__}: {str(e)}")
+            self.logger.error(
+                f"Unexpected error gathering futures with timeout: {type(e).__name__}: {str(e)}"
+            )
             self.logger.error(f"Full traceback:\n{traceback.format_exc()}")
             return [None] * len(futures)

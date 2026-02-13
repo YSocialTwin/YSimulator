@@ -121,7 +121,9 @@ class CostTracker:
             for handler in self.usage_logger.handlers:
                 handler.flush()
 
-    def log_gpu_selection(self, gpu_info: dict, model_name: str = None, backend: str = "vllm") -> None:
+    def log_gpu_selection(
+        self, gpu_info: dict, model_name: str = None, backend: str = "vllm"
+    ) -> None:
         """
         Log GPU selection information to the usage log.
 

@@ -63,7 +63,10 @@ class PostProcessor(BaseActionProcessor):
                 )
             else:
                 # Log when article_id is missing but content mentions article
-                if hasattr(action, "content") and "check out this article" in action.content.lower():
+                if (
+                    hasattr(action, "content")
+                    and "check out this article" in action.content.lower()
+                ):
                     self.logger.warning(
                         f"Post for agent {action.agent_id}: Content mentions article but NO article_id! "
                         f"hasattr={hasattr(action, 'article_id')}, "

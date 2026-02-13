@@ -215,9 +215,11 @@ class TestMemoryEstimation(unittest.TestCase):
         # estimated = 9 * 1.3 = 11.7 GB
         # required = 11.7 / 0.9 = 13.0 GB
         expected_gb = ((3 * 2) * 1.5) * (1.0 + (40000 / 40000) * 0.3) / 0.9
-        
+
         # Allow tolerance for rounding
-        self.assertAlmostEqual(required_gb, expected_gb, delta=expected_gb * MEMORY_ESTIMATION_TOLERANCE)
+        self.assertAlmostEqual(
+            required_gb, expected_gb, delta=expected_gb * MEMORY_ESTIMATION_TOLERANCE
+        )
 
     def test_estimate_required_vllm_memory_7b(self):
         """Test memory estimation for 7B model."""
@@ -235,9 +237,11 @@ class TestMemoryEstimation(unittest.TestCase):
         # estimated = 21 * 1.3 = 27.3 GB
         # required = 27.3 / 0.9 = 30.33 GB
         expected_gb = ((7 * 2) * 1.5) * (1.0 + (40000 / 40000) * 0.3) / 0.9
-        
+
         # Allow tolerance for rounding
-        self.assertAlmostEqual(required_gb, expected_gb, delta=expected_gb * MEMORY_ESTIMATION_TOLERANCE)
+        self.assertAlmostEqual(
+            required_gb, expected_gb, delta=expected_gb * MEMORY_ESTIMATION_TOLERANCE
+        )
 
     def test_estimate_required_vllm_memory_unknown_model(self):
         """Test memory estimation for unknown model (should use conservative default)."""
@@ -255,9 +259,11 @@ class TestMemoryEstimation(unittest.TestCase):
         # estimated = 21 * 1.3 = 27.3 GB
         # required = 27.3 / 0.9 = 30.33 GB
         expected_gb = ((7 * 2) * 1.5) * (1.0 + (40000 / 40000) * 0.3) / 0.9
-        
+
         # Allow tolerance for rounding
-        self.assertAlmostEqual(required_gb, expected_gb, delta=expected_gb * MEMORY_ESTIMATION_TOLERANCE)
+        self.assertAlmostEqual(
+            required_gb, expected_gb, delta=expected_gb * MEMORY_ESTIMATION_TOLERANCE
+        )
 
 
 if __name__ == "__main__":

@@ -46,7 +46,9 @@ class TestGPUSelectionLogging(unittest.TestCase):
             }
 
             # Log GPU selection
-            tracker.log_gpu_selection(gpu_info, model_name="meta-llama/Llama-3.2-3B", backend="vllm")
+            tracker.log_gpu_selection(
+                gpu_info, model_name="meta-llama/Llama-3.2-3B", backend="vllm"
+            )
 
             # Verify log file was created
             self.assertTrue(log_file.exists(), "Log file should be created")

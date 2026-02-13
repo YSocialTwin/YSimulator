@@ -67,97 +67,101 @@ class VLLMService:
         # 1. vLLM spawns subprocesses that need to inherit CUDA_VISIBLE_DEVICES
         # 2. Setting it after CUDA initialization is too late
         # 3. The environment must be set before ANY imports that might touch CUDA
-        
+
         # Get list of candidate GPUs for retry logic
         candidate_gpus = VLLMService._get_candidate_gpus_static(llm_config)
 
         # Store server and client_id early for use in _initialize
         self.server = server
         self.client_id = client_id
-        
-        import sys
 
+        import sys
 
         print(
             f"####################\n{candidate_gpus}\n########################",
             file=sys.stdout,
-            flush=True
+            flush=True,
         )
-        
+
         # Try each GPU in order until one works
         last_error = None
         gpu_attempts = []
-        
+
         for attempt_num, (gpu_id, free_gb, total_gb) in enumerate(candidate_gpus, 1):
             try:
                 # Set GPU environment for this attempt
-                VLLMService._set_gpu_env_for_attempt_static(gpu_id, attempt_num, len(candidate_gpus), free_gb)
-                
+                VLLMService._set_gpu_env_for_attempt_static(
+                    gpu_id, attempt_num, len(candidate_gpus), free_gb
+                )
+
                 # Try to initialize with this GPU
                 self._initialize(llm_config, prompts_config, llm_v_config, logging_config)
-                
+
                 # Success! Log and return
                 print(
                     f"[GPU Attempt {attempt_num}/{len(candidate_gpus)}] ✅ Success! "
                     f"vLLM initialized on GPU {gpu_id}",
                     file=sys.stdout,
-                    flush=True
+                    flush=True,
                 )
                 return
-                
+
             except Exception as e:
                 last_error = e
                 gpu_attempts.append((gpu_id, free_gb, str(e)))
-                
+
                 # Log this failed attempt
-                error_summary = str(e).split('\n')[0] if '\n' in str(e) else str(e)
+                error_summary = str(e).split("\n")[0] if "\n" in str(e) else str(e)
                 error_summary = error_summary[:100]  # Limit length
                 print(
                     f"[GPU Attempt {attempt_num}/{len(candidate_gpus)}] ❌ Failed on GPU {gpu_id} "
                     f"({free_gb:.2f} GB free): {error_summary}",
                     file=sys.stdout,
-                    flush=True
+                    flush=True,
                 )
-                
+
                 # If this isn't the last GPU, continue to next
                 if attempt_num < len(candidate_gpus):
                     continue
-        
+
         # All GPUs exhausted - build comprehensive error message
         error_msg = f"\n{'='*70}\n"
         error_msg += "❌ VLLMService Initialization Failed - All GPUs Exhausted\n"
         error_msg += f"{'='*70}\n"
         error_msg += f"Attempted {len(gpu_attempts)} GPU(s):\n"
         for gpu_id, free_gb, error in gpu_attempts:
-            error_summary = error.split('\n')[0] if '\n' in error else error
+            error_summary = error.split("\n")[0] if "\n" in error else error
             error_summary = error_summary[:80]
             error_msg += f"  - GPU {gpu_id} ({free_gb:.2f} GB free): {error_summary}\n"
         error_msg += f"\nLast error: {type(last_error).__name__}: {str(last_error)[:200]}\n"
         error_msg += f"{'='*70}\n"
-        
+
         print(error_msg, file=sys.stderr, flush=True)
-        
+
         # Re-raise the last error
         raise RuntimeError(
             f"Failed to initialize vLLM on any of {len(gpu_attempts)} available GPU(s). "
             f"Last error: {type(last_error).__name__}: {str(last_error)}"
         ) from last_error
-    
- 
+
     @staticmethod
-    def _get_candidate_gpus_static(llm_config: Optional[Dict[str, Any]] = None) -> List[Tuple[int, float, float]]:
+    def _get_candidate_gpus_static(
+        llm_config: Optional[Dict[str, Any]] = None,
+    ) -> List[Tuple[int, float, float]]:
         """
         Dynamically discovers all physical GPUs and returns them sorted by free memory.
         """
         import os
+
         # Save the original mask Ray gave us to restore it later if needed
         original_mask = os.environ.get("CUDA_VISIBLE_DEVICES", "")
 
         try:
             import pynvml
+
             # 1. Temporarily clear the mask so we can see all hardware on the host
-            os.environ["CUDA_VISIBLE_DEVICES"] = "" 
-            
+            os.environ["CUDA_VISIBLE_DEVICES"] = ""
+
             pynvml.nvmlInit()
             device_count = pynvml.nvmlDeviceGetCount()
             candidates = []
@@ -167,7 +171,7 @@ class VLLMService:
                 info = pynvml.nvmlDeviceGetMemoryInfo(handle)
                 free_gb = info.free / (1024**3)
                 total_gb = info.total / (1024**3)
-                
+
                 # Minimum threshold: skip cards that can't even hold the model weights
                 # A 3B model (FP16/AWQ) usually needs at least 3-4GB free
                 if free_gb > 2.0:
@@ -175,15 +179,15 @@ class VLLMService:
 
             pynvml.nvmlShutdown()
 
-            # 2. Sort by free memory (Highest first) 
+            # 2. Sort by free memory (Highest first)
             # This pushes the busy GPU 0 to the bottom of the list automatically
             candidates.sort(key=lambda x: x[1], reverse=True)
-            
+
             # Restore the original mask (for safety) before returning the list
             os.environ["CUDA_VISIBLE_DEVICES"] = original_mask
-            
+
             return candidates if candidates else [(0, 0.0, 0.0)]
-                
+
         except Exception as e:
             # Always restore the mask on error
             os.environ["CUDA_VISIBLE_DEVICES"] = original_mask
@@ -192,37 +196,34 @@ class VLLMService:
 
     @staticmethod
     def _set_gpu_env_for_attempt_static(
-        gpu_id: Optional[int],
-        attempt_num: int,
-        total_attempts: int,
-        free_gb: float
+        gpu_id: Optional[int], attempt_num: int, total_attempts: int, free_gb: float
     ):
         """Set CUDA_VISIBLE_DEVICES and order for a specific GPU attempt."""
         import os
         import sys
-        
+
         if gpu_id is None:
             return
 
         # 1. PCI_BUS_ID ensures index 4 is physically card 4 from nvidia-smi
         os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
-        
+
         # 2. Set the mask for this process
         gpu_str = str(gpu_id)
         os.environ["CUDA_VISIBLE_DEVICES"] = gpu_str
-        
+
         # 3. FORCE the environment variable into the actual C-level environment
         # This is critical for vLLM V1 because it uses the 'spawn' start method
         # for subprocesses, which often ignores standard os.environ updates.
         os.putenv("CUDA_VISIBLE_DEVICES", gpu_str)
-        
+
         print(
             f"[GPU Attempt {attempt_num}/{total_attempts}] 🚀 Selected Physical GPU {gpu_id} "
             f"({free_gb:.2f} GB free). Remapping to logical cuda:0",
             file=sys.stdout,
-            flush=True
+            flush=True,
         )
-    
+
     def _initialize(
         self,
         llm_config: Optional[Dict[str, Any]] = None,
@@ -232,6 +233,7 @@ class VLLMService:
     ):
         """Internal initialization method with specific fixes for Ray worker isolation."""
         import os
+
         import torch
         from vllm import LLM, SamplingParams
 
@@ -243,7 +245,7 @@ class VLLMService:
         tensor_parallel_size = llm_config.get("tensor_parallel_size", 1)
         gpu_memory_utilization = llm_config.get("gpu_memory_utilization", 0.9)
         max_model_len = llm_config.get("max_model_len", 4096)
-        
+
         # Verify CUDA is seeing the masked device
         if not torch.cuda.is_available():
             raise RuntimeError("Torch reports CUDA is not available after masking.")
@@ -257,7 +259,7 @@ class VLLMService:
             "gpu_memory_utilization": gpu_memory_utilization,
             "max_model_len": max_model_len,
             "trust_remote_code": True,
-            "enforce_eager": True, # Skips CUDA Graph capture to save VRAM and avoid crashes
+            "enforce_eager": True,  # Skips CUDA Graph capture to save VRAM and avoid crashes
             "disable_custom_all_reduce": True,
         }
 
@@ -290,7 +292,7 @@ class VLLMService:
                 v_tensor_parallel_size = llm_v_config.get("tensor_parallel_size", 1)
                 v_gpu_memory_utilization = llm_v_config.get("gpu_memory_utilization", 0.9)
                 v_max_model_len = llm_v_config.get("max_model_len", 4096)
-                
+
                 vllm_v_params = {
                     "model": v_model_name,
                     "tensor_parallel_size": v_tensor_parallel_size,
@@ -300,20 +302,22 @@ class VLLMService:
                     "enforce_eager": True,
                     "disable_custom_all_reduce": True,
                 }
-                
+
                 if v_tensor_parallel_size == 1:
                     vllm_v_params["distributed_executor_backend"] = "mp"
                 else:
                     vllm_v_params["distributed_executor_backend"] = "ray"
-                
+
                 self.llm_v = LLM(**vllm_v_params)
-                
+
                 self.sampling_params_v = SamplingParams(
                     temperature=llm_v_config.get("temperature", 0.5),
                     max_tokens=llm_v_config.get("max_tokens", 256),
                     top_p=0.95,
                 )
-                logger.info(f"[vLLM] Vision LLM initialized successfully with model: {v_model_name}")
+                logger.info(
+                    f"[vLLM] Vision LLM initialized successfully with model: {v_model_name}"
+                )
             except Exception as e:
                 logger.error(f"[vLLM] Failed to initialize vision LLM: {e}")
                 self.llm_v = None
@@ -323,16 +327,16 @@ class VLLMService:
         self.prompts_config = prompts_config or {}
         self.gpu_selection_info = {
             "cuda_visible_devices": os.environ.get("CUDA_VISIBLE_DEVICES"),
-            "backend": vllm_params.get("distributed_executor_backend")
+            "backend": vllm_params.get("distributed_executor_backend"),
         }
-        
+
         # Configure logger to write to file if logging_config provided
         self._setup_logger(logging_config)
 
     def _setup_logger(self, logging_config: Optional[Dict[str, Any]] = None):
         """
         Configure the module-level logger to write to {client_id}_actor.log file.
-        
+
         Args:
             logging_config: Dictionary with:
                 - log_dir: Directory for log files (default: "./logs")
@@ -340,42 +344,40 @@ class VLLMService:
                 - enable_actor_log: Whether to enable file logging (default: True)
         """
         global logger
-        
+
         if logging_config is None:
             logging_config = {}
-        
+
         # Check if file logging is enabled
         enable_actor_log = logging_config.get("enable_actor_log", True)
         if not enable_actor_log:
             return
-        
+
         # Get configuration
         from pathlib import Path
+
         log_dir = Path(logging_config.get("log_dir", "./logs"))
         client_id = logging_config.get("client_id", "vllm")
-        
+
         # Create log directory
         log_dir.mkdir(parents=True, exist_ok=True)
-        
+
         # Configure logger
         logger.setLevel(logging.INFO)
-        
+
         # Remove existing handlers to avoid duplicates
         logger.handlers = []
-        
+
         # Create file handler with rotation
         from logging.handlers import RotatingFileHandler
+
         log_file = log_dir / f"{client_id}_actor.log"
-        handler = RotatingFileHandler(
-            log_file,
-            maxBytes=10 * 1024 * 1024,  # 10MB
-            backupCount=5
-        )
-        
+        handler = RotatingFileHandler(log_file, maxBytes=10 * 1024 * 1024, backupCount=5)  # 10MB
+
         # Create JSON formatter matching client.py pattern
         import json
         from datetime import datetime
-        
+
         class JsonFormatter(logging.Formatter):
             def format(self, record: logging.LogRecord) -> str:
                 log_data = {
@@ -391,12 +393,12 @@ class VLLMService:
                 if hasattr(record, "extra_data"):
                     log_data.update(record.extra_data)
                 return json.dumps(log_data)
-        
+
         handler.setFormatter(JsonFormatter())
         logger.addHandler(handler)
-        
+
         logger.info(f"[vLLM] Logger configured to write to {log_file}")
-    
+
     def get_gpu_selection_info(self) -> dict:
         """
         Get GPU selection information for logging and diagnostics.
@@ -608,102 +610,133 @@ class VLLMService:
                         raise ValueError(f"Missing slot in request {idx}")
                     agent_attrs = req.get("agent_attrs")
                     article = req.get("article")  # Article content for news posts
-                    
+
                     # Log agent_attrs for debugging
                     if agent_attrs:
-                        logger.info(f"[vLLM Batch {idx}] agent_attrs keys: {list(agent_attrs.keys())}")
+                        logger.info(
+                            f"[vLLM Batch {idx}] agent_attrs keys: {list(agent_attrs.keys())}"
+                        )
                         topic_value = agent_attrs.get("topic")
                         logger.info(f"[vLLM Batch {idx}] topic from agent_attrs: {topic_value}")
                     else:
                         logger.info(f"[vLLM Batch {idx}] agent_attrs is None or empty")
-                    
+
                     # FALLBACK: If article is None but we have a topic that looks like article_id, try to fetch
                     if not article and agent_attrs and self.server and self.client_id:
                         topic = agent_attrs.get("topic")
                         if topic:
                             try:
                                 import uuid
+
                                 uuid.UUID(topic)  # Validate it's a UUID (article_id)
-                                logger.info(f"[vLLM Batch {idx}] Article is None but topic looks like UUID - attempting fallback fetch for {topic}")
-                                article_data = ray.get(self.server.get_article.remote(topic, client_id=self.client_id))
+                                logger.info(
+                                    f"[vLLM Batch {idx}] Article is None but topic looks like UUID - attempting fallback fetch for {topic}"
+                                )
+                                article_data = ray.get(
+                                    self.server.get_article.remote(topic, client_id=self.client_id)
+                                )
                                 if article_data:
                                     article = {
                                         "id": topic,
                                         "title": article_data.get("title", ""),
-                                        "summary": article_data.get("summary", article_data.get("description", ""))
+                                        "summary": article_data.get(
+                                            "summary", article_data.get("description", "")
+                                        ),
                                     }
-                                    logger.info(f"[vLLM Batch {idx}] ✅ Fallback fetch successful: '{article['title'][:50]}...'")
+                                    logger.info(
+                                        f"[vLLM Batch {idx}] ✅ Fallback fetch successful: '{article['title'][:50]}...'"
+                                    )
                                 else:
-                                    logger.warning(f"[vLLM Batch {idx}] ❌ Fallback fetch returned None for article_id {topic}")
+                                    logger.warning(
+                                        f"[vLLM Batch {idx}] ❌ Fallback fetch returned None for article_id {topic}"
+                                    )
                             except ValueError:
                                 # Not a UUID - regular topic
-                                logger.debug(f"[vLLM Batch {idx}] Topic '{topic}' is not UUID - skipping fallback fetch")
+                                logger.debug(
+                                    f"[vLLM Batch {idx}] Topic '{topic}' is not UUID - skipping fallback fetch"
+                                )
                             except Exception as e:
-                                logger.warning(f"[vLLM Batch {idx}] ❌ Fallback fetch failed: {type(e).__name__}: {e}")
-                    
+                                logger.warning(
+                                    f"[vLLM Batch {idx}] ❌ Fallback fetch failed: {type(e).__name__}: {e}"
+                                )
+
                     # DETAILED DIAGNOSTIC LOGGING - Improved for robustness
                     logger.info(f"[vLLM Batch {idx}] article type: {type(article).__name__}")
                     logger.info(f"[vLLM Batch {idx}] article is None: {article is None}")
                     logger.info(f"[vLLM Batch {idx}] article is dict: {isinstance(article, dict)}")
-                    
+
                     if article and isinstance(article, dict):
                         logger.info(f"[vLLM Batch {idx}] article keys: {list(article.keys())}")
-                        article_title_value = article.get('title')
+                        article_title_value = article.get("title")
                         logger.info(f"[vLLM Batch {idx}] article title: '{article_title_value}'")
                         logger.info(f"[vLLM Batch {idx}] title bool: {bool(article_title_value)}")
-                        logger.info(f"[vLLM Batch {idx}] has_summary: {bool(article.get('summary'))}")
+                        logger.info(
+                            f"[vLLM Batch {idx}] has_summary: {bool(article.get('summary'))}"
+                        )
                     else:
-                        logger.info(f"[vLLM Batch {idx}] No article content or not dict - generating regular post")
+                        logger.info(
+                            f"[vLLM Batch {idx}] No article content or not dict - generating regular post"
+                        )
 
                     # Check if this is a news post (page sharing article)
                     if article and article.get("title"):
                         # Use news commentary generation for article posts
                         article_title = article.get("title", "News Article")
                         article_text = article.get("summary", "")
-                        
-                        logger.info(f"[vLLM Batch {idx}] ✅ USING NEWS COMMENTARY PATH for: '{article_title[:50]}...'")
-                        
+
+                        logger.info(
+                            f"[vLLM Batch {idx}] ✅ USING NEWS COMMENTARY PATH for: '{article_title[:50]}...'"
+                        )
+
                         if len(article_text) > 500:
                             article_text = article_text[:500] + "..."
-                        
+
                         # Get news commentary prompt templates
-                        news_commentary_config = self.prompts_config.get("generate_news_commentary", {})
+                        news_commentary_config = self.prompts_config.get(
+                            "generate_news_commentary", {}
+                        )
                         system_template = news_commentary_config.get(
                             "system_template",
-                            "You are a social media content creator for {website_name}. Create engaging posts about news articles."
+                            "You are a social media content creator for {website_name}. Create engaging posts about news articles.",
                         )
                         user_template = news_commentary_config.get(
                             "user_template",
-                            'Article: "{article_title}"\n\nSummary: {article_text}\n\nWrite a brief engaging social media post about this article (max 280 characters).'
+                            'Article: "{article_title}"\n\nSummary: {article_text}\n\nWrite a brief engaging social media post about this article (max 280 characters).',
                         )
-                        
+
                         # Safely format templates - only replace placeholders that exist
                         try:
                             system_msg = system_template.format(website_name="this website")
                         except KeyError:
                             # Template doesn't have {website_name} placeholder
                             system_msg = system_template
-                        
+
                         user_msg = user_template.format(
                             website_name="this website",
                             article_title=article_title,
-                            article_text=article_text
+                            article_text=article_text,
                         )
-                        
-                        logger.info(f"[vLLM Batch {idx}] News commentary prompt: user_msg='{user_msg[:100]}...'")
+
+                        logger.info(
+                            f"[vLLM Batch {idx}] News commentary prompt: user_msg='{user_msg[:100]}...'"
+                        )
                         prompt = self._format_prompt(system_msg, user_msg)
                         prompts.append(prompt)
                     else:
                         # Regular post generation
-                        logger.info(f"[vLLM Batch {idx}] ❌ USING REGULAR POST PATH (no article or no title)")
-                        
+                        logger.info(
+                            f"[vLLM Batch {idx}] ❌ USING REGULAR POST PATH (no article or no title)"
+                        )
+
                         # Build persona
                         persona = self._build_persona(cluster_id, agent_attrs)
                         toxicity = agent_attrs.get("toxicity", "no") if agent_attrs else "no"
                         topic = agent_attrs.get("topic") if agent_attrs else None
                         topic_opinion = agent_attrs.get("topic_opinion") if agent_attrs else None
-                        
-                        logger.debug(f"[vLLM Batch {idx}] Regular post - persona: {persona[:50]}..., topic: {topic}")
+
+                        logger.debug(
+                            f"[vLLM Batch {idx}] Regular post - persona: {persona[:50]}..., topic: {topic}"
+                        )
 
                         # Get prompt templates
                         system_template = self.prompts_config["generate_post"]["system_template"]
@@ -1219,11 +1252,11 @@ class VLLMService:
             news_commentary_config = self.prompts_config.get("generate_news_commentary", {})
             system_template = news_commentary_config.get(
                 "system_template",
-                "You are a social media content creator for {website_name}. Create engaging posts about news articles."
+                "You are a social media content creator for {website_name}. Create engaging posts about news articles.",
             )
             user_template = news_commentary_config.get(
                 "user_template",
-                'Article: "{article_title}"\n\nSummary: {article_text}\n\nWrite a brief engaging social media post about this article (max 280 characters).'
+                'Article: "{article_title}"\n\nSummary: {article_text}\n\nWrite a brief engaging social media post about this article (max 280 characters).',
             )
 
             # Safe template formatting - handle missing placeholders
@@ -1233,12 +1266,12 @@ class VLLMService:
                 # Template doesn't have {website_name} placeholder, use as-is
                 logger.debug("[vLLM] system_template doesn't have {website_name} placeholder")
                 system_msg = system_template
-            
+
             try:
                 user_msg = user_template.format(
                     website_name=website_name,
                     article_title=article_title,
-                    article_text=article_text
+                    article_text=article_text,
                 )
             except KeyError:
                 # Template doesn't have expected placeholders, use as-is or try minimal formatting

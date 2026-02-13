@@ -130,7 +130,9 @@ class SimulationClient:
         self.llm = llm_handle
         self.news_service = news_service_handle
         self.config_path = Path(config_path)
-        self.agent_config_file_path = Path(agent_config_file_path) if agent_config_file_path else None
+        self.agent_config_file_path = (
+            Path(agent_config_file_path) if agent_config_file_path else None
+        )
 
         # Phase 3: Initialize LLM Manager for consistent LLM interface
         # Import here to avoid circular dependencies during initial setup
@@ -581,7 +583,7 @@ class SimulationClient:
             llm_service = self.llm_manager.llm_service
 
             # Check if this is a VLLMService with GPU info
-            if hasattr(llm_service, 'get_gpu_selection_info'):
+            if hasattr(llm_service, "get_gpu_selection_info"):
                 gpu_info = llm_service.get_gpu_selection_info()
 
                 # Get model name from config
@@ -592,7 +594,7 @@ class SimulationClient:
                 # Log to usage file
                 self.cost_tracker.log_gpu_selection(gpu_info, model_name, backend)
             # Check if it's a load balancer with multiple actors
-            elif hasattr(llm_service, 'get_all_actors'):
+            elif hasattr(llm_service, "get_all_actors"):
                 # Load balancer - log info for first actor
                 actors = llm_service.get_all_actors()
                 if actors:
@@ -610,7 +612,9 @@ class SimulationClient:
                         gpu_info_with_actors = gpu_info.copy()
                         gpu_info_with_actors["num_actors"] = num_actors
 
-                        self.cost_tracker.log_gpu_selection(gpu_info_with_actors, model_name, backend)
+                        self.cost_tracker.log_gpu_selection(
+                            gpu_info_with_actors, model_name, backend
+                        )
                         self.logger.info(f"GPU selection logged for {num_actors} vLLM actors")
                     except Exception as e:
                         self.logger.debug(f"Could not get GPU info from actor: {e}")

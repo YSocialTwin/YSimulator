@@ -37,7 +37,7 @@ def recommend_rchrono_popularity_redis(
 ) -> List[str]:
     """
     Reverse chronological with popularity boost.
-    
+
     Now ensures that the full `limit` of posts is returned by including posts
     with 0 popularity if needed.
 
@@ -123,7 +123,7 @@ def recommend_rchrono_followers_popularity_redis(
 ) -> List[str]:
     """
     Combine followers and popularity.
-    
+
     Now ensures that the full `limit` of posts is returned by:
     1. Getting posts from followers (prioritized by popularity)
     2. Filling remaining slots with non-follower posts (by popularity)
@@ -171,7 +171,7 @@ def recommend_rchrono_followers_popularity_redis(
 
     # Build result ensuring we get the full limit
     post_ids = [p["id"] for p in follower_posts_sorted[:follower_posts_limit]]
-    
+
     # Fill remaining slots with other posts
     if len(post_ids) < limit:
         remaining = limit - len(post_ids)
