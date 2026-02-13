@@ -497,36 +497,31 @@ def generate_image_post_async(
     This function doesn't wait for the LLM response - it immediately returns
     a Ray ObjectRef (future) that can be resolved later for batching.
     
-    The LLM service will generate image commentary/caption based on a randomly
-    selected image and the agent's persona.
+    The LLM service will generate post content for an image. The actual image
+    selection happens later in the action processing pipeline, not during this
+    async call. This matches the pattern of other async generators where
+    content generation is separated from resource attachment.
 
     Args:
         llm_handle: Ray actor handle for the LLM service or LLMLoadBalancer
         cluster_id: Cluster/group the agent belongs to (determines persona)
-        day: Current simulation day
-        slot: Current time slot within the day
+        day: Current simulation day (used by caller for context/tracking)
+        slot: Current time slot within the day (used by caller for context/tracking)
         agent_attrs: Optional dict with agent attributes (name, age, gender, etc.)
         agent_id: Optional agent ID for load balancing (required when using LLMLoadBalancer)
 
     Returns:
-        Ray ObjectRef: Future that will resolve to generated image post content (str)
+        Ray ObjectRef: Future that will resolve to generated post content (str)
         
     Note:
-        The actual image selection and retrieval happens in the action processor,
-        not in this async call. This just generates the commentary/caption text.
+        Image selection/attachment happens in the action processor when the future
+        is resolved, not during this async generation call. The day/slot parameters
+        are included for signature consistency with other async generators and are
+        used by the caller for context tracking.
     """
-    # Check if we're dealing with a load balancer or direct LLM actor
-    if hasattr(llm_handle, "get_actor_for_agent"):
-        # LLMLoadBalancer - get specific actor for this agent
-        if agent_id is None:
-            raise ValueError("agent_id is required when using LLMLoadBalancer")
-        llm_actor = llm_handle.get_actor_for_agent(agent_id)
-    else:
-        # Direct LLM actor
-        llm_actor = llm_handle
+    llm_actor = _get_llm_actor(llm_handle, agent_id)
 
-    # Call LLM service to generate image post content
-    # The image itself will be selected when the action is processed
+    # Generate post content (image will be attached later during action processing)
     future = llm_actor.generate_post.remote(cluster_id, agent_attrs)
 
     return future
