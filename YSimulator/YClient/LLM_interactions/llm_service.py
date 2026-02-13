@@ -82,7 +82,6 @@ class LLMService:
         self.prompts_config = prompts_config
 
         # Build base_url from address and port
-        # http://http://127.0.0.1:11434/v1:11434
 
         if llm_config["address"].startswith("http://") or llm_config["address"].startswith("https://"):
             logger.warning(f"LLM config address should not include protocol (http://). Removing it from {llm_config['address']}")
