@@ -110,6 +110,7 @@ class SimulationClient:
         config_path: str = ".",
         parent_logger=None,
         news_service_handle=None,
+        agent_config_file_path: str = None,
     ):
         """
         Initialize the simulation client.
@@ -122,11 +123,14 @@ class SimulationClient:
             config_path: Path to configuration directory for logs
             parent_logger: Parent logger (not used in Ray actor, we create our own)
             news_service_handle: Ray actor handle for NewsFeedService (optional)
+            agent_config_file_path: Optional path to agent_population.json file
+                                    (overrides default config_path lookup)
         """
         self.client_id = client_id
         self.llm = llm_handle
         self.news_service = news_service_handle
         self.config_path = Path(config_path)
+        self.agent_config_file_path = Path(agent_config_file_path) if agent_config_file_path else None
 
         # Phase 3: Initialize LLM Manager for consistent LLM interface
         # Import here to avoid circular dependencies during initial setup
@@ -232,6 +236,7 @@ class SimulationClient:
             actions_likelihood=self.actions_likelihood,
             logger=self.logger,
             follow_action_decay_config=self.follow_action_decay_config,
+            agent_config_file_path=self.agent_config_file_path,
         )
 
         # Create agents from configuration
@@ -559,9 +564,59 @@ class SimulationClient:
                 enable_file_logging=True,
             )
             self.logger.info(f"LLM usage logging enabled: {llm_usage_log_file}")
+
+            # Log GPU selection information if using vLLM
+            self._log_gpu_selection_info()
         else:
             self.cost_tracker = None
             self.logger.info("LLM usage logging disabled")
+
+    def _log_gpu_selection_info(self):
+        """Log GPU selection information to LLM usage log."""
+        if not self.cost_tracker or not self.llm_manager:
+            return
+
+        try:
+            # Check if the LLM service has GPU selection info (vLLM only)
+            llm_service = self.llm_manager.llm_service
+
+            # Check if this is a VLLMService with GPU info
+            if hasattr(llm_service, 'get_gpu_selection_info'):
+                gpu_info = llm_service.get_gpu_selection_info()
+
+                # Get model name from config
+                llm_config = self.simulation_config.get("llm", {})
+                model_name = llm_config.get("model", "unknown")
+                backend = llm_config.get("backend", "vllm")
+
+                # Log to usage file
+                self.cost_tracker.log_gpu_selection(gpu_info, model_name, backend)
+            # Check if it's a load balancer with multiple actors
+            elif hasattr(llm_service, 'get_all_actors'):
+                # Load balancer - log info for first actor
+                actors = llm_service.get_all_actors()
+                if actors:
+                    first_actor = actors[0]
+                    # Get GPU info from first actor (requires remote call)
+                    try:
+                        gpu_info = ray.get(first_actor.get_gpu_selection_info.remote())
+
+                        llm_config = self.simulation_config.get("llm", {})
+                        model_name = llm_config.get("model", "unknown")
+                        backend = llm_config.get("backend", "vllm")
+                        num_actors = len(actors)
+
+                        # Add actor count to GPU info
+                        gpu_info_with_actors = gpu_info.copy()
+                        gpu_info_with_actors["num_actors"] = num_actors
+
+                        self.cost_tracker.log_gpu_selection(gpu_info_with_actors, model_name, backend)
+                        self.logger.info(f"GPU selection logged for {num_actors} vLLM actors")
+                    except Exception as e:
+                        self.logger.debug(f"Could not get GPU info from actor: {e}")
+        except Exception as e:
+            # Don't fail if GPU logging fails
+            self.logger.debug(f"Could not log GPU selection info: {e}")
 
     def _parse_activity_profiles(self, activity_profiles_config):
         """

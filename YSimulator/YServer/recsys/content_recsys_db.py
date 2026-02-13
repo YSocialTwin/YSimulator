@@ -96,6 +96,9 @@ def recommend_rchrono_popularity(
 ) -> List[str]:
     """
     Reverse chronological with popularity boost (reaction count).
+    
+    Now ensures that the full `limit` of posts is returned by including posts
+    with 0 popularity if needed, and falling back to reverse chrono if still insufficient.
 
     Args:
         session: SQLAlchemy session object
@@ -105,37 +108,52 @@ def recommend_rchrono_popularity(
         limit: Number of posts to recommend
 
     Returns:
-        List of post UUIDs
+        List of post UUIDs (always `limit` items or all available posts if fewer exist)
     """
-    # Subquery to count reactions per post
-    # reaction_count_subq = (
-    #    session.query(Reaction.post_id, func.count().label("reaction_count"))
-    #    .group_by(Reaction.post_id)
-    #    .subquery()
-    # )
-
+    # Primary query: Get posts ordered by popularity (including 0)
     query = (
         session.query(Post.id)
         .join(Round, Post.round == Round.id)
-        # .join(reaction_count_subq, Post.id == reaction_count_subq.c.post_id)  # inner join
         .filter(
             or_(
                 Round.day > visibility_day,
                 and_(Round.day == visibility_day, Round.hour >= visibility_hour),
             ),
             Post.user_id != agent_id,
-            # reaction_count_subq.c.reaction_count > 0,  # technically redundant now
         )
         .order_by(
             desc(Post.reaction_count),
-            # desc(reaction_count_subq.c.reaction_count),
             desc(Round.day),
             desc(Round.hour),
         )
         .limit(limit)
     )
 
-    return [row[0] for row in query.all()]
+    post_ids = [row[0] for row in query.all()]
+    
+    # If we got fewer than requested, fill with reverse chrono fallback
+    if len(post_ids) < limit:
+        remaining = limit - len(post_ids)
+        fallback_query = (
+            session.query(Post.id)
+            .join(Round, Post.round == Round.id)
+            .filter(
+                or_(
+                    Round.day > visibility_day,
+                    and_(Round.day == visibility_day, Round.hour >= visibility_hour),
+                ),
+                Post.user_id != agent_id,
+                Post.id.notin_(post_ids) if post_ids else True,
+            )
+            .order_by(
+                desc(Round.day),
+                desc(Round.hour),
+            )
+            .limit(remaining)
+        )
+        post_ids.extend([row[0] for row in fallback_query.all()])
+    
+    return post_ids
 
 
 def recommend_rchrono_followers(
@@ -232,6 +250,11 @@ def recommend_rchrono_followers_popularity(
 ) -> List[str]:
     """
     Followers with popularity boost (combines following and reaction count).
+    
+    Now ensures that the full `limit` of posts is returned by:
+    1. Getting follower posts (prioritized by popularity)
+    2. Filling remaining slots with non-follower posts (by popularity)
+    3. Final fallback to reverse chrono if still insufficient
 
     Args:
         session: SQLAlchemy session object
@@ -242,24 +265,16 @@ def recommend_rchrono_followers_popularity(
         followers_ratio: Ratio of posts from followers
 
     Returns:
-        List of post UUIDs
+        List of post UUIDs (always `limit` items or all available posts if fewer exist)
     """
     follower_posts_limit = int(limit * followers_ratio)
-    additional_posts_limit = limit - follower_posts_limit
-
-    # Subquery to count reactions per post
-    # reaction_count_subq = (
-    #    session.query(Reaction.post_id, func.count().label("reaction_count"))
-    #    .group_by(Reaction.post_id)
-    #    .subquery()
-    # )
-
+    
+    # Query 1: Get posts from followers (ordered by popularity)
     query_followers = (
         session.query(Post.id)
         .distinct()
         .join(Round, Post.round == Round.id)
         .join(Follow, Post.user_id == Follow.follower_id)
-        # .outerjoin(reaction_count_subq, Post.id == reaction_count_subq.c.post_id)
         .filter(
             Follow.user_id == agent_id,
             Follow.action == "follow",
@@ -268,31 +283,24 @@ def recommend_rchrono_followers_popularity(
                 and_(Round.day == visibility_day, Round.hour >= visibility_hour),
             ),
             Post.user_id != agent_id,
-            # func.coalesce(reaction_count_subq.c.reaction_count, 0) > 0,  # added
         )
         .order_by(
             desc(Post.reaction_count),
             desc(Post.round),
-            # desc(func.coalesce(reaction_count_subq.c.reaction_count, 0)),
         )
         .limit(follower_posts_limit)
     )
 
     post_ids = [row[0] for row in query_followers.all()]
 
-    if len(post_ids) < limit and additional_posts_limit > 0:
-        # Recreate reaction count subquery for additional posts
-        # reaction_count_subq2 = (
-        #    session.query(Reaction.post_id, func.count().label("reaction_count"))
-        #    .group_by(Reaction.post_id)
-        #    .subquery()
-        # )
-
+    # Query 2: Fill remaining slots with non-follower posts (ordered by popularity)
+    if len(post_ids) < limit:
+        remaining = limit - len(post_ids)
+        
         if post_ids:
             query_additional = (
                 session.query(Post.id)
                 .join(Round, Post.round == Round.id)
-                # .outerjoin(reaction_count_subq2, Post.id == reaction_count_subq2.c.post_id)
                 .filter(
                     or_(
                         Round.day > visibility_day,
@@ -303,17 +311,14 @@ def recommend_rchrono_followers_popularity(
                 )
                 .order_by(
                     desc(Post.reaction_count),
-                    desc(
-                        Post.round
-                    ),  # , desc(func.coalesce(reaction_count_subq2.c.reaction_count, 0))
+                    desc(Post.round),
                 )
-                .limit(additional_posts_limit)
+                .limit(remaining)
             )
         else:
             query_additional = (
                 session.query(Post.id)
                 .join(Round, Post.round == Round.id)
-                # .outerjoin(reaction_count_subq2, Post.id == reaction_count_subq2.c.post_id)
                 .filter(
                     or_(
                         Round.day > visibility_day,
@@ -323,14 +328,34 @@ def recommend_rchrono_followers_popularity(
                 )
                 .order_by(
                     desc(Post.reaction_count),
-                    desc(
-                        Post.round
-                    ),  # , desc(func.coalesce(reaction_count_subq2.c.reaction_count, 0))
+                    desc(Post.round),
                 )
-                .limit(additional_posts_limit)
+                .limit(remaining)
             )
 
         post_ids.extend([row[0] for row in query_additional.all()])
+    
+    # Query 3: Final fallback to reverse chrono if still not enough
+    if len(post_ids) < limit:
+        remaining = limit - len(post_ids)
+        fallback_query = (
+            session.query(Post.id)
+            .join(Round, Post.round == Round.id)
+            .filter(
+                or_(
+                    Round.day > visibility_day,
+                    and_(Round.day == visibility_day, Round.hour >= visibility_hour),
+                ),
+                Post.user_id != agent_id,
+                Post.id.notin_(post_ids) if post_ids else True,
+            )
+            .order_by(
+                desc(Round.day),
+                desc(Round.hour),
+            )
+            .limit(remaining)
+        )
+        post_ids.extend([row[0] for row in fallback_query.all()])
 
     return post_ids
 

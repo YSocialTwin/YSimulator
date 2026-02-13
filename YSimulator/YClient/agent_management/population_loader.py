@@ -25,7 +25,13 @@ class PopulationLoader:
     - Save updated agent populations back to configuration files
     """
 
-    def __init__(self, config_path: Path, client_id: str, logger: logging.Logger):
+    def __init__(
+        self,
+        config_path: Path,
+        client_id: str,
+        logger: logging.Logger,
+        agent_config_file_path: Optional[Path] = None,
+    ):
         """
         Initialize PopulationLoader.
 
@@ -33,10 +39,13 @@ class PopulationLoader:
             config_path: Path to configuration directory
             client_id: Client identifier
             logger: Logger instance
+            agent_config_file_path: Optional path to agent_population.json file
+                                    (overrides default config_path lookup)
         """
         self.config_path = config_path
         self.client_id = client_id
         self.logger = logger
+        self.agent_config_file_path = agent_config_file_path
         self.AGENT_UUID_NAMESPACE = uuid.UUID("12345678-1234-5678-1234-567812345678")
 
     def create_agents_from_config(self, agent_config: dict) -> List[AgentProfile]:
@@ -317,7 +326,19 @@ class PopulationLoader:
         return topics, counts
 
     def _get_agent_config_file(self) -> Optional[Path]:
-        """Get the agent population configuration file path."""
+        """
+        Get the agent population configuration file path.
+        
+        Priority order:
+        1. Custom agent_config_file_path if provided (from --agents parameter)
+        2. Client-specific file in config_path
+        3. Generic file in config_path
+        """
+        # If a custom path was provided (e.g., via --agents parameter), use it
+        if self.agent_config_file_path is not None:
+            return self.agent_config_file_path
+        
+        # Otherwise, fall back to looking in config_path
         client_specific = self.config_path / f"{self.client_id}_agent_population.json"
         generic = self.config_path / "agent_population.json"
 

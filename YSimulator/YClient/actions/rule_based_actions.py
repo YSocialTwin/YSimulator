@@ -182,6 +182,7 @@ def generate_rule_based_news_post(
     content = ""  # Empty for rule-based agents
 
     action = ActionDTO(agent_id, cluster_id, "POST", content=content)
+    action.article_id = article_id  # Set article reference
 
     return action, article_id
 

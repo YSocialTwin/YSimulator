@@ -58,6 +58,18 @@ class PostProcessor(BaseActionProcessor):
             if hasattr(action, "article_id") and action.article_id:
                 post_data["news_id"] = action.article_id
                 article_id = action.article_id
+                self.logger.info(
+                    f"Post for agent {action.agent_id}: ✅ Setting news_id={article_id}"
+                )
+            else:
+                # Log when article_id is missing but content mentions article
+                if hasattr(action, "content") and "check out this article" in action.content.lower():
+                    self.logger.warning(
+                        f"Post for agent {action.agent_id}: Content mentions article but NO article_id! "
+                        f"hasattr={hasattr(action, 'article_id')}, "
+                        f"article_id={getattr(action, 'article_id', 'N/A')}, "
+                        f"content={action.content[:100]}..."
+                    )
 
             # Add image_id if this is an image post
             if hasattr(action, "image_id") and action.image_id:

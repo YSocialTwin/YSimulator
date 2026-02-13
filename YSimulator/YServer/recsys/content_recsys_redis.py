@@ -37,16 +37,18 @@ def recommend_rchrono_popularity_redis(
 ) -> List[str]:
     """
     Reverse chronological with popularity boost.
+    
+    Now ensures that the full `limit` of posts is returned by including posts
+    with 0 popularity if needed.
 
     Args:
         valid_posts_with_data: List of post dictionaries with 'id', 'index', 'reaction_count'
         limit: Number of posts to recommend
 
     Returns:
-        List of post IDs sorted by time then popularity
+        List of post IDs sorted by time then popularity (always `limit` items or all available)
     """
-    # Sort by index (time proxy) first, then by reaction_count
-    # This aligns better with SQL which sorts by time first, then popularity
+    # Sort by index (time proxy) first, then by reaction_count (including 0)
     sorted_posts = sorted(valid_posts_with_data, key=lambda x: (x["index"], -x["reaction_count"]))
     return [p["id"] for p in sorted_posts[:limit]]
 
@@ -121,6 +123,11 @@ def recommend_rchrono_followers_popularity_redis(
 ) -> List[str]:
     """
     Combine followers and popularity.
+    
+    Now ensures that the full `limit` of posts is returned by:
+    1. Getting posts from followers (prioritized by popularity)
+    2. Filling remaining slots with non-follower posts (by popularity)
+    3. Automatically includes posts with 0 popularity if needed
 
     Args:
         valid_posts_with_data: List of post dictionaries
@@ -132,10 +139,9 @@ def recommend_rchrono_followers_popularity_redis(
         db_engine: Database engine for follow queries
 
     Returns:
-        List of post IDs combining follower priority and popularity
+        List of post IDs combining follower priority and popularity (always `limit` items or all available)
     """
     follower_posts_limit = int(limit * followers_ratio)
-    additional_posts_limit = limit - follower_posts_limit
 
     # Get follow relationships using SQLAlchemy ORM
     from sqlalchemy.orm import Session
@@ -159,13 +165,17 @@ def recommend_rchrono_followers_popularity_redis(
         else:
             other_posts.append(post)
 
-    # Sort by index (time) then popularity
+    # Sort by index (time) then popularity (including 0)
     follower_posts_sorted = sorted(follower_posts, key=lambda x: (x["index"], -x["reaction_count"]))
     other_posts_sorted = sorted(other_posts, key=lambda x: (x["index"], -x["reaction_count"]))
 
+    # Build result ensuring we get the full limit
     post_ids = [p["id"] for p in follower_posts_sorted[:follower_posts_limit]]
+    
+    # Fill remaining slots with other posts
     if len(post_ids) < limit:
-        post_ids.extend([p["id"] for p in other_posts_sorted[:additional_posts_limit]])
+        remaining = limit - len(post_ids)
+        post_ids.extend([p["id"] for p in other_posts_sorted[:remaining]])
 
     return post_ids
 

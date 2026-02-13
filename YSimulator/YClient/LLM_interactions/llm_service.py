@@ -82,7 +82,15 @@ class LLMService:
         self.prompts_config = prompts_config
 
         # Build base_url from address and port
-        base_url = f"http://{llm_config['address']}:{llm_config['port']}"
+
+        if llm_config["address"].startswith("http://") or llm_config["address"].startswith("https://"):
+            logger.warning(f"LLM config address should not include protocol (http://). Removing it from {llm_config['address']}")
+            llm_config["address"] = llm_config["address"].replace("http://", "").replace("https://", "")
+        if ":" in llm_config["address"]:
+            logger.warning(f"LLM config address include port.")
+            base_url = f"http://{llm_config['address']}".replace("/v1", "")
+        else:
+            base_url = f"http://{llm_config['address']}:{llm_config['port']}".replace("/v1", "")  # Ensure no duplicate /v1 in URL
 
         # Initialize LLM with configuration
         self.llm = ChatOllama(
@@ -92,7 +100,17 @@ class LLMService:
         # Initialize vision LLM if config provided
         self.llm_v = None
         if llm_v_config:
-            base_url_v = f"http://{llm_v_config['address']}:{llm_v_config['port']}"
+
+            if llm_v_config["address"].startswith("http://") or llm_v_config["address"].startswith("https://"):
+                logger.warning(
+                    f"LLM config address should not include protocol (http://). Removing it from {llm_v_config['address']}")
+                llm_v_config["address"] = llm_v_config["address"].replace("http://", "").replace("https://", "")
+            if ":" in llm_v_config["address"]:
+                logger.warning(f"LLM config address include port.")
+                base_url_v = f"http://{llm_v_config['address']}".replace("/v1", "")
+            else:
+                base_url_v = f"http://{llm_v_config['address']}:{llm_v_config['port']}".replace("/v1", "")
+
             self.llm_v = ChatOllama(
                 model=llm_v_config["model"],
                 temperature=llm_v_config.get("temperature", 0.5),
@@ -150,6 +168,80 @@ class LLMService:
                 prompt_handler.setFormatter(PromptJsonFormatter())
                 self.prompt_logger.addHandler(prompt_handler)
                 logger.info("Prompt logging enabled in LLM service")
+        
+        # Configure main logger to write to file
+        self._setup_logger(logging_config)
+
+    def _setup_logger(self, logging_config: Optional[Dict[str, Any]] = None):
+        """
+        Configure the module-level logger to write to {client_id}_actor.log file.
+        
+        This ensures all error messages, warnings, and info logs from LLMService
+        are saved to files instead of only appearing on stdout/stderr.
+        
+        Args:
+            logging_config: Dictionary with:
+                - log_dir: Directory for log files (default: "./logs")
+                - client_id: Client identifier for log filename (default: "llm")
+                - enable_actor_log: Whether to enable file logging (default: True)
+        """
+        global logger
+        
+        if logging_config is None:
+            logging_config = {}
+        
+        # Check if file logging is enabled
+        enable_actor_log = logging_config.get("enable_actor_log", True)
+        if not enable_actor_log:
+            return
+        
+        # Get configuration
+        from pathlib import Path
+        log_dir = Path(logging_config.get("log_dir", "./logs"))
+        client_id = logging_config.get("client_id", "llm")
+        
+        # Create log directory
+        log_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Configure logger
+        logger.setLevel(logging.INFO)
+        
+        # Remove existing handlers to avoid duplicates
+        logger.handlers = []
+        
+        # Create file handler with rotation
+        from logging.handlers import RotatingFileHandler
+        log_file = log_dir / f"{client_id}_actor.log"
+        handler = RotatingFileHandler(
+            log_file,
+            maxBytes=10 * 1024 * 1024,  # 10MB
+            backupCount=5
+        )
+        
+        # Create JSON formatter matching client.py pattern
+        import json
+        from datetime import datetime
+        
+        class JsonFormatter(logging.Formatter):
+            def format(self, record: logging.LogRecord) -> str:
+                log_data = {
+                    "timestamp": datetime.utcnow().isoformat(),
+                    "level": record.levelname,
+                    "message": record.getMessage(),
+                    "module": record.module,
+                    "function": record.funcName,
+                    "line": record.lineno,
+                }
+                if hasattr(record, "execution_time"):
+                    log_data["execution_time_ms"] = record.execution_time
+                if hasattr(record, "extra_data"):
+                    log_data.update(record.extra_data)
+                return json.dumps(log_data)
+        
+        handler.setFormatter(JsonFormatter())
+        logger.addHandler(handler)
+        
+        logger.info(f"LLMService logger configured to write to {log_file}")
 
     def _log_prompt(
         self, method_name: str, system_msg: str, user_msg: str, agent_attrs: dict = None
@@ -278,7 +370,21 @@ class LLMService:
 
         prompt = ChatPromptTemplate.from_messages([("system", system_msg), ("user", user_msg)])
         chain = prompt | self.llm | StrOutputParser()
-        return chain.invoke({})
+        
+        try:
+            return chain.invoke({})
+        except Exception as e:
+            logger.error(f"Ollama error in generate_post: {type(e).__name__}: {str(e)}")
+            logger.error(f"Cluster: {cluster_id}, Day: {day}, Slot: {slot}, Topic: {topic}")
+            # Log additional context
+            import traceback
+            logger.debug(f"Full traceback:\n{traceback.format_exc()}")
+            # Return fallback content
+            fallback = f"Post for day {day}, slot {slot}"
+            if topic:
+                fallback = f"Thoughts on {topic}"
+            logger.warning(f"Returning fallback content: {fallback}")
+            return fallback
 
     def decide_reaction(self, cluster_id: int, post_content: str) -> str:
         """Decide: LIKE, COMMENT, or IGNORE."""
@@ -301,13 +407,23 @@ class LLMService:
 
         prompt = ChatPromptTemplate.from_messages([("system", system_msg), ("user", user_msg)])
         chain = prompt | self.llm | StrOutputParser()
-        result = chain.invoke({}).strip().upper()
+        
+        try:
+            result = chain.invoke({}).strip().upper()
 
-        if "LIKE" in result:
-            return "LIKE"
-        if "COMMENT" in result:
-            return "COMMENT"
-        return "IGNORE"
+            if "LIKE" in result:
+                return "LIKE"
+            if "COMMENT" in result:
+                return "COMMENT"
+            return "IGNORE"
+        except Exception as e:
+            logger.error(f"Ollama error in decide_reaction: {type(e).__name__}: {str(e)}")
+            logger.error(f"Cluster: {cluster_id}, Post content length: {len(post_content)}")
+            # Log additional context
+            import traceback
+            logger.debug(f"Full traceback:\n{traceback.format_exc()}")
+            logger.warning("Returning fallback reaction: IGNORE")
+            return "IGNORE"
 
     def generate_news_commentary(self, article: dict, website_name: str = None) -> str:
         """

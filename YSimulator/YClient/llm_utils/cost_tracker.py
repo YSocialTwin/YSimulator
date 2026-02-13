@@ -70,6 +70,7 @@ class CostTracker:
 
         # Create rotating file handler (10MB per file, keep 5 backups)
         handler = RotatingFileHandler(log_file_path, maxBytes=10 * 1024 * 1024, backupCount=5)
+        handler.setLevel(logging.INFO)  # Ensure handler level is set
 
         # Use JSON format for structured logging
         class UsageFormatter(logging.Formatter):
@@ -116,6 +117,41 @@ class CostTracker:
                 log_entry["cumulative_cost"] = self.get_estimated_cost(method)
 
             self.usage_logger.info(json.dumps(log_entry))
+            # Flush to ensure log is written immediately
+            for handler in self.usage_logger.handlers:
+                handler.flush()
+
+    def log_gpu_selection(self, gpu_info: dict, model_name: str = None, backend: str = "vllm") -> None:
+        """
+        Log GPU selection information to the usage log.
+
+        Args:
+            gpu_info: Dictionary with GPU selection details
+            model_name: Optional model name being loaded
+            backend: Backend being used (default: vllm)
+        """
+        if self.usage_logger:
+            log_entry = {
+                "timestamp": datetime.utcnow().isoformat(),
+                "event": "gpu_selection",
+                "backend": backend,
+                "physical_gpu_id": gpu_info.get("physical_gpu_id"),
+                "logical_gpu_id": gpu_info.get("logical_gpu_id"),
+                "assignment_method": gpu_info.get("assignment_method", "unknown"),
+                "cuda_visible_devices": gpu_info.get("cuda_visible_devices"),
+            }
+
+            if model_name:
+                log_entry["model"] = model_name
+
+            self.usage_logger.info(json.dumps(log_entry))
+            # Flush to ensure log is written immediately
+            for handler in self.usage_logger.handlers:
+                handler.flush()
+            self.logger.info(
+                f"GPU selection logged: method={gpu_info.get('assignment_method')}, "
+                f"physical_gpu={gpu_info.get('physical_gpu_id')}"
+            )
 
     def get_call_count(self, method: Optional[str] = None) -> int:
         """

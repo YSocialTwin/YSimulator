@@ -38,6 +38,7 @@ class AgentManager:
         actions_likelihood: Dict,
         logger: logging.Logger,
         follow_action_decay_config: Dict = None,
+        agent_config_file_path: Path = None,
     ):
         """
         Initialize AgentManager.
@@ -51,6 +52,8 @@ class AgentManager:
             actions_likelihood: Action probability configuration
             logger: Logger instance
             follow_action_decay_config: Configuration for time-based follow action decay
+            agent_config_file_path: Optional path to agent_population.json file
+                                    (overrides default config_path lookup)
         """
         self.config_path = config_path
         self.server = server
@@ -65,7 +68,9 @@ class AgentManager:
             follow_decay_manager = FollowDecayManager(server, follow_action_decay_config, logger)
 
         # Initialize specialized components
-        self.population_loader = PopulationLoader(config_path, client_id, logger)
+        self.population_loader = PopulationLoader(
+            config_path, client_id, logger, agent_config_file_path
+        )
         self.network_loader = NetworkLoader(server, client_id, logger)
         self.agent_selector = AgentSelector(
             archetype_distribution,

@@ -21,6 +21,12 @@ pip install vllm>=0.6.0
 - CUDA-compatible GPU with adequate VRAM
 - Python 3.8 or higher
 
+**Recommended for Multi-GPU Systems:**
+```bash
+pip install nvidia-ml-py
+```
+This enables GPU detection without CUDA initialization, improving GPU selection on multi-GPU systems.
+
 ### 2. Configure Backend
 
 In your `simulation_config.json`, set the LLM backend:
@@ -290,6 +296,218 @@ torch.cuda.OutOfMemoryError: CUDA out of memory
 2. Use a smaller model (e.g., `meta-llama/Llama-3.2-1B`)
 3. Reduce `max_tokens`
 4. Close other GPU-using applications
+
+### GPU Memory Allocation Error (Multi-GPU Systems)
+
+**Error:**
+```
+ValueError: Free memory on device cuda:0 (3.71/39.39 GiB) on startup is less than 
+desired GPU memory utilization (0.15, 5.91 GiB). Decrease GPU memory utilization 
+or reduce GPU memory used by other processes.
+```
+
+**Cause:**
+This error occurs on multi-GPU systems when cuda:0 doesn't have enough free memory, even though other GPUs might have sufficient memory available. vLLM defaults to using cuda:0 if not instructed otherwise.
+
+**Automatic Solution (v1.x+):**
+YSimulator now automatically handles this by:
+1. **Early GPU detection (without CUDA init)**: Uses nvidia-ml-py (pynvml) to query GPU memory WITHOUT initializing CUDA
+2. **Detects Ray-assigned GPUs**: Reads `CUDA_VISIBLE_DEVICES` if Ray assigned specific GPUs
+3. **Dynamically selects GPU**: Chooses a GPU with sufficient free memory based on model requirements
+4. **Sets environment FIRST**: Sets `CUDA_VISIBLE_DEVICES` at the very start of `__init__()` before ANY operations
+5. **Then imports vLLM/PyTorch**: CUDA initializes on the correct GPU from the start
+6. **Subprocess inheritance**: Environment variables properly propagate to vLLM v1 engine subprocesses (even with 'spawn')
+7. **Falls back gracefully**: Warns if no GPU has sufficient memory but still attempts initialization
+
+**Key Innovation: pynvml for GPU Detection + Ray GPU Unmasking**
+
+Using nvidia-ml-py (pynvml) instead of torch for GPU queries:
+- ✅ No CUDA initialization during GPU detection
+- ✅ Can query all GPUs before setting CUDA_VISIBLE_DEVICES  
+- ✅ Lightweight and fast
+- ✅ Works perfectly in Docker with nvidia-container-toolkit
+
+**Critical: Ray GPU Unmasking**
+
+When running as a Ray actor, Ray often sets `CUDA_VISIBLE_DEVICES` to limit which GPUs the actor can see (e.g., only GPU 0). This masked GPU might be full, while other GPUs on the host have plenty of free memory.
+
+YSimulator now **temporarily unmasks all GPUs** during GPU detection:
+1. **Saves Ray's CUDA_VISIBLE_DEVICES** (e.g., "0")
+2. **Uses pynvml to get physical GPU count** on the host (e.g., 6 GPUs)
+3. **Temporarily sets CUDA_VISIBLE_DEVICES="0,1,2,3,4,5"** to unmask all physical GPUs
+4. **Queries memory on ALL physical GPUs** (not just Ray's assignment)
+5. **Selects best GPU** from complete list (e.g., GPU 2 with 35GB free)
+6. **Sets CUDA_VISIBLE_DEVICES to selected GPU** (e.g., "2")
+7. **vLLM initializes on the selected GPU** successfully
+
+This is critical for multi-GPU hosts where Ray might assign a full GPU but other GPUs are available.
+
+**Example Scenario:**
+```
+Host: 6 GPUs (GPU 0-5)
+Ray assigns: GPU 0 (CUDA_VISIBLE_DEVICES=0)
+GPU 0: 3GB free ❌ not enough for vLLM
+GPU 2: 35GB free ✅ plenty of space!
+
+WITHOUT unmasking: Can only see GPU 0 → Fails
+WITH unmasking: Discovers all 6 GPUs → Selects GPU 2 → Success!
+```
+
+**Logs showing unmasking:**
+```
+[GPU Query] Original CUDA_VISIBLE_DEVICES from Ray: 0
+[GPU Query] Physical GPU count on host: 6
+[GPU Query] Temporarily unmasking all GPUs: 0,1,2,3,4,5
+[GPU Query] Querying all 6 physical GPU(s)...
+[GPU Query] Found 6 physical GPU(s) on host
+[GPU Query] Restored original CUDA_VISIBLE_DEVICES: 0
+[GPU Selection] Found 3 candidate GPU(s) with >= 13.00 GB free
+[GPU Attempt 1/3] Trying GPU 2 (35.20 GB free)
+[GPU Attempt 1/3] ✅ Success! vLLM initialized on GPU 2
+```
+
+The GPU selection happens at the absolute beginning of VLLMService `__init__()`, before any CUDA operations, ensuring the correct GPU is used even when vLLM spawns subprocesses.
+
+**How It Works with vLLM v1 Engine:**
+vLLM v1 uses multiprocessing to spawn EngineCore subprocesses. To ensure these subprocesses use the correct GPU:
+- GPU selection happens FIRST in `__init__()`, before any imports
+- `CUDA_VISIBLE_DEVICES` is set using both `os.environ` and `os.putenv` for reliable subprocess inheritance
+- When running as a Ray actor (the normal case), vLLM uses 'spawn' multiprocessing method (required by Ray)
+- When not in Ray, multiprocessing start method is configured to 'fork' or 'forkserver' for better environment propagation
+- `torch.cuda.set_device(0)` is called before vLLM initialization (after GPU remapping)
+- Physical GPU 2 becomes logical device 0 within the process context
+
+**Note on Ray Actors:**
+VLLMService runs as a Ray actor (`@ray.remote`). In this context, vLLM automatically uses the 'spawn' multiprocessing method because:
+- Ray actors require 'spawn' for safety and isolation
+- CUDA is already initialized when the actor starts
+- vLLM detects this and enforces 'spawn' internally
+
+Despite using 'spawn', GPU selection works correctly because `os.putenv()` ensures `CUDA_VISIBLE_DEVICES` is inherited by spawned subprocesses.
+
+**Verification:**
+Check the logs for GPU selection messages:
+```
+[vLLM] Ray has not assigned a specific GPU, selecting based on available memory
+[vLLM] Estimated memory for meta-llama/Llama-3.2-3B: 11.70 GB (requires 13.00 GB free with utilization=0.9)
+[vLLM] Dynamically selected GPU 2 with 35.20 GB free (required: 13.00 GB)
+[vLLM] Set CUDA_VISIBLE_DEVICES=2 before vLLM initialization
+[vLLM] Current multiprocessing start method: None
+[vLLM] Running in Ray actor - vLLM will use 'spawn' multiprocessing method (this is expected and required for Ray actors)
+[vLLM] CUDA is available. Found 6 GPU(s)
+[vLLM] Setting torch.cuda default device to 0 (physical GPU: 2)
+[vLLM] Current CUDA device: 0 (NVIDIA A100-SXM4-40GB)
+[vLLM] GPU memory: 35.20 GB free / 39.39 GB total
+[vLLM] CUDA_VISIBLE_DEVICES: 2
+[vLLM] Initializing vLLM engine with text model=meta-llama/Llama-3.2-3B...
+```
+
+Note: After setting `CUDA_VISIBLE_DEVICES=2`, the physical GPU 2 becomes logical device 0 within the process. This is normal CUDA behavior.
+
+**GPU Selection Logging:**
+GPU selection information is automatically logged to `{client_name}_llm_usage.log` for traceability. The log file is located in the `logs/` directory within your configuration folder. Example log entry:
+```json
+{
+  "timestamp": "2026-02-10T14:50:00.000Z",
+  "event": "gpu_selection",
+  "backend": "vllm",
+  "physical_gpu_id": 1,
+  "logical_gpu_id": 0,
+  "assignment_method": "dynamic_selection",
+  "cuda_visible_devices": "1",
+  "model": "meta-llama/Llama-3.2-3B"
+}
+```
+
+This log entry appears once at initialization and helps verify which GPU was selected and how the selection was made. **Logs are written immediately** to disk (no buffering), so you can monitor them in real-time.
+
+To view the log:
+```bash
+# View the log file
+cat example/llm_population_100_vllm/logs/client_0_llm_usage.log
+
+# Monitor in real-time
+tail -f example/llm_population_100_vllm/logs/client_0_llm_usage.log
+```
+
+### GPU Fallback Strategy (Automatic Retry)
+
+**What It Does:**
+YSimulator implements an automatic GPU fallback strategy. If vLLM initialization fails on the first selected GPU, the system automatically tries the next available GPU until one works or all GPUs are exhausted.
+
+**How It Works:**
+1. **Get ordered GPU list**: Queries all GPUs sorted by free memory (most free → least free)
+2. **Filter by requirements**: Only includes GPUs with sufficient memory for the model
+3. **Try each GPU**: Attempts vLLM initialization on each GPU in sequence
+4. **Return on success**: Stops retrying as soon as one GPU works
+5. **Fail after exhaustion**: Only raises error after trying all available GPUs
+
+**Example Success Log (2nd GPU works):**
+```
+[GPU Selection] Found 3 candidate GPU(s) with >= 13.00 GB free
+[GPU Attempt 1/3] Trying GPU 2 (35.20 GB free)
+[GPU Attempt 1/3] ❌ Failed on GPU 2 (35.20 GB free): ValueError: Free memory...
+[GPU Attempt 2/3] Trying GPU 1 (28.30 GB free)
+[GPU Attempt 2/3] ✅ Success! vLLM initialized on GPU 1
+```
+
+**Example Exhaustion Log (all GPUs fail):**
+```
+[GPU Selection] Found 3 candidate GPU(s) with >= 13.00 GB free
+[GPU Attempt 1/3] Trying GPU 2 (35.20 GB free)
+[GPU Attempt 1/3] ❌ Failed on GPU 2: ValueError...
+[GPU Attempt 2/3] Trying GPU 1 (28.30 GB free)  
+[GPU Attempt 2/3] ❌ Failed on GPU 1: ValueError...
+[GPU Attempt 3/3] Trying GPU 0 (25.10 GB free)
+[GPU Attempt 3/3] ❌ Failed on GPU 0: ValueError...
+
+======================================================================
+❌ VLLMService Initialization Failed - All GPUs Exhausted
+======================================================================
+Attempted 3 GPU(s):
+  - GPU 2 (35.20 GB free): ValueError: Free memory on device...
+  - GPU 1 (28.30 GB free): ValueError: Free memory on device...
+  - GPU 0 (25.10 GB free): ValueError: Free memory on device...
+
+Last error: RuntimeError: Engine core initialization failed...
+======================================================================
+```
+
+**When Fallback Applies:**
+- ✅ Single-GPU mode (`tensor_parallel_size=1`)
+- ✅ No Ray GPU assignment (dynamic GPU selection enabled)
+- ✅ Multiple GPUs with sufficient memory available
+
+**When Fallback is Disabled:**
+- Ray has assigned specific GPU → respects assignment, no retry
+- Multi-GPU mode (`tensor_parallel_size>1`) → vLLM handles GPU assignment
+- Only one suitable GPU found → tries that GPU only
+
+**Benefits:**
+- **Resilient**: Automatically recovers from transient allocation failures
+- **Efficient**: Uses any available GPU instead of failing immediately
+- **Transparent**: Clear logging shows all attempts and results
+- **Automatic**: No user intervention needed
+
+**Manual Solutions (if automatic selection fails):**
+1. Reduce `gpu_memory_utilization` to fit within available memory:
+   ```json
+   {
+     "llm": {
+       "backend": "vllm",
+       "gpu_memory_utilization": 0.5
+     }
+   }
+   ```
+
+2. Manually specify which GPU to use by setting `CUDA_VISIBLE_DEVICES`:
+   ```bash
+   CUDA_VISIBLE_DEVICES=1 python run_client.py --config example/llm_population_100_vllm
+   ```
+
+3. Close processes using GPU memory on cuda:0, or use a smaller model
+
+4. If automatic selection is not working, check the logs for error messages and report the issue
 
 ### Model Download Issues
 

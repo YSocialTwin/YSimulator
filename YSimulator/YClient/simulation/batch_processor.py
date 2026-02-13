@@ -213,8 +213,10 @@ class BatchProcessor:
 
             # Phase 3: Validate response
             res_txt = self.response_parser.parse_text_response(res_txt, default="")
-            if not res_txt:
-                self.logger.warning(f"Empty LLM post response for agent {a_id}, skipping")
+            if not res_txt or not res_txt.strip():
+                self.logger.warning(
+                    f"Empty or whitespace-only LLM post response for agent {a_id}, skipping"
+                )
                 continue
 
             # Phase 3: Track LLM usage (estimate tokens from content length)
@@ -239,6 +241,14 @@ class BatchProcessor:
                 topic_or_article = pending_item[3] if len(pending_item) > 3 else None
                 action = ActionDTO(a_id, cid, "POST", content=res_txt)
 
+                # DEBUG: Log the pending_item structure for page agents
+                if topic_or_article:
+                    self.logger.debug(
+                        f"Agent {a_id} post: pending_item length={len(pending_item)}, "
+                        f"position[3]={topic_or_article}, type={type(topic_or_article)}, "
+                        f"content preview={res_txt[:50]}..."
+                    )
+
                 # Check if the fourth element is an article_id (UUID format) or a topic (string)
                 if topic_or_article:
                     # Try to parse as UUID - if successful, it's an article_id
@@ -246,7 +256,7 @@ class BatchProcessor:
                         uuid.UUID(topic_or_article)
                         action.article_id = topic_or_article
                         self.logger.info(
-                            f"LLM post for agent {a_id}: article_id={topic_or_article}, content_len={len(res_txt)}"
+                            f"LLM post for agent {a_id}: ✅ article_id={topic_or_article}, content_len={len(res_txt)}"
                         )
                     except ValueError:
                         # Not a valid UUID, treat as topic string
@@ -254,10 +264,28 @@ class BatchProcessor:
                         self.logger.info(
                             f"LLM post for agent {a_id}: topic={topic_or_article}, content_len={len(res_txt)}"
                         )
+                    except Exception as e:
+                        # Unexpected error during UUID validation
+                        self.logger.error(
+                            f"Agent {a_id} post: Error validating UUID for '{topic_or_article}': {e}"
+                        )
+                        # Still try to set it as article_id if it looks like a UUID
+                        if isinstance(topic_or_article, str) and len(topic_or_article) == 36 and topic_or_article.count('-') == 4:
+                            self.logger.warning(
+                                f"Agent {a_id}: Setting article_id despite UUID validation error"
+                            )
+                            action.article_id = topic_or_article
                 else:
-                    self.logger.info(
-                        f"LLM post for agent {a_id}: NO article_id/topic, content_len={len(res_txt)}"
-                    )
+                    # Log when there's NO article_id/topic but content mentions article
+                    if "check out this article" in res_txt.lower():
+                        self.logger.warning(
+                            f"Agent {a_id}: Post mentions article but NO article_id/topic in pending_item! "
+                            f"Content: {res_txt[:100]}..."
+                        )
+                    else:
+                        self.logger.info(
+                            f"LLM post for agent {a_id}: NO article_id/topic, content_len={len(res_txt)}"
+                        )
 
             # Annotate the post text
             annotations = annotate_text(
@@ -333,12 +361,53 @@ class BatchProcessor:
         batch_requests = []
         for item in batchable_posts:
             agent_id, cluster_id, future, topic, item_day, item_slot, agent_attrs = item
+            
+            # Check if article content is already in agent_attrs (optimization to avoid DB fetch)
+            article_content = None
+            if agent_attrs and "article" in agent_attrs:
+                # Article content was passed directly through agent_attrs
+                article_content = agent_attrs["article"]
+                self.logger.info(f"✅ Using article from agent_attrs (no DB fetch needed): '{article_content.get('title', '')[:50]}...'")
+            elif topic:
+                # Fallback: Fetch article from DB if not in agent_attrs
+                self.logger.debug(f"Processing batch post with topic: {topic}, type: {type(topic)}")
+                try:
+                    uuid.UUID(topic)  # Validate it's a UUID
+                    # This is an article_id - fetch article for news commentary
+                    self.logger.info(f"Topic {topic} is UUID - fetching article from DB (fallback)")
+                    article_data = ray.get(self.server.get_article.remote(topic, client_id=self.client_id))
+                    
+                    if article_data:
+                        self.logger.info(f"✅ Article fetched from DB: {article_data.get('title', 'NO TITLE')[:100]}")
+                        article_content = {
+                            "id": topic,
+                            "title": article_data.get("title", ""),
+                            "summary": article_data.get("summary", article_data.get("description", ""))
+                        }
+                        self.logger.info(f"✅ Article content prepared for batch: title='{article_content['title'][:50]}...', summary_len={len(article_content['summary'])}")
+                    else:
+                        self.logger.warning(f"❌ Article fetch returned None for article_id {topic}")
+                except ValueError:
+                    # Not a UUID - regular topic
+                    self.logger.debug(f"Topic {topic} is not UUID - treating as regular topic")
+                except Exception as e:
+                    # Fetch failed
+                    self.logger.error(f"❌ Failed to fetch article {topic}: {type(e).__name__}: {e}")
+            else:
+                self.logger.debug(f"No topic or article in agent_attrs")
+            
+            if article_content:
+                self.logger.info(f"✅ Adding batch request WITH article: {article_content.get('title', '')[:30]}...")
+            else:
+                self.logger.debug(f"Adding batch request WITHOUT article (regular post)")
+            
             batch_requests.append(
                 {
                     "cluster_id": cluster_id,
                     "day": item_day,
                     "slot": item_slot,
                     "agent_attrs": agent_attrs,
+                    "article": article_content,  # Include article for news posts
                 }
             )
 
@@ -370,9 +439,9 @@ class BatchProcessor:
 
             # Validate response
             res_txt = self.response_parser.parse_text_response(res_txt, default="")
-            if not res_txt:
+            if not res_txt or not res_txt.strip():
                 self.logger.warning(
-                    f"Empty vLLM batch post response for agent {agent_id}, skipping"
+                    f"Empty or whitespace-only vLLM batch post response for agent {agent_id}, skipping"
                 )
                 continue
 
@@ -562,6 +631,13 @@ class BatchProcessor:
 
             # Check if result is a comment/share commentary (text) or a reaction type
             if res_act and res_act.upper() not in REACTION_TYPES:
+                # Validate content is not empty or whitespace-only
+                if not res_act.strip():
+                    self.logger.warning(
+                        f"Empty or whitespace-only LLM comment/share for agent {a_id}, skipping"
+                    )
+                    continue
+                
                 # This is comment/share commentary text from LLM
                 # Determine action type: SHARE (with commentary) or COMMENT
                 determined_action_type = action_type_override if action_type_override else "COMMENT"
@@ -622,12 +698,43 @@ class BatchProcessor:
 
                 # Special handling for SHARE - generate share commentary
                 if res_act.upper() == "SHARE":
-                    # For SHARE actions, use cluster-specific share content (similar to rule-based)
-                    share_content = f"Sharing from cluster {cid}"
-                    # Calculate opinion updates for the share
+                    # Get post data for context and opinion updates
                     post_data = ray.get(
                         self.server.get_post.remote(target, client_id=self.client_id)
                     )
+                    
+                    # Generate LLM commentary for the share (synchronous call since we're in gather phase)
+                    post_content = post_data.get("tweet", "") if post_data else ""
+                    author_id = post_data.get("user_id") if post_data else None
+                    
+                    # Get author username for context
+                    author_name = "Someone"
+                    if author_id:
+                        author_user = ray.get(
+                            self.server.get_user.remote(author_id, client_id=self.client_id)
+                        )
+                        if author_user:
+                            author_name = author_user.get("username", "Someone")
+                    
+                    # Build agent attributes for persona-based commentary
+                    agent_attrs = {"name": f"Agent_{a_id}"}
+                    
+                    # Call LLM to generate share commentary synchronously
+                    try:
+                        llm_actor = self._get_llm_actor()
+                        share_content = ray.get(
+                            llm_actor.generate_share_commentary.remote(
+                                cid, post_content, agent_attrs, author_name
+                            )
+                        )
+                    except Exception as e:
+                        # Fallback to generic content if LLM call fails
+                        self.logger.warning(
+                            f"Failed to generate LLM share commentary for agent {a_id}: {e}. Using fallback."
+                        )
+                        share_content = f"Sharing from cluster {cid}"
+                    
+                    # Calculate opinion updates for the share
                     updated_opinions = None
                     if post_data:
                         updated_opinions = calculate_opinion_updates_fn(a_id, target, post_data)
@@ -846,6 +953,13 @@ class BatchProcessor:
             cluster_id = item[1]
             target_post = item[2]
 
+            # Validate comment text is not empty or whitespace-only
+            if not comment_text or not comment_text.strip():
+                self.logger.warning(
+                    f"Empty or whitespace-only vLLM batch comment for agent {agent_id}, skipping"
+                )
+                continue
+
             # Track LLM usage
             if self.cost_tracker:
                 output_tokens = len(comment_text) // CHARS_PER_TOKEN
@@ -999,6 +1113,13 @@ class BatchProcessor:
             agent_id = item[0]
             cluster_id = item[1]
             target_post = item[2]
+
+            # Validate share text is not empty or whitespace-only
+            if not share_text or not share_text.strip():
+                self.logger.warning(
+                    f"Empty or whitespace-only vLLM batch share commentary for agent {agent_id}, skipping"
+                )
+                continue
 
             # Track LLM usage
             if self.cost_tracker:

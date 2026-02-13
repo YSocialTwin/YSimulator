@@ -154,6 +154,48 @@ Or remove the `backend` field entirely (defaults to "ollama").
 
 ## Troubleshooting
 
+### Automatic GPU Selection (Multi-GPU Systems)
+
+YSimulator automatically handles GPU selection on multi-GPU systems. When vLLM is initialized:
+
+1. **Early Selection**: GPU selection happens BEFORE any CUDA initialization to prevent locking to cuda:0
+2. **Ray Assignment**: First checks if Ray has assigned a specific GPU via `CUDA_VISIBLE_DEVICES`
+3. **Memory Estimation**: Estimates required GPU memory based on model size and configuration
+4. **Dynamic Selection**: Selects a GPU with sufficient free memory from all available GPUs
+5. **Automatic Fallback**: Falls back gracefully with warnings if no GPU has enough memory
+
+This prevents the common error:
+```
+ValueError: Free memory on device cuda:0 (3.71/39.39 GiB) on startup is less than 
+desired GPU memory utilization (0.15, 5.91 GiB)
+```
+
+**What to look for in logs:**
+```
+[vLLM] Ray has not assigned a specific GPU, selecting based on available memory
+[GPU Selection] Estimated memory for meta-llama/Llama-3.2-3B: 11.70 GB
+[GPU Selection] Selected GPU 1 with 35.20 GB free (required: 13.00 GB)
+[vLLM] Set CUDA_VISIBLE_DEVICES=1 before vLLM initialization
+```
+
+**GPU Selection Logging:**
+GPU selection is also logged to `logs/{client_name}_llm_usage.log` for traceability:
+```json
+{
+  "event": "gpu_selection",
+  "physical_gpu_id": 1,
+  "logical_gpu_id": 0,
+  "assignment_method": "dynamic_selection",
+  "model": "meta-llama/Llama-3.2-3B"
+}
+```
+
+**Manual GPU Selection** (optional - only needed if automatic selection fails):
+```bash
+# Use specific GPU (e.g., GPU 1)
+CUDA_VISIBLE_DEVICES=1 python run_client.py --config example/llm_population_100_vllm
+```
+
 ### vLLM Not Available
 
 If you see:
