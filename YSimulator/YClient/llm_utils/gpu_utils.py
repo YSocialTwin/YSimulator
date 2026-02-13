@@ -473,7 +473,7 @@ def get_total_gpu_count() -> int:
         finally:
             try:
                 pynvml.nvmlShutdown()
-            except:
+            except Exception:
                 pass
 
     except (ImportError, Exception) as e:

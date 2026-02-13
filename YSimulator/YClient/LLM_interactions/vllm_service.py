@@ -310,7 +310,10 @@ class VLLMService:
                     current_gpu_ids = []
                     if current_gpu:
                         try:
-                            current_gpu_ids = [int(g.strip()) for g in current_gpu.split(",") if g.strip()]
+                            # Parse GPU IDs, stripping whitespace once
+                            current_gpu_ids = [
+                                int(g) for g in (part.strip() for part in current_gpu.split(",")) if g
+                            ]
                         except ValueError:
                             logger.warning(f"[vLLM] Could not parse CUDA_VISIBLE_DEVICES: {current_gpu}")
 
@@ -340,6 +343,8 @@ class VLLMService:
                         original_cuda_visible = os.environ.get("CUDA_VISIBLE_DEVICES", "")
 
                         # Temporarily set the vision GPU
+                        # Note: Both os.environ and os.putenv are set intentionally.
+                        # os.putenv is critical for vLLM v1 subprocess spawning (see _set_gpu_env_for_attempt_static)
                         os.environ["CUDA_VISIBLE_DEVICES"] = str(vision_gpu_id)
                         os.putenv("CUDA_VISIBLE_DEVICES", str(vision_gpu_id))
 
@@ -376,6 +381,7 @@ class VLLMService:
                             )
                         finally:
                             # Restore original GPU setting
+                            # Note: Both os.environ and os.putenv are set intentionally (see comment above)
                             os.environ["CUDA_VISIBLE_DEVICES"] = original_cuda_visible
                             os.putenv("CUDA_VISIBLE_DEVICES", original_cuda_visible)
                     else:
