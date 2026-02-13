@@ -82,7 +82,18 @@ class LLMService:
         self.prompts_config = prompts_config
 
         # Build base_url from address and port
-        base_url = f"http://{llm_config['address']}:{llm_config['port']}"
+        # http://http://127.0.0.1:11434/v1:11434
+
+        if llm_config["address"].startswith("http://") or llm_config["address"].startswith("https://"):
+            logger.warning(f"LLM config address should not include protocol (http://). Removing it from {llm_config['address']}")
+            llm_config["address"] = llm_config["address"].replace("http://", "").replace("https://", "")
+        if ":" in llm_config["address"]:
+            logger.warning(f"LLM config address include port.")
+            base_url = f"http://{llm_config['address']}"
+        else:
+            base_url = f"http://{llm_config['address']}:{llm_config['port']}"
+
+        print(f"\n\n\n\n\n\n########################\n\n\n\n{base_url}\n\n\n\n########################\n\n\n\n")
 
         # Initialize LLM with configuration
         self.llm = ChatOllama(
@@ -92,7 +103,17 @@ class LLMService:
         # Initialize vision LLM if config provided
         self.llm_v = None
         if llm_v_config:
-            base_url_v = f"http://{llm_v_config['address']}:{llm_v_config['port']}"
+
+            if llm_v_config["address"].startswith("http://") or llm_v_config["address"].startswith("https://"):
+                logger.warning(
+                    f"LLM config address should not include protocol (http://). Removing it from {llm_v_config['address']}")
+                llm_v_config["address"] = llm_v_config["address"].replace("http://", "").replace("https://", "")
+            if ":" in llm_v_config["address"]:
+                logger.warning(f"LLM config address include port.")
+                base_url_v = f"http://{llm_v_config['address']}"
+            else:
+                base_url_v = f"http://{llm_v_config['address']}:{llm_v_config['port']}"
+
             self.llm_v = ChatOllama(
                 model=llm_v_config["model"],
                 temperature=llm_v_config.get("temperature", 0.5),
