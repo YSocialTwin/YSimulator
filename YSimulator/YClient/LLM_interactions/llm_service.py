@@ -278,7 +278,21 @@ class LLMService:
 
         prompt = ChatPromptTemplate.from_messages([("system", system_msg), ("user", user_msg)])
         chain = prompt | self.llm | StrOutputParser()
-        return chain.invoke({})
+        
+        try:
+            return chain.invoke({})
+        except Exception as e:
+            logger.error(f"Ollama error in generate_post: {type(e).__name__}: {str(e)}")
+            logger.error(f"Cluster: {cluster_id}, Day: {day}, Slot: {slot}, Topic: {topic}")
+            # Log additional context
+            import traceback
+            logger.debug(f"Full traceback:\n{traceback.format_exc()}")
+            # Return fallback content
+            fallback = f"Post for day {day}, slot {slot}"
+            if topic:
+                fallback = f"Thoughts on {topic}"
+            logger.warning(f"Returning fallback content: {fallback}")
+            return fallback
 
     def decide_reaction(self, cluster_id: int, post_content: str) -> str:
         """Decide: LIKE, COMMENT, or IGNORE."""
@@ -301,13 +315,23 @@ class LLMService:
 
         prompt = ChatPromptTemplate.from_messages([("system", system_msg), ("user", user_msg)])
         chain = prompt | self.llm | StrOutputParser()
-        result = chain.invoke({}).strip().upper()
+        
+        try:
+            result = chain.invoke({}).strip().upper()
 
-        if "LIKE" in result:
-            return "LIKE"
-        if "COMMENT" in result:
-            return "COMMENT"
-        return "IGNORE"
+            if "LIKE" in result:
+                return "LIKE"
+            if "COMMENT" in result:
+                return "COMMENT"
+            return "IGNORE"
+        except Exception as e:
+            logger.error(f"Ollama error in decide_reaction: {type(e).__name__}: {str(e)}")
+            logger.error(f"Cluster: {cluster_id}, Post content length: {len(post_content)}")
+            # Log additional context
+            import traceback
+            logger.debug(f"Full traceback:\n{traceback.format_exc()}")
+            logger.warning("Returning fallback reaction: IGNORE")
+            return "IGNORE"
 
     def generate_news_commentary(self, article: dict, website_name: str = None) -> str:
         """
