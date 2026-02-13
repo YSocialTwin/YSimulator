@@ -71,9 +71,18 @@ class VLLMService:
         # Get list of candidate GPUs for retry logic
         candidate_gpus = VLLMService._get_candidate_gpus_static(llm_config)
 
-        # Store server and client_id early for use in _initialize
+        # Store essential attributes early to ensure consistent state even if initialization fails
         self.server = server
         self.client_id = client_id
+        self.prompts_config = prompts_config or {}
+        
+        # Initialize optional attributes to None (will be set properly in _initialize if successful)
+        self.llm = None
+        self.sampling_params = None
+        self.llm_v = None
+        self.sampling_params_v = None
+        self.vision_gpu_id = None
+        self.gpu_selection_info = {}
 
         import sys
 
