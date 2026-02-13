@@ -413,9 +413,12 @@ class VLLMService:
                         self.sampling_params_v = None
 
                 except Exception as e:
-                    self.vision_init_status = f"dedicated_gpu_allocation_failed: {str(e)[:100]}"
-                    logger.error(f"[vLLM] Failed to allocate dedicated GPU for vision LLM: {e}")
+                    # Sanitize error message to avoid exposing sensitive information
+                    error_type = type(e).__name__
+                    self.vision_init_status = f"dedicated_gpu_allocation_failed: {error_type}"
+                    logger.error(f"[vLLM] Failed to allocate dedicated GPU for vision LLM: {error_type}")
                     logger.error(f"[vLLM] Vision service status: {self.vision_init_status}")
+                    logger.debug(f"[vLLM] Full error details: {e}")  # Debug level for full details
                     logger.info("[vLLM] Falling back to shared GPU initialization")
                     # Fall through to shared GPU initialization below
                     self._initialize_vision_llm_shared_gpu(llm_v_config)
@@ -477,9 +480,12 @@ class VLLMService:
             )
             logger.info(f"[vLLM] Vision service status: {self.vision_init_status}")
         except Exception as e:
-            self.vision_init_status = f"shared_gpu_failed: {str(e)[:100]}"
-            logger.error(f"[vLLM] Failed to initialize vision LLM on shared GPU: {e}")
+            # Sanitize error message to avoid exposing sensitive information
+            error_type = type(e).__name__
+            self.vision_init_status = f"shared_gpu_failed: {error_type}"
+            logger.error(f"[vLLM] Failed to initialize vision LLM on shared GPU: {error_type}")
             logger.error(f"[vLLM] Vision service status: {self.vision_init_status}")
+            logger.debug(f"[vLLM] Full error details: {e}")  # Debug level for full details
             self.llm_v = None
             self.sampling_params_v = None
 
@@ -1876,10 +1882,6 @@ class VLLMService:
             status_msg = self.vision_init_status or "unknown"
             logger.warning(
                 f"[vLLM] Vision LLM (llm_v) not available for image description. "
-                f"Status: {status_msg}"
-            )
-            logger.info(
-                f"[vLLM] Vision service unavailable - cannot describe image. "
                 f"Reason: {status_msg}"
             )
             return None
