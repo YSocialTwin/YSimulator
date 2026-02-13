@@ -265,6 +265,94 @@ class TestMemoryEstimation(unittest.TestCase):
             required_gb, expected_gb, delta=expected_gb * MEMORY_ESTIMATION_TOLERANCE
         )
 
+    def test_estimate_required_vllm_memory_int4_quantized(self):
+        """Test memory estimation for int4 quantized model."""
+        from YSimulator.YClient.llm_utils.gpu_utils import estimate_required_vllm_memory
+
+        required_gb = estimate_required_vllm_memory(
+            model_name="meta-llama/Llama-3.2-3B-int4",
+            max_model_len=40000,
+            gpu_memory_utilization=0.9,
+        )
+
+        # Expected calculation for 3B int4 model:
+        # params = 3B, bytes_per_param = 0.5 (int4), base_memory = (3 * 0.5) * 1.5 = 2.25 GB
+        # length_factor = 1.0 + (40000/40000) * 0.3 = 1.3
+        # estimated = 2.25 * 1.3 = 2.925 GB
+        # required = 2.925 / 0.9 = 3.25 GB
+        expected_gb = ((3 * 0.5) * 1.5) * (1.0 + (40000 / 40000) * 0.3) / 0.9
+
+        # Allow tolerance for rounding
+        self.assertAlmostEqual(
+            required_gb, expected_gb, delta=expected_gb * MEMORY_ESTIMATION_TOLERANCE
+        )
+
+    def test_estimate_required_vllm_memory_minicpm_v(self):
+        """Test memory estimation for MiniCPM-V vision model."""
+        from YSimulator.YClient.llm_utils.gpu_utils import estimate_required_vllm_memory
+
+        required_gb = estimate_required_vllm_memory(
+            model_name="openbmb/MiniCPM-V-2_6-int4",
+            max_model_len=40000,
+            gpu_memory_utilization=0.9,
+        )
+
+        # Expected calculation for MiniCPM-V-2_6 int4 model:
+        # params = 2.6B, bytes_per_param = 0.5 (int4), base_memory = (2.6 * 0.5) * 1.5 = 1.95 GB
+        # length_factor = 1.0 + (40000/40000) * 0.3 = 1.3
+        # estimated = 1.95 * 1.3 = 2.535 GB
+        # required = 2.535 / 0.9 = 2.817 GB
+        expected_gb = ((2.6 * 0.5) * 1.5) * (1.0 + (40000 / 40000) * 0.3) / 0.9
+
+        # Allow tolerance for rounding
+        self.assertAlmostEqual(
+            required_gb, expected_gb, delta=expected_gb * MEMORY_ESTIMATION_TOLERANCE
+        )
+
+    def test_estimate_required_vllm_memory_int8_quantized(self):
+        """Test memory estimation for int8 quantized model."""
+        from YSimulator.YClient.llm_utils.gpu_utils import estimate_required_vllm_memory
+
+        required_gb = estimate_required_vllm_memory(
+            model_name="meta-llama/Llama-7B-int8",
+            max_model_len=40000,
+            gpu_memory_utilization=0.9,
+        )
+
+        # Expected calculation for 7B int8 model:
+        # params = 7B, bytes_per_param = 1.0 (int8), base_memory = (7 * 1.0) * 1.5 = 10.5 GB
+        # length_factor = 1.0 + (40000/40000) * 0.3 = 1.3
+        # estimated = 10.5 * 1.3 = 13.65 GB
+        # required = 13.65 / 0.9 = 15.167 GB
+        expected_gb = ((7 * 1.0) * 1.5) * (1.0 + (40000 / 40000) * 0.3) / 0.9
+
+        # Allow tolerance for rounding
+        self.assertAlmostEqual(
+            required_gb, expected_gb, delta=expected_gb * MEMORY_ESTIMATION_TOLERANCE
+        )
+
+    def test_estimate_required_vllm_memory_awq(self):
+        """Test memory estimation for AWQ quantized model."""
+        from YSimulator.YClient.llm_utils.gpu_utils import estimate_required_vllm_memory
+
+        required_gb = estimate_required_vllm_memory(
+            model_name="TheBloke/Llama-7B-AWQ",
+            max_model_len=40000,
+            gpu_memory_utilization=0.9,
+        )
+
+        # Expected calculation for 7B AWQ model:
+        # params = 7B, bytes_per_param = 0.5 (AWQ is 4-bit), base_memory = (7 * 0.5) * 1.5 = 5.25 GB
+        # length_factor = 1.0 + (40000/40000) * 0.3 = 1.3
+        # estimated = 5.25 * 1.3 = 6.825 GB
+        # required = 6.825 / 0.9 = 7.583 GB
+        expected_gb = ((7 * 0.5) * 1.5) * (1.0 + (40000 / 40000) * 0.3) / 0.9
+
+        # Allow tolerance for rounding
+        self.assertAlmostEqual(
+            required_gb, expected_gb, delta=expected_gb * MEMORY_ESTIMATION_TOLERANCE
+        )
+
 
 class TestGPUCount(unittest.TestCase):
     """Test GPU count detection."""

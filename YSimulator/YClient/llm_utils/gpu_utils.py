@@ -505,9 +505,10 @@ def estimate_required_vllm_memory(
     Estimate the required GPU memory for loading a vLLM model.
 
     This is a rough estimate based on model size. Actual memory usage may vary.
+    Supports quantized models (int4, int8, awq, gptq) and vision models.
 
     Args:
-        model_name: Name of the model (e.g., "meta-llama/Llama-3.2-3B")
+        model_name: Name of the model (e.g., "meta-llama/Llama-3.2-3B", "openbmb/MiniCPM-V-2_6-int4")
         max_model_len: Maximum sequence length
         gpu_memory_utilization: Target GPU memory utilization
 
@@ -517,9 +518,46 @@ def estimate_required_vllm_memory(
     # Extract parameter count from model name if possible
     # This is a heuristic and may not work for all model names
     model_name_lower = model_name.lower()
+    
+    # Detect quantization format and set bytes per parameter
+    bytes_per_param = 2.0  # Default: FP16
+    quantization_type = "FP16"
+    
+    if "int4" in model_name_lower or "4bit" in model_name_lower:
+        bytes_per_param = 0.5
+        quantization_type = "int4"
+    elif "int8" in model_name_lower or "8bit" in model_name_lower:
+        bytes_per_param = 1.0
+        quantization_type = "int8"
+    elif "awq" in model_name_lower or "gptq" in model_name_lower:
+        bytes_per_param = 0.5  # 4-bit quantization
+        quantization_type = "AWQ/GPTQ"
+    elif "gguf" in model_name_lower:
+        # GGUF can be various quantizations, assume 4-bit for safety
+        bytes_per_param = 0.5
+        quantization_type = "GGUF"
 
     # Common model size patterns
-    if "1b" in model_name_lower or "1.5b" in model_name_lower:
+    # Check for vision models first (MiniCPM-V-2_6, etc.)
+    if "minicpm-v" in model_name_lower:
+        # MiniCPM-V-2_6 is a 2.6B parameter model
+        if "2_6" in model_name_lower or "2.6" in model_name_lower:
+            params_billions = 2.6
+        elif "8b" in model_name_lower:
+            params_billions = 8
+        else:
+            params_billions = 2.6  # Default for MiniCPM-V
+    elif "llava" in model_name_lower:
+        # LLaVA models - check for size in name
+        if "7b" in model_name_lower:
+            params_billions = 7
+        elif "13b" in model_name_lower:
+            params_billions = 13
+        elif "34b" in model_name_lower:
+            params_billions = 34
+        else:
+            params_billions = 7  # Default LLaVA
+    elif "1b" in model_name_lower or "1.5b" in model_name_lower:
         params_billions = 1.5
     elif "3b" in model_name_lower:
         params_billions = 3
@@ -539,10 +577,9 @@ def estimate_required_vllm_memory(
         )
         params_billions = 7
 
-    # Rough estimate: ~2 bytes per parameter (FP16) + KV cache + overhead
-    # Model weights: params * 2 bytes
+    # Model weights: params * bytes_per_param
     # KV cache and overhead: roughly 50% additional (represented by multiplier)
-    base_memory_gb = (params_billions * 2) * KV_CACHE_OVERHEAD_MULTIPLIER
+    base_memory_gb = (params_billions * bytes_per_param) * KV_CACHE_OVERHEAD_MULTIPLIER
 
     # Account for max_model_len - longer sequences need more KV cache
     # Rough scaling: every 10k tokens adds ~10% memory for 7B model
@@ -557,8 +594,9 @@ def estimate_required_vllm_memory(
 
     logger.info(
         f"[GPU Selection] Estimated memory for {model_name}: "
-        f"{estimated_memory:.2f} GB (requires {required_free_memory:.2f} GB free "
-        f"with utilization={gpu_memory_utilization})"
+        f"{estimated_memory:.2f} GB ({params_billions}B params, {quantization_type}, "
+        f"{bytes_per_param} bytes/param) "
+        f"(requires {required_free_memory:.2f} GB free with utilization={gpu_memory_utilization})"
     )
 
     return required_free_memory
