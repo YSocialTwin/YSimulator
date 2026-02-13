@@ -23,7 +23,7 @@
     "temperature": 0.5,
     "max_tokens": 300,
     "max_model_len": 40000,
-    "note": "max_model_len sets the maximum sequence length for the vision model (default: 40000)."
+    "note": "Vision LLM for image transcription. max_model_len sets the maximum sequence length (default: 40000). In multi-GPU environments, a dedicated GPU will be automatically allocated for the vision model, separate from the text generation GPU. In single-GPU environments, vision LLM initialization is skipped to avoid memory issues."
   },
   "simulation": {
     "num_days": 3,
