@@ -257,3 +257,7 @@ class ImageRepository(BaseRepository):
     @abstractmethod
     def get_random_image(self) -> Optional[Dict[str, Any]]:
         """Get a random image."""
+
+    @abstractmethod
+    def get_image_by_url(self, url: str) -> Optional[Dict[str, Any]]:
+        """Get an image by its URL."""

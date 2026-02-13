@@ -555,6 +555,10 @@ class NewsFeedService:
     def _process_and_save_images(self, article_id: str, image_urls: List[str]):
         """
         Process images by getting descriptions from LLM and saving to database.
+        
+        - Limits to maximum 3 images per article
+        - Checks if image URL already exists before requesting LLM description
+        - Reuses existing descriptions for duplicate URLs
 
         Args:
             article_id: UUID of the article these images belong to
@@ -567,16 +571,62 @@ class NewsFeedService:
             self.logger.warning("LLM service not available, skipping image descriptions")
             return
 
+        # Limit to 3 images per article
+        MAX_IMAGES_PER_ARTICLE = 3
+        if len(image_urls) > MAX_IMAGES_PER_ARTICLE:
+            self.logger.info(
+                f"Article has {len(image_urls)} images, limiting to {MAX_IMAGES_PER_ARTICLE}"
+            )
+            image_urls = image_urls[:MAX_IMAGES_PER_ARTICLE]
+
         self.logger.info(f"Processing {len(image_urls)} image(s) for article {article_id}")
         successful_saves = 0
+        reused_existing = 0
         failed_descriptions = 0
         failed_saves = 0
 
         for idx, image_url in enumerate(image_urls, 1):
             try:
-                # Get image description from LLM
+                # Check if image already exists in database
                 self.logger.info(
-                    f"[{idx}/{len(image_urls)}] Requesting description for image: {image_url[:80]}..."
+                    f"[{idx}/{len(image_urls)}] Checking if image already exists: {image_url[:80]}..."
+                )
+                existing_image = ray.get(self.server.get_image_by_url.remote(image_url))
+                
+                if existing_image:
+                    # Image already exists, reuse it by creating a new entry with same URL and description
+                    self.logger.info(
+                        f"[{idx}/{len(image_urls)}] ✓ Found existing image (id={existing_image['id']}), "
+                        f"reusing description: {existing_image['description'][:100]}..."
+                    )
+                    
+                    # Create new image entry for this article with the existing description
+                    image_data = {
+                        "id": str(uuid.uuid4()),
+                        "url": image_url,
+                        "description": existing_image["description"],
+                        "article_id": article_id,
+                    }
+                    
+                    self.logger.info(f"[{idx}/{len(image_urls)}] Saving reused image to database...")
+                    image_id = ray.get(self.server.add_image.remote(image_data))
+                    
+                    if image_id:
+                        reused_existing += 1
+                        successful_saves += 1
+                        self.logger.info(
+                            f"[{idx}/{len(image_urls)}] ✓ Image saved successfully with reused description: id={image_id}"
+                        )
+                    else:
+                        failed_saves += 1
+                        self.logger.info(
+                            f"[{idx}/{len(image_urls)}] ✗ WARNING: Failed to save image to database"
+                        )
+                    continue
+
+                # Image doesn't exist, get description from LLM
+                self.logger.info(
+                    f"[{idx}/{len(image_urls)}] Requesting new description from LLM for image: {image_url[:80]}..."
                 )
                 # Get the appropriate LLM actor (handles LLMLoadBalancer case)
                 llm_actor = _get_llm_actor(self.llm_service)
@@ -595,7 +645,7 @@ class NewsFeedService:
                         "article_id": article_id,
                     }
 
-                    self.logger.info(f"[{idx}/{len(image_urls)}] Saving image to database...")
+                    self.logger.info(f"[{idx}/{len(image_urls)}] Saving new image to database...")
                     image_id = ray.get(self.server.add_image.remote(image_data))
 
                     if image_id:
@@ -629,6 +679,8 @@ class NewsFeedService:
         self.logger.info(f"Image processing summary for article {article_id}:")
         self.logger.info(f"  - Total images: {len(image_urls)}")
         self.logger.info(f"  - Successfully saved: {successful_saves}")
+        self.logger.info(f"  - Reused existing descriptions: {reused_existing}")
+        self.logger.info(f"  - New descriptions from LLM: {successful_saves - reused_existing}")
         self.logger.info(f"  - Failed descriptions: {failed_descriptions}")
         self.logger.info(f"  - Failed saves: {failed_saves}")
 

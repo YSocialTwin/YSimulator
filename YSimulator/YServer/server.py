@@ -1663,6 +1663,20 @@ class OrchestratorServer:
         """
         return self.image_service.get_random_image()
 
+    def get_image_by_url(self, url: str) -> Optional[dict]:
+        """
+        Get an image by its URL from the database.
+
+        This is a wrapper method that can be called remotely from Ray actors.
+
+        Args:
+            url: Image URL to search for
+
+        Returns:
+            dict: Image data or None if not found
+        """
+        return self.image_service.get_image_by_url(url)
+
     def get_interest_by_id(self, interest_id: str) -> Optional[dict]:
         """
         Get interest details by ID.

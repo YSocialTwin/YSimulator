@@ -60,6 +60,22 @@ class ImageService:
             self.logger.error(f"Error in image service get_random_image: {e}")
             return None
 
+    def get_image_by_url(self, url: str) -> Optional[Dict[str, Any]]:
+        """
+        Get an image by its URL.
+
+        Args:
+            url: Image URL to search for
+
+        Returns:
+            Image data dictionary or None if not found
+        """
+        try:
+            return self.image_repo.get_image_by_url(url)
+        except Exception as e:
+            self.logger.error(f"Error in image service get_image_by_url: {e}")
+            return None
+
     def health_check(self) -> bool:
         """
         Check if the image service is healthy.

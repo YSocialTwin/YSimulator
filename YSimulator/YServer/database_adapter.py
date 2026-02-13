@@ -505,6 +505,10 @@ class DatabaseServiceAdapter:
         """Get random image."""
         return self.content_service.get_random_image()
 
+    def get_image_by_url(self, url: str) -> Optional[Dict[str, Any]]:
+        """Get image by URL."""
+        return self.content_service.get_image_by_url(url)
+
     def add_website(self, website_data: Dict[str, Any]) -> str:
         """Add website."""
         return self.content_service.add_website(website_data)
