@@ -450,6 +450,52 @@ def get_ray_assigned_gpu() -> Optional[int]:
         return None
 
 
+def get_total_gpu_count() -> int:
+    """
+    Get the total number of physical GPUs available on the system.
+
+    This function queries the actual hardware, not just what's visible via CUDA_VISIBLE_DEVICES.
+
+    Returns:
+        Total number of physical GPUs available
+
+    Raises:
+        RuntimeError: If unable to query GPU count
+    """
+    try:
+        import pynvml
+
+        pynvml.nvmlInit()
+        try:
+            device_count = pynvml.nvmlDeviceGetCount()
+            logger.info(f"[GPU Query] Total physical GPUs on system: {device_count}")
+            return device_count
+        finally:
+            try:
+                pynvml.nvmlShutdown()
+            except:
+                pass
+
+    except (ImportError, Exception) as e:
+        logger.debug(f"pynvml not available or failed ({e}), falling back to torch")
+
+        # Fallback to torch
+        try:
+            import torch
+
+            if not torch.cuda.is_available():
+                logger.warning("[GPU Query] CUDA is not available")
+                return 0
+
+            device_count = torch.cuda.device_count()
+            logger.info(f"[GPU Query] Total GPUs visible to torch: {device_count}")
+            return device_count
+        except ImportError:
+            raise RuntimeError("Neither pynvml nor PyTorch is available. Cannot query GPU count.")
+        except Exception as e:
+            raise RuntimeError(f"Failed to query GPU count: {e}")
+
+
 def estimate_required_vllm_memory(
     model_name: str,
     max_model_len: int = 40000,
@@ -516,3 +562,68 @@ def estimate_required_vllm_memory(
     )
 
     return required_free_memory
+
+
+def select_dedicated_gpu_for_vision(
+    required_memory_gb: Optional[float] = None, exclude_gpus: Optional[List[int]] = None
+) -> Optional[int]:
+    """
+    Select a dedicated GPU for vision LLM, excluding GPUs already in use.
+
+    This function is used to allocate a separate GPU for image transcription/vision
+    tasks in multi-GPU environments to avoid memory contention.
+
+    Args:
+        required_memory_gb: Optional minimum required free memory in GB
+        exclude_gpus: Optional list of GPU IDs to exclude (e.g., ones already in use)
+
+    Returns:
+        GPU device ID suitable for vision LLM, or None if no suitable GPU found
+
+    Example:
+        >>> # Select a GPU for vision, excluding GPU 0 (used for text generation)
+        >>> vision_gpu = select_dedicated_gpu_for_vision(
+        ...     required_memory_gb=8.0,
+        ...     exclude_gpus=[0]
+        ... )
+    """
+    if exclude_gpus is None:
+        exclude_gpus = []
+
+    try:
+        # Get all GPUs sorted by free memory
+        gpu_info = get_ordered_gpus_by_memory(required_memory_gb=required_memory_gb)
+
+        if not gpu_info:
+            logger.warning(
+                "[GPU Selection] No GPUs with sufficient memory found for vision LLM"
+            )
+            return None
+
+        # Filter out excluded GPUs
+        available_gpus = [
+            (device_id, free_gb, total_gb)
+            for device_id, free_gb, total_gb in gpu_info
+            if device_id not in exclude_gpus
+        ]
+
+        if not available_gpus:
+            logger.warning(
+                f"[GPU Selection] No available GPUs after excluding {exclude_gpus}"
+            )
+            return None
+
+        # Select the GPU with the most free memory (first in sorted list)
+        selected_gpu_id = available_gpus[0][0]
+        selected_free_gb = available_gpus[0][1]
+
+        logger.info(
+            f"[GPU Selection] Selected GPU {selected_gpu_id} for vision LLM "
+            f"({selected_free_gb:.2f} GB free, excluding GPUs: {exclude_gpus})"
+        )
+
+        return selected_gpu_id
+
+    except Exception as e:
+        logger.error(f"[GPU Selection] Failed to select dedicated GPU for vision: {e}")
+        return None

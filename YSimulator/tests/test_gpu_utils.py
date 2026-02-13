@@ -266,5 +266,97 @@ class TestMemoryEstimation(unittest.TestCase):
         )
 
 
+class TestGPUCount(unittest.TestCase):
+    """Test GPU count detection."""
+
+    @patch("YSimulator.YClient.llm_utils.gpu_utils.torch")
+    def test_get_total_gpu_count(self, mock_torch):
+        """Test getting total GPU count."""
+        mock_torch.cuda.is_available.return_value = True
+        mock_torch.cuda.device_count.return_value = 4
+
+        from YSimulator.YClient.llm_utils.gpu_utils import get_total_gpu_count
+
+        count = get_total_gpu_count()
+
+        self.assertEqual(count, 4)
+
+    @patch("YSimulator.YClient.llm_utils.gpu_utils.torch")
+    def test_get_total_gpu_count_no_cuda(self, mock_torch):
+        """Test getting GPU count when CUDA is not available."""
+        mock_torch.cuda.is_available.return_value = False
+
+        from YSimulator.YClient.llm_utils.gpu_utils import get_total_gpu_count
+
+        count = get_total_gpu_count()
+
+        self.assertEqual(count, 0)
+
+
+class TestDedicatedGPUSelection(unittest.TestCase):
+    """Test dedicated GPU selection for vision models."""
+
+    @patch("YSimulator.YClient.llm_utils.gpu_utils.get_ordered_gpus_by_memory")
+    def test_select_dedicated_gpu_for_vision(self, mock_get_ordered):
+        """Test selecting dedicated GPU excluding specific GPUs."""
+        mock_get_ordered.return_value = [
+            (0, 30.0, 40.0),  # GPU 0: 30 GB free (text generation GPU)
+            (1, 25.0, 40.0),  # GPU 1: 25 GB free
+            (2, 20.0, 40.0),  # GPU 2: 20 GB free
+        ]
+
+        from YSimulator.YClient.llm_utils.gpu_utils import select_dedicated_gpu_for_vision
+
+        # Exclude GPU 0 (used for text generation)
+        gpu_id = select_dedicated_gpu_for_vision(required_memory_gb=10.0, exclude_gpus=[0])
+
+        # Should select GPU 1 (most free memory excluding GPU 0)
+        self.assertEqual(gpu_id, 1)
+
+    @patch("YSimulator.YClient.llm_utils.gpu_utils.get_ordered_gpus_by_memory")
+    def test_select_dedicated_gpu_for_vision_no_exclusion(self, mock_get_ordered):
+        """Test selecting dedicated GPU without exclusions."""
+        mock_get_ordered.return_value = [
+            (0, 30.0, 40.0),  # GPU 0: 30 GB free
+            (1, 25.0, 40.0),  # GPU 1: 25 GB free
+        ]
+
+        from YSimulator.YClient.llm_utils.gpu_utils import select_dedicated_gpu_for_vision
+
+        # No exclusions
+        gpu_id = select_dedicated_gpu_for_vision(required_memory_gb=10.0)
+
+        # Should select GPU 0 (most free memory)
+        self.assertEqual(gpu_id, 0)
+
+    @patch("YSimulator.YClient.llm_utils.gpu_utils.get_ordered_gpus_by_memory")
+    def test_select_dedicated_gpu_for_vision_all_excluded(self, mock_get_ordered):
+        """Test selecting dedicated GPU when all suitable GPUs are excluded."""
+        mock_get_ordered.return_value = [
+            (0, 30.0, 40.0),  # GPU 0: 30 GB free
+            (1, 25.0, 40.0),  # GPU 1: 25 GB free
+        ]
+
+        from YSimulator.YClient.llm_utils.gpu_utils import select_dedicated_gpu_for_vision
+
+        # Exclude all GPUs
+        gpu_id = select_dedicated_gpu_for_vision(required_memory_gb=10.0, exclude_gpus=[0, 1])
+
+        # Should return None when all GPUs are excluded
+        self.assertIsNone(gpu_id)
+
+    @patch("YSimulator.YClient.llm_utils.gpu_utils.get_ordered_gpus_by_memory")
+    def test_select_dedicated_gpu_for_vision_insufficient_memory(self, mock_get_ordered):
+        """Test selecting dedicated GPU when no GPU has sufficient memory."""
+        mock_get_ordered.return_value = []  # No GPUs with sufficient memory
+
+        from YSimulator.YClient.llm_utils.gpu_utils import select_dedicated_gpu_for_vision
+
+        gpu_id = select_dedicated_gpu_for_vision(required_memory_gb=50.0)
+
+        # Should return None when no GPU has sufficient memory
+        self.assertIsNone(gpu_id)
+
+
 if __name__ == "__main__":
     unittest.main()

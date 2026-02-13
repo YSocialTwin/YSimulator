@@ -285,49 +285,173 @@ class VLLMService:
         # Initialize vision LLM if config provided
         self.llm_v = None
         self.sampling_params_v = None
+        self.vision_gpu_id = None
         if llm_v_config:
-            try:
-                logger.info("[vLLM] Initializing vision LLM (llm_v)...")
-                v_model_name = llm_v_config.get("model", "meta-llama/Llama-3.2-11B-Vision")
-                v_tensor_parallel_size = llm_v_config.get("tensor_parallel_size", 1)
-                v_gpu_memory_utilization = llm_v_config.get("gpu_memory_utilization", 0.9)
-                v_max_model_len = llm_v_config.get("max_model_len", 4096)
+            # Check if we're in a multi-GPU environment
+            from YSimulator.YClient.llm_utils.gpu_utils import (
+                get_total_gpu_count,
+                select_dedicated_gpu_for_vision,
+                estimate_required_vllm_memory,
+            )
 
-                vllm_v_params = {
-                    "model": v_model_name,
-                    "tensor_parallel_size": v_tensor_parallel_size,
-                    "gpu_memory_utilization": v_gpu_memory_utilization,
-                    "max_model_len": v_max_model_len,
-                    "trust_remote_code": True,
-                    "enforce_eager": True,
-                    "disable_custom_all_reduce": True,
-                }
+            total_gpus = get_total_gpu_count()
+            logger.info(f"[vLLM] Total GPUs available: {total_gpus}")
 
-                if v_tensor_parallel_size == 1:
-                    vllm_v_params["distributed_executor_backend"] = "mp"
-                else:
-                    vllm_v_params["distributed_executor_backend"] = "ray"
-
-                self.llm_v = LLM(**vllm_v_params)
-
-                self.sampling_params_v = SamplingParams(
-                    temperature=llm_v_config.get("temperature", 0.5),
-                    max_tokens=llm_v_config.get("max_tokens", 256),
-                    top_p=0.95,
-                )
+            # Only allocate dedicated GPU for vision if we have multiple GPUs
+            if total_gpus > 1:
                 logger.info(
-                    f"[vLLM] Vision LLM initialized successfully with model: {v_model_name}"
+                    "[vLLM] Multi-GPU environment detected. "
+                    "Attempting to allocate dedicated GPU for vision LLM..."
                 )
-            except Exception as e:
-                logger.error(f"[vLLM] Failed to initialize vision LLM: {e}")
+
+                try:
+                    # Get the current GPU being used for text generation
+                    current_gpu = os.environ.get("CUDA_VISIBLE_DEVICES", "")
+                    current_gpu_ids = []
+                    if current_gpu:
+                        try:
+                            current_gpu_ids = [int(g.strip()) for g in current_gpu.split(",") if g.strip()]
+                        except ValueError:
+                            logger.warning(f"[vLLM] Could not parse CUDA_VISIBLE_DEVICES: {current_gpu}")
+
+                    logger.info(f"[vLLM] Text generation using GPU(s): {current_gpu_ids}")
+
+                    # Estimate memory requirements for vision model
+                    v_model_name = llm_v_config.get("model", "meta-llama/Llama-3.2-11B-Vision")
+                    v_max_model_len = llm_v_config.get("max_model_len", 4096)
+                    v_gpu_memory_utilization = llm_v_config.get("gpu_memory_utilization", 0.9)
+
+                    required_memory = estimate_required_vllm_memory(
+                        v_model_name, v_max_model_len, v_gpu_memory_utilization
+                    )
+
+                    # Select a dedicated GPU for vision, excluding the one(s) used for text generation
+                    vision_gpu_id = select_dedicated_gpu_for_vision(
+                        required_memory_gb=required_memory, exclude_gpus=current_gpu_ids
+                    )
+
+                    if vision_gpu_id is not None:
+                        logger.info(
+                            f"[vLLM] Selected dedicated GPU {vision_gpu_id} for vision LLM "
+                            f"(separate from text generation GPU(s) {current_gpu_ids})"
+                        )
+
+                        # Save current GPU setting
+                        original_cuda_visible = os.environ.get("CUDA_VISIBLE_DEVICES", "")
+
+                        # Temporarily set the vision GPU
+                        os.environ["CUDA_VISIBLE_DEVICES"] = str(vision_gpu_id)
+                        os.putenv("CUDA_VISIBLE_DEVICES", str(vision_gpu_id))
+
+                        try:
+                            # Initialize vision LLM on dedicated GPU
+                            v_tensor_parallel_size = llm_v_config.get("tensor_parallel_size", 1)
+
+                            vllm_v_params = {
+                                "model": v_model_name,
+                                "tensor_parallel_size": v_tensor_parallel_size,
+                                "gpu_memory_utilization": v_gpu_memory_utilization,
+                                "max_model_len": v_max_model_len,
+                                "trust_remote_code": True,
+                                "enforce_eager": True,
+                                "disable_custom_all_reduce": True,
+                            }
+
+                            if v_tensor_parallel_size == 1:
+                                vllm_v_params["distributed_executor_backend"] = "mp"
+                            else:
+                                vllm_v_params["distributed_executor_backend"] = "ray"
+
+                            self.llm_v = LLM(**vllm_v_params)
+
+                            self.sampling_params_v = SamplingParams(
+                                temperature=llm_v_config.get("temperature", 0.5),
+                                max_tokens=llm_v_config.get("max_tokens", 256),
+                                top_p=0.95,
+                            )
+                            self.vision_gpu_id = vision_gpu_id
+                            logger.info(
+                                f"[vLLM] Vision LLM initialized successfully on dedicated GPU {vision_gpu_id} "
+                                f"with model: {v_model_name}"
+                            )
+                        finally:
+                            # Restore original GPU setting
+                            os.environ["CUDA_VISIBLE_DEVICES"] = original_cuda_visible
+                            os.putenv("CUDA_VISIBLE_DEVICES", original_cuda_visible)
+                    else:
+                        logger.warning(
+                            "[vLLM] No suitable GPU found for vision LLM. "
+                            "Skipping vision LLM initialization to avoid memory issues."
+                        )
+                        self.llm_v = None
+                        self.sampling_params_v = None
+
+                except Exception as e:
+                    logger.error(f"[vLLM] Failed to allocate dedicated GPU for vision LLM: {e}")
+                    logger.info("[vLLM] Falling back to shared GPU initialization")
+                    # Fall through to shared GPU initialization below
+                    self._initialize_vision_llm_shared_gpu(llm_v_config)
+            else:
+                logger.info(
+                    "[vLLM] Single GPU environment detected. "
+                    "Skipping vision LLM initialization to avoid memory issues."
+                )
                 self.llm_v = None
                 self.sampling_params_v = None
+
+    def _initialize_vision_llm_shared_gpu(self, llm_v_config: Dict[str, Any]):
+        """
+        Initialize vision LLM on shared GPU (fallback for single GPU systems).
+
+        This method is used as a fallback when dedicated GPU allocation fails.
+
+        Args:
+            llm_v_config: Vision LLM configuration dictionary
+        """
+        try:
+            logger.info("[vLLM] Initializing vision LLM on shared GPU (fallback)...")
+            v_model_name = llm_v_config.get("model", "meta-llama/Llama-3.2-11B-Vision")
+            v_tensor_parallel_size = llm_v_config.get("tensor_parallel_size", 1)
+            v_gpu_memory_utilization = llm_v_config.get("gpu_memory_utilization", 0.9)
+            v_max_model_len = llm_v_config.get("max_model_len", 4096)
+
+            vllm_v_params = {
+                "model": v_model_name,
+                "tensor_parallel_size": v_tensor_parallel_size,
+                "gpu_memory_utilization": v_gpu_memory_utilization,
+                "max_model_len": v_max_model_len,
+                "trust_remote_code": True,
+                "enforce_eager": True,
+                "disable_custom_all_reduce": True,
+            }
+
+            if v_tensor_parallel_size == 1:
+                vllm_v_params["distributed_executor_backend"] = "mp"
+            else:
+                vllm_v_params["distributed_executor_backend"] = "ray"
+
+            self.llm_v = LLM(**vllm_v_params)
+
+            self.sampling_params_v = SamplingParams(
+                temperature=llm_v_config.get("temperature", 0.5),
+                max_tokens=llm_v_config.get("max_tokens", 256),
+                top_p=0.95,
+            )
+            logger.info(
+                f"[vLLM] Vision LLM initialized successfully on shared GPU with model: {v_model_name}"
+            )
+        except Exception as e:
+            logger.error(f"[vLLM] Failed to initialize vision LLM on shared GPU: {e}")
+            self.llm_v = None
+            self.sampling_params_v = None
 
         # Store prompts and metadata
         self.prompts_config = prompts_config or {}
         self.gpu_selection_info = {
             "cuda_visible_devices": os.environ.get("CUDA_VISIBLE_DEVICES"),
             "backend": vllm_params.get("distributed_executor_backend"),
+            "vision_gpu_id": self.vision_gpu_id,
+            "has_dedicated_vision_gpu": self.vision_gpu_id is not None,
         }
 
         # Configure logger to write to file if logging_config provided
