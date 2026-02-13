@@ -582,6 +582,7 @@ class NewsFeedService:
         - Limits to maximum 3 images per article
         - Checks if image URL already exists before requesting LLM description
         - Reuses existing descriptions for duplicate URLs
+        - Uses batch processing for new image descriptions
 
         Args:
             article_id: UUID of the article these images belong to
@@ -605,19 +606,22 @@ class NewsFeedService:
         failed_descriptions = 0
         failed_saves = 0
 
-        for idx, image_url in enumerate(image_urls, 1):
+        # Phase 1: Check which images already exist and collect URLs for new descriptions
+        images_to_describe = []  # List of (index, url) for images needing description
+        
+        for idx, image_url in enumerate(image_urls):
             try:
                 # Check if image already exists in database
-                self.logger.info(
-                    f"[{idx}/{len(image_urls)}] Checking if image already exists: {image_url[:80]}..."
+                self.logger.debug(
+                    f"[{idx+1}/{len(image_urls)}] Checking if image already exists: {image_url[:80]}..."
                 )
                 existing_image = ray.get(self.server.get_image_by_url.remote(image_url))
                 
                 if existing_image:
                     # Image already exists, reuse it by creating a new entry with same URL and description
                     self.logger.info(
-                        f"[{idx}/{len(image_urls)}] ✓ Found existing image (id={existing_image['id']}), "
-                        f"reusing description: {existing_image['description'][:100]}..."
+                        f"[{idx+1}/{len(image_urls)}] ✓ Found existing image (id={existing_image['id']}), "
+                        f"reusing description"
                     )
                     
                     # Create new image entry for this article with the existing description
@@ -625,67 +629,98 @@ class NewsFeedService:
                         image_url, existing_image["description"], article_id
                     )
                     
-                    self.logger.info(f"[{idx}/{len(image_urls)}] Saving reused image to database...")
                     image_id = ray.get(self.server.add_image.remote(image_data))
                     
                     if image_id:
                         reused_existing += 1
                         successful_saves += 1
-                        self.logger.info(
-                            f"[{idx}/{len(image_urls)}] ✓ Image saved successfully with reused description: id={image_id}"
+                        self.logger.debug(
+                            f"[{idx+1}/{len(image_urls)}] ✓ Image saved with reused description: id={image_id}"
                         )
                     else:
                         failed_saves += 1
-                        self.logger.info(
-                            f"[{idx}/{len(image_urls)}] ✗ WARNING: Failed to save image to database"
-                        )
-                    continue
-
-                # Image doesn't exist, get description from LLM
-                self.logger.info(
-                    f"[{idx}/{len(image_urls)}] Requesting new description from LLM for image: {image_url[:80]}..."
-                )
-                # Get the appropriate LLM actor (handles LLMLoadBalancer case)
-                llm_actor = _get_llm_actor(self.llm_service)
-                description = ray.get(llm_actor.describe_image.remote(image_url))
-
-                if description:
-                    self.logger.info(
-                        f"[{idx}/{len(image_urls)}] Got description ({len(description)} chars): {description[:100]}..."
-                    )
-
-                    # Save image to database using helper method
-                    image_data = self._create_image_data(image_url, description, article_id)
-
-                    self.logger.info(f"[{idx}/{len(image_urls)}] Saving new image to database...")
-                    image_id = ray.get(self.server.add_image.remote(image_data))
-
-                    if image_id:
-                        successful_saves += 1
-                        self.logger.info(
-                            f"[{idx}/{len(image_urls)}] ✓ Image saved successfully: id={image_id}"
-                        )
-                    else:
-                        failed_saves += 1
-                        self.logger.info(
-                            f"[{idx}/{len(image_urls)}] ✗ WARNING: Failed to save image to database"
+                        self.logger.warning(
+                            f"[{idx+1}/{len(image_urls)}] ✗ Failed to save image to database"
                         )
                 else:
-                    failed_descriptions += 1
-                    self.logger.info(
-                        f"[{idx}/{len(image_urls)}] ✗ WARNING: No description returned from LLM for image"
-                    )
-
+                    # Image doesn't exist, needs description
+                    images_to_describe.append((idx, image_url))
+                    
             except Exception as e:
-                # Log error but continue with other images
-                failed_descriptions += 1
-                self.logger.info(
-                    f"[{idx}/{len(image_urls)}] ✗ ERROR: Failed to process image {image_url[:80]}: {e}"
+                # Log error and mark for description
+                self.logger.warning(
+                    f"[{idx+1}/{len(image_urls)}] Error checking existing image, will request description: {e}"
                 )
-                import traceback
+                images_to_describe.append((idx, image_url))
 
+        # Phase 2: Batch describe new images if any
+        if images_to_describe:
+            self.logger.info(
+                f"Requesting batch descriptions for {len(images_to_describe)} new images"
+            )
+            
+            try:
+                # Get the appropriate LLM actor (handles LLMLoadBalancer case)
+                llm_actor = _get_llm_actor(self.llm_service)
+                
+                # Extract just the URLs for batch processing
+                urls_to_describe = [url for _, url in images_to_describe]
+                
+                # Check if batch method is available (vLLM service)
+                if hasattr(llm_actor, "describe_images_batch"):
+                    self.logger.info(
+                        f"Using batch image description for {len(urls_to_describe)} images"
+                    )
+                    descriptions = ray.get(llm_actor.describe_images_batch.remote(urls_to_describe))
+                else:
+                    # Fallback to individual descriptions if batch not available
+                    self.logger.info(
+                        f"Batch method not available, processing {len(urls_to_describe)} images individually"
+                    )
+                    descriptions = []
+                    for url in urls_to_describe:
+                        desc = ray.get(llm_actor.describe_image.remote(url))
+                        descriptions.append(desc)
+                
+                # Process batch results
+                for (idx, image_url), description in zip(images_to_describe, descriptions):
+                    try:
+                        if description:
+                            self.logger.info(
+                                f"[{idx+1}/{len(image_urls)}] Got description ({len(description)} chars)"
+                            )
+
+                            # Save image to database using helper method
+                            image_data = self._create_image_data(image_url, description, article_id)
+                            image_id = ray.get(self.server.add_image.remote(image_data))
+
+                            if image_id:
+                                successful_saves += 1
+                                self.logger.debug(
+                                    f"[{idx+1}/{len(image_urls)}] ✓ Image saved successfully: id={image_id}"
+                                )
+                            else:
+                                failed_saves += 1
+                                self.logger.warning(
+                                    f"[{idx+1}/{len(image_urls)}] ✗ Failed to save image to database"
+                                )
+                        else:
+                            failed_descriptions += 1
+                            self.logger.warning(
+                                f"[{idx+1}/{len(image_urls)}] ✗ No description returned from LLM"
+                            )
+                    except Exception as e:
+                        failed_descriptions += 1
+                        self.logger.error(
+                            f"[{idx+1}/{len(image_urls)}] ✗ Error saving image: {e}"
+                        )
+                        
+            except Exception as e:
+                # Log error for batch processing
+                failed_descriptions += len(images_to_describe)
+                self.logger.error(f"Batch image description failed: {e}")
+                import traceback
                 traceback.print_exc()
-                continue
 
         # Summary logging
         self.logger.info(f"Image processing summary for article {article_id}:")

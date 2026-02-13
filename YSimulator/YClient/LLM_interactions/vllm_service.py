@@ -1934,6 +1934,96 @@ class VLLMService:
             traceback.print_exc()
             return None
 
+    def describe_images_batch(self, image_urls: List[str]) -> List[Optional[str]]:
+        """
+        Generate descriptions for multiple images in a single batch for improved performance.
+
+        This method uses the llm_v (vision) model loaded in vLLM to analyze and
+        describe multiple images at once using batch inference.
+
+        Args:
+            image_urls: List of image URLs to describe
+
+        Returns:
+            List of descriptions (one per image URL) in the same order as inputs.
+            Returns None for any image that fails to generate a description.
+        """
+        # Check if vision LLM is available
+        if not self.llm_v:
+            status_msg = self.vision_init_status or "unknown"
+            logger.warning(
+                f"[vLLM] Vision LLM (llm_v) not available for batch image description. "
+                f"Reason: {status_msg}"
+            )
+            return [None] * len(image_urls)
+
+        try:
+            logger.info(f"[vLLM] Starting batch image description for {len(image_urls)} images")
+
+            # Get prompts from configuration with defaults
+            describe_image_config = self.prompts_config.get(
+                "describe_image",
+                {
+                    "system_template": "You are an image description assistant. Describe images accurately and concisely in English.",
+                    "user_template": "Describe the following image. Write in english. <img {url}>",
+                },
+            )
+            system_template = describe_image_config.get(
+                "system_template",
+                "You are an image description assistant. Describe images accurately and concisely in English.",
+            )
+            user_template = describe_image_config.get(
+                "user_template", "Describe the following image. Write in english. <img {url}>"
+            )
+
+            # Build prompts for all images
+            prompts = []
+            for image_url in image_urls:
+                system_msg = system_template
+                user_msg = user_template.format(url=image_url)
+                prompt = f"{system_msg}\n\n{user_msg}"
+                prompts.append(prompt)
+
+            # Batch generate using vision model
+            logger.debug(
+                f"[vLLM] Executing batch inference for {len(prompts)} image description prompts"
+            )
+            outputs = self.llm_v.generate(prompts, self.sampling_params_v)
+
+            # Parse results
+            results = []
+            for idx, output in enumerate(outputs):
+                if output and len(output.outputs) > 0:
+                    description = output.outputs[0].text.strip()
+                    if description:
+                        logger.debug(
+                            f"[vLLM] Image {idx+1}/{len(image_urls)}: Got description ({len(description)} chars)"
+                        )
+                        results.append(description)
+                    else:
+                        logger.warning(f"[vLLM] Image {idx+1}/{len(image_urls)}: Empty description")
+                        results.append(None)
+                else:
+                    logger.warning(
+                        f"[vLLM] Image {idx+1}/{len(image_urls)}: No output from vision model"
+                    )
+                    results.append(None)
+
+            logger.info(
+                f"[vLLM] Batch image description completed: "
+                f"{sum(1 for r in results if r is not None)}/{len(results)} successful"
+            )
+            return results
+
+        except Exception as e:
+            logger.error(f"[vLLM] Batch image description failed: {e}")
+            logger.error(f"[vLLM] Number of images: {len(image_urls)}")
+            import traceback
+
+            traceback.print_exc()
+            # Return None for all images on error
+            return [None] * len(image_urls)
+
     def infer_article_opinion(
         self, article_content: str, topic_name: str, opinion_groups: dict
     ) -> float:
