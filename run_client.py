@@ -13,6 +13,7 @@ import os
 import shutil
 import sys
 import time
+import traceback
 from datetime import datetime
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
@@ -527,7 +528,22 @@ if __name__ == "__main__":
         logger.info("Client stopping by user request")
         print("Client stopping...")
     except Exception as e:
-        logger.error(f"Client error: {e}", extra={"extra_data": {"error": str(e)}})
+        # Capture full exception details including traceback
+        error_type = type(e).__name__
+        error_msg = str(e)
+        full_traceback = traceback.format_exc()
+        
+        # Log concise error message to console
+        logger.error(
+            f"Client error: {error_type}: {error_msg[:200]}{'...' if len(error_msg) > 200 else ''}",
+            extra={
+                "extra_data": {
+                    "error_type": error_type,
+                    "error_message": error_msg,
+                    "traceback": full_traceback,
+                }
+            },
+        )
         raise
     finally:
         logger.info("Client shutdown complete")
