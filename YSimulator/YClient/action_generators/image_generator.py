@@ -65,7 +65,7 @@ class ImageGenerator(BaseActionGenerator):
             )
             # Store pending call with extended format for vLLM batching support
             # Format: (agent_id, cluster_id, future, topic, day, slot, agent_attrs, image_id)
-            # For image posts, topic is None but we add image_id at the end (8th element)
+            # For image posts: topic (4th element) is None and image_id is added as 8th element
             result.pending_llm_calls.append(
                 (
                     agent.id,

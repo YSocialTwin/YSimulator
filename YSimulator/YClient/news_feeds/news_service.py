@@ -683,6 +683,12 @@ class NewsFeedService:
                         descriptions.append(desc)
                 
                 # Process batch results
+                if len(descriptions) != len(images_to_describe):
+                    self.logger.warning(
+                        f"Batch description returned {len(descriptions)} results but expected "
+                        f"{len(images_to_describe)}. Some results may be missing."
+                    )
+                
                 for (idx, image_url), description in zip(images_to_describe, descriptions):
                     try:
                         if description:

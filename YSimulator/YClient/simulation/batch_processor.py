@@ -227,7 +227,7 @@ class BatchProcessor:
             # Check if this is an image post (has 8 elements with image_id at position 7)
             if len(pending_item) == 8:
                 # Image post: (agent_id, cluster_id, future, None, day, slot, agent_attrs, image_id)
-                image_id = pending_item[7]
+                agent_id, cluster_id, future, _, day_val, slot_val, agent_attrs, image_id = pending_item
                 action = ActionDTO(a_id, cid, "POST", content=res_txt)
                 action.image_id = image_id  # Set image_id as attribute
                 self.logger.info(
