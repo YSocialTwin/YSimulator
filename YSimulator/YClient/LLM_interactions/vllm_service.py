@@ -373,6 +373,7 @@ class VLLMService:
                                 "trust_remote_code": True,
                                 "enforce_eager": True,
                                 "disable_custom_all_reduce": True,
+                                "use_fast": True,  # Use fast tokenizer for vision model
                             }
 
                             if v_tensor_parallel_size == 1:
@@ -460,6 +461,7 @@ class VLLMService:
                 "trust_remote_code": True,
                 "enforce_eager": True,
                 "disable_custom_all_reduce": True,
+                "use_fast": True,  # Use fast tokenizer for vision model
             }
 
             if v_tensor_parallel_size == 1:
