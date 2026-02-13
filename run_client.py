@@ -107,8 +107,28 @@ def setup_logging(
     # Add console handler if enabled
     if enable_console_log:
         console_handler = logging.StreamHandler()
+        
+        # Create custom console formatter that truncates long messages
+        class TruncatingConsoleFormatter(logging.Formatter):
+            """Console formatter that truncates long messages for readability."""
+            
+            def format(self, record):
+                # Get the full formatted message first
+                formatted = super().format(record)
+                
+                # Find where the message starts (after timestamp - name - level - )
+                # Format is: "timestamp - name - level - message"
+                parts = formatted.split(" - ", 3)  # Split on first 3 occurrences
+                
+                if len(parts) == 4 and len(parts[3]) > 200:
+                    # Truncate just the message part
+                    parts[3] = parts[3][:200] + "..."
+                    return " - ".join(parts)
+                
+                return formatted
+        
         console_handler.setFormatter(
-            logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+            TruncatingConsoleFormatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
         )
         logger.addHandler(console_handler)
 
@@ -533,9 +553,9 @@ if __name__ == "__main__":
         error_msg = str(e)
         full_traceback = traceback.format_exc()
         
-        # Log concise error message to console
+        # Log complete error message (console handler will truncate if needed)
         logger.error(
-            f"Client error: {error_type}: {error_msg[:200]}{'...' if len(error_msg) > 200 else ''}",
+            f"Client error: {error_type}: {error_msg}",
             extra={
                 "extra_data": {
                     "error_type": error_type,
