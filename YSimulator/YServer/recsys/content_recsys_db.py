@@ -1005,6 +1005,9 @@ def recommend_hybrid_linear_ranker(
     # STAGE 1: CANDIDATE GENERATION (SQL)
     # ==========================================
 
+    # Ensure limit has a valid value (defensive check)
+    limit = 5 if limit is None else limit  # Default to 5 if None
+
     candidate_limit = min(limit * 10, 100)
     candidates_set = set()
 

@@ -312,13 +312,17 @@ class ContentRecommender:
         Calculate visibility threshold parameters.
 
         Args:
-            day: Current simulation day
-            slot: Current simulation slot
+            day: Current simulation day (can be None to use default)
+            slot: Current simulation slot (can be None to use default)
             visibility_rounds: Number of rounds posts remain visible
 
         Returns:
             Tuple of (visibility_day, visibility_hour)
         """
+        # Handle None inputs by defaulting to 0 (show all posts)
+        if day is None or slot is None:
+            return 0, 0
+        
         # Calculate how many full days worth of slots are in visibility_rounds
         visibility_total_slots = day * self.num_slots_per_day + slot - visibility_rounds
 
