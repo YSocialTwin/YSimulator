@@ -154,7 +154,7 @@ class ContentRecommender:
             # Determine why we're falling back for better logging
             if not all_post_ids:
                 reason = "no posts in Redis cache"
-            elif len(posts_data) == 0:
+            elif not posts_data:
                 reason = "post data could not be fetched from Redis"
             else:
                 # Posts exist but were filtered out (likely all from agent)

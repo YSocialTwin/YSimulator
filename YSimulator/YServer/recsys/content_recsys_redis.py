@@ -1364,7 +1364,7 @@ def recommend_hybrid_linear_ranker_redis(
     # ==========================================
 
     # Ensure limit has a valid value (defensive check)
-    limit = limit or 5  # Default to 5 if None
+    limit = 5 if limit is None else limit  # Default to 5 if None
 
     # Get candidates from multiple sources
     candidate_limit = min(limit * 10, 100)  # Get more candidates to rank
