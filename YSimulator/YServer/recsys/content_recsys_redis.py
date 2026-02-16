@@ -62,7 +62,7 @@ def recommend_rchrono_followers_redis(
     posts_data: List[Dict[str, bytes]],
     db_engine,
     **kwargs,
-) -> List[str]:
+) -> tuple[List[str], bool]:
     """
     Prioritize posts from followed users.
 
@@ -76,7 +76,7 @@ def recommend_rchrono_followers_redis(
         db_engine: Database engine for follow queries
 
     Returns:
-        List of post IDs prioritizing followed users
+        Tuple of (List of post IDs prioritizing followed users, False indicating no fallback used)
     """
     follower_posts_limit = int(limit * followers_ratio)
     additional_posts_limit = limit - follower_posts_limit
@@ -108,7 +108,7 @@ def recommend_rchrono_followers_redis(
     if len(post_ids) < limit:
         post_ids.extend([p["id"] for p in other_posts[:additional_posts_limit]])
 
-    return post_ids
+    return post_ids, False
 
 
 def recommend_rchrono_followers_popularity_redis(
@@ -1371,7 +1371,6 @@ def recommend_hybrid_linear_ranker_redis(
         valid_posts_with_data=valid_posts_with_data,
         limit=candidate_limit,
         agent_id=agent_id,
-        followers_ratio=0.6,
         all_post_ids=all_post_ids,
         posts_data=posts_data,
         db_engine=db_engine,

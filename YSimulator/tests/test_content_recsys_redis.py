@@ -125,7 +125,7 @@ class TestRecommendRchronoFollowersRedis:
             mock_session_class.return_value.__enter__.return_value = mock_session
             mock_session_class.return_value.__exit__.return_value = None
 
-            result = recommend_rchrono_followers_redis(
+            result, fallback = recommend_rchrono_followers_redis(
                 posts,
                 limit=3,
                 agent_id="agent1",
@@ -138,6 +138,7 @@ class TestRecommendRchronoFollowersRedis:
         # Should prioritize posts from user1 (followed)
         assert len(result) <= 3
         assert isinstance(result, list)
+        assert fallback is False
 
     def test_rchrono_followers_ratio_calculation(self):
         """Test follower ratio calculation."""
@@ -157,7 +158,7 @@ class TestRecommendRchronoFollowersRedis:
             mock_session_class.return_value.__enter__.return_value = mock_session
             mock_session_class.return_value.__exit__.return_value = None
 
-            result = recommend_rchrono_followers_redis(
+            result, fallback = recommend_rchrono_followers_redis(
                 posts,
                 limit=10,
                 agent_id="agent1",
@@ -168,6 +169,7 @@ class TestRecommendRchronoFollowersRedis:
             )
 
         assert len(result) <= 10
+        assert fallback is False
 
     def test_rchrono_followers_no_followed_users(self):
         """Test when user follows no one."""
@@ -187,7 +189,7 @@ class TestRecommendRchronoFollowersRedis:
             mock_session_class.return_value.__enter__.return_value = mock_session
             mock_session_class.return_value.__exit__.return_value = None
 
-            result = recommend_rchrono_followers_redis(
+            result, fallback = recommend_rchrono_followers_redis(
                 posts,
                 limit=5,
                 agent_id="agent1",
@@ -198,6 +200,7 @@ class TestRecommendRchronoFollowersRedis:
             )
 
         assert len(result) <= 5
+        assert fallback is False
 
 
 class TestRecommendRchronoFollowersPopularityRedis:
@@ -581,7 +584,7 @@ class TestEdgeCases:
             mock_session_class.return_value.__enter__.return_value = mock_session
             mock_session_class.return_value.__exit__.return_value = None
 
-            result = recommend_rchrono_followers_redis(
+            result, fallback = recommend_rchrono_followers_redis(
                 posts,
                 limit=5,
                 agent_id="agent1",
@@ -592,6 +595,7 @@ class TestEdgeCases:
             )
 
         assert isinstance(result, list)
+        assert fallback is False
 
 
 class TestDataStructures:
