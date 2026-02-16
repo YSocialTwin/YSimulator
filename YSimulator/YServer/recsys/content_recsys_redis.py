@@ -1368,6 +1368,17 @@ def recommend_hybrid_linear_ranker_redis(
 
     # Get candidates from multiple sources
     candidate_limit = min(limit * 10, 100)  # Get more candidates to rank
+    
+    logger.debug(
+        f"HybridLinearRanker Stage 1 starting: candidate_limit={candidate_limit}, valid_posts={len(valid_posts_with_data)}",
+        extra={
+            "extra_data": {
+                "agent_id": agent_id,
+                "candidate_limit": candidate_limit,
+                "valid_posts_count": len(valid_posts_with_data),
+            }
+        },
+    )
 
     # 1. rchrono_followers
     candidates_followers, fallback1 = recommend_rchrono_followers_redis(

@@ -87,6 +87,11 @@ class ContentRecSys:
             list: List of post UUIDs recommended for the agent
         """
         try:
+            # Debug logging for recommendation request
+            logging.debug(
+                f"Requesting recommendations: mode={self.mode}, n_posts={self.n_posts}, agent={agent_id}"
+            )
+            
             post_ids = ray.get(
                 server_handle.get_recommended_posts.remote(
                     agent_id=agent_id,
@@ -96,6 +101,12 @@ class ContentRecSys:
                     client_id=client_id,
                 )
             )
+            
+            # Debug logging for recommendation result
+            logging.debug(
+                f"Received recommendations: mode={self.mode}, requested={self.n_posts}, received={len(post_ids) if post_ids else 0}"
+            )
+            
             return post_ids if post_ids else []
         except Exception as e:
             logger.error(f"Error getting recommendations for agent {agent_id}: {e}")
@@ -213,7 +224,7 @@ class RandomOrder(ContentRecSys):
         Args:
             n_posts (int, optional): Number of posts to recommend. Defaults to 5.
         """
-        super().__init__(mode="ContentRecSys", n_posts=n_posts)
+        super().__init__(mode="random", n_posts=n_posts)
 
 
 class CommonInterests(ContentRecSys):
