@@ -227,10 +227,11 @@ class FollowRecommender:
                         extra={"extra_data": {"user_count": user_count}}
                     )
                 
-                # If still no users, fall back to SQL
+                # If still no users, fall back to SQL-based recommendations
+                # (SQL backend handles empty user case gracefully)
                 if user_count == 0:
                     self.logger.info(
-                        f"No users available in SQL either, falling back to SQL-based recommendations",
+                        f"Redis user population completed but no users found, using SQL-based recommendations",
                         extra={"extra_data": {"agent_id": agent_id, "mode": mode}}
                     )
                     return self._get_suggestions_sql(agent_id, mode, n_neighbors, leaning_bias)
