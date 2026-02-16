@@ -151,9 +151,25 @@ class ContentRecommender:
         
         # If no valid posts in Redis, fall back to SQL
         if not valid_posts_with_data:
+            # Determine why we're falling back for better logging
+            if not all_post_ids:
+                reason = "no posts in Redis cache"
+            elif len(posts_data) == 0:
+                reason = "post data could not be fetched from Redis"
+            else:
+                # Posts exist but were filtered out (likely all from agent)
+                reason = f"no posts from other users (found {len(all_post_ids)} posts, all filtered)"
+            
             self.logger.info(
-                f"No posts available in Redis cache for agent {agent_id}, falling back to SQL",
-                extra={"extra_data": {"agent_id": agent_id, "mode": mode}}
+                f"No valid posts for recommendations - {reason}, falling back to SQL",
+                extra={
+                    "extra_data": {
+                        "agent_id": agent_id,
+                        "mode": mode,
+                        "total_posts_in_redis": len(all_post_ids) if all_post_ids else 0,
+                        "reason": reason,
+                    }
+                }
             )
             # Calculate visibility parameters for SQL fallback
             # Pass None for day and slot to use default visibility calculation
