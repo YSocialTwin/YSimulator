@@ -204,6 +204,18 @@ class FollowRecommender:
     ) -> List[str]:
         """Get follow suggestions using Redis backend."""
         try:
+            # Check if user data is available in Redis
+            user_ids_key = self.db._redis_key("user_mgmt", "ids")
+            user_count = self.db.redis_client.scard(user_ids_key) if self.db.redis_client.exists(user_ids_key) else 0
+            
+            # If no users in Redis, fall back to SQL
+            if user_count == 0:
+                self.logger.info(
+                    f"No users available in Redis cache for agent {agent_id}, falling back to SQL",
+                    extra={"extra_data": {"agent_id": agent_id, "mode": mode}}
+                )
+                return self._get_suggestions_sql(agent_id, mode, n_neighbors, leaning_bias)
+            
             # Dispatch to appropriate recommendation function
             if mode == "FollowRecSys":
                 recommendations = follow_recsys_redis.recommend_random_follows_redis(
@@ -270,6 +282,14 @@ class FollowRecommender:
                     leaning_bias,
                     self.logger,
                 )
+            
+            # If no recommendations found, fall back to SQL
+            if not recommendations:
+                self.logger.info(
+                    f"No follow recommendations from Redis for agent {agent_id}, falling back to SQL",
+                    extra={"extra_data": {"agent_id": agent_id, "mode": mode}}
+                )
+                return self._get_suggestions_sql(agent_id, mode, n_neighbors, leaning_bias)
 
             return recommendations
 

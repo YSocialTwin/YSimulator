@@ -148,6 +148,20 @@ class ContentRecommender:
         else:
             valid_posts_with_data = []
             posts_data = []
+        
+        # If no valid posts in Redis, fall back to SQL
+        if not valid_posts_with_data:
+            self.logger.info(
+                f"No posts available in Redis cache for agent {agent_id}, falling back to SQL",
+                extra={"extra_data": {"agent_id": agent_id, "mode": mode}}
+            )
+            # Calculate visibility parameters for SQL fallback
+            visibility_day, visibility_hour = self._calculate_visibility_params(
+                None, None, self.visibility_rounds
+            )
+            return self._get_recommendations_sql(
+                agent_id, mode, limit, followers_ratio, visibility_day, visibility_hour
+            )
 
         # Prepare common kwargs for recommendation functions
         common_kwargs = {
