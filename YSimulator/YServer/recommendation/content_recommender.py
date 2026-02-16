@@ -318,8 +318,9 @@ class ContentRecommender:
 
         Returns:
             Tuple of (visibility_day, visibility_hour)
+            Returns (0, 0) when inputs are None, which shows all posts regardless of age
         """
-        # Handle None inputs by defaulting to 0 (show all posts)
+        # Handle None inputs by defaulting to 0 (show all posts regardless of age)
         if day is None or slot is None:
             return 0, 0
         
