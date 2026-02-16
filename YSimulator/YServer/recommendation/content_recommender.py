@@ -156,6 +156,7 @@ class ContentRecommender:
                 extra={"extra_data": {"agent_id": agent_id, "mode": mode}}
             )
             # Calculate visibility parameters for SQL fallback
+            # Pass None for day and slot to use default visibility calculation
             visibility_day, visibility_hour = self._calculate_visibility_params(
                 None, None, self.visibility_rounds
             )

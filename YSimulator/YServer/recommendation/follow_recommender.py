@@ -206,7 +206,8 @@ class FollowRecommender:
         try:
             # Check if user data is available in Redis
             user_ids_key = self.db._redis_key("user_mgmt", "ids")
-            user_count = self.db.redis_client.scard(user_ids_key) if self.db.redis_client.exists(user_ids_key) else 0
+            # scard returns 0 for non-existent keys, so no need for exists() check
+            user_count = self.db.redis_client.scard(user_ids_key)
             
             # If no users in Redis, fall back to SQL
             if user_count == 0:
