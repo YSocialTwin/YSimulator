@@ -46,7 +46,7 @@ class ImageGenerator(BaseActionGenerator):
                 if not image or not image.get("id"):
                     self.context.logger.warning(f"No image available for LLM agent {agent.id}")
                     return result  # Return empty result if no image available
-                
+
                 image_id = image["id"]
                 self.context.logger.info(
                     f"LLM agent {agent.id} selected image {image_id} for image post"

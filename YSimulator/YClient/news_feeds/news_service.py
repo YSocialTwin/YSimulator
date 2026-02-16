@@ -96,7 +96,7 @@ class NewsFeedService:
         self.feeds_config = feeds_config.get("feeds", [])
         self.cache_duration = feeds_config.get("cache_duration", 3600)
         self.llm_service = llm_service  # Store LLM service reference for image descriptions
-        
+
         # Configuration for image processing
         self.max_images_per_article = 3  # Limit images per article for performance
 
@@ -556,7 +556,9 @@ class NewsFeedService:
             traceback.print_exc()
             return None
 
-    def _create_image_data(self, image_url: str, description: str, article_id: str) -> Dict[str, Any]:
+    def _create_image_data(
+        self, image_url: str, description: str, article_id: str
+    ) -> Dict[str, Any]:
         """
         Create image data dictionary for database insertion.
 
@@ -578,7 +580,7 @@ class NewsFeedService:
     def _process_and_save_images(self, article_id: str, image_urls: List[str]):
         """
         Process images by getting descriptions from LLM and saving to database.
-        
+
         - Limits to maximum 3 images per article
         - Checks if image URL already exists before requesting LLM description
         - Reuses existing descriptions for duplicate URLs
@@ -598,7 +600,7 @@ class NewsFeedService:
             self.logger.info(
                 f"Article has {len(image_urls)} images, limiting to {self.max_images_per_article}"
             )
-            image_urls = image_urls[:self.max_images_per_article]
+            image_urls = image_urls[: self.max_images_per_article]
 
         self.logger.info(f"Processing {len(image_urls)} image(s) for article {article_id}")
         successful_saves = 0
@@ -608,7 +610,7 @@ class NewsFeedService:
 
         # Phase 1: Check which images already exist and collect URLs for new descriptions
         images_to_describe = []  # List of (index, url) for images needing description
-        
+
         for idx, image_url in enumerate(image_urls):
             try:
                 # Check if image already exists in database
@@ -616,21 +618,21 @@ class NewsFeedService:
                     f"[{idx+1}/{len(image_urls)}] Checking if image already exists: {image_url[:80]}..."
                 )
                 existing_image = ray.get(self.server.get_image_by_url.remote(image_url))
-                
+
                 if existing_image:
                     # Image already exists, reuse it by creating a new entry with same URL and description
                     self.logger.info(
                         f"[{idx+1}/{len(image_urls)}] ✓ Found existing image (id={existing_image['id']}), "
                         f"reusing description"
                     )
-                    
+
                     # Create new image entry for this article with the existing description
                     image_data = self._create_image_data(
                         image_url, existing_image["description"], article_id
                     )
-                    
+
                     image_id = ray.get(self.server.add_image.remote(image_data))
-                    
+
                     if image_id:
                         reused_existing += 1
                         successful_saves += 1
@@ -645,7 +647,7 @@ class NewsFeedService:
                 else:
                     # Image doesn't exist, needs description
                     images_to_describe.append((idx, image_url))
-                    
+
             except Exception as e:
                 # Log error and mark for description
                 self.logger.warning(
@@ -658,14 +660,14 @@ class NewsFeedService:
             self.logger.info(
                 f"Requesting batch descriptions for {len(images_to_describe)} new images"
             )
-            
+
             try:
                 # Get the appropriate LLM actor (handles LLMLoadBalancer case)
                 llm_actor = _get_llm_actor(self.llm_service)
-                
+
                 # Extract just the URLs for batch processing
                 urls_to_describe = [url for _, url in images_to_describe]
-                
+
                 # Check if batch method is available (vLLM service)
                 if hasattr(llm_actor, "describe_images_batch"):
                     self.logger.info(
@@ -681,14 +683,14 @@ class NewsFeedService:
                     for url in urls_to_describe:
                         desc = ray.get(llm_actor.describe_image.remote(url))
                         descriptions.append(desc)
-                
+
                 # Process batch results
                 if len(descriptions) != len(images_to_describe):
                     self.logger.warning(
                         f"Batch description returned {len(descriptions)} results but expected "
                         f"{len(images_to_describe)}. Some results may be missing."
                     )
-                
+
                 for (idx, image_url), description in zip(images_to_describe, descriptions):
                     try:
                         if description:
@@ -717,15 +719,14 @@ class NewsFeedService:
                             )
                     except Exception as e:
                         failed_descriptions += 1
-                        self.logger.error(
-                            f"[{idx+1}/{len(image_urls)}] ✗ Error saving image: {e}"
-                        )
-                        
+                        self.logger.error(f"[{idx+1}/{len(image_urls)}] ✗ Error saving image: {e}")
+
             except Exception as e:
                 # Log error for batch processing
                 failed_descriptions += len(images_to_describe)
                 self.logger.error(f"Batch image description failed: {e}")
                 import traceback
+
                 traceback.print_exc()
 
         # Summary logging

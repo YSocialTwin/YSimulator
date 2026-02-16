@@ -75,7 +75,7 @@ class VLLMService:
         self.server = server
         self.client_id = client_id
         self.prompts_config = prompts_config or {}
-        
+
         # Initialize optional attributes to None (will be set properly in _initialize if successful)
         self.llm = None
         self.sampling_params = None
@@ -297,18 +297,20 @@ class VLLMService:
         self.sampling_params_v = None
         self.vision_gpu_id = None
         self.vision_init_status = None  # Track why vision LLM is unavailable
-        
+
         if llm_v_config:
             # Check if we're in a multi-GPU environment
             from YSimulator.YClient.llm_utils.gpu_utils import (
+                estimate_required_vllm_memory,
                 get_total_gpu_count,
                 select_dedicated_gpu_for_vision,
-                estimate_required_vllm_memory,
             )
 
             total_gpus = get_total_gpu_count()
             logger.info(f"[vLLM] Total GPUs available: {total_gpus}")
-            logger.info(f"[vLLM] Vision LLM config provided: model={llm_v_config.get('model', 'default')}")
+            logger.info(
+                f"[vLLM] Vision LLM config provided: model={llm_v_config.get('model', 'default')}"
+            )
 
             # Only allocate dedicated GPU for vision if we have multiple GPUs
             if total_gpus > 1:
@@ -325,10 +327,14 @@ class VLLMService:
                         try:
                             # Parse GPU IDs, stripping whitespace once
                             current_gpu_ids = [
-                                int(g) for g in (part.strip() for part in current_gpu.split(",")) if g
+                                int(g)
+                                for g in (part.strip() for part in current_gpu.split(","))
+                                if g
                             ]
                         except ValueError:
-                            logger.warning(f"[vLLM] Could not parse CUDA_VISIBLE_DEVICES: {current_gpu}")
+                            logger.warning(
+                                f"[vLLM] Could not parse CUDA_VISIBLE_DEVICES: {current_gpu}"
+                            )
 
                     logger.info(f"[vLLM] Text generation using GPU(s): {current_gpu_ids}")
 
@@ -417,7 +423,9 @@ class VLLMService:
                     # Sanitize error message to avoid exposing sensitive information
                     error_type = type(e).__name__
                     self.vision_init_status = f"dedicated_gpu_allocation_failed: {error_type}"
-                    logger.error(f"[vLLM] Failed to allocate dedicated GPU for vision LLM: {error_type}")
+                    logger.error(
+                        f"[vLLM] Failed to allocate dedicated GPU for vision LLM: {error_type}"
+                    )
                     logger.error(f"[vLLM] Vision service status: {self.vision_init_status}")
                     logger.debug(f"[vLLM] Full error details: {e}")  # Debug level for full details
                     logger.info("[vLLM] Falling back to shared GPU initialization")

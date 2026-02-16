@@ -496,7 +496,7 @@ def generate_image_post_async(
 
     This function doesn't wait for the LLM response - it immediately returns
     a Ray ObjectRef (future) that can be resolved later for batching.
-    
+
     The LLM service will generate post content for an image. The actual image
     selection happens later in the action processing pipeline, not during this
     async call. This matches the pattern of other async generators where
@@ -512,7 +512,7 @@ def generate_image_post_async(
 
     Returns:
         Ray ObjectRef: Future that will resolve to generated post content (str)
-        
+
     Note:
         Image selection/attachment happens in the action processor when the future
         is resolved, not during this async generation call. The day/slot parameters

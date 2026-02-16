@@ -633,9 +633,7 @@ def select_dedicated_gpu_for_vision(
         gpu_info = get_ordered_gpus_by_memory(required_memory_gb=required_memory_gb)
 
         if not gpu_info:
-            logger.warning(
-                "[GPU Selection] No GPUs with sufficient memory found for vision LLM"
-            )
+            logger.warning("[GPU Selection] No GPUs with sufficient memory found for vision LLM")
             return None
 
         # Filter out excluded GPUs
@@ -646,9 +644,7 @@ def select_dedicated_gpu_for_vision(
         ]
 
         if not available_gpus:
-            logger.warning(
-                f"[GPU Selection] No available GPUs after excluding {exclude_gpus}"
-            )
+            logger.warning(f"[GPU Selection] No available GPUs after excluding {exclude_gpus}")
             return None
 
         # Select the GPU with the most free memory (first in sorted list)
