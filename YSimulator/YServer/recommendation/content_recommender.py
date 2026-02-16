@@ -147,6 +147,7 @@ class ContentRecommender:
                         )
         else:
             valid_posts_with_data = []
+            posts_data = []
 
         # Prepare common kwargs for recommendation functions
         common_kwargs = {

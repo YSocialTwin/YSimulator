@@ -13,6 +13,7 @@ import os
 import shutil
 import sys
 import time
+import traceback
 from datetime import datetime
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
@@ -106,8 +107,28 @@ def setup_logging(
     # Add console handler if enabled
     if enable_console_log:
         console_handler = logging.StreamHandler()
+        
+        # Create custom console formatter that truncates long messages
+        class TruncatingConsoleFormatter(logging.Formatter):
+            """Console formatter that truncates long messages for readability."""
+            
+            def format(self, record):
+                # Get the full formatted message first
+                formatted = super().format(record)
+                
+                # Find where the message starts (after timestamp - name - level - )
+                # Format is: "timestamp - name - level - message"
+                parts = formatted.split(" - ", 3)  # Split on first 3 occurrences
+                
+                if len(parts) == 4 and len(parts[3]) > 200:
+                    # Truncate just the message part
+                    parts[3] = parts[3][:200] + "..."
+                    return " - ".join(parts)
+                
+                return formatted
+        
         console_handler.setFormatter(
-            logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+            TruncatingConsoleFormatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
         )
         logger.addHandler(console_handler)
 
@@ -527,7 +548,22 @@ if __name__ == "__main__":
         logger.info("Client stopping by user request")
         print("Client stopping...")
     except Exception as e:
-        logger.error(f"Client error: {e}", extra={"extra_data": {"error": str(e)}})
+        # Capture full exception details including traceback
+        error_type = type(e).__name__
+        error_msg = str(e)
+        full_traceback = traceback.format_exc()
+        
+        # Log complete error message (console handler will truncate if needed)
+        logger.error(
+            f"Client error: {error_type}: {error_msg}",
+            extra={
+                "extra_data": {
+                    "error_type": error_type,
+                    "error_message": error_msg,
+                    "traceback": full_traceback,
+                }
+            },
+        )
         raise
     finally:
         logger.info("Client shutdown complete")

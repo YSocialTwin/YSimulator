@@ -106,6 +106,13 @@ pip install vllm>=0.6.0
 - `max_tokens`: Maximum tokens to generate per prompt
 - `max_model_len`: Maximum sequence length for the vision model (default: 40000)
 
+**Multi-GPU Behavior**:
+- In **multi-GPU environments** (2+ GPUs), YSimulator automatically allocates a dedicated GPU for the vision model, separate from the text generation GPU
+- This prevents memory contention and improves performance for image transcription tasks
+- The dedicated GPU is selected based on available memory, excluding GPUs already in use
+- In **single-GPU environments**, vision LLM initialization is **automatically skipped** to avoid out-of-memory issues
+- To enable vision in single-GPU setups, use a smaller vision model or reduce `gpu_memory_utilization` for both models
+
 ## Usage
 
 ### 1. Start the Server
@@ -164,6 +171,13 @@ YSimulator automatically handles GPU selection on multi-GPU systems. When vLLM i
 4. **Dynamic Selection**: Selects a GPU with sufficient free memory from all available GPUs
 5. **Automatic Fallback**: Falls back gracefully with warnings if no GPU has enough memory
 
+**Vision Model GPU Allocation**:
+When both text (`llm`) and vision (`llm_v`) models are configured:
+- In **multi-GPU systems**: A dedicated GPU is automatically allocated for the vision model
+- The vision GPU is selected from available GPUs, excluding the text generation GPU
+- Each model runs on its own GPU to prevent memory contention
+- In **single-GPU systems**: Vision model initialization is skipped with a warning to avoid OOM errors
+
 This prevents the common error:
 ```
 ValueError: Free memory on device cuda:0 (3.71/39.39 GiB) on startup is less than 
@@ -176,6 +190,8 @@ desired GPU memory utilization (0.15, 5.91 GiB)
 [GPU Selection] Estimated memory for meta-llama/Llama-3.2-3B: 11.70 GB
 [GPU Selection] Selected GPU 1 with 35.20 GB free (required: 13.00 GB)
 [vLLM] Set CUDA_VISIBLE_DEVICES=1 before vLLM initialization
+[vLLM] Multi-GPU environment detected. Attempting to allocate dedicated GPU for vision LLM...
+[vLLM] Selected dedicated GPU 2 for vision LLM (separate from text generation GPU(s) [1])
 ```
 
 **GPU Selection Logging:**

@@ -4,6 +4,8 @@ Image action generator for YSimulator agents.
 This module generates IMAGE actions where agents post images.
 """
 
+import ray
+
 from YSimulator.YClient.action_generators.base_generator import (
     ActionGeneratorResult,
     BaseActionGenerator,
@@ -38,7 +40,22 @@ class ImageGenerator(BaseActionGenerator):
         agent_attrs = self._extract_agent_attrs(agent)
 
         if agent_type == "llm":
-            # LLM: Fire off async call to generate image post
+            # LLM: Fetch a random image from the server
+            try:
+                image = ray.get(self.context.server.get_random_image.remote())
+                if not image or not image.get("id"):
+                    self.context.logger.warning(f"No image available for LLM agent {agent.id}")
+                    return result  # Return empty result if no image available
+                
+                image_id = image["id"]
+                self.context.logger.info(
+                    f"LLM agent {agent.id} selected image {image_id} for image post"
+                )
+            except Exception as e:
+                self.context.logger.error(f"Error fetching image for LLM agent {agent.id}: {e}")
+                return result  # Return empty result on error
+
+            # Fire off async call to generate image post
             future = generate_image_post_async(
                 self.context.llm,
                 agent.cluster,
@@ -47,8 +64,8 @@ class ImageGenerator(BaseActionGenerator):
                 agent_attrs,
             )
             # Store pending call with extended format for vLLM batching support
-            # Format: (agent_id, cluster_id, future, topic, day, slot, agent_attrs)
-            # For image posts, topic is None
+            # Format: (agent_id, cluster_id, future, topic, day, slot, agent_attrs, image_id)
+            # For image posts: topic (4th element) is None and image_id is added as 8th element
             result.pending_llm_calls.append(
                 (
                     agent.id,
@@ -58,11 +75,11 @@ class ImageGenerator(BaseActionGenerator):
                     self.context.day,
                     self.context.slot,
                     agent_attrs,
+                    image_id,  # Add image_id as 8th element for LLM agents
                 )
             )
         else:
-            # Rule-based: Create simple image post
-            # Use a placeholder image_id (would normally be from image service)
+            # Rule-based: Keep as is - use placeholder image_id
             image_id = "image_placeholder"
             action = generate_rule_based_image_post(agent.id, agent.cluster, image_id)
             self._annotate_action(action)

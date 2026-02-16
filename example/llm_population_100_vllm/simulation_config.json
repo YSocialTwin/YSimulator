@@ -22,8 +22,9 @@
     "model": "openbmb/MiniCPM-V-2_6-int4",
     "temperature": 0.5,
     "max_tokens": 300,
-    "max_model_len": 40000,
-    "note": "max_model_len sets the maximum sequence length for the vision model (default: 40000)."
+    "max_model_len": 8000,
+    "gpu_memory_utilization": 0.75,
+    "note": "Vision LLM for image transcription. max_model_len sets the maximum sequence length (8000 is sufficient for most vision tasks). gpu_memory_utilization should be lower than text models (0.75 vs 0.9) to leave headroom for image processing buffers and cache allocation. In multi-GPU environments, a dedicated GPU will be automatically allocated for the vision model, separate from the text generation GPU. In single-GPU environments, vision LLM initialization is skipped to avoid memory issues."
   },
   "simulation": {
     "num_days": 3,

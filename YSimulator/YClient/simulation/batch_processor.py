@@ -224,15 +224,26 @@ class BatchProcessor:
                 output_tokens = len(res_txt) // CHARS_PER_TOKEN
                 self.cost_tracker.record_call("generate_post", PROMPT_TOKENS_POST, output_tokens)
 
-            # Check if this is an image post (has 6 elements)
-            if len(pending_item) == 6:
-                # Image post: (agent_id, cluster_id, future, None, image_id, topic_ids)
+            # Check if this is an image post (has 8 elements with image_id at position 7)
+            if len(pending_item) == 8:
+                # Image post: (agent_id, cluster_id, future, None, day, slot, agent_attrs, image_id)
+                agent_id, cluster_id, future, _, day_val, slot_val, agent_attrs, image_id = pending_item
+                action = ActionDTO(a_id, cid, "POST", content=res_txt)
+                action.image_id = image_id  # Set image_id as attribute
+                self.logger.info(
+                    f"LLM image post for agent {a_id}: image_id={image_id}, "
+                    f"has_image_id_attr={hasattr(action, 'image_id')}, content_len={len(res_txt)}"
+                )
+            elif len(pending_item) == 6:
+                # Old image post format: (agent_id, cluster_id, future, None, image_id, topic_ids)
+                # Keep for backward compatibility
                 _, _, _, _, image_id, topic_ids = pending_item
                 action = ActionDTO(a_id, cid, "POST", content=res_txt)
                 action.image_id = image_id  # Set image_id as attribute
                 action.topic_ids = topic_ids  # Store for later processing
                 self.logger.info(
-                    f"LLM image post for agent {a_id}: image_id={image_id}, has_image_id_attr={hasattr( action, 'image_id')}, topics={len(topic_ids)}, content_len={len(res_txt)}"
+                    f"LLM image post (old format) for agent {a_id}: image_id={image_id}, "
+                    f"has_image_id_attr={hasattr(action, 'image_id')}, topics={len(topic_ids)}, content_len={len(res_txt)}"
                 )
             else:
                 # Regular/news post: Old format (agent_id, cluster_id, future, topic_or_article_id)

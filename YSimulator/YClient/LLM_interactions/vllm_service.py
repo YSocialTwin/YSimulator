@@ -71,9 +71,19 @@ class VLLMService:
         # Get list of candidate GPUs for retry logic
         candidate_gpus = VLLMService._get_candidate_gpus_static(llm_config)
 
-        # Store server and client_id early for use in _initialize
+        # Store essential attributes early to ensure consistent state even if initialization fails
         self.server = server
         self.client_id = client_id
+        self.prompts_config = prompts_config or {}
+        
+        # Initialize optional attributes to None (will be set properly in _initialize if successful)
+        self.llm = None
+        self.sampling_params = None
+        self.llm_v = None
+        self.sampling_params_v = None
+        self.vision_gpu_id = None
+        self.vision_init_status = None  # Track why vision LLM is unavailable
+        self.gpu_selection_info = {}
 
         import sys
 
@@ -285,49 +295,209 @@ class VLLMService:
         # Initialize vision LLM if config provided
         self.llm_v = None
         self.sampling_params_v = None
+        self.vision_gpu_id = None
+        self.vision_init_status = None  # Track why vision LLM is unavailable
+        
         if llm_v_config:
-            try:
-                logger.info("[vLLM] Initializing vision LLM (llm_v)...")
-                v_model_name = llm_v_config.get("model", "meta-llama/Llama-3.2-11B-Vision")
-                v_tensor_parallel_size = llm_v_config.get("tensor_parallel_size", 1)
-                v_gpu_memory_utilization = llm_v_config.get("gpu_memory_utilization", 0.9)
-                v_max_model_len = llm_v_config.get("max_model_len", 4096)
+            # Check if we're in a multi-GPU environment
+            from YSimulator.YClient.llm_utils.gpu_utils import (
+                get_total_gpu_count,
+                select_dedicated_gpu_for_vision,
+                estimate_required_vllm_memory,
+            )
 
-                vllm_v_params = {
-                    "model": v_model_name,
-                    "tensor_parallel_size": v_tensor_parallel_size,
-                    "gpu_memory_utilization": v_gpu_memory_utilization,
-                    "max_model_len": v_max_model_len,
-                    "trust_remote_code": True,
-                    "enforce_eager": True,
-                    "disable_custom_all_reduce": True,
-                }
+            total_gpus = get_total_gpu_count()
+            logger.info(f"[vLLM] Total GPUs available: {total_gpus}")
+            logger.info(f"[vLLM] Vision LLM config provided: model={llm_v_config.get('model', 'default')}")
 
-                if v_tensor_parallel_size == 1:
-                    vllm_v_params["distributed_executor_backend"] = "mp"
-                else:
-                    vllm_v_params["distributed_executor_backend"] = "ray"
-
-                self.llm_v = LLM(**vllm_v_params)
-
-                self.sampling_params_v = SamplingParams(
-                    temperature=llm_v_config.get("temperature", 0.5),
-                    max_tokens=llm_v_config.get("max_tokens", 256),
-                    top_p=0.95,
-                )
+            # Only allocate dedicated GPU for vision if we have multiple GPUs
+            if total_gpus > 1:
                 logger.info(
-                    f"[vLLM] Vision LLM initialized successfully with model: {v_model_name}"
+                    "[vLLM] Multi-GPU environment detected. "
+                    "Attempting to allocate dedicated GPU for vision LLM..."
                 )
-            except Exception as e:
-                logger.error(f"[vLLM] Failed to initialize vision LLM: {e}")
+
+                try:
+                    # Get the current GPU being used for text generation
+                    current_gpu = os.environ.get("CUDA_VISIBLE_DEVICES", "")
+                    current_gpu_ids = []
+                    if current_gpu:
+                        try:
+                            # Parse GPU IDs, stripping whitespace once
+                            current_gpu_ids = [
+                                int(g) for g in (part.strip() for part in current_gpu.split(",")) if g
+                            ]
+                        except ValueError:
+                            logger.warning(f"[vLLM] Could not parse CUDA_VISIBLE_DEVICES: {current_gpu}")
+
+                    logger.info(f"[vLLM] Text generation using GPU(s): {current_gpu_ids}")
+
+                    # Estimate memory requirements for vision model
+                    v_model_name = llm_v_config.get("model", "meta-llama/Llama-3.2-11B-Vision")
+                    v_max_model_len = llm_v_config.get("max_model_len", 4096)
+                    v_gpu_memory_utilization = llm_v_config.get("gpu_memory_utilization", 0.9)
+
+                    required_memory = estimate_required_vllm_memory(
+                        v_model_name, v_max_model_len, v_gpu_memory_utilization
+                    )
+
+                    # Select a dedicated GPU for vision, excluding the one(s) used for text generation
+                    vision_gpu_id = select_dedicated_gpu_for_vision(
+                        required_memory_gb=required_memory, exclude_gpus=current_gpu_ids
+                    )
+
+                    if vision_gpu_id is not None:
+                        logger.info(
+                            f"[vLLM] Selected dedicated GPU {vision_gpu_id} for vision LLM "
+                            f"(separate from text generation GPU(s) {current_gpu_ids})"
+                        )
+
+                        # Save current GPU setting
+                        original_cuda_visible = os.environ.get("CUDA_VISIBLE_DEVICES", "")
+
+                        # Temporarily set the vision GPU
+                        # Note: Both os.environ and os.putenv are set intentionally.
+                        # os.putenv is critical for vLLM v1 subprocess spawning (see _set_gpu_env_for_attempt_static)
+                        os.environ["CUDA_VISIBLE_DEVICES"] = str(vision_gpu_id)
+                        os.putenv("CUDA_VISIBLE_DEVICES", str(vision_gpu_id))
+
+                        try:
+                            # Initialize vision LLM on dedicated GPU
+                            v_tensor_parallel_size = llm_v_config.get("tensor_parallel_size", 1)
+
+                            vllm_v_params = {
+                                "model": v_model_name,
+                                "tensor_parallel_size": v_tensor_parallel_size,
+                                "gpu_memory_utilization": v_gpu_memory_utilization,
+                                "max_model_len": v_max_model_len,
+                                "trust_remote_code": True,
+                                "enforce_eager": True,
+                                "disable_custom_all_reduce": True,
+                                "use_fast": True,  # Use fast tokenizer for vision model
+                            }
+
+                            if v_tensor_parallel_size == 1:
+                                vllm_v_params["distributed_executor_backend"] = "mp"
+                            else:
+                                vllm_v_params["distributed_executor_backend"] = "ray"
+
+                            self.llm_v = LLM(**vllm_v_params)
+
+                            self.sampling_params_v = SamplingParams(
+                                temperature=llm_v_config.get("temperature", 0.5),
+                                max_tokens=llm_v_config.get("max_tokens", 256),
+                                top_p=0.95,
+                            )
+                            self.vision_gpu_id = vision_gpu_id
+                            self.vision_init_status = f"dedicated_gpu_success_gpu_{vision_gpu_id}"
+                            logger.info(
+                                f"[vLLM] Vision LLM initialized successfully on dedicated GPU {vision_gpu_id} "
+                                f"with model: {v_model_name}"
+                            )
+                            logger.info(f"[vLLM] Vision service status: {self.vision_init_status}")
+                        finally:
+                            # Restore original GPU setting
+                            # Note: Both os.environ and os.putenv are set intentionally (see comment above)
+                            os.environ["CUDA_VISIBLE_DEVICES"] = original_cuda_visible
+                            os.putenv("CUDA_VISIBLE_DEVICES", original_cuda_visible)
+                    else:
+                        self.vision_init_status = f"no_suitable_gpu_multi_gpu_env"
+                        logger.warning(
+                            "[vLLM] No suitable GPU found for vision LLM. "
+                            "Skipping vision LLM initialization to avoid memory issues."
+                        )
+                        logger.info(
+                            f"[vLLM] Vision service unavailable: {self.vision_init_status}. "
+                            f"Current GPU(s): {current_gpu_ids}, Total GPUs: {total_gpus}"
+                        )
+                        self.llm_v = None
+                        self.sampling_params_v = None
+
+                except Exception as e:
+                    # Sanitize error message to avoid exposing sensitive information
+                    error_type = type(e).__name__
+                    self.vision_init_status = f"dedicated_gpu_allocation_failed: {error_type}"
+                    logger.error(f"[vLLM] Failed to allocate dedicated GPU for vision LLM: {error_type}")
+                    logger.error(f"[vLLM] Vision service status: {self.vision_init_status}")
+                    logger.debug(f"[vLLM] Full error details: {e}")  # Debug level for full details
+                    logger.info("[vLLM] Falling back to shared GPU initialization")
+                    # Fall through to shared GPU initialization below
+                    self._initialize_vision_llm_shared_gpu(llm_v_config)
+            else:
+                self.vision_init_status = "single_gpu_environment_skipped"
+                logger.info(
+                    "[vLLM] Single GPU environment detected. "
+                    "Skipping vision LLM initialization to avoid memory issues."
+                )
+                logger.info(f"[vLLM] Vision service unavailable: {self.vision_init_status}")
                 self.llm_v = None
                 self.sampling_params_v = None
+        else:
+            self.vision_init_status = "llm_v_config_not_provided"
+            logger.info("[vLLM] Vision LLM config (llm_v_config) not provided in configuration")
+            logger.info(f"[vLLM] Vision service unavailable: {self.vision_init_status}")
+
+    def _initialize_vision_llm_shared_gpu(self, llm_v_config: Dict[str, Any]):
+        """
+        Initialize vision LLM on shared GPU (fallback for single GPU systems).
+
+        This method is used as a fallback when dedicated GPU allocation fails.
+
+        Args:
+            llm_v_config: Vision LLM configuration dictionary
+        """
+        try:
+            logger.info("[vLLM] Initializing vision LLM on shared GPU (fallback)...")
+            v_model_name = llm_v_config.get("model", "meta-llama/Llama-3.2-11B-Vision")
+            v_tensor_parallel_size = llm_v_config.get("tensor_parallel_size", 1)
+            v_gpu_memory_utilization = llm_v_config.get("gpu_memory_utilization", 0.9)
+            v_max_model_len = llm_v_config.get("max_model_len", 4096)
+
+            vllm_v_params = {
+                "model": v_model_name,
+                "tensor_parallel_size": v_tensor_parallel_size,
+                "gpu_memory_utilization": v_gpu_memory_utilization,
+                "max_model_len": v_max_model_len,
+                "trust_remote_code": True,
+                "enforce_eager": True,
+                "disable_custom_all_reduce": True,
+                "use_fast": True,  # Use fast tokenizer for vision model
+            }
+
+            if v_tensor_parallel_size == 1:
+                vllm_v_params["distributed_executor_backend"] = "mp"
+            else:
+                vllm_v_params["distributed_executor_backend"] = "ray"
+
+            self.llm_v = LLM(**vllm_v_params)
+
+            self.sampling_params_v = SamplingParams(
+                temperature=llm_v_config.get("temperature", 0.5),
+                max_tokens=llm_v_config.get("max_tokens", 256),
+                top_p=0.95,
+            )
+            self.vision_init_status = "shared_gpu_success"
+            logger.info(
+                f"[vLLM] Vision LLM initialized successfully on shared GPU with model: {v_model_name}"
+            )
+            logger.info(f"[vLLM] Vision service status: {self.vision_init_status}")
+        except Exception as e:
+            # Sanitize error message to avoid exposing sensitive information
+            error_type = type(e).__name__
+            self.vision_init_status = f"shared_gpu_failed: {error_type}"
+            logger.error(f"[vLLM] Failed to initialize vision LLM on shared GPU: {error_type}")
+            logger.error(f"[vLLM] Vision service status: {self.vision_init_status}")
+            logger.debug(f"[vLLM] Full error details: {e}")  # Debug level for full details
+            self.llm_v = None
+            self.sampling_params_v = None
 
         # Store prompts and metadata
         self.prompts_config = prompts_config or {}
         self.gpu_selection_info = {
             "cuda_visible_devices": os.environ.get("CUDA_VISIBLE_DEVICES"),
             "backend": vllm_params.get("distributed_executor_backend"),
+            "vision_gpu_id": self.vision_gpu_id,
+            "has_dedicated_vision_gpu": self.vision_gpu_id is not None,
         }
 
         # Configure logger to write to file if logging_config provided
@@ -1711,7 +1881,11 @@ class VLLMService:
         """
         # Check if vision LLM is available
         if not self.llm_v:
-            logger.warning("[vLLM] Vision LLM (llm_v) not configured, cannot describe image")
+            status_msg = self.vision_init_status or "unknown"
+            logger.warning(
+                f"[vLLM] Vision LLM (llm_v) not available for image description. "
+                f"Reason: {status_msg}"
+            )
             return None
 
         try:
@@ -1761,6 +1935,96 @@ class VLLMService:
 
             traceback.print_exc()
             return None
+
+    def describe_images_batch(self, image_urls: List[str]) -> List[Optional[str]]:
+        """
+        Generate descriptions for multiple images in a single batch for improved performance.
+
+        This method uses the llm_v (vision) model loaded in vLLM to analyze and
+        describe multiple images at once using batch inference.
+
+        Args:
+            image_urls: List of image URLs to describe
+
+        Returns:
+            List of descriptions (one per image URL) in the same order as inputs.
+            Returns None for any image that fails to generate a description.
+        """
+        # Check if vision LLM is available
+        if not self.llm_v:
+            status_msg = self.vision_init_status or "unknown"
+            logger.warning(
+                f"[vLLM] Vision LLM (llm_v) not available for batch image description. "
+                f"Reason: {status_msg}"
+            )
+            return [None] * len(image_urls)
+
+        try:
+            logger.info(f"[vLLM] Starting batch image description for {len(image_urls)} images")
+
+            # Get prompts from configuration with defaults
+            describe_image_config = self.prompts_config.get(
+                "describe_image",
+                {
+                    "system_template": "You are an image description assistant. Describe images accurately and concisely in English.",
+                    "user_template": "Describe the following image. Write in english. <img {url}>",
+                },
+            )
+            system_template = describe_image_config.get(
+                "system_template",
+                "You are an image description assistant. Describe images accurately and concisely in English.",
+            )
+            user_template = describe_image_config.get(
+                "user_template", "Describe the following image. Write in english. <img {url}>"
+            )
+
+            # Build prompts for all images
+            prompts = []
+            for image_url in image_urls:
+                system_msg = system_template
+                user_msg = user_template.format(url=image_url)
+                prompt = f"{system_msg}\n\n{user_msg}"
+                prompts.append(prompt)
+
+            # Batch generate using vision model
+            logger.debug(
+                f"[vLLM] Executing batch inference for {len(prompts)} image description prompts"
+            )
+            outputs = self.llm_v.generate(prompts, self.sampling_params_v)
+
+            # Parse results
+            results = []
+            for idx, output in enumerate(outputs):
+                if output and len(output.outputs) > 0:
+                    description = output.outputs[0].text.strip()
+                    if description:
+                        logger.debug(
+                            f"[vLLM] Image {idx+1}/{len(image_urls)}: Got description ({len(description)} chars)"
+                        )
+                        results.append(description)
+                    else:
+                        logger.warning(f"[vLLM] Image {idx+1}/{len(image_urls)}: Empty description")
+                        results.append(None)
+                else:
+                    logger.warning(
+                        f"[vLLM] Image {idx+1}/{len(image_urls)}: No output from vision model"
+                    )
+                    results.append(None)
+
+            logger.info(
+                f"[vLLM] Batch image description completed: "
+                f"{sum(1 for r in results if r is not None)}/{len(results)} successful"
+            )
+            return results
+
+        except Exception as e:
+            logger.error(f"[vLLM] Batch image description failed: {e}")
+            logger.error(f"[vLLM] Number of images: {len(image_urls)}")
+            import traceback
+
+            traceback.print_exc()
+            # Return None for all images on error
+            return [None] * len(image_urls)
 
     def infer_article_opinion(
         self, article_content: str, topic_name: str, opinion_groups: dict

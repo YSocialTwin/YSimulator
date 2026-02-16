@@ -2137,3 +2137,27 @@ class SQLImageRepository(ImageRepository):
                 f"Error getting random image: {e}", extra={"extra_data": {"error": str(e)}}
             )
             return None
+
+    def get_image_by_url(self, url: str) -> Optional[Dict[str, Any]]:
+        """Get an image by its URL."""
+        try:
+            session = Session(self.engine)
+            try:
+                # Query for image with matching URL
+                image = session.query(Image).filter(Image.url == url).first()
+                if not image:
+                    return None
+
+                return {
+                    "id": image.id,
+                    "url": image.url,
+                    "description": image.description,
+                    "article_id": image.article_id,
+                }
+            finally:
+                session.close()
+        except Exception as e:
+            self.logger.error(
+                f"Error getting image by URL: {e}", extra={"extra_data": {"error": str(e)}}
+            )
+            return None

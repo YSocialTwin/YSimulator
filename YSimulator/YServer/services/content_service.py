@@ -226,3 +226,26 @@ class ContentService:
         except Exception as e:
             self.logger.error(f"Error getting random image: {e}")
             return None
+
+    def get_image_by_url(self, url: str) -> Optional[Dict[str, Any]]:
+        """
+        Get an image by its URL.
+
+        Args:
+            url: Image URL to search for
+
+        Returns:
+            Image data or None
+        """
+        if self.image_service:
+            return self.image_service.get_image_by_url(url)
+
+        if not self.image_repo:
+            self.logger.warning("Image repository not available")
+            return None
+
+        try:
+            return self.image_repo.get_image_by_url(url)
+        except Exception as e:
+            self.logger.error(f"Error getting image by URL: {e}")
+            return None
