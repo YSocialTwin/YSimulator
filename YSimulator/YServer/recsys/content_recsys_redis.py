@@ -1422,8 +1422,38 @@ def recommend_hybrid_linear_ranker_redis(
     candidate_set.update(candidates_popularity)
     candidate_set.update(candidates_collab)
 
+    # Log candidate generation results for diagnostics
+    logger.info(
+        f"HybridLinearRanker candidate generation: "
+        f"followers={len(candidates_followers)}, "
+        f"fof={len(candidates_fof)}, "
+        f"popularity={len(candidates_popularity)}, "
+        f"collab={len(candidates_collab)}, "
+        f"total_unique={len(candidate_set)}",
+        extra={
+            "extra_data": {
+                "agent_id": agent_id,
+                "candidates_followers": len(candidates_followers),
+                "candidates_fof": len(candidates_fof),
+                "candidates_popularity": len(candidates_popularity),
+                "candidates_collab": len(candidates_collab),
+                "candidate_set_size": len(candidate_set),
+                "valid_posts_count": len(valid_posts_with_data),
+            }
+        },
+    )
+
     # If no candidates found, fall back to random
     if not candidate_set:
+        logger.warning(
+            f"HybridLinearRanker: No candidates generated from any source, falling back to random",
+            extra={
+                "extra_data": {
+                    "agent_id": agent_id,
+                    "valid_posts_count": len(valid_posts_with_data),
+                }
+            },
+        )
         result = recommend_random_redis(valid_posts_with_data, limit)
         return result, True
 
