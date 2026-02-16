@@ -88,7 +88,7 @@ class ContentRecSys:
         """
         try:
             # Debug logging for recommendation request
-            logging.debug(
+            logger.debug(
                 f"Requesting recommendations: mode={self.mode}, n_posts={self.n_posts}, agent={agent_id}"
             )
             
@@ -103,7 +103,7 @@ class ContentRecSys:
             )
             
             # Debug logging for recommendation result
-            logging.debug(
+            logger.debug(
                 f"Received recommendations: mode={self.mode}, requested={self.n_posts}, received={len(post_ids) if post_ids else 0}"
             )
             
