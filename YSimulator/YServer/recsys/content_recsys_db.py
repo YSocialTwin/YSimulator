@@ -1063,8 +1063,8 @@ def recommend_hybrid_linear_ranker(
     # Get followed users
     followed_users = set(
         row[0]
-        for row in session.query(Follow.follower_id)
-        .filter(Follow.user_id == agent_id, Follow.action == "follow")
+        for row in session.query(Follow.user_id)
+        .filter(Follow.follower_id == agent_id, Follow.action == "follow")
         .all()
     )
 
@@ -1241,8 +1241,8 @@ def _calculate_similar_user_author_score_sql(session, agent_id: str, author_id: 
     count = (
         session.query(Follow)
         .filter(
-            Follow.user_id.in_(similar_users),
-            Follow.follower_id == author_id,
+            Follow.follower_id.in_(similar_users),
+            Follow.user_id == author_id,
             Follow.action == "follow",
         )
         .count()

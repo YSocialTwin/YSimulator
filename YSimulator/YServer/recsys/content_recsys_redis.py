@@ -85,8 +85,8 @@ def recommend_rchrono_followers_redis(
     from sqlalchemy.orm import Session
 
     with Session(db_engine) as session:
-        query = session.query(Follow.follower_id).filter(
-            Follow.user_id == agent_id, Follow.action == "follow"
+        query = session.query(Follow.user_id).filter(
+            Follow.follower_id == agent_id, Follow.action == "follow"
         )
         followed_user_ids = set(row[0] for row in query.all())
 
@@ -147,8 +147,8 @@ def recommend_rchrono_followers_popularity_redis(
     from sqlalchemy.orm import Session
 
     with Session(db_engine) as session:
-        query = session.query(Follow.follower_id).filter(
-            Follow.user_id == agent_id, Follow.action == "follow"
+        query = session.query(Follow.user_id).filter(
+            Follow.follower_id == agent_id, Follow.action == "follow"
         )
         followed_user_ids = set(row[0] for row in query.all())
 
@@ -1672,8 +1672,8 @@ def _get_followed_users_redis(agent_id: str, redis_client, redis_key_fn, db_engi
 
     # Fallback to SQL
     with Session(db_engine) as session:
-        query = session.query(Follow.follower_id).filter(
-            Follow.user_id == agent_id, Follow.action == "follow"
+        query = session.query(Follow.user_id).filter(
+            Follow.follower_id == agent_id, Follow.action == "follow"
         )
         return set(row[0] for row in query.all())
 
