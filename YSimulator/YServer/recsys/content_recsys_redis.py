@@ -1381,50 +1381,106 @@ def recommend_hybrid_linear_ranker_redis(
     )
 
     # 1. rchrono_followers
-    candidates_followers, fallback1 = recommend_rchrono_followers_redis(
-        valid_posts_with_data=valid_posts_with_data,
-        limit=candidate_limit,
-        agent_id=agent_id,
-        all_post_ids=all_post_ids,
-        posts_data=posts_data,
-        db_engine=db_engine,
-        **kwargs,
-    )
-    used_fallback = used_fallback or fallback1
+    try:
+        candidates_followers, fallback1 = recommend_rchrono_followers_redis(
+            valid_posts_with_data=valid_posts_with_data,
+            limit=candidate_limit,
+            agent_id=agent_id,
+            all_post_ids=all_post_ids,
+            posts_data=posts_data,
+            db_engine=db_engine,
+            **kwargs,
+        )
+        used_fallback = used_fallback or fallback1
+    except Exception as e:
+        logger.error(
+            f"HybridLinearRanker: Error in followers candidate source: {e}",
+            extra={
+                "extra_data": {
+                    "agent_id": agent_id,
+                    "error": str(e),
+                    "source": "rchrono_followers",
+                }
+            },
+        )
+        candidates_followers = []
+        used_fallback = True
 
     # 2. friends_of_friends (posts from users followed by users you follow)
-    candidates_fof, fallback2 = _get_friends_of_friends_candidates_redis(
-        valid_posts_with_data=valid_posts_with_data,
-        limit=candidate_limit,
-        agent_id=agent_id,
-        all_post_ids=all_post_ids,
-        posts_data=posts_data,
-        redis_client=redis_client,
-        redis_key_fn=redis_key_fn,
-        db_engine=db_engine,
-        logger=logger,
-    )
-    used_fallback = used_fallback or fallback2
+    try:
+        candidates_fof, fallback2 = _get_friends_of_friends_candidates_redis(
+            valid_posts_with_data=valid_posts_with_data,
+            limit=candidate_limit,
+            agent_id=agent_id,
+            all_post_ids=all_post_ids,
+            posts_data=posts_data,
+            redis_client=redis_client,
+            redis_key_fn=redis_key_fn,
+            db_engine=db_engine,
+            logger=logger,
+        )
+        used_fallback = used_fallback or fallback2
+    except Exception as e:
+        logger.error(
+            f"HybridLinearRanker: Error in friends-of-friends candidate source: {e}",
+            extra={
+                "extra_data": {
+                    "agent_id": agent_id,
+                    "error": str(e),
+                    "source": "friends_of_friends",
+                }
+            },
+        )
+        candidates_fof = []
+        used_fallback = True
 
     # 3. rchrono_popularity
-    candidates_popularity = recommend_rchrono_popularity_redis(
-        valid_posts_with_data=valid_posts_with_data, limit=candidate_limit, **kwargs
-    )
+    try:
+        candidates_popularity = recommend_rchrono_popularity_redis(
+            valid_posts_with_data=valid_posts_with_data, limit=candidate_limit, **kwargs
+        )
+    except Exception as e:
+        logger.error(
+            f"HybridLinearRanker: Error in popularity candidate source: {e}",
+            extra={
+                "extra_data": {
+                    "agent_id": agent_id,
+                    "error": str(e),
+                    "source": "rchrono_popularity",
+                }
+            },
+        )
+        candidates_popularity = []
+        used_fallback = True
 
     # 4. collaborative_user_user
-    candidates_collab, fallback3 = recommend_collaborative_user_user_redis(
-        valid_posts_with_data=valid_posts_with_data,
-        limit=candidate_limit,
-        agent_id=agent_id,
-        all_post_ids=all_post_ids,
-        posts_data=posts_data,
-        redis_client=redis_client,
-        redis_key_fn=redis_key_fn,
-        db_engine=db_engine,
-        logger=logger,
-        **kwargs,
-    )
-    used_fallback = used_fallback or fallback3
+    try:
+        candidates_collab, fallback3 = recommend_collaborative_user_user_redis(
+            valid_posts_with_data=valid_posts_with_data,
+            limit=candidate_limit,
+            agent_id=agent_id,
+            all_post_ids=all_post_ids,
+            posts_data=posts_data,
+            redis_client=redis_client,
+            redis_key_fn=redis_key_fn,
+            db_engine=db_engine,
+            logger=logger,
+            **kwargs,
+        )
+        used_fallback = used_fallback or fallback3
+    except Exception as e:
+        logger.error(
+            f"HybridLinearRanker: Error in collaborative candidate source: {e}",
+            extra={
+                "extra_data": {
+                    "agent_id": agent_id,
+                    "error": str(e),
+                    "source": "collaborative_user_user",
+                }
+            },
+        )
+        candidates_collab = []
+        used_fallback = True
 
     # Union and deduplicate
     candidate_set = set()
