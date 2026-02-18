@@ -208,34 +208,34 @@ class FollowRecommender:
             user_ids_key = self.db._redis_key("user_mgmt", "ids")
             # scard returns 0 for non-existent keys, so no need for exists() check
             user_count = self.db.redis_client.scard(user_ids_key)
-            
+
             # If no users in Redis, try to populate from SQL first
             if user_count == 0:
                 self.logger.info(
                     f"Redis user cache empty for agent {agent_id}, attempting to populate from SQL",
-                    extra={"extra_data": {"agent_id": agent_id, "mode": mode}}
+                    extra={"extra_data": {"agent_id": agent_id, "mode": mode}},
                 )
-                
+
                 # Try to populate Redis from SQL
                 populated = self._populate_redis_users_from_sql()
-                
+
                 if populated:
                     # Re-check user count after population
                     user_count = self.db.redis_client.scard(user_ids_key)
                     self.logger.info(
                         f"Populated {user_count} users into Redis cache from SQL",
-                        extra={"extra_data": {"user_count": user_count}}
+                        extra={"extra_data": {"user_count": user_count}},
                     )
-                
+
                 # If still no users, fall back to SQL-based recommendations
                 # (SQL backend handles empty user case gracefully)
                 if user_count == 0:
                     self.logger.info(
                         f"Redis user population completed but no users found, using SQL-based recommendations",
-                        extra={"extra_data": {"agent_id": agent_id, "mode": mode}}
+                        extra={"extra_data": {"agent_id": agent_id, "mode": mode}},
                     )
                     return self._get_suggestions_sql(agent_id, mode, n_neighbors, leaning_bias)
-            
+
             # Dispatch to appropriate recommendation function
             if mode == "FollowRecSys":
                 recommendations = follow_recsys_redis.recommend_random_follows_redis(
@@ -302,12 +302,12 @@ class FollowRecommender:
                     leaning_bias,
                     self.logger,
                 )
-            
+
             # If no recommendations found, fall back to SQL
             if not recommendations:
                 self.logger.info(
                     f"No follow recommendations from Redis for agent {agent_id}, falling back to SQL",
-                    extra={"extra_data": {"agent_id": agent_id, "mode": mode}}
+                    extra={"extra_data": {"agent_id": agent_id, "mode": mode}},
                 )
                 return self._get_suggestions_sql(agent_id, mode, n_neighbors, leaning_bias)
 
@@ -324,33 +324,34 @@ class FollowRecommender:
     def _populate_redis_users_from_sql(self) -> bool:
         """
         Populate Redis user cache from SQL database.
-        
+
         This is called when Redis user cache is empty but we want to use Redis for performance.
         It loads all users from SQL and registers them in Redis.
-        
+
         Returns:
             bool: True if users were successfully populated, False otherwise
         """
         try:
             from sqlalchemy.orm import Session
+
             from YSimulator.YServer.classes.models import User_mgmt
-            
+
             with Session(self.db.engine) as session:
                 # Get all users from SQL
                 users = session.query(User_mgmt).all()
-                
+
                 if not users:
                     return False
-                
+
                 # Register each user in Redis
                 user_ids_key = self.db._redis_key("user_mgmt", "ids")
                 count = 0
-                
+
                 for user in users:
                     try:
                         # Add to user IDs set
                         self.db.redis_client.sadd(user_ids_key, user.id)
-                        
+
                         # Store user data as hash
                         user_key = self.db._redis_key("user_mgmt", user.id)
                         user_data = {
@@ -361,30 +362,32 @@ class FollowRecommender:
                         # Filter out None values
                         user_data = {k: v for k, v in user_data.items() if v is not None}
                         self.db.redis_client.hset(user_key, mapping=user_data)
-                        
+
                         # Create username index
                         if user.username:
-                            username_key = self.db._redis_key("user_mgmt:by_username", user.username)
+                            username_key = self.db._redis_key(
+                                "user_mgmt:by_username", user.username
+                            )
                             self.db.redis_client.set(username_key, user.id)
-                        
+
                         count += 1
                     except Exception as e:
                         self.logger.warning(
                             f"Failed to populate user {user.id} in Redis: {e}",
-                            extra={"extra_data": {"user_id": user.id, "error": str(e)}}
+                            extra={"extra_data": {"user_id": user.id, "error": str(e)}},
                         )
                         continue
-                
+
                 self.logger.info(
                     f"Successfully populated {count} users from SQL to Redis cache",
-                    extra={"extra_data": {"users_populated": count}}
+                    extra={"extra_data": {"users_populated": count}},
                 )
                 return count > 0
-                
+
         except Exception as e:
             self.logger.error(
                 f"Error populating Redis users from SQL: {e}",
-                extra={"extra_data": {"error": str(e)}}
+                extra={"extra_data": {"error": str(e)}},
             )
             return False
 

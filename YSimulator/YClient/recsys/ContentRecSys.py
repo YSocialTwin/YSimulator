@@ -91,7 +91,7 @@ class ContentRecSys:
             logger.debug(
                 f"Requesting recommendations: mode={self.mode}, n_posts={self.n_posts}, agent={agent_id}"
             )
-            
+
             post_ids = ray.get(
                 server_handle.get_recommended_posts.remote(
                     agent_id=agent_id,
@@ -101,12 +101,12 @@ class ContentRecSys:
                     client_id=client_id,
                 )
             )
-            
+
             # Debug logging for recommendation result
             logger.debug(
                 f"Received recommendations: mode={self.mode}, requested={self.n_posts}, received={len(post_ids) if post_ids else 0}"
             )
-            
+
             return post_ids if post_ids else []
         except Exception as e:
             logger.error(f"Error getting recommendations for agent {agent_id}: {e}")

@@ -77,7 +77,7 @@ class ContentRecommender:
                     }
                 },
             )
-            
+
             # Calculate visibility threshold
             visibility_day, visibility_hour = self._calculate_visibility_params(
                 day, slot, self.visibility_rounds
@@ -163,7 +163,7 @@ class ContentRecommender:
         else:
             valid_posts_with_data = []
             posts_data = []
-        
+
         # If no valid posts in Redis, fall back to SQL
         if not valid_posts_with_data:
             # Determine why we're falling back for better logging
@@ -173,8 +173,10 @@ class ContentRecommender:
                 reason = "post data could not be fetched from Redis"
             else:
                 # Posts exist but were filtered out (likely all from agent)
-                reason = f"no posts from other users (found {len(all_post_ids)} posts, all filtered)"
-            
+                reason = (
+                    f"no posts from other users (found {len(all_post_ids)} posts, all filtered)"
+                )
+
             self.logger.info(
                 f"No valid posts for recommendations - {reason}, falling back to SQL",
                 extra={
@@ -184,7 +186,7 @@ class ContentRecommender:
                         "total_posts_in_redis": len(all_post_ids) if all_post_ids else 0,
                         "reason": reason,
                     }
-                }
+                },
             )
             # Calculate visibility parameters for SQL fallback
             # Pass None for day and slot to use default visibility calculation
@@ -214,7 +216,7 @@ class ContentRecommender:
             f"Dispatching to recommendation function for mode: {mode}",
             extra={"extra_data": {"mode": mode, "agent_id": agent_id}},
         )
-        
+
         if mode == "ReverseChrono":
             return content_recsys_redis.recommend_rchrono_redis(**common_kwargs)
         elif mode == "ReverseChronoPopularity":
@@ -246,7 +248,12 @@ class ContentRecommender:
         elif mode == "HybridLinearRanker":
             self.logger.debug(
                 f"Calling HybridLinearRanker for agent {agent_id}",
-                extra={"extra_data": {"agent_id": agent_id, "valid_posts_count": len(valid_posts_with_data)}},
+                extra={
+                    "extra_data": {
+                        "agent_id": agent_id,
+                        "valid_posts_count": len(valid_posts_with_data),
+                    }
+                },
             )
             return content_recsys_redis.recommend_hybrid_linear_ranker_redis(**common_kwargs)
         else:
@@ -351,7 +358,7 @@ class ContentRecommender:
         # Handle None inputs by defaulting to 0 (show all posts regardless of age)
         if day is None or slot is None:
             return 0, 0
-        
+
         # Calculate how many full days worth of slots are in visibility_rounds
         visibility_total_slots = day * self.num_slots_per_day + slot - visibility_rounds
 

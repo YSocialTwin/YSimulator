@@ -7,7 +7,14 @@ Each function implements a specific recommendation algorithm using Redis key-val
 import random
 from typing import Any, Dict, List
 
-from YSimulator.YServer.classes.models import Follow, PostTopic, Reaction, Round, User_mgmt, UserInterest
+from YSimulator.YServer.classes.models import (
+    Follow,
+    PostTopic,
+    Reaction,
+    Round,
+    User_mgmt,
+    UserInterest,
+)
 
 # Constants for hybrid linear ranker
 RECENT_AFFINITY_DISCOUNT = 0.5  # Weight for recent interactions (50% of total affinity)
@@ -1376,7 +1383,7 @@ def recommend_hybrid_linear_ranker_redis(
 
     # Get candidates from multiple sources
     candidate_limit = min(limit * 10, 100)  # Get more candidates to rank
-    
+
     logger.debug(
         f"HybridLinearRanker Stage 1 starting: candidate_limit={candidate_limit}, valid_posts={len(valid_posts_with_data)}",
         extra={
