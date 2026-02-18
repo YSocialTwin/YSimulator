@@ -286,7 +286,8 @@ def recommend_rchrono_followers_popularity(
         )
         .order_by(
             desc(Post.reaction_count),
-            desc(Post.round),
+            desc(Round.day),
+            desc(Round.hour),
         )
         .limit(follower_posts_limit)
     )
@@ -311,7 +312,8 @@ def recommend_rchrono_followers_popularity(
                 )
                 .order_by(
                     desc(Post.reaction_count),
-                    desc(Post.round),
+                    desc(Round.day),
+                    desc(Round.hour),
                 )
                 .limit(remaining)
             )
@@ -328,7 +330,8 @@ def recommend_rchrono_followers_popularity(
                 )
                 .order_by(
                     desc(Post.reaction_count),
-                    desc(Post.round),
+                    desc(Round.day),
+                    desc(Round.hour),
                 )
                 .limit(remaining)
             )
