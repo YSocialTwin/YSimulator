@@ -7,7 +7,7 @@ Each function implements a specific recommendation algorithm using Redis key-val
 import random
 from typing import Any, Dict, List
 
-from YSimulator.YServer.classes.models import Follow, PostTopic, Reaction, User_mgmt, UserInterest
+from YSimulator.YServer.classes.models import Follow, PostTopic, Reaction, Round, User_mgmt, UserInterest
 
 # Constants for hybrid linear ranker
 RECENT_AFFINITY_DISCOUNT = 0.5  # Weight for recent interactions (50% of total affinity)
@@ -315,9 +315,10 @@ def recommend_common_interests_redis(
                 post_query = (
                     session.query(PostTopic.post_id)
                     .join(Post, PostTopic.post_id == Post.id)
+                    .join(Round, Post.round == Round.id)
                     .filter(PostTopic.topic_id.in_(user_interests), Post.user_id != agent_id)
                     .distinct()
-                    .order_by(desc(PostTopic.post_id))
+                    .order_by(desc(Round.day), desc(Round.hour))
                     .limit(limit)
                 )
 
@@ -437,13 +438,14 @@ def recommend_common_user_interests_redis(
                 .join(UserInterest1, Reaction.user_id == UserInterest1.user_id)
                 .join(UserInterest2, UserInterest1.interest_id == UserInterest2.interest_id)
                 .join(Post, Reaction.post_id == Post.id)
+                .join(Round, Post.round == Round.id)
                 .filter(
                     UserInterest2.user_id == agent_id,
                     Reaction.user_id != agent_id,
                     Post.user_id != agent_id,
                     Reaction.type == "LIKE",
                 )
-                .order_by(desc(Reaction.post_id))
+                .order_by(desc(Round.day), desc(Round.hour))
                 .limit(limit)
             )
 
@@ -562,6 +564,7 @@ def recommend_similar_users_react_redis(
                 .join(ReactorUser, Reaction.user_id == ReactorUser.id)
                 .join(TargetUser, TargetUser.id == agent_id)
                 .join(Post, Reaction.post_id == Post.id)
+                .join(Round, Post.round == Round.id)
                 .filter(
                     Post.user_id != agent_id,
                     ReactorUser.id != agent_id,
@@ -572,7 +575,7 @@ def recommend_similar_users_react_redis(
                         ReactorUser.leaning == TargetUser.leaning,
                     ),
                 )
-                .order_by(desc(Reaction.post_id))
+                .order_by(desc(Round.day), desc(Round.hour))
                 .limit(limit)
             )
 
@@ -690,6 +693,7 @@ def recommend_similar_users_posts_redis(
 
             query = (
                 session.query(Post.id)
+                .join(Round, Post.round == Round.id)
                 .join(PostAuthor, Post.user_id == PostAuthor.id)
                 .join(TargetUser, TargetUser.id == agent_id)
                 .filter(
@@ -700,7 +704,7 @@ def recommend_similar_users_posts_redis(
                         PostAuthor.leaning == TargetUser.leaning,
                     ),
                 )
-                .order_by(desc(Post.id))
+                .order_by(desc(Round.day), desc(Round.hour))
                 .limit(limit)
             )
 
@@ -867,6 +871,7 @@ def recommend_collaborative_user_user_redis(
                     posts_query = (
                         session.query(Reaction.post_id)
                         .join(Post, Reaction.post_id == Post.id)
+                        .join(Round, Post.round == Round.id)
                         .filter(
                             Reaction.user_id.in_(similar_user_ids),
                             Reaction.type == "LIKE",
@@ -874,7 +879,7 @@ def recommend_collaborative_user_user_redis(
                             Reaction.post_id.notin_(agent_likes_ids),
                         )
                         .distinct()
-                        .order_by(desc(Reaction.post_id))
+                        .order_by(desc(Round.day), desc(Round.hour))
                         .limit(limit)
                     )
                     sql_post_ids = [row[0] for row in posts_query.all()]
@@ -1011,6 +1016,7 @@ def recommend_collaborative_item_item_redis(
                     session.query(Reaction2.post_id)
                     .join(Reaction, Reaction.user_id == Reaction2.user_id)
                     .join(Post, Reaction2.post_id == Post.id)
+                    .join(Round, Post.round == Round.id)
                     .filter(
                         Reaction.post_id.in_(agent_likes_ids),
                         Reaction.type == "LIKE",
@@ -1020,7 +1026,7 @@ def recommend_collaborative_item_item_redis(
                         Reaction2.post_id.notin_(agent_likes_ids),
                     )
                     .distinct()
-                    .order_by(desc(Reaction2.post_id))
+                    .order_by(desc(Round.day), desc(Round.hour))
                     .limit(limit)
                 )
                 sql_post_ids = [row[0] for row in posts_query.all()]
@@ -1148,6 +1154,7 @@ def recommend_content_based_features_redis(
                 posts_query = (
                     session.query(PostTopic.post_id)
                     .join(Post, PostTopic.post_id == Post.id)
+                    .join(Round, Post.round == Round.id)
                     .outerjoin(Reaction, Reaction.post_id == Post.id)
                     .filter(
                         PostTopic.topic_id.in_(liked_topic_ids),
@@ -1155,7 +1162,7 @@ def recommend_content_based_features_redis(
                         Reaction.id.is_(None),
                     )
                     .distinct()
-                    .order_by(desc(PostTopic.post_id))
+                    .order_by(desc(Round.day), desc(Round.hour))
                     .limit(limit)
                 )
                 sql_post_ids = [row[0] for row in posts_query.all()]
@@ -1285,6 +1292,7 @@ def recommend_content_based_vector_redis(
                 posts_query = (
                     session.query(PostTopic.post_id)
                     .join(Post, PostTopic.post_id == Post.id)
+                    .join(Round, Post.round == Round.id)
                     .outerjoin(Reaction, Reaction.post_id == Post.id)
                     .filter(
                         PostTopic.topic_id.in_(user_topics.keys()),
@@ -1292,7 +1300,7 @@ def recommend_content_based_vector_redis(
                         Reaction.id.is_(None),
                     )
                     .distinct()
-                    .order_by(desc(PostTopic.post_id))
+                    .order_by(desc(Round.day), desc(Round.hour))
                     .limit(limit)
                 )
                 sql_post_ids = [row[0] for row in posts_query.all()]
