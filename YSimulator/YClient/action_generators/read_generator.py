@@ -92,6 +92,19 @@ class ReadGenerator(BaseActionGenerator):
             "recsys_mode", "rchrono"
         )
         recsys_class = recsys_class_map.get(agent_recsys_mode, RandomOrder)
+        
+        # Debug logging for mode selection
+        if agent_recsys_mode not in recsys_class_map:
+            self.context.logger.debug(
+                f"Recsys mode '{agent_recsys_mode}' not found in map, using RandomOrder",
+                extra={"extra_data": {"agent_id": agent.id, "requested_mode": agent_recsys_mode}}
+            )
+        else:
+            self.context.logger.debug(
+                f"Using recsys mode: {agent_recsys_mode} -> {recsys_class.__name__}",
+                extra={"extra_data": {"agent_id": agent.id, "mode": agent_recsys_mode, "class": recsys_class.__name__}}
+            )
+        
         recsys_n_posts = self.context.recsys_settings.get("recsys_n_posts", 10)
         recsys = recsys_class(n_posts=recsys_n_posts)
 

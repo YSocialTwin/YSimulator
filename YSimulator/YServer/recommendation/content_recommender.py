@@ -63,6 +63,21 @@ class ContentRecommender:
             List of post UUIDs recommended for the agent
         """
         try:
+            # Debug logging for incoming request
+            self.logger.debug(
+                f"get_recommended_posts called: agent={agent_id}, mode={mode}, limit={limit}",
+                extra={
+                    "extra_data": {
+                        "agent_id": agent_id,
+                        "mode": mode,
+                        "limit": limit,
+                        "followers_ratio": followers_ratio,
+                        "day": day,
+                        "slot": slot,
+                    }
+                },
+            )
+            
             # Calculate visibility threshold
             visibility_day, visibility_hour = self._calculate_visibility_params(
                 day, slot, self.visibility_rounds
@@ -148,6 +163,37 @@ class ContentRecommender:
         else:
             valid_posts_with_data = []
             posts_data = []
+        
+        # If no valid posts in Redis, fall back to SQL
+        if not valid_posts_with_data:
+            # Determine why we're falling back for better logging
+            if not all_post_ids:
+                reason = "no posts in Redis cache"
+            elif not posts_data:
+                reason = "post data could not be fetched from Redis"
+            else:
+                # Posts exist but were filtered out (likely all from agent)
+                reason = f"no posts from other users (found {len(all_post_ids)} posts, all filtered)"
+            
+            self.logger.info(
+                f"No valid posts for recommendations - {reason}, falling back to SQL",
+                extra={
+                    "extra_data": {
+                        "agent_id": agent_id,
+                        "mode": mode,
+                        "total_posts_in_redis": len(all_post_ids) if all_post_ids else 0,
+                        "reason": reason,
+                    }
+                }
+            )
+            # Calculate visibility parameters for SQL fallback
+            # Pass None for day and slot to use default visibility calculation
+            visibility_day, visibility_hour = self._calculate_visibility_params(
+                None, None, self.visibility_rounds
+            )
+            return self._get_recommendations_sql(
+                agent_id, mode, limit, followers_ratio, visibility_day, visibility_hour
+            )
 
         # Prepare common kwargs for recommendation functions
         common_kwargs = {
@@ -164,6 +210,11 @@ class ContentRecommender:
         }
 
         # Dispatch to appropriate recommendation function
+        self.logger.debug(
+            f"Dispatching to recommendation function for mode: {mode}",
+            extra={"extra_data": {"mode": mode, "agent_id": agent_id}},
+        )
+        
         if mode == "ReverseChrono":
             return content_recsys_redis.recommend_rchrono_redis(**common_kwargs)
         elif mode == "ReverseChronoPopularity":
@@ -193,9 +244,17 @@ class ContentRecommender:
         elif mode == "ContentBasedVector":
             return content_recsys_redis.recommend_content_based_vector_redis(**common_kwargs)
         elif mode == "HybridLinearRanker":
+            self.logger.debug(
+                f"Calling HybridLinearRanker for agent {agent_id}",
+                extra={"extra_data": {"agent_id": agent_id, "valid_posts_count": len(valid_posts_with_data)}},
+            )
             return content_recsys_redis.recommend_hybrid_linear_ranker_redis(**common_kwargs)
         else:
             # Default: random ordering
+            self.logger.debug(
+                f"Mode '{mode}' not recognized, using random ordering",
+                extra={"extra_data": {"mode": mode, "agent_id": agent_id}},
+            )
             return content_recsys_redis.recommend_random_redis(**common_kwargs)
 
     def _get_recommendations_sql(
@@ -281,13 +340,18 @@ class ContentRecommender:
         Calculate visibility threshold parameters.
 
         Args:
-            day: Current simulation day
-            slot: Current simulation slot
+            day: Current simulation day (can be None to use default)
+            slot: Current simulation slot (can be None to use default)
             visibility_rounds: Number of rounds posts remain visible
 
         Returns:
             Tuple of (visibility_day, visibility_hour)
+            Returns (0, 0) when inputs are None, which shows all posts regardless of age
         """
+        # Handle None inputs by defaulting to 0 (show all posts regardless of age)
+        if day is None or slot is None:
+            return 0, 0
+        
         # Calculate how many full days worth of slots are in visibility_rounds
         visibility_total_slots = day * self.num_slots_per_day + slot - visibility_rounds
 

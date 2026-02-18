@@ -7,7 +7,7 @@ Each function implements a specific recommendation algorithm using Redis key-val
 import random
 from typing import Any, Dict, List
 
-from YSimulator.YServer.classes.models import Follow, PostTopic, Reaction, User_mgmt, UserInterest
+from YSimulator.YServer.classes.models import Follow, PostTopic, Reaction, Round, User_mgmt, UserInterest
 
 # Constants for hybrid linear ranker
 RECENT_AFFINITY_DISCOUNT = 0.5  # Weight for recent interactions (50% of total affinity)
@@ -62,7 +62,7 @@ def recommend_rchrono_followers_redis(
     posts_data: List[Dict[str, bytes]],
     db_engine,
     **kwargs,
-) -> List[str]:
+) -> tuple[List[str], bool]:
     """
     Prioritize posts from followed users.
 
@@ -76,7 +76,7 @@ def recommend_rchrono_followers_redis(
         db_engine: Database engine for follow queries
 
     Returns:
-        List of post IDs prioritizing followed users
+        Tuple of (List of post IDs prioritizing followed users, False indicating no fallback used)
     """
     follower_posts_limit = int(limit * followers_ratio)
     additional_posts_limit = limit - follower_posts_limit
@@ -85,8 +85,8 @@ def recommend_rchrono_followers_redis(
     from sqlalchemy.orm import Session
 
     with Session(db_engine) as session:
-        query = session.query(Follow.follower_id).filter(
-            Follow.user_id == agent_id, Follow.action == "follow"
+        query = session.query(Follow.user_id).filter(
+            Follow.follower_id == agent_id, Follow.action == "follow"
         )
         followed_user_ids = set(row[0] for row in query.all())
 
@@ -108,7 +108,7 @@ def recommend_rchrono_followers_redis(
     if len(post_ids) < limit:
         post_ids.extend([p["id"] for p in other_posts[:additional_posts_limit]])
 
-    return post_ids
+    return post_ids, False
 
 
 def recommend_rchrono_followers_popularity_redis(
@@ -147,8 +147,8 @@ def recommend_rchrono_followers_popularity_redis(
     from sqlalchemy.orm import Session
 
     with Session(db_engine) as session:
-        query = session.query(Follow.follower_id).filter(
-            Follow.user_id == agent_id, Follow.action == "follow"
+        query = session.query(Follow.user_id).filter(
+            Follow.follower_id == agent_id, Follow.action == "follow"
         )
         followed_user_ids = set(row[0] for row in query.all())
 
@@ -315,9 +315,10 @@ def recommend_common_interests_redis(
                 post_query = (
                     session.query(PostTopic.post_id)
                     .join(Post, PostTopic.post_id == Post.id)
+                    .join(Round, Post.round == Round.id)
                     .filter(PostTopic.topic_id.in_(user_interests), Post.user_id != agent_id)
                     .distinct()
-                    .order_by(desc(PostTopic.post_id))
+                    .order_by(desc(Round.day), desc(Round.hour))
                     .limit(limit)
                 )
 
@@ -437,13 +438,14 @@ def recommend_common_user_interests_redis(
                 .join(UserInterest1, Reaction.user_id == UserInterest1.user_id)
                 .join(UserInterest2, UserInterest1.interest_id == UserInterest2.interest_id)
                 .join(Post, Reaction.post_id == Post.id)
+                .join(Round, Post.round == Round.id)
                 .filter(
                     UserInterest2.user_id == agent_id,
                     Reaction.user_id != agent_id,
                     Post.user_id != agent_id,
                     Reaction.type == "LIKE",
                 )
-                .order_by(desc(Reaction.post_id))
+                .order_by(desc(Round.day), desc(Round.hour))
                 .limit(limit)
             )
 
@@ -562,6 +564,7 @@ def recommend_similar_users_react_redis(
                 .join(ReactorUser, Reaction.user_id == ReactorUser.id)
                 .join(TargetUser, TargetUser.id == agent_id)
                 .join(Post, Reaction.post_id == Post.id)
+                .join(Round, Post.round == Round.id)
                 .filter(
                     Post.user_id != agent_id,
                     ReactorUser.id != agent_id,
@@ -572,7 +575,7 @@ def recommend_similar_users_react_redis(
                         ReactorUser.leaning == TargetUser.leaning,
                     ),
                 )
-                .order_by(desc(Reaction.post_id))
+                .order_by(desc(Round.day), desc(Round.hour))
                 .limit(limit)
             )
 
@@ -690,6 +693,7 @@ def recommend_similar_users_posts_redis(
 
             query = (
                 session.query(Post.id)
+                .join(Round, Post.round == Round.id)
                 .join(PostAuthor, Post.user_id == PostAuthor.id)
                 .join(TargetUser, TargetUser.id == agent_id)
                 .filter(
@@ -700,7 +704,7 @@ def recommend_similar_users_posts_redis(
                         PostAuthor.leaning == TargetUser.leaning,
                     ),
                 )
-                .order_by(desc(Post.id))
+                .order_by(desc(Round.day), desc(Round.hour))
                 .limit(limit)
             )
 
@@ -867,6 +871,7 @@ def recommend_collaborative_user_user_redis(
                     posts_query = (
                         session.query(Reaction.post_id)
                         .join(Post, Reaction.post_id == Post.id)
+                        .join(Round, Post.round == Round.id)
                         .filter(
                             Reaction.user_id.in_(similar_user_ids),
                             Reaction.type == "LIKE",
@@ -874,7 +879,7 @@ def recommend_collaborative_user_user_redis(
                             Reaction.post_id.notin_(agent_likes_ids),
                         )
                         .distinct()
-                        .order_by(desc(Reaction.post_id))
+                        .order_by(desc(Round.day), desc(Round.hour))
                         .limit(limit)
                     )
                     sql_post_ids = [row[0] for row in posts_query.all()]
@@ -1011,6 +1016,7 @@ def recommend_collaborative_item_item_redis(
                     session.query(Reaction2.post_id)
                     .join(Reaction, Reaction.user_id == Reaction2.user_id)
                     .join(Post, Reaction2.post_id == Post.id)
+                    .join(Round, Post.round == Round.id)
                     .filter(
                         Reaction.post_id.in_(agent_likes_ids),
                         Reaction.type == "LIKE",
@@ -1020,7 +1026,7 @@ def recommend_collaborative_item_item_redis(
                         Reaction2.post_id.notin_(agent_likes_ids),
                     )
                     .distinct()
-                    .order_by(desc(Reaction2.post_id))
+                    .order_by(desc(Round.day), desc(Round.hour))
                     .limit(limit)
                 )
                 sql_post_ids = [row[0] for row in posts_query.all()]
@@ -1148,6 +1154,7 @@ def recommend_content_based_features_redis(
                 posts_query = (
                     session.query(PostTopic.post_id)
                     .join(Post, PostTopic.post_id == Post.id)
+                    .join(Round, Post.round == Round.id)
                     .outerjoin(Reaction, Reaction.post_id == Post.id)
                     .filter(
                         PostTopic.topic_id.in_(liked_topic_ids),
@@ -1155,7 +1162,7 @@ def recommend_content_based_features_redis(
                         Reaction.id.is_(None),
                     )
                     .distinct()
-                    .order_by(desc(PostTopic.post_id))
+                    .order_by(desc(Round.day), desc(Round.hour))
                     .limit(limit)
                 )
                 sql_post_ids = [row[0] for row in posts_query.all()]
@@ -1285,6 +1292,7 @@ def recommend_content_based_vector_redis(
                 posts_query = (
                     session.query(PostTopic.post_id)
                     .join(Post, PostTopic.post_id == Post.id)
+                    .join(Round, Post.round == Round.id)
                     .outerjoin(Reaction, Reaction.post_id == Post.id)
                     .filter(
                         PostTopic.topic_id.in_(user_topics.keys()),
@@ -1292,7 +1300,7 @@ def recommend_content_based_vector_redis(
                         Reaction.id.is_(None),
                     )
                     .distinct()
-                    .order_by(desc(PostTopic.post_id))
+                    .order_by(desc(Round.day), desc(Round.hour))
                     .limit(limit)
                 )
                 sql_post_ids = [row[0] for row in posts_query.all()]
@@ -1363,55 +1371,124 @@ def recommend_hybrid_linear_ranker_redis(
     # STAGE 1: CANDIDATE GENERATION
     # ==========================================
 
+    # Ensure limit has a valid value (defensive check)
+    limit = 5 if limit is None else limit  # Default to 5 if None
+
     # Get candidates from multiple sources
     candidate_limit = min(limit * 10, 100)  # Get more candidates to rank
+    
+    logger.debug(
+        f"HybridLinearRanker Stage 1 starting: candidate_limit={candidate_limit}, valid_posts={len(valid_posts_with_data)}",
+        extra={
+            "extra_data": {
+                "agent_id": agent_id,
+                "candidate_limit": candidate_limit,
+                "valid_posts_count": len(valid_posts_with_data),
+            }
+        },
+    )
 
     # 1. rchrono_followers
-    candidates_followers, fallback1 = recommend_rchrono_followers_redis(
-        valid_posts_with_data=valid_posts_with_data,
-        limit=candidate_limit,
-        agent_id=agent_id,
-        followers_ratio=0.6,
-        all_post_ids=all_post_ids,
-        posts_data=posts_data,
-        db_engine=db_engine,
-        **kwargs,
-    )
-    used_fallback = used_fallback or fallback1
+    try:
+        candidates_followers, fallback1 = recommend_rchrono_followers_redis(
+            valid_posts_with_data=valid_posts_with_data,
+            limit=candidate_limit,
+            agent_id=agent_id,
+            all_post_ids=all_post_ids,
+            posts_data=posts_data,
+            db_engine=db_engine,
+            **kwargs,
+        )
+        used_fallback = used_fallback or fallback1
+    except Exception as e:
+        logger.error(
+            f"HybridLinearRanker: Error in followers candidate source: {e}",
+            extra={
+                "extra_data": {
+                    "agent_id": agent_id,
+                    "error": str(e),
+                    "source": "rchrono_followers",
+                }
+            },
+        )
+        candidates_followers = []
+        used_fallback = True
 
     # 2. friends_of_friends (posts from users followed by users you follow)
-    candidates_fof, fallback2 = _get_friends_of_friends_candidates_redis(
-        valid_posts_with_data=valid_posts_with_data,
-        limit=candidate_limit,
-        agent_id=agent_id,
-        all_post_ids=all_post_ids,
-        posts_data=posts_data,
-        redis_client=redis_client,
-        redis_key_fn=redis_key_fn,
-        db_engine=db_engine,
-        logger=logger,
-    )
-    used_fallback = used_fallback or fallback2
+    try:
+        candidates_fof, fallback2 = _get_friends_of_friends_candidates_redis(
+            valid_posts_with_data=valid_posts_with_data,
+            limit=candidate_limit,
+            agent_id=agent_id,
+            all_post_ids=all_post_ids,
+            posts_data=posts_data,
+            redis_client=redis_client,
+            redis_key_fn=redis_key_fn,
+            db_engine=db_engine,
+            logger=logger,
+        )
+        used_fallback = used_fallback or fallback2
+    except Exception as e:
+        logger.error(
+            f"HybridLinearRanker: Error in friends-of-friends candidate source: {e}",
+            extra={
+                "extra_data": {
+                    "agent_id": agent_id,
+                    "error": str(e),
+                    "source": "friends_of_friends",
+                }
+            },
+        )
+        candidates_fof = []
+        used_fallback = True
 
     # 3. rchrono_popularity
-    candidates_popularity = recommend_rchrono_popularity_redis(
-        valid_posts_with_data=valid_posts_with_data, limit=candidate_limit, **kwargs
-    )
+    try:
+        candidates_popularity = recommend_rchrono_popularity_redis(
+            valid_posts_with_data=valid_posts_with_data, limit=candidate_limit, **kwargs
+        )
+    except Exception as e:
+        logger.error(
+            f"HybridLinearRanker: Error in popularity candidate source: {e}",
+            extra={
+                "extra_data": {
+                    "agent_id": agent_id,
+                    "error": str(e),
+                    "source": "rchrono_popularity",
+                }
+            },
+        )
+        candidates_popularity = []
+        used_fallback = True
 
     # 4. collaborative_user_user
-    candidates_collab, fallback3 = recommend_collaborative_user_user_redis(
-        valid_posts_with_data=valid_posts_with_data,
-        limit=candidate_limit,
-        agent_id=agent_id,
-        all_post_ids=all_post_ids,
-        posts_data=posts_data,
-        redis_client=redis_client,
-        redis_key_fn=redis_key_fn,
-        db_engine=db_engine,
-        logger=logger,
-        **kwargs,
-    )
-    used_fallback = used_fallback or fallback3
+    try:
+        candidates_collab, fallback3 = recommend_collaborative_user_user_redis(
+            valid_posts_with_data=valid_posts_with_data,
+            limit=candidate_limit,
+            agent_id=agent_id,
+            all_post_ids=all_post_ids,
+            posts_data=posts_data,
+            redis_client=redis_client,
+            redis_key_fn=redis_key_fn,
+            db_engine=db_engine,
+            logger=logger,
+            **kwargs,
+        )
+        used_fallback = used_fallback or fallback3
+    except Exception as e:
+        logger.error(
+            f"HybridLinearRanker: Error in collaborative candidate source: {e}",
+            extra={
+                "extra_data": {
+                    "agent_id": agent_id,
+                    "error": str(e),
+                    "source": "collaborative_user_user",
+                }
+            },
+        )
+        candidates_collab = []
+        used_fallback = True
 
     # Union and deduplicate
     candidate_set = set()
@@ -1420,8 +1497,38 @@ def recommend_hybrid_linear_ranker_redis(
     candidate_set.update(candidates_popularity)
     candidate_set.update(candidates_collab)
 
+    # Log candidate generation results for diagnostics
+    logger.info(
+        f"HybridLinearRanker candidate generation: "
+        f"followers={len(candidates_followers)}, "
+        f"fof={len(candidates_fof)}, "
+        f"popularity={len(candidates_popularity)}, "
+        f"collab={len(candidates_collab)}, "
+        f"total_unique={len(candidate_set)}",
+        extra={
+            "extra_data": {
+                "agent_id": agent_id,
+                "candidates_followers": len(candidates_followers),
+                "candidates_fof": len(candidates_fof),
+                "candidates_popularity": len(candidates_popularity),
+                "candidates_collab": len(candidates_collab),
+                "candidate_set_size": len(candidate_set),
+                "valid_posts_count": len(valid_posts_with_data),
+            }
+        },
+    )
+
     # If no candidates found, fall back to random
     if not candidate_set:
+        logger.warning(
+            f"HybridLinearRanker: No candidates generated from any source, falling back to random",
+            extra={
+                "extra_data": {
+                    "agent_id": agent_id,
+                    "valid_posts_count": len(valid_posts_with_data),
+                }
+            },
+        )
         result = recommend_random_redis(valid_posts_with_data, limit)
         return result, True
 
@@ -1629,8 +1736,8 @@ def _get_followed_users_redis(agent_id: str, redis_client, redis_key_fn, db_engi
 
     # Fallback to SQL
     with Session(db_engine) as session:
-        query = session.query(Follow.follower_id).filter(
-            Follow.user_id == agent_id, Follow.action == "follow"
+        query = session.query(Follow.user_id).filter(
+            Follow.follower_id == agent_id, Follow.action == "follow"
         )
         return set(row[0] for row in query.all())
 
