@@ -317,6 +317,65 @@ class TestToxicity:
         result = toxicity("", api_key="test_key")
         assert isinstance(result, dict)
 
+    def test_toxicity_no_api_key_logs_debug(self):
+        """Test that falling back to detoxify emits a DEBUG log message."""
+        with patch(
+            "YSimulator.YClient.text_support.annotations._get_detoxify_model"
+        ) as mock_get_model:
+            mock_model = MagicMock()
+            mock_model.predict.return_value = {
+                "toxicity": 0.1,
+                "severe_toxicity": 0.0,
+                "identity_attack": 0.0,
+                "insult": 0.0,
+                "obscene": 0.0,
+                "threat": 0.0,
+                "sexual_explicit": 0.0,
+            }
+            mock_get_model.return_value = mock_model
+
+            import logging
+
+            with patch(
+                "YSimulator.YClient.text_support.annotations.logger"
+            ) as mock_logger:
+                toxicity("Test text", api_key=None)
+                mock_logger.debug.assert_called_once()
+                debug_msg = mock_logger.debug.call_args[0][0]
+                assert "detoxify" in debug_msg.lower()
+
+    @patch("YSimulator.YClient.text_support.annotations.PerspectiveAPI")
+    def test_toxicity_perspective_failure_logs_warning(self, mock_perspective):
+        """Test that a Perspective API failure emits a WARNING log message."""
+        mock_perspective.side_effect = Exception("network error")
+
+        with patch(
+            "YSimulator.YClient.text_support.annotations.logger"
+        ) as mock_logger:
+            result = toxicity("Test text", api_key="bad_key")
+            assert result == {}
+            mock_logger.warning.assert_called_once()
+            warning_msg = str(mock_logger.warning.call_args)
+            assert "network error" in warning_msg
+
+    def test_detoxify_toxicity_failure_logs_warning(self):
+        """Test that a detoxify failure emits a WARNING log message."""
+        with patch(
+            "YSimulator.YClient.text_support.annotations._get_detoxify_model"
+        ) as mock_get_model:
+            mock_get_model.side_effect = RuntimeError("model load error")
+
+            with patch(
+                "YSimulator.YClient.text_support.annotations.logger"
+            ) as mock_logger:
+                from YSimulator.YClient.text_support.annotations import detoxify_toxicity
+
+                result = detoxify_toxicity("Test text")
+                assert result == {}
+                mock_logger.warning.assert_called_once()
+                warning_msg = str(mock_logger.warning.call_args)
+                assert "model load error" in warning_msg
+
 
 class TestAnnotateText:
     """Test suite for text annotation integration."""

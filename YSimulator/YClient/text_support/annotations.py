@@ -1,6 +1,10 @@
+import logging
+
 from detoxify import Detoxify
 from nltk.sentiment import SentimentIntensityAnalyzer
 from perspective import PerspectiveAPI
+
+logger = logging.getLogger(__name__)
 
 _detoxify_model = None
 
@@ -9,7 +13,9 @@ def _get_detoxify_model() -> Detoxify:
     """Return a cached Detoxify model instance, creating it on first use."""
     global _detoxify_model
     if _detoxify_model is None:
+        logger.info("Initializing Detoxify model (first use)")
         _detoxify_model = Detoxify("original")
+        logger.info("Detoxify model initialized successfully")
     return _detoxify_model
 
 
@@ -47,7 +53,8 @@ def detoxify_toxicity(text: str) -> dict:
             "SEXUALLY_EXPLICIT": scores.get("sexual_explicit", 0.0),
             "FLIRTATION": 0.0,
         }
-    except Exception:
+    except Exception as e:
+        logger.warning("detoxify_toxicity failed: %s", e)
         return {}
 
 
@@ -91,7 +98,9 @@ def toxicity(text, api_key: str) -> dict:
                 "FLIRTATION": toxicity_score["FLIRTATION"],
             }
 
-        except Exception:
+        except Exception as e:
+            logger.warning("Perspective API toxicity scoring failed: %s", e)
             return {}
 
+    logger.debug("No Perspective API key provided; using detoxify for local toxicity scoring")
     return detoxify_toxicity(text)
