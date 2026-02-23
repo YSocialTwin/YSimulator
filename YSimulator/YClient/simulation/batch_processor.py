@@ -727,12 +727,14 @@ class BatchProcessor:
             # Check 5th element: mention_id or action_type
             mention_id = None
             action_type_override = None
+            metadata_payload = {}
             if len(reaction_tuple) > 4:
                 fifth_element = reaction_tuple[4]
                 # Check if it's a dict (new metadata format from vLLM batching)
                 if isinstance(fifth_element, dict):
                     # Extract mention_id from metadata dict if present
                     mention_id = fifth_element.get("mention_id")
+                    metadata_payload = fifth_element
                 # Check if it's "SHARE" action type string (old format)
                 elif fifth_element == "SHARE":
                     action_type_override = "SHARE"
@@ -791,7 +793,7 @@ class BatchProcessor:
                     agent_id=str(a_id),
                     action_type=determined_action_type,
                     content=res_act,
-                    metadata=fifth_element if isinstance(fifth_element, dict) else {},
+                    metadata=metadata_payload,
                     target_post_id=target,
                 )
 
