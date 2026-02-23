@@ -1519,6 +1519,10 @@ class OrchestratorServer:
 
                 # Ingest memory event through selected backend (no-op when backend=none).
                 if result.success:
+                    metadata = dict(result.metadata or {})
+                    extra_memory_metadata = getattr(act, "memory_metadata", None)
+                    if isinstance(extra_memory_metadata, dict):
+                        metadata.update(extra_memory_metadata)
                     memory_event = {
                         "action_type": act.action_type,
                         "agent_id": str(act.agent_id),
@@ -1527,7 +1531,7 @@ class OrchestratorServer:
                         "target_user_id": getattr(act, "target_user_id", None),
                         "topic": getattr(act, "topic", None),
                         "new_ids": result.new_ids,
-                        "metadata": result.metadata,
+                        "metadata": metadata,
                     }
                     self.memory_service.ingest_event(
                         str(act.agent_id),

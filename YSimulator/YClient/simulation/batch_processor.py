@@ -14,7 +14,7 @@ Updated in Phase 3 to use LLM service layer.
 
 import logging
 import uuid
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import ray
 
@@ -159,6 +159,7 @@ class BatchProcessor:
         content: str,
         metadata: Optional[Dict] = None,
         target_post_id: Optional[str] = None,
+        reflection_triplets: Optional[List[List[Any]]] = None,
     ) -> None:
         """
         Write-back phase for cognitive memory loop: persist generated text so
@@ -188,6 +189,9 @@ class BatchProcessor:
             "metadata": {
                 "memory_phase": "write_back",
                 "context_used": self._memory_context_to_text(agent_attrs),
+                "ghostkg_reflection_triplets": reflection_triplets
+                if reflection_triplets is not None
+                else self._extract_reflection_triplets(str(agent_id), content_text),
             },
         }
 
@@ -201,6 +205,165 @@ class BatchProcessor:
             )
         except Exception as e:
             self.logger.debug(f"Memory write-back failed for agent {agent_id}: {e}")
+
+    def _extract_reflection_triplets(self, agent_id: str, text: str) -> List[List[Any]]:
+        content_text = str(text or "").strip()
+        if not content_text:
+            return []
+        try:
+            llm_actor = self._get_llm_actor(agent_id)
+            if not hasattr(llm_actor, "extract_ghostkg_reflection_triplets"):
+                return []
+            raw = ray.get(
+                llm_actor.extract_ghostkg_reflection_triplets.remote(
+                    content_text, str(agent_id)
+                )
+            )
+            return self._sanitize_reflection_triplets(raw)
+        except Exception as e:
+            self.logger.debug(f"GhostKG reflection extraction failed for agent {agent_id}: {e}")
+            return []
+
+    def _extract_reflection_triplets_batch(
+        self, requests: List[Dict[str, Any]]
+    ) -> List[List[List[Any]]]:
+        if not requests:
+            return []
+
+        # Group by actor to keep affinity with load-balanced pools while still batching per actor.
+        actor_groups: Dict[Any, List[Tuple[int, Dict[str, Any]]]] = {}
+        for idx, req in enumerate(requests):
+            actor = self._get_llm_actor(str(req.get("agent_id")))
+            actor_groups.setdefault(actor, []).append((idx, req))
+
+        results: List[List[List[Any]]] = [[] for _ in requests]
+        for actor, grouped in actor_groups.items():
+            batch_requests = [
+                {
+                    "text": str(req.get("text", "") or ""),
+                    "agent_name": str(req.get("agent_id", "Agent") or "Agent"),
+                }
+                for _, req in grouped
+            ]
+            try:
+                if hasattr(actor, "extract_ghostkg_reflection_triplets_batch"):
+                    raw_batch = ray.get(actor.extract_ghostkg_reflection_triplets_batch.remote(batch_requests))
+                elif hasattr(actor, "extract_ghostkg_reflection_triplets"):
+                    raw_batch = ray.get(
+                        [
+                            actor.extract_ghostkg_reflection_triplets.remote(
+                                req["text"], req["agent_name"]
+                            )
+                            for req in batch_requests
+                        ]
+                    )
+                else:
+                    raw_batch = [[] for _ in batch_requests]
+            except Exception as e:
+                self.logger.debug(f"GhostKG batch reflection extraction failed: {e}")
+                raw_batch = [[] for _ in batch_requests]
+
+            for (original_idx, _), raw in zip(grouped, raw_batch):
+                results[original_idx] = self._sanitize_reflection_triplets(raw)
+        return results
+
+    def _extract_absorb_triplets(self, agent_id: str, text: str) -> List[List[Any]]:
+        content_text = str(text or "").strip()
+        if not content_text:
+            return []
+        try:
+            llm_actor = self._get_llm_actor(agent_id)
+            if not hasattr(llm_actor, "extract_ghostkg_absorb_triplets"):
+                return []
+            raw = ray.get(
+                llm_actor.extract_ghostkg_absorb_triplets.remote(
+                    content_text, str(agent_id), str(agent_id)
+                )
+            )
+            return self._sanitize_absorb_triplets(raw)
+        except Exception as e:
+            self.logger.debug(f"GhostKG absorb extraction failed for agent {agent_id}: {e}")
+            return []
+
+    def _extract_absorb_triplets_batch(
+        self, requests: List[Dict[str, Any]]
+    ) -> List[List[List[Any]]]:
+        if not requests:
+            return []
+        actor_groups: Dict[Any, List[Tuple[int, Dict[str, Any]]]] = {}
+        for idx, req in enumerate(requests):
+            actor = self._get_llm_actor(str(req.get("agent_id")))
+            actor_groups.setdefault(actor, []).append((idx, req))
+
+        results: List[List[List[Any]]] = [[] for _ in requests]
+        for actor, grouped in actor_groups.items():
+            try:
+                if hasattr(actor, "extract_ghostkg_absorb_triplets_batch"):
+                    raw_batch = ray.get(
+                        actor.extract_ghostkg_absorb_triplets_batch.remote(
+                            [
+                                {
+                                    "text": str(req.get("text", "") or ""),
+                                    "author": str(req.get("agent_id", "User") or "User"),
+                                    "agent_name": str(req.get("agent_id", "Agent") or "Agent"),
+                                }
+                                for _, req in grouped
+                            ]
+                        )
+                    )
+                elif hasattr(actor, "extract_ghostkg_absorb_triplets"):
+                    raw_batch = ray.get(
+                        [
+                            actor.extract_ghostkg_absorb_triplets.remote(
+                                str(req.get("text", "") or ""),
+                                str(req.get("agent_id", "User") or "User"),
+                                str(req.get("agent_id", "Agent") or "Agent"),
+                            )
+                            for _, req in grouped
+                        ]
+                    )
+                else:
+                    raw_batch = [[] for _ in grouped]
+            except Exception as e:
+                self.logger.debug(f"GhostKG batch absorb extraction failed: {e}")
+                raw_batch = [[] for _ in grouped]
+
+            for (original_idx, _), raw in zip(grouped, raw_batch):
+                results[original_idx] = self._sanitize_absorb_triplets(raw)
+        return results
+
+    @staticmethod
+    def _sanitize_reflection_triplets(raw_triplets: Any) -> List[List[Any]]:
+        if not isinstance(raw_triplets, list):
+            return []
+        cleaned: List[List[Any]] = []
+        for item in raw_triplets:
+            if not isinstance(item, (list, tuple)) or len(item) != 3:
+                continue
+            relation = str(item[0]).strip()
+            target = str(item[1]).strip()
+            try:
+                sentiment = float(item[2])
+            except (TypeError, ValueError):
+                sentiment = 0.0
+            if relation and target:
+                cleaned.append([relation, target, max(-1.0, min(1.0, sentiment))])
+        return cleaned
+
+    @staticmethod
+    def _sanitize_absorb_triplets(raw_triplets: Any) -> List[List[Any]]:
+        if not isinstance(raw_triplets, list):
+            return []
+        cleaned: List[List[Any]] = []
+        for item in raw_triplets:
+            if not isinstance(item, (list, tuple)) or len(item) != 3:
+                continue
+            source = str(item[0]).strip()
+            relation = str(item[1]).strip()
+            target = str(item[2]).strip()
+            if source and relation and target:
+                cleaned.append([source, relation, target])
+        return cleaned
 
     def gather_pending_llm_posts(
         self,
@@ -383,6 +546,9 @@ class BatchProcessor:
             )
 
             actions.append(action)
+            action.memory_metadata = {
+                "ghostkg_absorb_triplets": self._extract_absorb_triplets(str(a_id), res_txt)
+            }
             # Cognitive loop write-back: update personal beliefs from generated post text.
             action_metadata = {"agent_attrs": pending_item[6]} if len(pending_item) >= 7 else {}
             self._record_generated_content_memory(
@@ -535,6 +701,8 @@ class BatchProcessor:
         # Collect texts for batch emotion extraction
         texts_for_emotions = []
         action_start_idx = len(actions)
+        reflection_inputs: List[Dict[str, Any]] = []
+        action_payloads: List[Dict[str, Any]] = []
 
         for i, res_txt in enumerate(results):
             pending_item = batchable_posts[i]
@@ -598,16 +766,38 @@ class BatchProcessor:
             )
 
             actions.append(action)
-            self._record_generated_content_memory(
-                agent_id=str(agent_id),
-                action_type="POST",
-                content=res_txt,
-                metadata={"agent_attrs": pending_item[6] if len(pending_item) >= 7 else {}},
-            )
+            payload = {
+                "agent_id": str(agent_id),
+                "action_type": "POST",
+                "content": res_txt,
+                "metadata": {"agent_attrs": pending_item[6] if len(pending_item) >= 7 else {}},
+                "target_post_id": None,
+            }
+            action_payloads.append(payload)
+            reflection_inputs.append({"agent_id": str(agent_id), "text": res_txt})
 
         # Batch extract emotions if any texts collected
         if texts_for_emotions:
             self._batch_extract_and_update_emotions(texts_for_emotions, action_start_idx, actions)
+
+        absorb_triplets_batch = self._extract_absorb_triplets_batch(reflection_inputs)
+        for idx, absorb_triplets in enumerate(absorb_triplets_batch):
+            action_idx = action_start_idx + idx
+            if action_idx < len(actions):
+                actions[action_idx].memory_metadata = {
+                    "ghostkg_absorb_triplets": absorb_triplets
+                }
+
+        reflection_triplets_batch = self._extract_reflection_triplets_batch(reflection_inputs)
+        for payload, reflection_triplets in zip(action_payloads, reflection_triplets_batch):
+            self._record_generated_content_memory(
+                agent_id=payload["agent_id"],
+                action_type=payload["action_type"],
+                content=payload["content"],
+                metadata=payload["metadata"],
+                target_post_id=payload["target_post_id"],
+                reflection_triplets=reflection_triplets,
+            )
 
     def gather_pending_llm_reactions(
         self,
@@ -789,6 +979,9 @@ class BatchProcessor:
                     updated_opinions=updated_opinions,
                 )
                 actions.append(action)
+                action.memory_metadata = {
+                    "ghostkg_absorb_triplets": self._extract_absorb_triplets(str(a_id), res_act)
+                }
                 self._record_generated_content_memory(
                     agent_id=str(a_id),
                     action_type=determined_action_type,
@@ -1148,12 +1341,19 @@ class BatchProcessor:
                 updated_opinions=None,  # Will be updated by batch processing
             )
             actions.append(action)
+            action.memory_metadata = {
+                "ghostkg_absorb_triplets": self._extract_absorb_triplets(
+                    str(agent_id), comment_text
+                )
+            }
+            reflection_triplets = self._extract_reflection_triplets(str(agent_id), comment_text)
             self._record_generated_content_memory(
                 agent_id=str(agent_id),
                 action_type="COMMENT",
                 content=comment_text,
                 metadata=metadata,
                 target_post_id=target_post,
+                reflection_triplets=reflection_triplets,
             )
 
             # Track for secondary follow
@@ -1307,12 +1507,19 @@ class BatchProcessor:
                 updated_opinions=None,  # Will be updated by batch processing
             )
             actions.append(action)
+            action.memory_metadata = {
+                "ghostkg_absorb_triplets": self._extract_absorb_triplets(
+                    str(agent_id), share_text
+                )
+            }
+            reflection_triplets = self._extract_reflection_triplets(str(agent_id), share_text)
             self._record_generated_content_memory(
                 agent_id=str(agent_id),
                 action_type="SHARE",
                 content=share_text,
                 metadata=item[4],
                 target_post_id=target_post,
+                reflection_triplets=reflection_triplets,
             )
 
             # Track for secondary follow

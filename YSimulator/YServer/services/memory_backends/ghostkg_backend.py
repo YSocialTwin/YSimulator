@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
+import sys
 import traceback
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
@@ -35,6 +36,7 @@ class GhostKGMemoryBackend(MemoryBackend):
         self._llm_service = None
         self._fast_extractor = None
         self._extraction_mode = str(self._cfg("extraction_mode", "triplets")).lower()
+        self._external_triplets_only = bool(self._cfg("external_triplets_only", True))
         self._relation_whitelist = set(self._cfg("relation_whitelist", []) or [])
         self._resolved_db_url: Optional[str] = None
         self._resolved_db_path: Optional[str] = None
@@ -45,13 +47,18 @@ class GhostKGMemoryBackend(MemoryBackend):
 
     def initialize(self, simulation_context: Dict[str, Any]) -> None:
         try:
-            # Prefer direct submodule imports to avoid triggering optional
-            # heavy extraction dependencies during top-level package import.
-            try:
-                from ghost_kg.core.manager import AgentManager
-                from ghost_kg.memory.fsrs import Rating
-            except Exception:
-                from ghost_kg import AgentManager, Rating
+            # Support test monkeypatching of `ghost_kg` module first.
+            # Otherwise prefer direct submodule imports to avoid heavy optional imports.
+            patched = sys.modules.get("ghost_kg")
+            if patched is not None and hasattr(patched, "AgentManager") and hasattr(patched, "Rating"):
+                AgentManager = getattr(patched, "AgentManager")
+                Rating = getattr(patched, "Rating")
+            else:
+                try:
+                    from ghost_kg.core.manager import AgentManager
+                    from ghost_kg.memory.fsrs import Rating
+                except Exception:
+                    from ghost_kg import AgentManager, Rating
 
             # Resolution priority:
             # 1) explicit ghostkg.db_url
@@ -103,6 +110,12 @@ class GhostKGMemoryBackend(MemoryBackend):
             target_user_id = event.get("target_user_id")
             content = event.get("content") or self._default_content(action_type, topic, target_user_id)
             metadata = event.get("metadata", {}) if isinstance(event.get("metadata"), dict) else {}
+            absorb_triplets = self._normalize_absorb_triplets(
+                metadata.get("ghostkg_absorb_triplets")
+            )
+            reflection_triplets = self._normalize_reflection_triplets(
+                metadata.get("ghostkg_reflection_triplets")
+            )
 
             # Write-back phase: generated text should reinforce personal beliefs.
             if str(metadata.get("memory_phase", "")).lower() == "write_back":
@@ -113,11 +126,14 @@ class GhostKGMemoryBackend(MemoryBackend):
                     topic=topic,
                     target_user_id=target_user_id,
                     simulation_context=context,
+                    triplets=reflection_triplets,
                 )
                 return IngestResult(success=True, updated=1)
 
             try:
-                if self._extraction_mode in {"fast", "llm"} and content:
+                if absorb_triplets:
+                    self._ingest_with_external_triplets(agent_id, str(content), absorb_triplets, target_user_id)
+                elif self._extraction_mode in {"fast", "llm"} and content and not self._external_triplets_only:
                     self._ingest_with_content_extraction(agent_id, content, action_type, target_user_id)
                 else:
                     self._ingest_with_direct_triplet(agent_id, action_type, topic, target_user_id)
@@ -131,7 +147,11 @@ class GhostKGMemoryBackend(MemoryBackend):
                 )
                 if "created_at" in str(primary_error):
                     self._set_agent_synthetic_datetime(agent_id, context)
-                    if self._extraction_mode in {"fast", "llm"} and content:
+                    if absorb_triplets:
+                        self._ingest_with_external_triplets(
+                            agent_id, str(content), absorb_triplets, target_user_id
+                        )
+                    elif self._extraction_mode in {"fast", "llm"} and content and not self._external_triplets_only:
                         self._ingest_with_content_extraction(
                             agent_id, content, action_type, target_user_id
                         )
@@ -290,6 +310,22 @@ class GhostKGMemoryBackend(MemoryBackend):
             fast_mode=use_fast_mode,
         )
 
+    def _ingest_with_external_triplets(
+        self,
+        agent_id: str,
+        content: str,
+        triplets: List[tuple[str, str, str]],
+        target_user_id: Optional[str],
+    ) -> None:
+        author = str(target_user_id or "User")
+        self.manager.absorb_content(
+            agent_id,
+            str(content),
+            author=author,
+            triplets=triplets,
+            fast_mode=False,
+        )
+
     def _ingest_with_direct_triplet(
         self,
         agent_id: str,
@@ -308,6 +344,7 @@ class GhostKGMemoryBackend(MemoryBackend):
         topic: Optional[str],
         target_user_id: Optional[str],
         simulation_context: Optional[Dict[str, Any]] = None,
+        triplets: Optional[List[tuple[str, str, float]]] = None,
     ) -> None:
         response_text = str(response_text or "").strip()
         if not response_text:
@@ -315,8 +352,22 @@ class GhostKGMemoryBackend(MemoryBackend):
 
         context_str = self._normalize_context(context_used)
 
+        if triplets:
+            self._safe_update_with_response(
+                agent_id=agent_id,
+                response_text=response_text,
+                triplets=triplets,
+                context_str=context_str,
+                simulation_context=simulation_context,
+            )
+            return
+
         # Full cognitive reflection path (LLM mode): let GhostKG infer self-expressed stances.
-        if self._extraction_mode == "llm" and self._llm_service is not None:
+        if (
+            self._extraction_mode == "llm"
+            and self._llm_service is not None
+            and not self._external_triplets_only
+        ):
             self._safe_update_with_response(
                 agent_id=agent_id,
                 response_text=response_text,
@@ -327,7 +378,7 @@ class GhostKGMemoryBackend(MemoryBackend):
             return
 
         # Fast mode: extract self-reaction triplets without full LLM reflection.
-        if self._extraction_mode == "fast":
+        if self._extraction_mode == "fast" and not self._external_triplets_only:
             extractor = self._build_fast_extractor_if_needed()
             if extractor is not None:
                 try:
@@ -506,3 +557,36 @@ class GhostKGMemoryBackend(MemoryBackend):
         if key in self.backend_config:
             return self.backend_config[key]
         return self.config.get(key, default)
+
+    @staticmethod
+    def _normalize_absorb_triplets(value: Any) -> List[tuple[str, str, str]]:
+        if not isinstance(value, list):
+            return []
+        cleaned: List[tuple[str, str, str]] = []
+        for item in value:
+            if not isinstance(item, (list, tuple)) or len(item) != 3:
+                continue
+            source = str(item[0]).strip()
+            relation = str(item[1]).strip()
+            target = str(item[2]).strip()
+            if source and relation and target:
+                cleaned.append((source, relation, target))
+        return cleaned
+
+    @staticmethod
+    def _normalize_reflection_triplets(value: Any) -> List[tuple[str, str, float]]:
+        if not isinstance(value, list):
+            return []
+        cleaned: List[tuple[str, str, float]] = []
+        for item in value:
+            if not isinstance(item, (list, tuple)) or len(item) != 3:
+                continue
+            relation = str(item[0]).strip()
+            target = str(item[1]).strip()
+            try:
+                sentiment = float(item[2])
+            except (TypeError, ValueError):
+                sentiment = 0.0
+            if relation and target:
+                cleaned.append((relation, target, max(-1.0, min(1.0, sentiment))))
+        return cleaned

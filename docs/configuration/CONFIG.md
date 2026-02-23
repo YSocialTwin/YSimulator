@@ -1566,6 +1566,7 @@ YSimulator supports pluggable memory backends through `agent_memory`:
       "db_path": "database_server.db",
       "db_url": null,
       "store_log_content": false,
+      "external_triplets_only": true,
 
       "extraction_mode": "triplets",
       "relation_whitelist": [
@@ -1608,13 +1609,14 @@ YSimulator supports pluggable memory backends through `agent_memory`:
 - `agent_memory.ghostkg.db_path` (str): Database file path (default shares simulation DB file).
 - `agent_memory.ghostkg.db_url` (str|null): Optional SQLAlchemy URL (takes precedence over `db_path`).
 - `agent_memory.ghostkg.store_log_content` (bool): Store full content in GhostKG logs vs UUID references.
+- `agent_memory.ghostkg.external_triplets_only` (bool): If `true` (default), GhostKG adapter never triggers GhostKG internal LLM/fast extraction and only consumes triplets provided by YSimulator metadata.
 
 #### Triplet Extraction Mode
 
 - `agent_memory.ghostkg.extraction_mode` controls how knowledge is ingested:
-  - `triplets`: cheapest mode, YSimulator maps actions directly to deterministic triplets (recommended default for scale).
-  - `fast`: content-based extraction using GhostKG fast mode (`fast_mode=True`) when content is available.
-  - `llm`: content-based extraction using GhostKG LLM path (`fast_mode=False`), requires LLM provider config/dependencies.
+  - `triplets`: deterministic direct mapping from actions/topics to triplets.
+  - `fast`: use GhostKG fast extractor, only when `external_triplets_only=false`.
+  - `llm`: use GhostKG internal LLM extractor, only when `external_triplets_only=false`.
 
 #### Relation Control
 
@@ -1628,6 +1630,17 @@ YSimulator supports pluggable memory backends through `agent_memory`:
 - `agent_memory.ghostkg.llm_base_url` (str|null): Host/base URL (e.g., Ollama endpoint).
 - `agent_memory.ghostkg.llm_api_key` (str|null): API key inline.
 - `agent_memory.ghostkg.llm_api_key_env` (str|null): Environment variable name for API key fallback.
+
+#### Prompt Templates For YSimulator-Side GhostKG Extraction
+
+When `external_triplets_only=true`, extraction is executed by YSimulator LLM services using prompt templates from `prompts.json`:
+
+- `ghostkg_extract_absorb.system_template`
+- `ghostkg_extract_absorb.user_template`
+- `ghostkg_extract_reflection.system_template`
+- `ghostkg_extract_reflection.user_template`
+
+The default templates mirror GhostKG internals (`extract()` + `reflect()`) and can be customized per experiment.
 
 ### Recommended Mode Selection
 

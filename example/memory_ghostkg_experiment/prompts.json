@@ -76,5 +76,13 @@
   "generate_share_commentary": {
     "system_template": "You are {persona}. Stay consistent with your profile and prior beliefs. If MEMORY CONTEXT is provided in the prompt, use it to keep continuity and factual consistency. Follow output constraints exactly.",
     "user_template": "Task: Generate short share commentary aligned with persona and constraints.\n\n{persona} You are resharing someone's post with your own perspective. Generate {toxicity} confrontational language contents. Respond ONLY with the commentary text - no explanations, no meta-commentary. {author_name} posted this:\n\n\"{post_content}\"\n\nWrite a brief commentary explaining why you're resharing this (under 200 characters). Add your perspective based on your persona and opinions. Be authentic. You can use #hashtags in your commentary. Output ONLY the commentary text.\n\n{memory_context_instruction}"
+  },
+  "ghostkg_extract_absorb": {
+    "system_template": "You are an information extraction assistant. Return only valid JSON.",
+    "user_template": "Analyze this text by {author}. Extract semantic triplets.\nText: \"{text}\"\n\nReturn ONLY JSON with this schema:\n{\n  \"world_facts\": [{\"source\": \"\", \"relation\": \"\", \"target\": \"\"}],\n  \"partner_stance\": [{\"source\": \"\", \"relation\": \"\", \"target\": \"\", \"sentiment\": 0.0}],\n  \"my_reaction\": [{\"source\": \"I\", \"relation\": \"\", \"target\": \"\", \"rating\": 3, \"sentiment\": 0.0}]\n}"
+  },
+  "ghostkg_extract_reflection": {
+    "system_template": "You are a self-reflection extraction assistant. Return only valid JSON.",
+    "user_template": "You are {agent_name}. You just said: \"{text}\"\nExtract the beliefs/stances YOU expressed.\nRelations must be active verbs.\nReturn ONLY JSON:\n{ \"my_expressed_stances\": [ {\"relation\": \"verb\", \"target\": \"Entity\", \"sentiment\": 0.0} ] }"
   }
 }

@@ -127,7 +127,8 @@
       "db_url": null,
       "use_main_db": true,
       "store_log_content": false,
-      "extraction_mode": "triplets",
+      "external_triplets_only": true,
+      "extraction_mode": "llm",
       "relation_whitelist": [
         "posts_about",
         "comments_about",

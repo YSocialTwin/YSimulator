@@ -8,12 +8,39 @@ The interface is designed to be compatible with the existing LLMService pattern.
 
 import logging
 import os
+import json
+import re
 from typing import Any, Dict, List, Optional, Tuple
 
 import ray
 
 # Initialize logger
 logger = logging.getLogger(__name__)
+
+DEFAULT_GHOSTKG_ABSORB_PROMPTS = {
+    "system_template": "You are an information extraction assistant. Return only valid JSON.",
+    "user_template": (
+        "Analyze this text by {author}. Extract semantic triplets.\n"
+        "Text: \"{text}\"\n\n"
+        "Return ONLY JSON with this schema:\n"
+        "{\n"
+        "  \"world_facts\": [{\"source\": \"\", \"relation\": \"\", \"target\": \"\"}],\n"
+        "  \"partner_stance\": [{\"source\": \"\", \"relation\": \"\", \"target\": \"\", \"sentiment\": 0.0}],\n"
+        "  \"my_reaction\": [{\"source\": \"I\", \"relation\": \"\", \"target\": \"\", \"rating\": 3, \"sentiment\": 0.0}]\n"
+        "}"
+    ),
+}
+
+DEFAULT_GHOSTKG_REFLECTION_PROMPTS = {
+    "system_template": "You are a self-reflection extraction assistant. Return only valid JSON.",
+    "user_template": (
+        "You are {agent_name}. You just said: \"{text}\"\n"
+        "Extract the beliefs/stances YOU expressed.\n"
+        "Relations must be active verbs.\n"
+        "Return ONLY JSON:\n"
+        "{ \"my_expressed_stances\": [ {\"relation\": \"verb\", \"target\": \"Entity\", \"sentiment\": 0.0} ] }"
+    ),
+}
 
 
 @ray.remote
@@ -2466,3 +2493,165 @@ class VLLMService:
             logger.error(f"[vLLM] Batch search action decision failed: {e}")
             logger.error(f"[vLLM] Number of requests: {len(requests)}")
             raise RuntimeError(f"vLLM batch search action decision failed: {e}") from e
+
+    @staticmethod
+    def _extract_json_block(raw_text: str) -> Dict[str, Any]:
+        text = str(raw_text or "").strip()
+        if not text:
+            return {}
+        try:
+            return json.loads(text)
+        except Exception:
+            pass
+        fenced_match = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", text, flags=re.DOTALL)
+        if fenced_match:
+            try:
+                return json.loads(fenced_match.group(1))
+            except Exception:
+                pass
+        start = text.find("{")
+        end = text.rfind("}")
+        if start >= 0 and end > start:
+            try:
+                return json.loads(text[start : end + 1])
+            except Exception:
+                return {}
+        return {}
+
+    @staticmethod
+    def _sanitize_absorb_triplets(payload: Any) -> List[List[Any]]:
+        if not isinstance(payload, dict):
+            return []
+        triplets: List[List[Any]] = []
+        sections = [
+            ("world_facts", False),
+            ("partner_stance", False),
+            ("my_reaction", True),
+        ]
+        for section_name, force_i_source in sections:
+            for item in payload.get(section_name, []) or []:
+                if not isinstance(item, dict):
+                    continue
+                source = "I" if force_i_source else str(item.get("source", "")).strip()
+                relation = str(item.get("relation", "")).strip()
+                target = str(item.get("target", "")).strip()
+                if source and relation and target:
+                    triplets.append([source, relation, target])
+        return triplets
+
+    @staticmethod
+    def _sanitize_reflection_triplets(payload: Any) -> List[List[Any]]:
+        if not isinstance(payload, dict):
+            return []
+        triplets: List[List[Any]] = []
+        for item in payload.get("my_expressed_stances", []) or []:
+            if not isinstance(item, dict):
+                continue
+            relation = str(item.get("relation", "")).strip()
+            target = str(item.get("target", "")).strip()
+            try:
+                sentiment = float(item.get("sentiment", 0.0) or 0.0)
+            except (TypeError, ValueError):
+                sentiment = 0.0
+            sentiment = max(-1.0, min(1.0, sentiment))
+            if relation and target:
+                triplets.append([relation, target, sentiment])
+        return triplets
+
+    def extract_ghostkg_absorb_triplets(
+        self, text: str, author: str = "User", agent_name: str = "Agent"
+    ) -> List[List[Any]]:
+        cfg = self.prompts_config.get("ghostkg_extract_absorb", {})
+        system_template = cfg.get("system_template", DEFAULT_GHOSTKG_ABSORB_PROMPTS["system_template"])
+        user_template = cfg.get("user_template", DEFAULT_GHOSTKG_ABSORB_PROMPTS["user_template"])
+        prompt = self._format_prompt(
+            system_template, user_template.format(text=text, author=author, agent_name=agent_name)
+        )
+        try:
+            outputs = self.llm.generate([prompt], self.sampling_params)
+            raw = outputs[0].outputs[0].text
+            return self._sanitize_absorb_triplets(self._extract_json_block(raw))
+        except Exception as e:
+            logger.warning(f"[vLLM] GhostKG absorb extraction failed: {e}")
+            return []
+
+    def extract_ghostkg_reflection_triplets(
+        self, text: str, agent_name: str = "Agent"
+    ) -> List[List[Any]]:
+        cfg = self.prompts_config.get("ghostkg_extract_reflection", {})
+        system_template = cfg.get(
+            "system_template", DEFAULT_GHOSTKG_REFLECTION_PROMPTS["system_template"]
+        )
+        user_template = cfg.get("user_template", DEFAULT_GHOSTKG_REFLECTION_PROMPTS["user_template"])
+        prompt = self._format_prompt(system_template, user_template.format(text=text, agent_name=agent_name))
+        try:
+            outputs = self.llm.generate([prompt], self.sampling_params)
+            raw = outputs[0].outputs[0].text
+            return self._sanitize_reflection_triplets(self._extract_json_block(raw))
+        except Exception as e:
+            logger.warning(f"[vLLM] GhostKG reflection extraction failed: {e}")
+            return []
+
+    def extract_ghostkg_reflection_triplets_batch(
+        self, requests: List[Dict[str, Any]]
+    ) -> List[List[List[Any]]]:
+        try:
+            cfg = self.prompts_config.get("ghostkg_extract_reflection", {})
+            system_template = cfg.get(
+                "system_template", DEFAULT_GHOSTKG_REFLECTION_PROMPTS["system_template"]
+            )
+            user_template = cfg.get(
+                "user_template", DEFAULT_GHOSTKG_REFLECTION_PROMPTS["user_template"]
+            )
+            prompts: List[str] = []
+            for req in requests or []:
+                prompt = self._format_prompt(
+                    system_template,
+                    user_template.format(
+                        text=str(req.get("text", "") or ""),
+                        agent_name=str(req.get("agent_name", "Agent") or "Agent"),
+                    ),
+                )
+                prompts.append(prompt)
+            if not prompts:
+                return []
+            outputs = self.llm.generate(prompts, self.sampling_params)
+            triplets: List[List[List[Any]]] = []
+            for output in outputs:
+                raw = output.outputs[0].text
+                triplets.append(self._sanitize_reflection_triplets(self._extract_json_block(raw)))
+            return triplets
+        except Exception as e:
+            logger.warning(f"[vLLM] GhostKG reflection batch extraction failed: {e}")
+            return [[] for _ in requests]
+
+    def extract_ghostkg_absorb_triplets_batch(
+        self, requests: List[Dict[str, Any]]
+    ) -> List[List[List[Any]]]:
+        try:
+            cfg = self.prompts_config.get("ghostkg_extract_absorb", {})
+            system_template = cfg.get("system_template", DEFAULT_GHOSTKG_ABSORB_PROMPTS["system_template"])
+            user_template = cfg.get("user_template", DEFAULT_GHOSTKG_ABSORB_PROMPTS["user_template"])
+            prompts: List[str] = []
+            for req in requests or []:
+                prompts.append(
+                    self._format_prompt(
+                        system_template,
+                        user_template.format(
+                            text=str(req.get("text", "") or ""),
+                            author=str(req.get("author", "User") or "User"),
+                            agent_name=str(req.get("agent_name", "Agent") or "Agent"),
+                        ),
+                    )
+                )
+            if not prompts:
+                return []
+            outputs = self.llm.generate(prompts, self.sampling_params)
+            triplets: List[List[List[Any]]] = []
+            for output in outputs:
+                raw = output.outputs[0].text
+                triplets.append(self._sanitize_absorb_triplets(self._extract_json_block(raw)))
+            return triplets
+        except Exception as e:
+            logger.warning(f"[vLLM] GhostKG absorb batch extraction failed: {e}")
+            return [[] for _ in requests]
