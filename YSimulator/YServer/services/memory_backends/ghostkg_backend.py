@@ -264,6 +264,9 @@ class GhostKGMemoryBackend(MemoryBackend):
         agent.set_time(synthetic_now)
 
     def _build_llm_service_if_needed(self):
+        # In external-triplets mode, all LLM calls must happen client-side.
+        if self._external_triplets_only:
+            return None
         if self._extraction_mode != "llm":
             return None
 

@@ -470,3 +470,38 @@ def test_ghostkg_backend_falls_back_to_direct_triplet_on_float_rating_error(monk
     )
     assert ingest.success is True
     assert backend.manager.learn_calls == 1
+
+
+def test_ghostkg_backend_external_triplets_mode_never_builds_server_llm_service(monkeypatch):
+    class FakeRating:
+        Good = 3
+        Hard = 2
+
+    class FakeManager:
+        def __init__(self, db_path="db", db_url=None, store_log_content=False):
+            self._agents = {}
+
+        def create_agent(self, name, llm_service=None):
+            self._agents[name] = object()
+            return self._agents[name]
+
+        def get_agent(self, name):
+            class _Agent:
+                def set_time(self, _time):
+                    return None
+
+            return _Agent()
+
+        def learn_triplet(self, *args, **kwargs):
+            return None
+
+    fake_module = types.SimpleNamespace(AgentManager=FakeManager, Rating=FakeRating)
+    monkeypatch.setitem(sys.modules, "ghost_kg", fake_module)
+
+    backend = GhostKGMemoryBackend(
+        backend_config={"extraction_mode": "llm", "external_triplets_only": True, "db_path": "fake.db"}
+    )
+    backend.initialize({"day": 1, "slot": 1})
+
+    assert backend.health_check().ok is True
+    assert backend._llm_service is None
