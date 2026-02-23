@@ -128,6 +128,7 @@
       "use_main_db": true,
       "store_log_content": false,
       "external_triplets_only": true,
+      "ensure_datetime_clock": true,
       "extraction_mode": "llm",
       "relation_whitelist": [
         "posts_about",
