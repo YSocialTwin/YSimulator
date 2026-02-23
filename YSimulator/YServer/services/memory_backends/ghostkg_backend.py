@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
 from YSimulator.YServer.services.memory_backends.base import (
@@ -152,7 +153,13 @@ class GhostKGMemoryBackend(MemoryBackend):
         day = int(context.get("day", 1) or 1)
         slot = int(context.get("slot", 0) or 0)
         agent = self.manager.get_agent(agent_id)
-        agent.set_time((max(1, day), min(23, max(0, slot))))
+        # Use synthetic UTC datetime to avoid NULL timestamp writes in some GhostKG paths.
+        safe_day = max(1, day)
+        safe_hour = min(23, max(0, slot))
+        synthetic_now = datetime(2025, 1, 1, tzinfo=timezone.utc) + timedelta(
+            days=safe_day - 1, hours=safe_hour
+        )
+        agent.set_time(synthetic_now)
 
     def _build_llm_service_if_needed(self):
         if self._extraction_mode != "llm":

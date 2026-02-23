@@ -38,21 +38,16 @@ class PostGenerator(BaseActionGenerator):
         agent_attrs = self._extract_agent_attrs(agent)
         selected_topic = agent_attrs.get("topic")  # Get the sampled topic
 
-        # Retrieve memory context for the selected topic (if memory backend enabled).
-        memory_items = self._fetch_agent_memory(
+        # Retrieve memory context using shared bounded helper.
+        self._inject_memory_context(
             str(agent.id),
+            agent_attrs,
             {
                 "topic": selected_topic,
                 "action_type": "POST",
-                "max_items": 3,
             },
+            metadata=result.metadata,
         )
-        if memory_items:
-            agent_attrs["memory_context"] = [m.get("memory_text", "") for m in memory_items]
-            used_memory_ids = [m.get("memory_id") for m in memory_items if m.get("memory_id")]
-            if used_memory_ids:
-                self._record_memory_usage(str(agent.id), used_memory_ids)
-            result.metadata["memory_items_used"] = len(memory_items)
 
         if agent_type == "llm":
             # LLM: Fire off async call (don't wait for result yet)

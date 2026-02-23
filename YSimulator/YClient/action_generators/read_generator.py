@@ -147,6 +147,18 @@ class ReadGenerator(BaseActionGenerator):
                     agent_attrs["post_opinions"] = opinion_info["opinions"]
                     agent_attrs["post_opinion_values"] = opinion_info["opinion_values"]
 
+                # Inject bounded memory context for read/reaction decision.
+                self._inject_memory_context(
+                    str(agent.id),
+                    agent_attrs,
+                    {
+                        "topic": opinion_info["topics"][0] if opinion_info["topics"] else None,
+                        "thread_id": post_data.get("thread_id"),
+                        "action_type": "READ",
+                    },
+                    metadata=result.metadata,
+                )
+
                 # Fire off async LLM call to decide reaction
                 from YSimulator.YClient.actions.llm_actions import _should_use_vllm_batching
 

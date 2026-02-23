@@ -78,6 +78,19 @@ class ShareGenerator(BaseActionGenerator):
                 agent_attrs["post_opinions"] = opinion_info["opinions"]
                 agent_attrs["post_opinion_values"] = opinion_info["opinion_values"]
 
+            # Inject bounded memory context for topic/author continuity.
+            self._inject_memory_context(
+                str(agent.id),
+                agent_attrs,
+                {
+                    "topic": opinion_info["topics"][0] if opinion_info["topics"] else None,
+                    "target_user_id": str(author_id) if author_id else None,
+                    "thread_id": post_data.get("thread_id"),
+                    "action_type": "SHARE",
+                },
+                metadata=result.metadata,
+            )
+
             # Fire off async LLM call to generate share commentary
             future = generate_llm_share_async(
                 self.context.llm, agent.cluster, post_content, agent_attrs, author_name, agent.id

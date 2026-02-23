@@ -64,6 +64,7 @@ class ActionContext:
     activity_profiles: Dict[str, List[int]] = field(default_factory=dict)
     actions_likelihood: Dict[str, Any] = field(default_factory=dict)
     recsys_settings: Dict[str, Any] = field(default_factory=dict)
+    memory_settings: Dict[str, Any] = field(default_factory=dict)
     opinion_dynamics_config: Optional[Dict[str, Any]] = None
 
     # Helper functions
@@ -248,3 +249,65 @@ class BaseActionGenerator(ABC):
         if self.context.record_memory_usage_fn:
             return self.context.record_memory_usage_fn(agent_id, memory_ids)
         return False
+
+    def _inject_memory_context(
+        self,
+        agent_id: str,
+        agent_attrs: Dict[str, Any],
+        query: Dict[str, Any],
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        """
+        Retrieve memory and inject a token/character-budgeted context into `agent_attrs`.
+
+        This helper enforces consistent behavior across backends:
+        - `none` backend -> no memory context injected
+        - `native`/`ghostkg` -> bounded memory snippets injected
+
+        Args:
+            agent_id: Agent UUID
+            agent_attrs: Mutable agent attributes dict
+            query: Memory retrieval query payload
+            metadata: Optional metadata dict to enrich with usage stats
+        """
+        settings = self.context.memory_settings or {}
+        max_items = int(query.get("max_items") or settings.get("retrieval_top_k", 3))
+        max_total_chars = int(settings.get("prompt_memory_char_budget", 600))
+        max_item_chars = int(settings.get("prompt_memory_item_char_limit", 140))
+
+        memory_items = self._fetch_agent_memory(
+            str(agent_id),
+            {
+                **query,
+                "max_items": max_items,
+            },
+        )
+        if not memory_items:
+            return
+
+        snippets: List[str] = []
+        used_ids: List[str] = []
+        used_chars = 0
+        for item in memory_items:
+            text = str(item.get("memory_text", "")).strip()
+            if not text:
+                continue
+            text = text[:max_item_chars]
+            if used_chars + len(text) > max_total_chars:
+                break
+            snippets.append(text)
+            used_chars += len(text)
+            memory_id = item.get("memory_id")
+            if memory_id:
+                used_ids.append(str(memory_id))
+
+        if not snippets:
+            return
+
+        agent_attrs["memory_context"] = snippets
+        if used_ids:
+            self._record_memory_usage(str(agent_id), used_ids)
+
+        if metadata is not None:
+            metadata["memory_items_used"] = len(snippets)
+            metadata["memory_chars_used"] = used_chars

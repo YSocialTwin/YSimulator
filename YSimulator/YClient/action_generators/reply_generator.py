@@ -148,6 +148,19 @@ class ReplyGenerator(BaseActionGenerator):
                     agent_attrs["post_opinions"] = opinion_info["opinions"]
                     agent_attrs["post_opinion_values"] = opinion_info["opinion_values"]
 
+                # Inject bounded memory context for this reply thread/author.
+                self._inject_memory_context(
+                    str(agent.id),
+                    agent_attrs,
+                    {
+                        "topic": opinion_info["topics"][0] if opinion_info["topics"] else None,
+                        "target_user_id": str(author_id) if author_id else None,
+                        "thread_id": post_data.get("thread_id"),
+                        "action_type": "REPLY",
+                    },
+                    metadata=result.metadata,
+                )
+
                 future = generate_llm_reply_to_mention_async(
                     self.context.llm,
                     agent.cluster,

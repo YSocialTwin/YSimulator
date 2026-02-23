@@ -335,6 +335,18 @@ class SimulationClient:
                 "recsys_n_posts": self.recsys_n_posts,
                 "max_length_thread_reading": self.max_length_thread_reading,
             },
+            memory_settings={
+                "enabled": self.simulation_config.get("agent_memory", {}).get("enabled", False),
+                "retrieval_top_k": self.simulation_config.get("agent_memory", {}).get(
+                    "retrieval_top_k", 3
+                ),
+                "prompt_memory_char_budget": self.simulation_config.get("agent_memory", {}).get(
+                    "prompt_memory_char_budget", 600
+                ),
+                "prompt_memory_item_char_limit": self.simulation_config.get(
+                    "agent_memory", {}
+                ).get("prompt_memory_item_char_limit", 140),
+            },
             opinion_dynamics_config=(
                 self.opinion_dynamics_config if hasattr(self, "opinion_dynamics_config") else None
             ),

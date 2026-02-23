@@ -1552,6 +1552,8 @@ YSimulator supports pluggable memory backends through `agent_memory`:
     "enabled": true,
     "backend": "ghostkg",
     "retrieval_top_k": 5,
+    "prompt_memory_char_budget": 600,
+    "prompt_memory_item_char_limit": 140,
     "forgetting_cycle_interval_rounds": 24,
 
     "max_memories_per_agent": 500,
@@ -1589,6 +1591,8 @@ YSimulator supports pluggable memory backends through `agent_memory`:
 - `agent_memory.enabled` (bool): Master switch.
 - `agent_memory.backend` (`none|native|ghostkg`): Select runtime backend.
 - `agent_memory.retrieval_top_k` (int): Retrieval size hint for generators.
+- `agent_memory.prompt_memory_char_budget` (int): Max total characters injected into LLM context from memory.
+- `agent_memory.prompt_memory_item_char_limit` (int): Max characters per individual memory snippet.
 - `agent_memory.forgetting_cycle_interval_rounds` (int): Forgetting run cadence.
 
 ### Native Backend Parameters

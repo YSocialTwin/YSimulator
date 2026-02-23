@@ -173,23 +173,18 @@ class CommentGenerator(BaseActionGenerator):
                     agent_attrs["post_opinions"] = opinion_info["opinions"]
                     agent_attrs["post_opinion_values"] = opinion_info["opinion_values"]
 
-                # Retrieve memory context for this thread/author for better continuity.
-                memory_items = self._fetch_agent_memory(
+                # Retrieve bounded memory context for this thread/author.
+                self._inject_memory_context(
                     str(agent.id),
+                    agent_attrs,
                     {
                         "topic": opinion_info["topics"][0] if opinion_info["topics"] else None,
                         "target_user_id": str(author_id) if author_id else None,
                         "thread_id": post_data.get("thread_id"),
                         "action_type": "COMMENT",
-                        "max_items": 3,
                     },
+                    metadata=result.metadata,
                 )
-                if memory_items:
-                    agent_attrs["memory_context"] = [m.get("memory_text", "") for m in memory_items]
-                    used_memory_ids = [m.get("memory_id") for m in memory_items if m.get("memory_id")]
-                    if used_memory_ids:
-                        self._record_memory_usage(str(agent.id), used_memory_ids)
-                    result.metadata["memory_items_used"] = len(memory_items)
 
                 # Fire off async LLM call to generate comment
                 from YSimulator.YClient.actions.llm_actions import (
