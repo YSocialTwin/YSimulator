@@ -437,6 +437,19 @@ class BatchProcessor:
         return fallback
 
     @staticmethod
+    def _get_post_text(post_data: Optional[Dict[str, Any]], fallback: str = "") -> str:
+        """
+        Normalize post content retrieval across API variants.
+        """
+        if isinstance(post_data, dict):
+            for key in ("tweet", "text", "content"):
+                value = post_data.get(key)
+                txt = str(value or "").strip()
+                if txt:
+                    return txt
+        return str(fallback or "")
+
+    @staticmethod
     def _filter_absorb_triplets_for_author(
         triplets: List[List[Any]], agent_id: str, author: Optional[str]
     ) -> List[List[Any]]:
@@ -1171,7 +1184,7 @@ class BatchProcessor:
                 self._set_absorb_memory_metadata(
                     action,
                     str(a_id),
-                    post_data.get("tweet", "") if post_data else None,
+                    self._get_post_text(post_data) if post_data else None,
                     author=self._resolve_author_label(post_data),
                 )
                 self._record_generated_content_memory(
@@ -1195,7 +1208,7 @@ class BatchProcessor:
                 # Track for secondary follow
                 if post_data:
                     secondary_follow_candidates.append(
-                        (a_id, cid, post_data.get("user_id"), post_data.get("tweet", ""), True)
+                        (a_id, cid, post_data.get("user_id"), self._get_post_text(post_data), True)
                     )
             elif res_act.upper() != "IGNORE":
                 # This is a reaction type (or SHARE)
@@ -1209,7 +1222,7 @@ class BatchProcessor:
                     )
 
                     # Generate LLM commentary for the share (synchronous call since we're in gather phase)
-                    post_content = post_data.get("tweet", "") if post_data else ""
+                    post_content = self._get_post_text(post_data) if post_data else ""
                     author_id = post_data.get("user_id") if post_data else None
 
                     # Get author username for context
@@ -1278,7 +1291,7 @@ class BatchProcessor:
                     # Track for secondary follow (share action)
                     if post_data:
                         secondary_follow_candidates.append(
-                            (a_id, cid, post_data.get("user_id"), post_data.get("tweet", ""), True)
+                            (a_id, cid, post_data.get("user_id"), self._get_post_text(post_data), True)
                         )
                 else:
                     # Regular reaction (LIKE, LOVE, LAUGH, ANGRY, SAD)
@@ -1290,12 +1303,12 @@ class BatchProcessor:
                     self._set_absorb_memory_metadata(
                         action,
                         str(a_id),
-                        post_data.get("tweet", "") if post_data else None,
+                        self._get_post_text(post_data) if post_data else None,
                         author=self._resolve_author_label(post_data),
                     )
                     if post_data:
                         secondary_follow_candidates.append(
-                            (a_id, cid, post_data.get("user_id"), post_data.get("tweet", ""), True)
+                            (a_id, cid, post_data.get("user_id"), self._get_post_text(post_data), True)
                         )
 
                 actions.append(action)
@@ -1548,7 +1561,7 @@ class BatchProcessor:
             self._set_absorb_memory_metadata(
                 action,
                 str(agent_id),
-                post_data.get("tweet", "") if post_data else metadata.get("post_content", ""),
+                self._get_post_text(post_data) if post_data else metadata.get("post_content", ""),
                 author=self._resolve_author_label(post_data, metadata.get("author_name") or "Author"),
             )
             reflection_triplets = self._extract_reflection_triplets(str(agent_id), comment_text)
@@ -1568,7 +1581,7 @@ class BatchProcessor:
                         agent_id,
                         cluster_id,
                         post_data.get("user_id"),
-                        post_data.get("tweet", ""),
+                        self._get_post_text(post_data),
                         True,
                     )
                 )
@@ -1715,7 +1728,7 @@ class BatchProcessor:
             self._set_absorb_memory_metadata(
                 action,
                 str(agent_id),
-                post_data.get("tweet", "") if post_data else item[4].get("post_content", ""),
+                self._get_post_text(post_data) if post_data else item[4].get("post_content", ""),
                 author=item[4].get("author_name") or "Author",
             )
             reflection_triplets = self._extract_reflection_triplets(str(agent_id), share_text)
@@ -1735,7 +1748,7 @@ class BatchProcessor:
                         agent_id,
                         cluster_id,
                         post_data.get("user_id"),
-                        post_data.get("tweet", ""),
+                        self._get_post_text(post_data),
                         True,
                     )
                 )
@@ -1888,7 +1901,7 @@ class BatchProcessor:
                 self._set_absorb_memory_metadata(
                     action,
                     str(agent_id),
-                    post_data.get("tweet", "") if post_data else item[4].get("post_content", ""),
+                    self._get_post_text(post_data) if post_data else item[4].get("post_content", ""),
                     author=self._resolve_author_label(post_data),
                 )
                 self._record_generated_content_memory(
@@ -1906,7 +1919,7 @@ class BatchProcessor:
                             agent_id,
                             cluster_id,
                             post_data.get("user_id"),
-                            post_data.get("tweet", ""),
+                            self._get_post_text(post_data),
                             True,
                         )
                     )
@@ -1950,7 +1963,7 @@ class BatchProcessor:
                 self._set_absorb_memory_metadata(
                     action,
                     str(agent_id),
-                    post_data.get("tweet", "") if post_data else item[4].get("post_content", ""),
+                    self._get_post_text(post_data) if post_data else item[4].get("post_content", ""),
                     author=self._resolve_author_label(post_data),
                 )
 
@@ -1961,7 +1974,7 @@ class BatchProcessor:
                             agent_id,
                             cluster_id,
                             post_data.get("user_id"),
-                            post_data.get("tweet", ""),
+                            self._get_post_text(post_data),
                             True,
                         )
                     )
@@ -2138,7 +2151,7 @@ class BatchProcessor:
                 self._set_absorb_memory_metadata(
                     action,
                     str(agent_id),
-                    post_data.get("tweet", "") if post_data else metadata.get("post_content", ""),
+                    self._get_post_text(post_data) if post_data else metadata.get("post_content", ""),
                     author=self._resolve_author_label(post_data),
                 )
                 self._record_generated_content_memory(
@@ -2156,7 +2169,7 @@ class BatchProcessor:
                             agent_id,
                             cluster_id,
                             post_data.get("user_id"),
-                            post_data.get("tweet", ""),
+                            self._get_post_text(post_data),
                             True,
                         )
                     )
@@ -2206,7 +2219,7 @@ class BatchProcessor:
                 self._set_absorb_memory_metadata(
                     action,
                     str(agent_id),
-                    post_data.get("tweet", "") if post_data else metadata.get("post_content", ""),
+                    self._get_post_text(post_data) if post_data else metadata.get("post_content", ""),
                     author=self._resolve_author_label(post_data),
                 )
                 self._record_generated_content_memory(
@@ -2224,7 +2237,7 @@ class BatchProcessor:
                             agent_id,
                             cluster_id,
                             post_data.get("user_id"),
-                            post_data.get("tweet", ""),
+                            self._get_post_text(post_data),
                             True,
                         )
                     )
@@ -2253,7 +2266,7 @@ class BatchProcessor:
                 self._set_absorb_memory_metadata(
                     action,
                     str(agent_id),
-                    post_data.get("tweet", "") if post_data else metadata.get("post_content", ""),
+                    self._get_post_text(post_data) if post_data else metadata.get("post_content", ""),
                     author=self._resolve_author_label(post_data),
                 )
 
@@ -2264,7 +2277,7 @@ class BatchProcessor:
                             agent_id,
                             cluster_id,
                             post_data.get("user_id"),
-                            post_data.get("tweet", ""),
+                            self._get_post_text(post_data),
                             True,
                         )
                     )

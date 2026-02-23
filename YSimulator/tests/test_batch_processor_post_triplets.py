@@ -103,3 +103,8 @@ def test_heuristic_fallback_generates_non_empty_triplets():
     )
     assert len(absorb) >= 1
     assert len(reflection) >= 1
+
+
+def test_get_post_text_supports_text_and_tweet_keys():
+    assert BatchProcessor._get_post_text({"text": "hello"}) == "hello"
+    assert BatchProcessor._get_post_text({"tweet": "world"}) == "world"
