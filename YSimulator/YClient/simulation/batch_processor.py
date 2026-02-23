@@ -378,6 +378,85 @@ class BatchProcessor:
         if triplets:
             action.memory_metadata = {"ghostkg_absorb_triplets": triplets}
 
+    @staticmethod
+    def _is_uuid_like(value: Optional[str]) -> bool:
+        if not value:
+            return False
+        try:
+            uuid.UUID(str(value))
+            return True
+        except Exception:
+            return False
+
+    @staticmethod
+    def _extract_selected_post_topics(
+        explicit_topic_or_article: Optional[str], agent_attrs: Optional[Dict[str, Any]]
+    ) -> List[str]:
+        topics: List[str] = []
+
+        if isinstance(agent_attrs, dict):
+            topic = str(agent_attrs.get("topic", "") or "").strip()
+            if topic:
+                topics.append(topic)
+            post_topics = agent_attrs.get("post_topics")
+            if isinstance(post_topics, list):
+                for item in post_topics:
+                    topic_name = str(item or "").strip()
+                    if topic_name:
+                        topics.append(topic_name)
+
+        explicit = str(explicit_topic_or_article or "").strip()
+        if explicit and not BatchProcessor._is_uuid_like(explicit):
+            topics.append(explicit)
+
+        deduped: List[str] = []
+        seen: set[str] = set()
+        for topic in topics:
+            key = topic.lower()
+            if key in seen:
+                continue
+            seen.add(key)
+            deduped.append(topic)
+        return deduped
+
+    @staticmethod
+    def _ensure_topic_subject_triplets(
+        triplets: List[List[Any]], selected_topics: List[str]
+    ) -> List[List[Any]]:
+        result = [list(item) for item in (triplets or []) if isinstance(item, list) and len(item) == 3]
+        existing_sources = {
+            str(item[0]).strip().lower()
+            for item in result
+            if str(item[0]).strip()
+        }
+        for topic in selected_topics:
+            source = str(topic).strip()
+            if not source:
+                continue
+            source_key = source.lower()
+            if source_key in existing_sources:
+                continue
+            # Enforce topic-as-subject anchor for each selected generation topic.
+            result.append([source, "is_topic_of", "generated_post"])
+            existing_sources.add(source_key)
+        return result
+
+    def _set_post_absorb_memory_metadata(
+        self,
+        action: ActionDTO,
+        agent_id: str,
+        generated_content: Optional[str],
+        explicit_topic_or_article: Optional[str],
+        agent_attrs: Optional[Dict[str, Any]],
+    ) -> None:
+        selected_topics = self._extract_selected_post_topics(explicit_topic_or_article, agent_attrs)
+        triplets = self._extract_absorb_triplets(
+            agent_id, str(generated_content or ""), author=str(agent_id)
+        )
+        triplets = self._ensure_topic_subject_triplets(triplets, selected_topics)
+        if triplets:
+            action.memory_metadata = {"ghostkg_absorb_triplets": triplets}
+
     def gather_pending_llm_posts(
         self,
         pending_llm_posts: List[Tuple],
@@ -450,6 +529,8 @@ class BatchProcessor:
             pending_item = pending_llm_posts[pending_idx]
             a_id = pending_item[0]
             cid = pending_item[1]
+            explicit_topic_or_article: Optional[str] = None
+            agent_attrs_for_memory: Optional[Dict[str, Any]] = None
 
             # Phase 3: Validate response
             res_txt = self.response_parser.parse_text_response(res_txt, default="")
@@ -472,6 +553,8 @@ class BatchProcessor:
                 )
                 action = ActionDTO(a_id, cid, "POST", content=res_txt)
                 action.image_id = image_id  # Set image_id as attribute
+                explicit_topic_or_article = None
+                agent_attrs_for_memory = agent_attrs if isinstance(agent_attrs, dict) else None
                 self.logger.info(
                     f"LLM image post for agent {a_id}: image_id={image_id}, "
                     f"has_image_id_attr={hasattr(action, 'image_id')}, content_len={len(res_txt)}"
@@ -483,6 +566,8 @@ class BatchProcessor:
                 action = ActionDTO(a_id, cid, "POST", content=res_txt)
                 action.image_id = image_id  # Set image_id as attribute
                 action.topic_ids = topic_ids  # Store for later processing
+                explicit_topic_or_article = None
+                agent_attrs_for_memory = None
                 self.logger.info(
                     f"LLM image post (old format) for agent {a_id}: image_id={image_id}, "
                     f"has_image_id_attr={hasattr(action, 'image_id')}, topics={len(topic_ids)}, content_len={len(res_txt)}"
@@ -492,6 +577,12 @@ class BatchProcessor:
                 # Or new format: (agent_id, cluster_id, future, topic, day, slot, agent_attrs)
                 # Extract topic from position 3 in both cases
                 topic_or_article = pending_item[3] if len(pending_item) > 3 else None
+                explicit_topic_or_article = str(topic_or_article) if topic_or_article else None
+                agent_attrs_for_memory = (
+                    pending_item[6]
+                    if len(pending_item) >= 7 and isinstance(pending_item[6], dict)
+                    else None
+                )
                 action = ActionDTO(a_id, cid, "POST", content=res_txt)
 
                 # DEBUG: Log the pending_item structure for page agents
@@ -559,6 +650,13 @@ class BatchProcessor:
             )
 
             actions.append(action)
+            self._set_post_absorb_memory_metadata(
+                action=action,
+                agent_id=str(a_id),
+                generated_content=res_txt,
+                explicit_topic_or_article=explicit_topic_or_article,
+                agent_attrs=agent_attrs_for_memory,
+            )
             # Cognitive loop write-back: update personal beliefs from generated post text.
             action_metadata = {"agent_attrs": pending_item[6]} if len(pending_item) >= 7 else {}
             self._record_generated_content_memory(
@@ -776,6 +874,18 @@ class BatchProcessor:
             )
 
             actions.append(action)
+            agent_attrs_for_memory = (
+                pending_item[6]
+                if len(pending_item) >= 7 and isinstance(pending_item[6], dict)
+                else None
+            )
+            self._set_post_absorb_memory_metadata(
+                action=action,
+                agent_id=str(agent_id),
+                generated_content=res_txt,
+                explicit_topic_or_article=str(topic) if topic else None,
+                agent_attrs=agent_attrs_for_memory,
+            )
             payload = {
                 "agent_id": str(agent_id),
                 "action_type": "POST",
