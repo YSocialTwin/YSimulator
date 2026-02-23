@@ -138,6 +138,70 @@ class BatchProcessor:
             self.logger.debug(f"Could not determine LLM backend type: {e}, defaulting to Ollama")
             return False
 
+    def _memory_context_to_text(self, agent_attrs: Optional[Dict]) -> Optional[str]:
+        if not agent_attrs:
+            return None
+        memory_context = agent_attrs.get("memory_context")
+        if not memory_context:
+            return None
+        if isinstance(memory_context, list):
+            lines = [str(item).strip() for item in memory_context if str(item).strip()]
+            if not lines:
+                return None
+            return "\n".join(f"- {line}" for line in lines)
+        text = str(memory_context).strip()
+        return text or None
+
+    def _record_generated_content_memory(
+        self,
+        agent_id: str,
+        action_type: str,
+        content: str,
+        metadata: Optional[Dict] = None,
+        target_post_id: Optional[str] = None,
+    ) -> None:
+        """
+        Write-back phase for cognitive memory loop: persist generated text so
+        backend-specific memory (e.g., GhostKG beliefs) can update from response.
+        """
+        content_text = str(content or "").strip()
+        if not content_text:
+            return
+
+        meta = metadata or {}
+        agent_attrs = meta.get("agent_attrs") if isinstance(meta, dict) else None
+
+        topic = None
+        if isinstance(agent_attrs, dict):
+            topic = agent_attrs.get("topic")
+            if topic is None:
+                topics = agent_attrs.get("post_topics")
+                if isinstance(topics, list) and topics:
+                    topic = topics[0]
+
+        event = {
+            "action_type": str(action_type or "WRITE").upper(),
+            "agent_id": str(agent_id),
+            "content": content_text,
+            "target_post_id": target_post_id,
+            "topic": topic,
+            "metadata": {
+                "memory_phase": "write_back",
+                "context_used": self._memory_context_to_text(agent_attrs),
+            },
+        }
+
+        try:
+            ray.get(
+                self.server.ingest_memory_event.remote(
+                    str(agent_id),
+                    event,
+                    client_id=self.client_id,
+                )
+            )
+        except Exception as e:
+            self.logger.debug(f"Memory write-back failed for agent {agent_id}: {e}")
+
     def gather_pending_llm_posts(
         self,
         pending_llm_posts: List[Tuple],
@@ -319,6 +383,14 @@ class BatchProcessor:
             )
 
             actions.append(action)
+            # Cognitive loop write-back: update personal beliefs from generated post text.
+            action_metadata = {"agent_attrs": pending_item[6]} if len(pending_item) >= 7 else {}
+            self._record_generated_content_memory(
+                agent_id=str(a_id),
+                action_type="POST",
+                content=res_txt,
+                metadata=action_metadata,
+            )
 
     def _gather_posts_with_vllm_batch(
         self,
@@ -526,6 +598,12 @@ class BatchProcessor:
             )
 
             actions.append(action)
+            self._record_generated_content_memory(
+                agent_id=str(agent_id),
+                action_type="POST",
+                content=res_txt,
+                metadata={"agent_attrs": pending_item[6] if len(pending_item) >= 7 else {}},
+            )
 
         # Batch extract emotions if any texts collected
         if texts_for_emotions:
@@ -709,6 +787,13 @@ class BatchProcessor:
                     updated_opinions=updated_opinions,
                 )
                 actions.append(action)
+                self._record_generated_content_memory(
+                    agent_id=str(a_id),
+                    action_type=determined_action_type,
+                    content=res_act,
+                    metadata=fifth_element if isinstance(fifth_element, dict) else {},
+                    target_post_id=target,
+                )
 
                 # If this was a reply to a mention, mark it as replied
                 if mention_id:
@@ -789,6 +874,13 @@ class BatchProcessor:
                                 "target_post_id": target,
                             }
                         },
+                    )
+                    self._record_generated_content_memory(
+                        agent_id=str(a_id),
+                        action_type="SHARE",
+                        content=share_content,
+                        metadata={"agent_attrs": agent_attrs},
+                        target_post_id=target,
                     )
                     # Track for secondary follow (share action)
                     if post_data:
@@ -1054,6 +1146,13 @@ class BatchProcessor:
                 updated_opinions=None,  # Will be updated by batch processing
             )
             actions.append(action)
+            self._record_generated_content_memory(
+                agent_id=str(agent_id),
+                action_type="COMMENT",
+                content=comment_text,
+                metadata=metadata,
+                target_post_id=target_post,
+            )
 
             # Track for secondary follow
             if post_data:
@@ -1206,6 +1305,13 @@ class BatchProcessor:
                 updated_opinions=None,  # Will be updated by batch processing
             )
             actions.append(action)
+            self._record_generated_content_memory(
+                agent_id=str(agent_id),
+                action_type="SHARE",
+                content=share_text,
+                metadata=item[4],
+                target_post_id=target_post,
+            )
 
             # Track for secondary follow
             if post_data:
@@ -1364,6 +1470,13 @@ class BatchProcessor:
                     updated_opinions=None,  # Will be updated by batch processing
                 )
                 actions.append(action)
+                self._record_generated_content_memory(
+                    agent_id=str(agent_id),
+                    action_type="COMMENT",
+                    content=reaction_type,
+                    metadata=item[4],
+                    target_post_id=target_post,
+                )
 
                 # Track for secondary follow
                 if post_data:
@@ -1413,6 +1526,13 @@ class BatchProcessor:
                     updated_opinions=None,  # Will be updated by batch processing
                 )
                 actions.append(action)
+                self._record_generated_content_memory(
+                    agent_id=str(agent_id),
+                    action_type="COMMENT",
+                    content=comment_text,
+                    metadata=metadata,
+                    target_post_id=target_post,
+                )
 
                 # Track for secondary follow (simple reaction)
                 if post_data:
@@ -1595,6 +1715,13 @@ class BatchProcessor:
                     updated_opinions=None,
                 )
                 actions.append(action)
+                self._record_generated_content_memory(
+                    agent_id=str(agent_id),
+                    action_type="SHARE",
+                    content=share_text,
+                    metadata=metadata,
+                    target_post_id=target_post,
+                )
 
                 # Track for secondary follow
                 if post_data:

@@ -287,9 +287,35 @@ class LLMService:
                         "post_topics",
                         "post_opinions",
                         "cluster_id",
+                        "memory_context",
                     ]
                 }
             self.prompt_logger.debug(f"LLM Prompt - {method_name}", extra={"extra_data": log_data})
+
+    def _build_memory_instruction(self, agent_attrs: Optional[dict], header: str = "MEMORY CONTEXT") -> str:
+        """
+        Build compact memory guidance text from `agent_attrs.memory_context`.
+        """
+        if not agent_attrs:
+            return ""
+        memory_context = agent_attrs.get("memory_context")
+        if not memory_context:
+            return ""
+
+        if isinstance(memory_context, list):
+            snippets = [str(item).strip() for item in memory_context if str(item).strip()]
+        else:
+            snippets = [str(memory_context).strip()] if str(memory_context).strip() else []
+
+        if not snippets:
+            return ""
+
+        bullet_lines = "\n".join(f"- {snippet}" for snippet in snippets[:5])
+        return (
+            f"\n\n{header}:\n"
+            f"{bullet_lines}\n"
+            "Use this context to keep your response consistent with what you know and believe."
+        )
 
     def _build_persona(self, cluster_id: int, agent_attrs: dict = None) -> str:
         """
@@ -377,6 +403,7 @@ class LLMService:
             slot=slot,
             topic_instruction=topic_instruction,
         )
+        user_msg += self._build_memory_instruction(agent_attrs, header="KNOWN CONTEXT")
 
         # Log the prompt for debugging
         self._log_prompt("generate_post", system_msg, user_msg, agent_attrs)
@@ -568,6 +595,7 @@ class LLMService:
         # Add opinion instruction if available
         if opinion_instruction:
             user_msg += opinion_instruction
+        user_msg += self._build_memory_instruction(agent_attrs, header="CONVERSATION MEMORY")
 
         # Log the prompt for debugging
         self._log_prompt("generate_comment", system_msg, user_msg, agent_attrs)
@@ -655,6 +683,7 @@ class LLMService:
         # Add opinion instruction if available
         if opinion_instruction:
             user_msg += opinion_instruction
+        user_msg += self._build_memory_instruction(agent_attrs, header="CONVERSATION MEMORY")
 
         prompt = ChatPromptTemplate.from_messages([("system", system_msg), ("user", user_msg)])
 

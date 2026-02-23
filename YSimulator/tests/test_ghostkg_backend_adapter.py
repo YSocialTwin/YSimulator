@@ -125,3 +125,68 @@ def test_ghostkg_backend_fast_extraction_mode_uses_absorb_content(monkeypatch):
     assert ingest.success is True
     assert backend.manager.absorb_calls == 1
     assert backend.manager.learn_calls == 0
+
+
+def test_ghostkg_backend_write_back_updates_personal_beliefs(monkeypatch):
+    class FakeRating:
+        Good = 3
+        Hard = 2
+
+    class FakeAgent:
+        def set_time(self, _time):
+            return None
+
+    class FakeManager:
+        def __init__(self, db_path="db", db_url=None, store_log_content=False):
+            self._agents = {}
+            self.update_calls = 0
+            self.last_triplets = None
+            self.last_context = None
+
+        def create_agent(self, name, llm_service=None):
+            self._agents[name] = FakeAgent()
+            return self._agents[name]
+
+        def get_agent(self, name):
+            return self._agents[name]
+
+        def learn_triplet(self, *args, **kwargs):
+            return None
+
+        def absorb_content(self, *args, **kwargs):
+            return None
+
+        def update_with_response(self, agent_name, response, triplets=None, context=None):
+            self.update_calls += 1
+            self.last_triplets = triplets
+            self.last_context = context
+            return None
+
+        def get_context(self, agent_name, topic):
+            return "- memory item"
+
+    fake_module = types.SimpleNamespace(AgentManager=FakeManager, Rating=FakeRating)
+    monkeypatch.setitem(sys.modules, "ghost_kg", fake_module)
+
+    backend = GhostKGMemoryBackend(
+        backend_config={"extraction_mode": "triplets", "db_path": "fake.db"}
+    )
+    backend.initialize({"day": 1, "slot": 1})
+
+    ingest = backend.ingest_event(
+        "agent-1",
+        {
+            "action_type": "POST",
+            "topic": "ai",
+            "content": "I think AI can improve healthcare access",
+            "metadata": {
+                "memory_phase": "write_back",
+                "context_used": ["Known facts: AI in medicine", "Others think: mixed sentiment"],
+            },
+        },
+        {"day": 1, "slot": 1},
+    )
+    assert ingest.success is True
+    assert backend.manager.update_calls == 1
+    assert backend.manager.last_triplets == [("stated_about", "ai", 0.0)]
+    assert "Known facts" in backend.manager.last_context

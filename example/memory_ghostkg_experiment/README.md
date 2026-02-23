@@ -32,6 +32,12 @@ python run_client.py \
 Configured default in this experiment:
 
 - `agent_memory.ghostkg.extraction_mode = "fast"`
+- `agent_memory.ghostkg.db_path = "example/memory_ghostkg_experiment/database_server.db"`
+
+The GhostKG tables are:
+- `kg_nodes`
+- `kg_edges`
+- `kg_logs`
 
 Alternatives:
 

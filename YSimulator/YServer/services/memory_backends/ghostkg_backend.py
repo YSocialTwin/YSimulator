@@ -31,6 +31,7 @@ class GhostKGMemoryBackend(MemoryBackend):
         self._initialized = False
         self._known_agents: set[str] = set()
         self._llm_service = None
+        self._fast_extractor = None
         self._extraction_mode = str(self._cfg("extraction_mode", "triplets")).lower()
         self._relation_whitelist = set(self._cfg("relation_whitelist", []) or [])
 
@@ -73,6 +74,18 @@ class GhostKGMemoryBackend(MemoryBackend):
             topic = event.get("topic")
             target_user_id = event.get("target_user_id")
             content = event.get("content") or self._default_content(action_type, topic, target_user_id)
+            metadata = event.get("metadata", {}) if isinstance(event.get("metadata"), dict) else {}
+
+            # Write-back phase: generated text should reinforce personal beliefs.
+            if str(metadata.get("memory_phase", "")).lower() == "write_back":
+                self._update_personal_beliefs_from_response(
+                    agent_id=agent_id,
+                    response_text=str(content or ""),
+                    context_used=metadata.get("context_used"),
+                    topic=topic,
+                    target_user_id=target_user_id,
+                )
+                return IngestResult(success=True, updated=1)
 
             try:
                 if self._extraction_mode in {"fast", "llm"} and content:
@@ -204,6 +217,24 @@ class GhostKGMemoryBackend(MemoryBackend):
             self._extraction_mode = "triplets"
             return None
 
+    def _build_fast_extractor_if_needed(self):
+        if self._extraction_mode != "fast":
+            return None
+        if self._fast_extractor is not None:
+            return self._fast_extractor
+        try:
+            from ghost_kg.extraction.extraction import get_extractor
+
+            self._fast_extractor = get_extractor(
+                fast_mode=True,
+                llm_service=None,
+                model=None,
+            )
+        except Exception as e:
+            self.logger.warning(f"GhostKG fast extractor unavailable, fallback to deterministic write-back: {e}")
+            self._fast_extractor = None
+        return self._fast_extractor
+
     def _ingest_with_content_extraction(
         self, agent_id: str, content: str, action_type: str, target_user_id: Optional[str]
     ) -> None:
@@ -226,6 +257,63 @@ class GhostKGMemoryBackend(MemoryBackend):
     ) -> None:
         relation, target, rating = self._event_to_triplet(action_type, topic, target_user_id)
         self.manager.learn_triplet(agent_id, "I", relation, target, rating=rating)
+
+    def _update_personal_beliefs_from_response(
+        self,
+        agent_id: str,
+        response_text: str,
+        context_used: Any,
+        topic: Optional[str],
+        target_user_id: Optional[str],
+    ) -> None:
+        response_text = str(response_text or "").strip()
+        if not response_text:
+            return
+
+        context_str = self._normalize_context(context_used)
+
+        # Full cognitive reflection path (LLM mode): let GhostKG infer self-expressed stances.
+        if self._extraction_mode == "llm" and self._llm_service is not None:
+            self.manager.update_with_response(
+                agent_id,
+                response_text,
+                context=context_str,
+            )
+            return
+
+        # Fast mode: extract self-reaction triplets without full LLM reflection.
+        if self._extraction_mode == "fast":
+            extractor = self._build_fast_extractor_if_needed()
+            if extractor is not None:
+                try:
+                    data = extractor.extract(response_text, author=agent_id, agent_name=agent_id)
+                    stances = []
+                    for item in data.get("my_reaction", []):
+                        relation = str(item.get("relation", "")).strip()
+                        target = str(item.get("target", "")).strip()
+                        sentiment = float(item.get("sentiment", 0.0) or 0.0)
+                        if relation and target:
+                            stances.append((relation, target, max(-1.0, min(1.0, sentiment))))
+                    if stances:
+                        self.manager.update_with_response(
+                            agent_id,
+                            response_text,
+                            triplets=stances,
+                            context=context_str,
+                        )
+                        return
+                except Exception as e:
+                    self.logger.warning(f"GhostKG fast write-back extraction failed, using fallback stance: {e}")
+
+        # Deterministic fallback for triplets mode (or failed extraction):
+        # persist at least one self-stance derived from action topic/target.
+        fallback_target = str(topic or target_user_id or "generated_content")
+        self.manager.update_with_response(
+            agent_id,
+            response_text,
+            triplets=[("stated_about", fallback_target, 0.0)],
+            context=context_str,
+        )
 
     def _event_to_triplet(
         self, action_type: str, topic: Optional[str], target_user_id: Optional[str]
@@ -255,6 +343,19 @@ class GhostKGMemoryBackend(MemoryBackend):
         if target_user_id:
             return f"{action_type} targeting {target_user_id}"
         return action_type or "action"
+
+    def _normalize_context(self, context_used: Any) -> Optional[str]:
+        if context_used is None:
+            return None
+        if isinstance(context_used, str):
+            text = context_used.strip()
+            return text or None
+        if isinstance(context_used, list):
+            lines = [str(item).strip() for item in context_used if str(item).strip()]
+            if not lines:
+                return None
+            return "\n".join(f"- {line}" for line in lines)
+        return str(context_used).strip() or None
 
     def _resolve_default_db_path(self, simulation_context: Dict[str, Any]) -> str:
         configured = self._cfg("db_path")
