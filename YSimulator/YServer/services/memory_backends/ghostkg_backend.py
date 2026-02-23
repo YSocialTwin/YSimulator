@@ -74,10 +74,20 @@ class GhostKGMemoryBackend(MemoryBackend):
             target_user_id = event.get("target_user_id")
             content = event.get("content") or self._default_content(action_type, topic, target_user_id)
 
-            if self._extraction_mode in {"fast", "llm"} and content:
-                self._ingest_with_content_extraction(agent_id, content, action_type, target_user_id)
-            else:
-                self._ingest_with_direct_triplet(agent_id, action_type, topic, target_user_id)
+            try:
+                if self._extraction_mode in {"fast", "llm"} and content:
+                    self._ingest_with_content_extraction(agent_id, content, action_type, target_user_id)
+                else:
+                    self._ingest_with_direct_triplet(agent_id, action_type, topic, target_user_id)
+            except Exception as primary_error:
+                # Compatibility fallback for older GhostKG timestamp constraints.
+                if "created_at" not in str(primary_error):
+                    raise
+                self._set_agent_synthetic_datetime(agent_id, context)
+                if self._extraction_mode in {"fast", "llm"} and content:
+                    self._ingest_with_content_extraction(agent_id, content, action_type, target_user_id)
+                else:
+                    self._ingest_with_direct_triplet(agent_id, action_type, topic, target_user_id)
 
             return IngestResult(success=True, created=1)
         except Exception as e:
@@ -149,16 +159,24 @@ class GhostKGMemoryBackend(MemoryBackend):
             self.manager.create_agent(agent_id, llm_service=self._llm_service)
             self._known_agents.add(agent_id)
 
-        # Keep GhostKG clock synchronized with simulation day/slot.
+        # Keep GhostKG clock synchronized with simulation day/slot using round tuple.
         day = int(context.get("day", 1) or 1)
         slot = int(context.get("slot", 0) or 0)
         agent = self.manager.get_agent(agent_id)
-        # Use synthetic UTC datetime to avoid NULL timestamp writes in some GhostKG paths.
+        agent.set_time((max(1, day), min(23, max(0, slot))))
+
+    def _set_agent_synthetic_datetime(self, agent_id: str, context: Dict[str, Any]) -> None:
+        """
+        Fallback clock sync for GhostKG versions requiring non-null datetime timestamps.
+        """
+        day = int(context.get("day", 1) or 1)
+        slot = int(context.get("slot", 0) or 0)
         safe_day = max(1, day)
         safe_hour = min(23, max(0, slot))
         synthetic_now = datetime(2025, 1, 1, tzinfo=timezone.utc) + timedelta(
             days=safe_day - 1, hours=safe_hour
         )
+        agent = self.manager.get_agent(agent_id)
         agent.set_time(synthetic_now)
 
     def _build_llm_service_if_needed(self):
