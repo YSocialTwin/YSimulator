@@ -128,7 +128,14 @@ class ClientMemoryRuntime:
     def _sqlite_url_from_path(self, db_path: str) -> str:
         db_path = str(db_path)
         if db_path.startswith("sqlite:///"):
-            return db_path
+            # Normalize relative sqlite URLs against experiment config_path.
+            if db_path == "sqlite:///:memory:" or db_path.startswith("sqlite:////"):
+                return db_path
+            raw_path = db_path[len("sqlite:///") :]
+            resolved = Path(raw_path)
+            if not resolved.is_absolute():
+                resolved = self.config_path / resolved
+            return f"sqlite:///{resolved.resolve()}"
         resolved = Path(db_path)
         if not resolved.is_absolute():
             resolved = self.config_path / resolved

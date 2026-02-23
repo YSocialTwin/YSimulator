@@ -231,7 +231,7 @@ class SimulationClient:
         self.memory_runtime = ClientMemoryRuntime(
             simulation_config=self.simulation_config,
             config_path=self.config_path,
-            logger=self.logger,
+            logger=self.memory_logger if getattr(self, "memory_logger", None) else self.logger,
         )
         self.memory_runtime.initialize()
 
@@ -565,6 +565,39 @@ class SimulationClient:
         # Initialize tracking variables for hourly and daily summaries
         self.hourly_actions = []  # Track actions for current hour
         self.daily_actions = []  # Track actions for current day
+
+        # Dedicated memory logger (enabled only when memory subsystem is active).
+        self.memory_logger = None
+        memory_cfg = self.simulation_config.get("agent_memory", {})
+        if memory_cfg.get("enabled", False):
+            memory_log_file = log_dir / "memory.log"
+            self.memory_logger = logging.getLogger(f"YSimulator.Client.{self.client_id}.Memory")
+            self.memory_logger.setLevel(logging.INFO)
+            self.memory_logger.handlers = []
+
+            memory_handler = RotatingFileHandler(
+                memory_log_file, maxBytes=10 * 1024 * 1024, backupCount=5
+            )
+            memory_handler.rotator = compress_rotated_log
+            memory_handler.namer = lambda name: name + ".gz"
+
+            class MemoryJsonFormatter(logging.Formatter):
+                def format(self, record: logging.LogRecord) -> str:
+                    payload = {
+                        "timestamp": datetime.utcnow().isoformat(),
+                        "level": record.levelname,
+                        "message": record.getMessage(),
+                        "module": record.module,
+                        "function": record.funcName,
+                        "line": record.lineno,
+                    }
+                    if hasattr(record, "extra_data"):
+                        payload.update(record.extra_data)
+                    return json.dumps(payload)
+
+            memory_handler.setFormatter(MemoryJsonFormatter())
+            self.memory_logger.addHandler(memory_handler)
+            self.memory_logger.propagate = False
 
         # Initialize cost tracker for LLM usage monitoring (Phase 3)
         self._setup_cost_tracker()
