@@ -30,3 +30,17 @@ def test_ensure_topic_subject_triplets_adds_missing_topic_subjects():
     assert "AI" in sources
     assert "Economy" in sources
     assert "Policy" in sources
+
+
+def test_filter_absorb_triplets_for_peer_removes_i_subject():
+    input_triplets = [
+        ["I", "support", "X"],
+        ["Author", "claims", "Y"],
+        ["Topic", "is_expressed_in", "text"],
+    ]
+    filtered = BatchProcessor._filter_absorb_triplets_for_author(
+        input_triplets, agent_id="agent-1", author="Author"
+    )
+    assert ["I", "support", "X"] not in filtered
+    assert ["Author", "claims", "Y"] in filtered
+    assert ["Topic", "is_expressed_in", "text"] in filtered

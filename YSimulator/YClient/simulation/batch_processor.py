@@ -375,8 +375,24 @@ class BatchProcessor:
         author: Optional[str] = None,
     ) -> None:
         triplets = self._extract_absorb_triplets(agent_id, str(observed_content or ""), author=author)
+        triplets = self._filter_absorb_triplets_for_author(triplets, agent_id=agent_id, author=author)
         if triplets:
             action.memory_metadata = {"ghostkg_absorb_triplets": triplets}
+
+    @staticmethod
+    def _filter_absorb_triplets_for_author(
+        triplets: List[List[Any]], agent_id: str, author: Optional[str]
+    ) -> List[List[Any]]:
+        author_norm = str(author or "").strip().lower()
+        is_self_absorb = author_norm in {"self", "i", "me", "myself", str(agent_id).lower()}
+        if is_self_absorb:
+            return triplets
+        # For peer-content absorption, never keep self-subject triplets.
+        return [
+            t
+            for t in triplets
+            if isinstance(t, list) and len(t) == 3 and str(t[0]).strip().lower() != "i"
+        ]
 
     @staticmethod
     def _is_uuid_like(value: Optional[str]) -> bool:

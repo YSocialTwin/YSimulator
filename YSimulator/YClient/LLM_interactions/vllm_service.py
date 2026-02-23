@@ -2535,7 +2535,6 @@ class VLLMService:
         sections = [
             ("world_facts", False),
             ("partner_stance", False),
-            ("my_reaction", True),
         ]
         for section_name, force_i_source in sections:
             for item in payload.get(section_name, []) or []:
