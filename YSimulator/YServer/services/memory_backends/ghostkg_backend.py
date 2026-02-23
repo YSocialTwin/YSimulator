@@ -112,6 +112,7 @@ class GhostKGMemoryBackend(MemoryBackend):
                     context_used=metadata.get("context_used"),
                     topic=topic,
                     target_user_id=target_user_id,
+                    simulation_context=context,
                 )
                 return IngestResult(success=True, updated=1)
 
@@ -306,6 +307,7 @@ class GhostKGMemoryBackend(MemoryBackend):
         context_used: Any,
         topic: Optional[str],
         target_user_id: Optional[str],
+        simulation_context: Optional[Dict[str, Any]] = None,
     ) -> None:
         response_text = str(response_text or "").strip()
         if not response_text:
@@ -315,10 +317,12 @@ class GhostKGMemoryBackend(MemoryBackend):
 
         # Full cognitive reflection path (LLM mode): let GhostKG infer self-expressed stances.
         if self._extraction_mode == "llm" and self._llm_service is not None:
-            self.manager.update_with_response(
-                agent_id,
-                response_text,
-                context=context_str,
+            self._safe_update_with_response(
+                agent_id=agent_id,
+                response_text=response_text,
+                triplets=None,
+                context_str=context_str,
+                simulation_context=simulation_context,
             )
             return
 
@@ -337,8 +341,8 @@ class GhostKGMemoryBackend(MemoryBackend):
                             stances.append((relation, target, max(-1.0, min(1.0, sentiment))))
                     if stances:
                         self.manager.update_with_response(
-                            agent_id,
-                            response_text,
+                            agent_id=agent_id,
+                            response=response_text,
                             triplets=stances,
                             context=context_str,
                         )
@@ -349,10 +353,39 @@ class GhostKGMemoryBackend(MemoryBackend):
         # Deterministic fallback for triplets mode (or failed extraction):
         # persist at least one self-stance derived from action topic/target.
         fallback_target = str(topic or target_user_id or "generated_content")
+        self._safe_update_with_response(
+            agent_id=agent_id,
+            response_text=response_text,
+            triplets=[("stated_about", fallback_target, 0.0)],
+            context_str=context_str,
+            simulation_context=simulation_context,
+        )
+
+    def _safe_update_with_response(
+        self,
+        agent_id: str,
+        response_text: str,
+        triplets: Optional[List[tuple[str, str, float]]],
+        context_str: Optional[str],
+        simulation_context: Optional[Dict[str, Any]],
+    ) -> None:
+        try:
+            self.manager.update_with_response(
+                agent_id,
+                response_text,
+                triplets=triplets,
+                context=context_str,
+            )
+            return
+        except Exception as e:
+            if "created_at" not in str(e):
+                raise
+
+        self._set_agent_synthetic_datetime(agent_id, simulation_context or {})
         self.manager.update_with_response(
             agent_id,
             response_text,
-            triplets=[("stated_about", fallback_target, 0.0)],
+            triplets=triplets,
             context=context_str,
         )
 
