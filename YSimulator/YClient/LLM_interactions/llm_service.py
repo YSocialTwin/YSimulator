@@ -368,7 +368,7 @@ class LLMService:
         memory_instruction = self._build_memory_instruction(agent_attrs, header=memory_header)
         kwargs = dict(format_kwargs or {})
         kwargs["memory_context_instruction"] = memory_instruction
-        rendered = user_template.format(**kwargs)
+        rendered = self._safe_format_template(user_template, kwargs)
         if memory_instruction and "{memory_context_instruction}" not in user_template:
             rendered += memory_instruction
         return rendered
@@ -1565,7 +1565,10 @@ class LLMService:
         cfg = self.prompts_config.get("ghostkg_extract_absorb", {})
         system_template = cfg.get("system_template", DEFAULT_GHOSTKG_ABSORB_PROMPTS["system_template"])
         user_template = cfg.get("user_template", DEFAULT_GHOSTKG_ABSORB_PROMPTS["user_template"])
-        user_msg = user_template.format(text=text, author=author, agent_name=agent_name)
+        user_msg = self._safe_format_template(
+            user_template,
+            {"text": text, "author": author, "agent_name": agent_name},
+        )
         prompt = ChatPromptTemplate.from_messages([("system", system_template), ("user", user_msg)])
         try:
             chain = prompt | self.llm.bind(temperature=0.1) | StrOutputParser()
@@ -1583,7 +1586,10 @@ class LLMService:
             "system_template", DEFAULT_GHOSTKG_REFLECTION_PROMPTS["system_template"]
         )
         user_template = cfg.get("user_template", DEFAULT_GHOSTKG_REFLECTION_PROMPTS["user_template"])
-        user_msg = user_template.format(text=text, agent_name=agent_name)
+        user_msg = self._safe_format_template(
+            user_template,
+            {"text": text, "agent_name": agent_name},
+        )
         prompt = ChatPromptTemplate.from_messages([("system", system_template), ("user", user_msg)])
         try:
             chain = prompt | self.llm.bind(temperature=0.1) | StrOutputParser()
@@ -1615,3 +1621,17 @@ class LLMService:
             )
             for req in (requests or [])
         ]
+    @staticmethod
+    def _safe_format_template(template: str, values: Dict[str, Any]) -> str:
+        """
+        Format known placeholders without failing on literal JSON braces.
+        """
+        if not template:
+            return ""
+        try:
+            return template.format(**(values or {}))
+        except Exception:
+            rendered = str(template)
+            for key, value in (values or {}).items():
+                rendered = rendered.replace("{" + str(key) + "}", str(value))
+            return rendered

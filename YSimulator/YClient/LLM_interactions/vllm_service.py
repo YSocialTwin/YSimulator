@@ -745,7 +745,7 @@ class VLLMService:
         memory_instruction = self._build_memory_instruction(agent_attrs, header=memory_header)
         kwargs = dict(format_kwargs or {})
         kwargs["memory_context_instruction"] = memory_instruction
-        rendered = user_template.format(**kwargs)
+        rendered = self._safe_format_template(user_template, kwargs)
         if memory_instruction and "{memory_context_instruction}" not in user_template:
             rendered += memory_instruction
         return rendered
@@ -2691,7 +2691,11 @@ class VLLMService:
         system_template = cfg.get("system_template", DEFAULT_GHOSTKG_ABSORB_PROMPTS["system_template"])
         user_template = cfg.get("user_template", DEFAULT_GHOSTKG_ABSORB_PROMPTS["user_template"])
         prompt = self._format_prompt(
-            system_template, user_template.format(text=text, author=author, agent_name=agent_name)
+            system_template,
+            self._safe_format_template(
+                user_template,
+                {"text": text, "author": author, "agent_name": agent_name},
+            ),
         )
         try:
             outputs = self.llm.generate([prompt], self.extraction_sampling_params)
@@ -2709,7 +2713,13 @@ class VLLMService:
             "system_template", DEFAULT_GHOSTKG_REFLECTION_PROMPTS["system_template"]
         )
         user_template = cfg.get("user_template", DEFAULT_GHOSTKG_REFLECTION_PROMPTS["user_template"])
-        prompt = self._format_prompt(system_template, user_template.format(text=text, agent_name=agent_name))
+        prompt = self._format_prompt(
+            system_template,
+            self._safe_format_template(
+                user_template,
+                {"text": text, "agent_name": agent_name},
+            ),
+        )
         try:
             outputs = self.llm.generate([prompt], self.extraction_sampling_params)
             raw = outputs[0].outputs[0].text
@@ -2733,9 +2743,12 @@ class VLLMService:
             for req in requests or []:
                 prompt = self._format_prompt(
                     system_template,
-                    user_template.format(
-                        text=str(req.get("text", "") or ""),
-                        agent_name=str(req.get("agent_name", "Agent") or "Agent"),
+                    self._safe_format_template(
+                        user_template,
+                        {
+                            "text": str(req.get("text", "") or ""),
+                            "agent_name": str(req.get("agent_name", "Agent") or "Agent"),
+                        },
                     ),
                 )
                 prompts.append(prompt)
@@ -2763,10 +2776,13 @@ class VLLMService:
                 prompts.append(
                     self._format_prompt(
                         system_template,
-                        user_template.format(
-                            text=str(req.get("text", "") or ""),
-                            author=str(req.get("author", "User") or "User"),
-                            agent_name=str(req.get("agent_name", "Agent") or "Agent"),
+                        self._safe_format_template(
+                            user_template,
+                            {
+                                "text": str(req.get("text", "") or ""),
+                                "author": str(req.get("author", "User") or "User"),
+                                "agent_name": str(req.get("agent_name", "Agent") or "Agent"),
+                            },
                         ),
                     )
                 )
@@ -2781,3 +2797,17 @@ class VLLMService:
         except Exception as e:
             logger.warning(f"[vLLM] GhostKG absorb batch extraction failed: {e}")
             return [[] for _ in requests]
+    @staticmethod
+    def _safe_format_template(template: str, values: Dict[str, Any]) -> str:
+        """
+        Format known placeholders without failing on literal JSON braces.
+        """
+        if not template:
+            return ""
+        try:
+            return template.format(**(values or {}))
+        except Exception:
+            rendered = str(template)
+            for key, value in (values or {}).items():
+                rendered = rendered.replace("{" + str(key) + "}", str(value))
+            return rendered
