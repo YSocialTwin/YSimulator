@@ -82,3 +82,24 @@ def test_extract_absorb_triplets_batch_uses_request_author(monkeypatch):
     )
     assert out == [[["Peer", "supports", "topic"]]]
     assert actor.captured[0]["author"] == "peer_user"
+
+
+def test_heuristic_fallback_generates_non_empty_triplets():
+    bp = BatchProcessor(
+        server=None,
+        client_id="c1",
+        llm=object(),
+        enable_sentiment=False,
+        enable_toxicity=False,
+        enable_emotions=False,
+        perspective_api_key=None,
+        logger=__import__("logging").getLogger("test"),
+    )
+    absorb = bp._heuristic_absorb_triplets(
+        "Sam Altman discusses energy demand at #Disrupt2026 conference", "author-1"
+    )
+    reflection = bp._heuristic_reflection_triplets(
+        "I support open science and discuss energy policy #AI"
+    )
+    assert len(absorb) >= 1
+    assert len(reflection) >= 1

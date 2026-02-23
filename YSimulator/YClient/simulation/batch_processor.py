@@ -13,6 +13,7 @@ Updated in Phase 3 to use LLM service layer.
 """
 
 import logging
+import re
 import uuid
 from typing import Any, Dict, List, Optional, Tuple, Union
 
@@ -182,6 +183,12 @@ class BatchProcessor:
                 if isinstance(topics, list) and topics:
                     topic = topics[0]
 
+        final_reflection_triplets = reflection_triplets
+        if not final_reflection_triplets:
+            final_reflection_triplets = self._extract_reflection_triplets(str(agent_id), content_text)
+        if not final_reflection_triplets:
+            final_reflection_triplets = self._heuristic_reflection_triplets(content_text)
+
         event = {
             "action_type": str(action_type or "WRITE").upper(),
             "agent_id": str(agent_id),
@@ -191,9 +198,7 @@ class BatchProcessor:
             "metadata": {
                 "memory_phase": "write_back",
                 "context_used": self._memory_context_to_text(agent_attrs),
-                "ghostkg_reflection_triplets": reflection_triplets
-                if reflection_triplets is not None
-                else self._extract_reflection_triplets(str(agent_id), content_text),
+                "ghostkg_reflection_triplets": final_reflection_triplets,
             },
         }
 
@@ -216,10 +221,11 @@ class BatchProcessor:
                     content_text, str(agent_id)
                 )
             )
-            return self._sanitize_reflection_triplets(raw)
+            cleaned = self._sanitize_reflection_triplets(raw)
+            return cleaned if cleaned else self._heuristic_reflection_triplets(content_text)
         except Exception as e:
             self.logger.debug(f"GhostKG reflection extraction failed for agent {agent_id}: {e}")
-            return []
+            return self._heuristic_reflection_triplets(content_text)
 
     def _extract_reflection_triplets_batch(
         self, requests: List[Dict[str, Any]]
@@ -279,10 +285,11 @@ class BatchProcessor:
                     content_text, str(author or "User"), str(agent_id)
                 )
             )
-            return self._sanitize_absorb_triplets(raw)
+            cleaned = self._sanitize_absorb_triplets(raw)
+            return cleaned if cleaned else self._heuristic_absorb_triplets(content_text, str(author or "Author"))
         except Exception as e:
             self.logger.debug(f"GhostKG absorb extraction failed for agent {agent_id}: {e}")
-            return []
+            return self._heuristic_absorb_triplets(content_text, str(author or "Author"))
 
     def _extract_absorb_triplets_batch(
         self, requests: List[Dict[str, Any]]
@@ -363,6 +370,50 @@ class BatchProcessor:
             if source and relation and target:
                 cleaned.append([source, relation, target])
         return cleaned
+
+    @staticmethod
+    def _extract_keywords_for_triplets(text: str) -> List[str]:
+        content = str(text or "")
+        hashtags = [m.group(1).strip() for m in re.finditer(r"#([A-Za-z0-9_]{2,})", content)]
+        words = re.findall(r"[A-Za-z][A-Za-z0-9_-]{3,}", content.lower())
+        stop = {
+            "this", "that", "with", "from", "have", "will", "would", "about", "check", "article",
+            "because", "there", "their", "your", "just", "posted", "comment", "sharing", "resharing",
+            "someone", "what", "when", "where", "which", "while", "into", "over", "under", "after",
+        }
+        candidates = []
+        for h in hashtags:
+            candidates.append(h.lower())
+        for w in words:
+            if w in stop or len(w) < 4:
+                continue
+            candidates.append(w)
+        deduped: List[str] = []
+        seen = set()
+        for c in candidates:
+            key = c.strip().lower()
+            if not key or key in seen:
+                continue
+            seen.add(key)
+            deduped.append(c.strip())
+            if len(deduped) >= 5:
+                break
+        return deduped
+
+    def _heuristic_absorb_triplets(self, text: str, author: str) -> List[List[Any]]:
+        kws = self._extract_keywords_for_triplets(text)
+        author_label = str(author or "Author").strip() or "Author"
+        triplets: List[List[Any]] = []
+        for kw in kws[:3]:
+            triplets.append([author_label, "mentions", kw])
+        return triplets
+
+    def _heuristic_reflection_triplets(self, text: str) -> List[List[Any]]:
+        kws = self._extract_keywords_for_triplets(text)
+        triplets: List[List[Any]] = []
+        for kw in kws[:3]:
+            triplets.append(["mentions", kw, 0.0])
+        return triplets
 
     def _set_absorb_memory_metadata(
         self,
