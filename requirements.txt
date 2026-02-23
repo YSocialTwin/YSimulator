@@ -7,7 +7,8 @@ redis>=4.0.0,<6.0.0
 langchain>=0.1.0,<1.0.0
 langchain-core>=0.1.0,<1.0.0
 langchain-ollama>=0.1.0,<1.0.0
-vllm>=0.6.0,<1.0.0
+# vLLM is Linux-only in practice.
+vllm>=0.6.0,<1.0.0; platform_system == "Linux"
 
 # Data processing
 feedparser>=6.0.0,<7.0.0
@@ -19,12 +20,12 @@ beautifulsoup4>=4.12.0,<5.0.0
 perspective>=1.0.0,<2.0.0
 faker>=18.0.0,<25.0.0
 
-# Memory / GhostKG fast extraction compatibility
-# Keep NumPy <2 to avoid binary compatibility issues with torch/gliner wheels.
+# Memory / GhostKG fast extraction compatibility (macOS + Linux)
+# Keep NumPy <2 to avoid binary compatibility issues with some torch/gliner wheels.
 numpy>=1.26.0,<2.0.0
 # GLiNER currently requires a modern torch runtime.
-torch>=2.4.0,<2.6.0
-gliner>=0.2.21,<0.3.0
+torch>=2.4.0,<2.6.0; platform_system == "Linux" or platform_system == "Darwin"
+gliner>=0.2.21,<0.3.0; platform_system == "Linux" or platform_system == "Darwin"
 vaderSentiment>=3.3.2,<4.0.0
 
 # Optional external memory backend library
