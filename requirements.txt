@@ -19,6 +19,16 @@ beautifulsoup4>=4.12.0,<5.0.0
 perspective>=1.0.0,<2.0.0
 faker>=18.0.0,<25.0.0
 
+# Memory / GhostKG fast extraction compatibility
+# Keep NumPy <2 to avoid binary compatibility issues with torch/gliner wheels.
+numpy>=1.26.0,<2.0.0
+# GLiNER currently requires a modern torch runtime.
+torch>=2.4.0,<2.6.0
+gliner>=0.2.21,<0.3.0
+vaderSentiment>=3.3.2,<4.0.0
+
+# Optional external memory backend library
+ghost-kg>=0.2.0,<0.3.0
 # Development dependencies
 # For testing, add these as needed:
 # pytest>=7.0.0
