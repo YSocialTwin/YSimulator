@@ -8,6 +8,7 @@ This directory contains comprehensive configuration documentation for YSimulator
   - Server configuration (database, Redis, Ray)
   - Client configuration (LLM, agents, behavior)
   - Agent population and archetypes
+  - Pluggable semantic memory (`agent_memory`)
   - Multi-client setups
   - Opinion dynamics configuration
   - Recommendation systems configuration
@@ -23,5 +24,6 @@ This directory contains comprehensive configuration documentation for YSimulator
 ## Quick Links
 
 - [Back to Documentation Index](../getting-started/INDEX.md)
+- [Memory Subsystem](../features/MEMORY_SUBSYSTEM.md)
 - [Architecture Overview](../architecture/ARCHITECTURE.md)
 - [Agent Types](../agents/AGENT_TYPES.md)

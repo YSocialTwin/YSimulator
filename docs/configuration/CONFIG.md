@@ -1635,6 +1635,26 @@ YSimulator supports pluggable memory backends through `agent_memory`:
 - `fast`: middle ground when you want automatic extraction without full LLM cost.
 - `llm`: highest semantic flexibility; use only when compute budget allows.
 
+### Integration Pipelines (Operational View)
+
+1. Action ingestion:
+   - client submits action
+   - server stores action and ingests memory event through selected backend
+2. Prompt-time retrieval:
+   - generators request top-K memory snippets
+   - bounded snippets are injected into LLM prompt context
+   - used memory IDs are reported for reinforcement
+3. Forgetting:
+   - server triggers periodic forget cycle every `forgetting_cycle_interval_rounds`
+   - backend applies decay/soft-forget/hard-delete (backend-specific)
+4. Observability:
+   - `get_memory_backend_status()` exposes health and selected backend
+
+### Related Example Experiments
+
+- `example/memory_native_experiment/` (native backend)
+- `example/memory_ghostkg_experiment/` (GhostKG backend)
+
 ---
 
 ## Related Documentation

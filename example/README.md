@@ -56,6 +56,14 @@ All agents use deterministic rule-based decision-making. Fastest and most predic
 - Development and debugging
 - No LLM infrastructure required
 
+### Memory Backend Experiments
+Targeted experiments for pluggable semantic memory backends.
+
+| Example | Memory Backend | Population Assets | Goal |
+|---------|----------------|-------------------|------|
+| [memory_native_experiment](memory_native_experiment/) | native | Reuses `llm_population_100` | Validate SQL memory + forgetting pipeline |
+| [memory_ghostkg_experiment](memory_ghostkg_experiment/) | ghostkg | Reuses `llm_population_100` | Validate GhostKG adapter and extraction modes |
+
 ## Quick Start
 
 ### 1. Choose a Population

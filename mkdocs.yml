@@ -79,73 +79,61 @@ plugins:
 # Navigation structure
 nav:
   - Home: index.md
-  - Getting Started:
-    - getting-started/INDEX.md
-  - Configuration:
-    - configuration/README.md
-    - Complete Configuration Guide: configuration/CONFIG.md
-    - vLLM Integration: configuration/VLLM_INTEGRATION_GUIDE.md
-  - Architecture:
-    - architecture/README.md
-    - Architecture Overview: architecture/ARCHITECTURE.md
-    - System Diagrams: architecture/DIAGRAMS.md
-    - Action Processor Framework: architecture/ACTION_PROCESSOR_FRAMEWORK.md
-    - Coordination Layer: architecture/COORDINATION_LAYER.md
-    - Critical Code Paths: architecture/CRITICAL_CODE_PATHS.md
-    - LLM Utilities: architecture/LLM_UTILITIES_LAYER.md
-    - Opinion Dynamics Handler: architecture/OPINION_DYNAMICS_HANDLER.md
-    - Recommendation Engine: architecture/RECOMMENDATION_ENGINE.md
-    - Repository Pattern: architecture/REPOSITORY_PATTERN.md
-    - Service Integration: architecture/SERVICE_INTEGRATION.md
-    - Simulation Orchestrator: architecture/SIMULATION_ORCHESTRATOR.md
-    - YClient Audit: architecture/YCLIENT_AUDIT.md
-  - Features:
-    - features/README.md
-    - Recommendation Systems: features/RECOMMENDATION_SYSTEMS.md
-    - Opinion Dynamics: features/OPINION_DYNAMICS.md
-    - Opinion Dynamics Architecture: features/OPINION_DYNAMICS_ARCHITECTURE.md
-    - Interests & Topics: features/INTERESTS.md
-    - Annotation Implementation: features/ANNOTATION_IMPLEMENTATION.md
-    - vLLM Batch Inference: features/VLLM_BATCH_INFERENCE.md
-    - vLLM Integration Summary: features/VLLM_INTEGRATION_SUMMARY.md
-    - vLLM Final Report: features/VLLM_FINAL_REPORT.md
-  - Agent System:
-    - agents/README.md
-    - Agent Actions: agents/AGENT_ACTIONS.md
-    - Agent Types: agents/AGENT_TYPES.md
-    - Agent Temporal Activities: agents/AGENT_TEMPORAL_ACTIVITIES.md
-  - Data Storage:
-    - data-storage/README.md
-    - Redis Integration: data-storage/REDIS_INTEGRATION.md
-    - Redis Coverage Analysis: data-storage/REDIS_COVERAGE_ANALYSIS.md
-    - Redis Recommendation Systems: data-storage/REDIS_RECOMMENDATION_SYSTEMS.md
-  - Development:
-    - development/README.md
-    - Extending YSimulator: development/EXTENDING.md
-    - Code Formatting: development/FORMATTING.md
-    - Codebase Analysis: development/CODEBASE_ANALYSIS.md
-    - Adding Actions Guide: development/ADDING_ACTIONS_GUIDE.md
-    - Adding Agent Knowledge Graphs: development/ADDING_AGENT_KNOWLEDGE_GRAPHS_GUIDE.md
-    - Adding Moderator Agent: development/ADDING_MODERATOR_AGENT_GUIDE.md
-    - Adding Recommendation Systems: development/ADDING_RECSYS_GUIDE.md
-    - GitHub Pages Setup: development/GITHUB_PAGES_SETUP.md
-  - Logging:
-    - logging/README.md
-    - Logging Configuration: logging/LOGGING_CONFIG.md
-    - Server Logging: logging/SERVER_LOGGING.md
-    - Action Logging: logging/ACTION_LOGGING.md
-  - Analysis & Performance:
-    - analysis/README.md
-    - Bottleneck Analysis: analysis/BOTTLENECK_ANALYSIS_SUMMARY.md
-    - Performance Optimization: analysis/PERFORMANCE_OPTIMIZATION_ROADMAP.md
-  - Testing:
-    - Test Coverage Report: testing/TEST_COVERAGE_REPORT.md
-  - Refactoring:
-    - refactoring/README.md
-    - Refactoring Audit Report: refactoring/REFACTORING_AUDIT_REPORT.md
-    - Client Refactoring: refactoring/CLIENT_REFACTORING_REPORT.md
-    - Server Refactoring: refactoring/SERVER_REFACTORING_REPORT.md
-  - Agent Population Optimization: AGENT_POPULATION_OPTIMIZATION.md
+
+  - Installation & Setup:
+      - Configuration Overview: configuration/README.md
+      - Complete Configuration Guide: configuration/CONFIG.md
+      - vLLM Integration: configuration/VLLM_INTEGRATION_GUIDE.md
+
+  - Core Concepts:
+      - Agents & Populations: agents/README.md
+      - Agent Types: agents/AGENT_TYPES.md
+      - Agent Actions: agents/AGENT_ACTIONS.md
+      - Temporal Activities: agents/AGENT_TEMPORAL_ACTIVITIES.md
+      - Interests & Topics: features/INTERESTS.md
+      - Opinion Dynamics: features/OPINION_DYNAMICS.md
+
+  - System Architecture:
+      - Architecture Overview: architecture/ARCHITECTURE.md
+      - System Diagrams: architecture/DIAGRAMS.md
+      - Simulation Orchestrator: architecture/SIMULATION_ORCHESTRATOR.md
+      - Coordination Layer: architecture/COORDINATION_LAYER.md
+      - Action Processor Framework: architecture/ACTION_PROCESSOR_FRAMEWORK.md
+      - Recommendation Engine: architecture/RECOMMENDATION_ENGINE.md
+      - Opinion Dynamics Handler: architecture/OPINION_DYNAMICS_HANDLER.md
+      - LLM Utilities Layer: architecture/LLM_UTILITIES_LAYER.md
+      - Repository Pattern: architecture/REPOSITORY_PATTERN.md
+      - Service Integration: architecture/SERVICE_INTEGRATION.md
+
+  - Features & Modules:
+      - Semantic Memory Subsystem: features/MEMORY_SUBSYSTEM.md
+      - Recommendation Systems: features/RECOMMENDATION_SYSTEMS.md
+      - Opinion Dynamics Architecture: features/OPINION_DYNAMICS_ARCHITECTURE.md
+      - Annotation System: features/ANNOTATION_IMPLEMENTATION.md
+      - vLLM Batch Inference: features/VLLM_BATCH_INFERENCE.md
+      - vLLM Integration Summary: features/VLLM_INTEGRATION_SUMMARY.md
+      - vLLM Final Report: features/VLLM_FINAL_REPORT.md
+
+  - Data & Storage:
+      - Redis Overview: data-storage/REDIS_INTEGRATION.md
+      - Redis for Recsys: data-storage/REDIS_RECOMMENDATION_SYSTEMS.md
+      - Redis Coverage Analysis: data-storage/REDIS_COVERAGE_ANALYSIS.md
+
+  - Development & Extending:
+      - Extending YSimulator: development/EXTENDING.md
+      - Adding Actions: development/ADDING_ACTIONS_GUIDE.md
+      - Adding Recommendation Systems: development/ADDING_RECSYS_GUIDE.md
+      - Adding Agent Knowledge Graphs: development/ADDING_AGENT_KNOWLEDGE_GRAPHS_GUIDE.md
+      - Adding Moderator Agent: development/ADDING_MODERATOR_AGENT_GUIDE.md
+      - Code Formatting: development/FORMATTING.md
+      - Codebase Analysis: development/CODEBASE_ANALYSIS.md
+
+  - Operations & Logging:
+      - Logging Configuration: logging/LOGGING_CONFIG.md
+      - Server Logging: logging/SERVER_LOGGING.md
+      - Action Logging: logging/ACTION_LOGGING.md
+
+
 
 # Extra settings
 extra:

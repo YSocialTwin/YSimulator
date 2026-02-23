@@ -20,6 +20,7 @@ YSimulator is a powerful simulation framework designed to model social media dyn
 - **Structured Logging**: Rotating JSON logs with timestamps and execution times
 - **UUID-Based IDs**: Universal identifiers for distributed compatibility
 - **Performance Optimization**: vLLM backend support for 8-30x faster LLM inference through batch processing
+- **Pluggable Semantic Memory**: Optional per-agent memory with forgetting (`none`, `native`, `ghostkg`)
 
 ## Quick Start
 
@@ -103,12 +104,14 @@ Information about the test suite and coverage reports.
 ### For Researchers
 - [Getting Started Guide](getting-started/INDEX.md)
 - [Configuration Guide](configuration/CONFIG.md)
+- [Memory Subsystem](features/MEMORY_SUBSYSTEM.md)
 - [Opinion Dynamics](features/OPINION_DYNAMICS.md)
 - [Agent Types](agents/AGENT_TYPES.md)
 
 ### For Developers
 - [Architecture Overview](architecture/ARCHITECTURE.md)
 - [Extending YSimulator](development/EXTENDING.md)
+- [Memory Subsystem](features/MEMORY_SUBSYSTEM.md)
 - [System Diagrams](architecture/DIAGRAMS.md)
 - [Code Formatting](development/FORMATTING.md)
 

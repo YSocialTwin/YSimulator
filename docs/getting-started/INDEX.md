@@ -37,6 +37,7 @@ Welcome to the YSimulator documentation! This comprehensive guide will help you 
 |----------|-------------|------------|
 | **[Recommendation Systems](../features/RECOMMENDATION_SYSTEMS.md)** | Content & follow recommendations (1,200+ lines) | 10 content modes, 5 follow strategies, algorithms, performance |
 | **[Opinion Dynamics](../features/OPINION_DYNAMICS.md)** | Opinion modeling and evolution (1,200+ lines) | Bounded confidence, LLM evaluation, polarization |
+| **[Memory Subsystem](../features/MEMORY_SUBSYSTEM.md)** | Pluggable semantic memory with forgetting | Backends (`none`, `native`, `ghostkg`), retrieval/reinforcement, decay policies |
 | **[Opinion Dynamics Architecture](../features/OPINION_DYNAMICS_ARCHITECTURE.md)** | Adding new opinion models (guide) | Two-layer architecture, model development, complete examples |
 | **[Interests & Topics](../features/INTERESTS.md)** | Interest management system (320+ lines) | Attention windows, sliding windows, topic extraction |
 | **[Annotations](../features/ANNOTATION_IMPLEMENTATION.md)** | Emotion annotation system (200+ lines) | GoEmotions taxonomy, 28 emotions, sentiment analysis |
@@ -142,6 +143,7 @@ Step-by-step guides for extending YSimulator with new features:
 4. **[Agent Temporal Activities](../agents/AGENT_TEMPORAL_ACTIVITIES.md)** - Configure temporal patterns and population dynamics
 5. **[Opinion Dynamics](../features/OPINION_DYNAMICS.md)** - Configure opinion models
 6. **[Recommendation Systems](../features/RECOMMENDATION_SYSTEMS.md)** - Configure recommendation strategies
+7. **[Memory Subsystem](../features/MEMORY_SUBSYSTEM.md)** - Configure pluggable semantic memory and forgetting
 
 #### Understand Agent Behavior
 1. **[Agent Actions](../agents/AGENT_ACTIONS.md)** - Available actions and how they work
@@ -183,6 +185,7 @@ Step-by-step guides for extending YSimulator with new features:
 - **Agent Behavior**: [Agent Actions](../agents/AGENT_ACTIONS.md) → [Agent Types](../agents/AGENT_TYPES.md) → [Agent Temporal Activities](../agents/AGENT_TEMPORAL_ACTIVITIES.md)
 - **Recommendations**: [Recommendation Systems](../features/RECOMMENDATION_SYSTEMS.md) → [Redis Integration](../data-storage/RECSYS_REDIS_SUPPORT.md)
 - **Opinions**: [Opinion Dynamics](../features/OPINION_DYNAMICS.md) → [Configuration Guide](../configuration/CONFIG.md)
+- **Memory**: [Memory Subsystem](../features/MEMORY_SUBSYSTEM.md) → [Configuration Guide](../configuration/CONFIG.md#agent-memory-pluggable-backends)
 - **Interests**: [Interests & Topics](../features/INTERESTS.md) → [Database & Storage](../data-storage/REDIS_DATABASE_ANALYSIS.md)
 - **Annotations**: [Annotations](../features/ANNOTATION_IMPLEMENTATION.md) → [Database & Storage](../data-storage/REDIS_DATABASE_ANALYSIS.md)
 - **vLLM Backend**: [vLLM Integration Guide](../configuration/VLLM_INTEGRATION_GUIDE.md) → [vLLM Batch Inference](../features/VLLM_BATCH_INFERENCE.md) → [vLLM Integration Summary](../features/VLLM_INTEGRATION_SUMMARY.md) → [vLLM Final Report](../features/VLLM_FINAL_REPORT.md)

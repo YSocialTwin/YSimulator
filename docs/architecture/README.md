@@ -29,6 +29,17 @@ This directory contains system architecture and design pattern documentation.
   - Service layer architecture
   - Clean architecture principles
 
+### Memory Architecture
+
+- **[SEMANTIC_MEMORY_WITH_FORGETTING_DESIGN.md](SEMANTIC_MEMORY_WITH_FORGETTING_DESIGN.md)** - Semantic memory design
+  - assumptions and requirements
+  - native and GhostKG integration options
+  - retrieval/reinforcement/forgetting flows
+
+- **[PLUGGABLE_MEMORY_SYSTEM_ROADMAP.md](PLUGGABLE_MEMORY_SYSTEM_ROADMAP.md)** - Implementation roadmap
+  - phased rollout plan
+  - validation checks and success criteria
+
 ### Refactoring Framework Documentation
 
 These documents describe the modular frameworks created during refactoring:

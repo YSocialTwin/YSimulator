@@ -4,6 +4,12 @@ This directory contains documentation for YSimulator's core features and systems
 
 ## Files
 
+- **[MEMORY_SUBSYSTEM.md](MEMORY_SUBSYSTEM.md)** - Pluggable semantic memory subsystem
+  - Backend abstraction (`none`, `native`, `ghostkg`)
+  - Ingestion, retrieval/reinforcement, and forgetting pipelines
+  - Integration patterns and observability
+  - Configuration and example experiments
+
 - **[RECOMMENDATION_SYSTEMS.md](RECOMMENDATION_SYSTEMS.md)** - Content & follow recommendations (1,200+ lines)
   - 10 content recommendation strategies
   - 5 follow recommendation algorithms
