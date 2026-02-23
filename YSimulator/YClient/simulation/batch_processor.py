@@ -267,7 +267,9 @@ class BatchProcessor:
                 results[original_idx] = self._sanitize_reflection_triplets(raw)
         return results
 
-    def _extract_absorb_triplets(self, agent_id: str, text: str) -> List[List[Any]]:
+    def _extract_absorb_triplets(
+        self, agent_id: str, text: str, author: Optional[str] = None
+    ) -> List[List[Any]]:
         content_text = str(text or "").strip()
         if not content_text:
             return []
@@ -277,7 +279,7 @@ class BatchProcessor:
                 return []
             raw = ray.get(
                 llm_actor.extract_ghostkg_absorb_triplets.remote(
-                    content_text, str(agent_id), str(agent_id)
+                    content_text, str(author or "User"), str(agent_id)
                 )
             )
             return self._sanitize_absorb_triplets(raw)
@@ -316,7 +318,7 @@ class BatchProcessor:
                         [
                             actor.extract_ghostkg_absorb_triplets.remote(
                                 str(req.get("text", "") or ""),
-                                str(req.get("agent_id", "User") or "User"),
+                                str(req.get("author", "User") or "User"),
                                 str(req.get("agent_id", "Agent") or "Agent"),
                             )
                             for _, req in grouped
@@ -364,6 +366,17 @@ class BatchProcessor:
             if source and relation and target:
                 cleaned.append([source, relation, target])
         return cleaned
+
+    def _set_absorb_memory_metadata(
+        self,
+        action: ActionDTO,
+        agent_id: str,
+        observed_content: Optional[str],
+        author: Optional[str] = None,
+    ) -> None:
+        triplets = self._extract_absorb_triplets(agent_id, str(observed_content or ""), author=author)
+        if triplets:
+            action.memory_metadata = {"ghostkg_absorb_triplets": triplets}
 
     def gather_pending_llm_posts(
         self,
@@ -546,9 +559,6 @@ class BatchProcessor:
             )
 
             actions.append(action)
-            action.memory_metadata = {
-                "ghostkg_absorb_triplets": self._extract_absorb_triplets(str(a_id), res_txt)
-            }
             # Cognitive loop write-back: update personal beliefs from generated post text.
             action_metadata = {"agent_attrs": pending_item[6]} if len(pending_item) >= 7 else {}
             self._record_generated_content_memory(
@@ -780,14 +790,6 @@ class BatchProcessor:
         if texts_for_emotions:
             self._batch_extract_and_update_emotions(texts_for_emotions, action_start_idx, actions)
 
-        absorb_triplets_batch = self._extract_absorb_triplets_batch(reflection_inputs)
-        for idx, absorb_triplets in enumerate(absorb_triplets_batch):
-            action_idx = action_start_idx + idx
-            if action_idx < len(actions):
-                actions[action_idx].memory_metadata = {
-                    "ghostkg_absorb_triplets": absorb_triplets
-                }
-
         reflection_triplets_batch = self._extract_reflection_triplets_batch(reflection_inputs)
         for payload, reflection_triplets in zip(action_payloads, reflection_triplets_batch):
             self._record_generated_content_memory(
@@ -979,9 +981,12 @@ class BatchProcessor:
                     updated_opinions=updated_opinions,
                 )
                 actions.append(action)
-                action.memory_metadata = {
-                    "ghostkg_absorb_triplets": self._extract_absorb_triplets(str(a_id), res_act)
-                }
+                self._set_absorb_memory_metadata(
+                    action,
+                    str(a_id),
+                    post_data.get("tweet", "") if post_data else None,
+                    author=str(post_data.get("user_id")) if post_data and post_data.get("user_id") else None,
+                )
                 self._record_generated_content_memory(
                     agent_id=str(a_id),
                     action_type=determined_action_type,
@@ -1077,6 +1082,12 @@ class BatchProcessor:
                         metadata={"agent_attrs": agent_attrs},
                         target_post_id=target,
                     )
+                    self._set_absorb_memory_metadata(
+                        action,
+                        str(a_id),
+                        post_content,
+                        author=str(author_id) if author_id else None,
+                    )
                     # Track for secondary follow (share action)
                     if post_data:
                         secondary_follow_candidates.append(
@@ -1088,6 +1099,12 @@ class BatchProcessor:
                     # Track for secondary follow (read/reaction action)
                     post_data = ray.get(
                         self.server.get_post.remote(target, client_id=self.client_id)
+                    )
+                    self._set_absorb_memory_metadata(
+                        action,
+                        str(a_id),
+                        post_data.get("tweet", "") if post_data else None,
+                        author=str(post_data.get("user_id")) if post_data and post_data.get("user_id") else None,
                     )
                     if post_data:
                         secondary_follow_candidates.append(
@@ -1341,11 +1358,12 @@ class BatchProcessor:
                 updated_opinions=None,  # Will be updated by batch processing
             )
             actions.append(action)
-            action.memory_metadata = {
-                "ghostkg_absorb_triplets": self._extract_absorb_triplets(
-                    str(agent_id), comment_text
-                )
-            }
+            self._set_absorb_memory_metadata(
+                action,
+                str(agent_id),
+                post_data.get("tweet", "") if post_data else metadata.get("post_content", ""),
+                author=str(post_data.get("user_id")) if post_data and post_data.get("user_id") else metadata.get("author_name"),
+            )
             reflection_triplets = self._extract_reflection_triplets(str(agent_id), comment_text)
             self._record_generated_content_memory(
                 agent_id=str(agent_id),
@@ -1507,11 +1525,12 @@ class BatchProcessor:
                 updated_opinions=None,  # Will be updated by batch processing
             )
             actions.append(action)
-            action.memory_metadata = {
-                "ghostkg_absorb_triplets": self._extract_absorb_triplets(
-                    str(agent_id), share_text
-                )
-            }
+            self._set_absorb_memory_metadata(
+                action,
+                str(agent_id),
+                post_data.get("tweet", "") if post_data else item[4].get("post_content", ""),
+                author=str(post_data.get("user_id")) if post_data and post_data.get("user_id") else item[4].get("author_name"),
+            )
             reflection_triplets = self._extract_reflection_triplets(str(agent_id), share_text)
             self._record_generated_content_memory(
                 agent_id=str(agent_id),
@@ -1679,6 +1698,12 @@ class BatchProcessor:
                     updated_opinions=None,  # Will be updated by batch processing
                 )
                 actions.append(action)
+                self._set_absorb_memory_metadata(
+                    action,
+                    str(agent_id),
+                    post_data.get("tweet", "") if post_data else item[4].get("post_content", ""),
+                    author=str(post_data.get("user_id")) if post_data and post_data.get("user_id") else None,
+                )
                 self._record_generated_content_memory(
                     agent_id=str(agent_id),
                     action_type="COMMENT",
@@ -1735,12 +1760,11 @@ class BatchProcessor:
                     updated_opinions=None,  # Will be updated by batch processing
                 )
                 actions.append(action)
-                self._record_generated_content_memory(
-                    agent_id=str(agent_id),
-                    action_type="COMMENT",
-                    content=comment_text,
-                    metadata=metadata,
-                    target_post_id=target_post,
+                self._set_absorb_memory_metadata(
+                    action,
+                    str(agent_id),
+                    post_data.get("tweet", "") if post_data else item[4].get("post_content", ""),
+                    author=str(post_data.get("user_id")) if post_data and post_data.get("user_id") else None,
                 )
 
                 # Track for secondary follow (simple reaction)
@@ -1924,10 +1948,16 @@ class BatchProcessor:
                     updated_opinions=None,
                 )
                 actions.append(action)
+                self._set_absorb_memory_metadata(
+                    action,
+                    str(agent_id),
+                    post_data.get("tweet", "") if post_data else metadata.get("post_content", ""),
+                    author=str(post_data.get("user_id")) if post_data and post_data.get("user_id") else None,
+                )
                 self._record_generated_content_memory(
                     agent_id=str(agent_id),
-                    action_type="SHARE",
-                    content=share_text,
+                    action_type="COMMENT",
+                    content=comment_text,
                     metadata=metadata,
                     target_post_id=target_post,
                 )
@@ -1986,6 +2016,19 @@ class BatchProcessor:
                     updated_opinions=None,
                 )
                 actions.append(action)
+                self._set_absorb_memory_metadata(
+                    action,
+                    str(agent_id),
+                    post_data.get("tweet", "") if post_data else metadata.get("post_content", ""),
+                    author=str(post_data.get("user_id")) if post_data and post_data.get("user_id") else None,
+                )
+                self._record_generated_content_memory(
+                    agent_id=str(agent_id),
+                    action_type="SHARE",
+                    content=share_text,
+                    metadata=metadata,
+                    target_post_id=target_post,
+                )
 
                 # Track for secondary follow
                 if post_data:
@@ -2020,6 +2063,12 @@ class BatchProcessor:
                     updated_opinions=None,
                 )
                 actions.append(action)
+                self._set_absorb_memory_metadata(
+                    action,
+                    str(agent_id),
+                    post_data.get("tweet", "") if post_data else metadata.get("post_content", ""),
+                    author=str(post_data.get("user_id")) if post_data and post_data.get("user_id") else None,
+                )
 
                 # Track for secondary follow
                 if post_data:
