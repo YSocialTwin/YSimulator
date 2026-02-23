@@ -53,7 +53,10 @@ class MemoryService:
     def initialize(self, simulation_context: Optional[Dict[str, Any]] = None) -> None:
         context = simulation_context or {}
         self.backend.initialize(context)
-        self.logger.info(f"Memory backend initialized: {self.backend.name}")
+        self.logger.info(
+            f"Memory backend initialized: {self.backend.name}",
+            extra={"extra_data": {"operation": "initialize", "backend": self.backend.name}},
+        )
 
     def get_backend_name(self) -> str:
         """Return selected backend name."""
@@ -68,7 +71,13 @@ class MemoryService:
         except Exception as e:
             self.logger.error(
                 f"Memory ingest failed for backend {self.backend.name}: {e}",
-                extra={"extra_data": {"backend": self.backend.name, "agent_id": agent_id}},
+                extra={
+                    "extra_data": {
+                        "operation": "ingest_event",
+                        "backend": self.backend.name,
+                        "agent_id": agent_id,
+                    }
+                },
             )
             return IngestResult(success=False, error=str(e))
 
@@ -89,7 +98,13 @@ class MemoryService:
         except Exception as e:
             self.logger.error(
                 f"Memory retrieval failed for backend {self.backend.name}: {e}",
-                extra={"extra_data": {"backend": self.backend.name, "agent_id": agent_id}},
+                extra={
+                    "extra_data": {
+                        "operation": "retrieve",
+                        "backend": self.backend.name,
+                        "agent_id": agent_id,
+                    }
+                },
             )
             return []
 
@@ -102,7 +117,13 @@ class MemoryService:
         except Exception as e:
             self.logger.error(
                 f"Memory reinforce failed for backend {self.backend.name}: {e}",
-                extra={"extra_data": {"backend": self.backend.name, "agent_id": agent_id}},
+                extra={
+                    "extra_data": {
+                        "operation": "reinforce",
+                        "backend": self.backend.name,
+                        "agent_id": agent_id,
+                    }
+                },
             )
             return ReinforceResult(success=False, error=str(e))
 
@@ -113,7 +134,9 @@ class MemoryService:
         except Exception as e:
             self.logger.error(
                 f"Memory forget cycle failed for backend {self.backend.name}: {e}",
-                extra={"extra_data": {"backend": self.backend.name}},
+                extra={
+                    "extra_data": {"operation": "forget_cycle", "backend": self.backend.name}
+                },
             )
             return ForgetResult(success=False, error=str(e))
 

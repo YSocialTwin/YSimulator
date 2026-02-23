@@ -589,10 +589,20 @@ class OrchestratorServer:
 
             class MemoryFormatter(logging.Formatter):
                 def format(self, record: logging.LogRecord) -> str:
-                    return (
-                        f"{datetime.now(timezone.utc).isoformat()} "
-                        f"{record.levelname} {record.getMessage()}"
-                    )
+                    log_data = {
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                        "level": record.levelname,
+                        "message": record.getMessage(),
+                        "logger": record.name,
+                        "module": record.module,
+                        "function": record.funcName,
+                        "line": record.lineno,
+                    }
+                    if hasattr(record, "extra_data"):
+                        log_data.update(record.extra_data)
+                    if record.exc_info:
+                        log_data["exception"] = self.formatException(record.exc_info)
+                    return json.dumps(log_data)
 
             memory_handler.setFormatter(MemoryFormatter())
             self.memory_logger.addHandler(memory_handler)
