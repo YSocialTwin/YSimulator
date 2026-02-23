@@ -1,5 +1,7 @@
 """Tests for memory service health/status reporting."""
 
+import logging
+
 from sqlalchemy import create_engine
 
 from YSimulator.YServer.services.memory_service import MemoryService
@@ -26,3 +28,15 @@ def test_memory_service_health_reports_native_backend_when_enabled(tmp_path):
     assert status["backend"] == "native"
     assert status["enabled"] is True
     assert status["ok"] is True
+
+
+def test_memory_service_bind_logger_propagates_to_backend():
+    engine = create_engine("sqlite:///:memory:")
+    service = MemoryService(
+        simulation_config={"agent_memory": {"enabled": True, "backend": "native"}},
+        engine=engine,
+    )
+    memory_logger = logging.getLogger("test.memory")
+    service.bind_logger(memory_logger)
+    assert service.logger is memory_logger
+    assert getattr(service.backend, "logger", None) is memory_logger

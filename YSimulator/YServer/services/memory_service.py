@@ -42,6 +42,14 @@ class MemoryService:
             engine=self.engine,
         )
 
+    def bind_logger(self, logger: Any) -> None:
+        """Bind a dedicated logger to memory service and backend."""
+        if logger is None:
+            return
+        self.logger = logger
+        if hasattr(self.backend, "logger"):
+            self.backend.logger = logger
+
     def initialize(self, simulation_context: Optional[Dict[str, Any]] = None) -> None:
         context = simulation_context or {}
         self.backend.initialize(context)

@@ -35,6 +35,8 @@ class GhostKGMemoryBackend(MemoryBackend):
         self._fast_extractor = None
         self._extraction_mode = str(self._cfg("extraction_mode", "triplets")).lower()
         self._relation_whitelist = set(self._cfg("relation_whitelist", []) or [])
+        self._resolved_db_url: Optional[str] = None
+        self._resolved_db_path: Optional[str] = None
 
     @property
     def name(self) -> str:
@@ -46,16 +48,28 @@ class GhostKGMemoryBackend(MemoryBackend):
 
             # Resolution priority:
             # 1) explicit ghostkg.db_url
-            # 2) explicit ghostkg.db_path
-            # 3) server SQL engine URL (shared simulation DB)
+            # 2) shared server DB URL (default when available)
+            # 3) explicit ghostkg.db_path (when shared DB is disabled)
             # 4) config_path/database_server.db fallback
-            db_url = self._resolve_db_url()
+            db_url = self._resolve_db_url(simulation_context)
             db_path = self._resolve_db_path(simulation_context, db_url=db_url)
+            self._resolved_db_url = db_url
+            self._resolved_db_path = db_path
             store_log_content = bool(self._cfg("store_log_content", False))
             self.manager = AgentManager(
                 db_path=db_path,
                 db_url=db_url,
                 store_log_content=store_log_content,
+            )
+            self.logger.info(
+                "GhostKG storage configured",
+                extra={
+                    "extra_data": {
+                        "db_url": db_url,
+                        "db_path": db_path,
+                        "store_log_content": store_log_content,
+                    }
+                },
             )
             self.rating = Rating
             self._llm_service = self._build_llm_service_if_needed()
@@ -169,6 +183,8 @@ class GhostKGMemoryBackend(MemoryBackend):
             details={
                 "initialized": self._initialized,
                 "available": self._available,
+                "db_url": self._resolved_db_url,
+                "db_path": self._resolved_db_path,
             },
         )
 
@@ -362,36 +378,67 @@ class GhostKGMemoryBackend(MemoryBackend):
             return "\n".join(f"- {line}" for line in lines)
         return str(context_used).strip() or None
 
-    def _resolve_db_url(self) -> Optional[str]:
+    def _resolve_db_url(self, simulation_context: Dict[str, Any]) -> Optional[str]:
         configured_url = self._cfg("db_url")
         if configured_url:
-            return str(configured_url)
+            return self._normalize_sqlite_url(str(configured_url), simulation_context)
 
-        # Explicit db_path takes precedence over engine fallback.
-        if self._cfg("db_path"):
-            return None
+        use_main_db = bool(self._cfg("use_main_db", True))
+        if use_main_db and self.engine is not None:
+            try:
+                return self._normalize_sqlite_url(str(self.engine.url), simulation_context)
+            except Exception:
+                return None
 
         if self.engine is None:
             return None
 
+        if not use_main_db and self._cfg("db_path"):
+            return None
+
         try:
-            return str(self.engine.url)
+            return self._normalize_sqlite_url(str(self.engine.url), simulation_context)
         except Exception:
             return None
 
     def _resolve_db_path(self, simulation_context: Dict[str, Any], db_url: Optional[str] = None) -> Optional[str]:
-        configured = self._cfg("db_path")
-        if configured:
-            return str(configured)
-
         # When db_url is present, AgentManager should use URL as source of truth.
         if db_url:
             return None
+
+        configured = self._cfg("db_path")
+        if configured:
+            return self._resolve_local_path(str(configured), simulation_context)
 
         config_path = simulation_context.get("config_path")
         if config_path:
             return os.path.join(str(config_path), "database_server.db")
         return "database_server.db"
+
+    def _normalize_sqlite_url(self, db_url: str, simulation_context: Dict[str, Any]) -> str:
+        """
+        Normalize relative SQLite URLs against experiment config_path to avoid
+        accidental writes in process CWD.
+        """
+        if not db_url.startswith("sqlite:///"):
+            return db_url
+        if db_url == "sqlite:///:memory:" or db_url.startswith("sqlite:////"):
+            return db_url
+        sqlite_path = db_url[len("sqlite:///") :]
+        resolved_path = self._resolve_local_path(sqlite_path, simulation_context)
+        return f"sqlite:///{resolved_path}"
+
+    def _resolve_local_path(self, path_value: str, simulation_context: Dict[str, Any]) -> str:
+        if os.path.isabs(path_value):
+            return path_value
+        candidate_abs = os.path.abspath(path_value)
+        config_path = simulation_context.get("config_path")
+        if config_path:
+            config_abs = os.path.abspath(str(config_path))
+            if candidate_abs.startswith(config_abs):
+                return candidate_abs
+            return os.path.abspath(os.path.join(config_abs, path_value))
+        return candidate_abs
 
     def _cfg(self, key: str, default: Any = None) -> Any:
         """Read backend configuration with support for nested `agent_memory.ghostkg`."""

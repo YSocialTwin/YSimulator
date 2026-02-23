@@ -123,8 +123,9 @@
     "prompt_memory_item_char_limit": 140,
     "forgetting_cycle_interval_rounds": 24,
     "ghostkg": {
-      "db_path": "example/memory_ghostkg_experiment/database_server.db",
+      "db_path": null,
       "db_url": null,
+      "use_main_db": true,
       "store_log_content": false,
       "extraction_mode": "fast",
       "relation_whitelist": [

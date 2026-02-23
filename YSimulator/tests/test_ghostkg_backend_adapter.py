@@ -217,7 +217,7 @@ def test_ghostkg_backend_defaults_to_engine_db_url(monkeypatch):
     assert backend.manager.db_path is None
 
 
-def test_ghostkg_backend_explicit_db_path_overrides_engine(monkeypatch):
+def test_ghostkg_backend_default_prefers_main_db_even_when_db_path_configured(monkeypatch):
     class FakeRating:
         Good = 3
         Hard = 2
@@ -238,5 +238,57 @@ def test_ghostkg_backend_explicit_db_path_overrides_engine(monkeypatch):
     backend.initialize({})
 
     assert backend.health_check().ok is True
+    assert backend.manager.db_url == "sqlite:////tmp/main_simulation.db"
+    assert backend.manager.db_path is None
+
+
+def test_ghostkg_backend_explicit_opt_out_uses_db_path(monkeypatch):
+    class FakeRating:
+        Good = 3
+        Hard = 2
+
+    class FakeManager:
+        def __init__(self, db_path="db", db_url=None, store_log_content=False):
+            self.db_path = db_path
+            self.db_url = db_url
+
+        def create_agent(self, name, llm_service=None):
+            return None
+
+    fake_module = types.SimpleNamespace(AgentManager=FakeManager, Rating=FakeRating)
+    monkeypatch.setitem(sys.modules, "ghost_kg", fake_module)
+
+    engine = types.SimpleNamespace(url="sqlite:////tmp/main_simulation.db")
+    backend = GhostKGMemoryBackend(
+        backend_config={"db_path": "/tmp/ghostkg_only.db", "use_main_db": False},
+        engine=engine,
+    )
+    backend.initialize({"config_path": "/tmp"})
+
+    assert backend.health_check().ok is True
     assert backend.manager.db_url is None
     assert backend.manager.db_path == "/tmp/ghostkg_only.db"
+
+
+def test_ghostkg_backend_resolves_relative_sqlite_url_with_config_path(monkeypatch):
+    class FakeRating:
+        Good = 3
+        Hard = 2
+
+    class FakeManager:
+        def __init__(self, db_path="db", db_url=None, store_log_content=False):
+            self.db_path = db_path
+            self.db_url = db_url
+
+        def create_agent(self, name, llm_service=None):
+            return None
+
+    fake_module = types.SimpleNamespace(AgentManager=FakeManager, Rating=FakeRating)
+    monkeypatch.setitem(sys.modules, "ghost_kg", fake_module)
+
+    engine = types.SimpleNamespace(url="sqlite:///simulation_memory_ghostkg.db")
+    backend = GhostKGMemoryBackend(backend_config={}, engine=engine)
+    backend.initialize({"config_path": "/tmp/experiment"})
+
+    assert backend.health_check().ok is True
+    assert backend.manager.db_url == "sqlite:////tmp/experiment/simulation_memory_ghostkg.db"

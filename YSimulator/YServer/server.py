@@ -266,6 +266,8 @@ class OrchestratorServer:
             self.metadata_service = metadata_service
             self.mention_service = mention_service
             self.memory_service = memory_service
+            if self.memory_logger is not None:
+                self.memory_service.bind_logger(self.memory_logger)
             self.redis_client = redis_client
             self.use_redis = redis_client is not None
 
@@ -492,6 +494,7 @@ class OrchestratorServer:
         logging_config = self.simulation_config.get("logging", {})
         enable_actor_log = logging_config.get("enable_actor_log", True)
         enable_request_log = logging_config.get("enable_request_log", True)
+        memory_enabled = bool(self.simulation_config.get("agent_memory", {}).get("enabled", False))
 
         log_dir = self.config_path / "logs"
         log_dir.mkdir(exist_ok=True)
@@ -567,6 +570,33 @@ class OrchestratorServer:
 
         # Prevent propagation to avoid duplicate logs
         self.server_request_logger.propagate = False
+
+        # Dedicated memory logger (enabled only when memory subsystem is active).
+        self.memory_logger = None
+        if memory_enabled:
+            from logging.handlers import RotatingFileHandler
+
+            memory_log_file = log_dir / "memory.log"
+            self.memory_logger = logging.getLogger(f"YSimulator.Server.{self.server_name}.Memory")
+            self.memory_logger.setLevel(logging.INFO)
+            self.memory_logger.handlers = []
+
+            memory_handler = RotatingFileHandler(
+                memory_log_file, maxBytes=LOG_FILE_MAX_BYTES, backupCount=LOG_FILE_BACKUP_COUNT
+            )
+            memory_handler.rotator = compress_rotated_log
+            memory_handler.namer = lambda name: name + ".gz"
+
+            class MemoryFormatter(logging.Formatter):
+                def format(self, record: logging.LogRecord) -> str:
+                    return (
+                        f"{datetime.now(timezone.utc).isoformat()} "
+                        f"{record.levelname} {record.getMessage()}"
+                    )
+
+            memory_handler.setFormatter(MemoryFormatter())
+            self.memory_logger.addHandler(memory_handler)
+            self.memory_logger.propagate = False
 
     def _validate_and_extract_interests(self, interests):
         """
