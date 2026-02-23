@@ -10,6 +10,7 @@ import logging
 import os
 import json
 import re
+import ast
 from typing import Any, Dict, List, Optional, Tuple
 
 import ray
@@ -326,6 +327,11 @@ class VLLMService:
             temperature=llm_config.get("temperature", 0.7),
             max_tokens=llm_config.get("max_tokens", 256),
             top_p=0.95,
+        )
+        self.extraction_sampling_params = SamplingParams(
+            temperature=llm_config.get("extraction_temperature", 0.1),
+            max_tokens=llm_config.get("extraction_max_tokens", 384),
+            top_p=0.9,
         )
 
         # Initialize vision LLM if config provided
@@ -2504,7 +2510,7 @@ class VLLMService:
             raise RuntimeError(f"vLLM batch search action decision failed: {e}") from e
 
     @staticmethod
-    def _extract_json_block(raw_text: str) -> Dict[str, Any]:
+    def _extract_json_block(raw_text: str) -> Any:
         text = str(raw_text or "").strip()
         if not text:
             return {}
@@ -2524,25 +2530,86 @@ class VLLMService:
             try:
                 return json.loads(text[start : end + 1])
             except Exception:
-                return {}
+                pass
+            try:
+                obj = ast.literal_eval(text[start : end + 1])
+                if isinstance(obj, (dict, list)):
+                    return obj
+            except Exception:
+                pass
+        lstart = text.find("[")
+        lend = text.rfind("]")
+        if lstart >= 0 and lend > lstart:
+            try:
+                return json.loads(text[lstart : lend + 1])
+            except Exception:
+                pass
+            try:
+                obj = ast.literal_eval(text[lstart : lend + 1])
+                if isinstance(obj, (dict, list)):
+                    return obj
+            except Exception:
+                pass
+        decoder = json.JSONDecoder()
+        for idx, ch in enumerate(text):
+            if ch not in "{[":
+                continue
+            try:
+                obj, _ = decoder.raw_decode(text[idx:])
+                return obj
+            except Exception:
+                continue
+        try:
+            obj = ast.literal_eval(text)
+            if isinstance(obj, (dict, list)):
+                return obj
+        except Exception:
+            pass
         return {}
 
     @staticmethod
     def _sanitize_absorb_triplets(payload: Any) -> List[List[Any]]:
+        if payload is None:
+            return []
+        if isinstance(payload, list):
+            cleaned: List[List[Any]] = []
+            for item in payload:
+                if isinstance(item, (list, tuple)) and len(item) == 3:
+                    source = str(item[0]).strip()
+                    relation = str(item[1]).strip()
+                    target = str(item[2]).strip()
+                    if source and relation and target and not VLLMService._looks_like_uuid(target):
+                        cleaned.append([source, relation, target])
+            if cleaned:
+                return cleaned
+            return []
         if not isinstance(payload, dict):
             return []
         triplets: List[List[Any]] = []
         sections = [
             ("world_facts", False),
             ("partner_stance", False),
+            ("facts", False),
+            ("partner_beliefs", False),
+            ("triplets", False),
         ]
         for section_name, force_i_source in sections:
             for item in payload.get(section_name, []) or []:
-                if not isinstance(item, dict):
+                source = ""
+                relation = ""
+                target = ""
+                if isinstance(item, dict):
+                    source = "I" if force_i_source else str(
+                        item.get("source", item.get("subject", ""))
+                    ).strip()
+                    relation = str(item.get("relation", item.get("predicate", ""))).strip()
+                    target = str(item.get("target", item.get("object", ""))).strip()
+                elif isinstance(item, (list, tuple)) and len(item) == 3:
+                    source = "I" if force_i_source else str(item[0]).strip()
+                    relation = str(item[1]).strip()
+                    target = str(item[2]).strip()
+                else:
                     continue
-                source = "I" if force_i_source else str(item.get("source", "")).strip()
-                relation = str(item.get("relation", "")).strip()
-                target = str(item.get("target", "")).strip()
                 if VLLMService._looks_like_uuid(source):
                     source = "Author" if not force_i_source else "I"
                 if VLLMService._looks_like_uuid(target):
@@ -2565,21 +2632,56 @@ class VLLMService:
 
     @staticmethod
     def _sanitize_reflection_triplets(payload: Any) -> List[List[Any]]:
+        if payload is None:
+            return []
+        if isinstance(payload, list):
+            cleaned: List[List[Any]] = []
+            for item in payload:
+                if isinstance(item, dict):
+                    relation = str(item.get("relation", item.get("predicate", ""))).strip()
+                    target = str(item.get("target", item.get("object", ""))).strip()
+                    sentiment_raw = item.get("sentiment", 0.0)
+                elif isinstance(item, (list, tuple)) and len(item) >= 2:
+                    relation = str(item[0]).strip()
+                    target = str(item[1]).strip()
+                    sentiment_raw = item[2] if len(item) > 2 else 0.0
+                else:
+                    continue
+                try:
+                    sentiment = float(sentiment_raw or 0.0)
+                except (TypeError, ValueError):
+                    sentiment = 0.0
+                sentiment = max(-1.0, min(1.0, sentiment))
+                if relation and target:
+                    cleaned.append([relation, target, sentiment])
+            if cleaned:
+                return cleaned
+            return []
         if not isinstance(payload, dict):
             return []
         triplets: List[List[Any]] = []
-        for item in payload.get("my_expressed_stances", []) or []:
-            if not isinstance(item, dict):
-                continue
-            relation = str(item.get("relation", "")).strip()
-            target = str(item.get("target", "")).strip()
-            try:
-                sentiment = float(item.get("sentiment", 0.0) or 0.0)
-            except (TypeError, ValueError):
-                sentiment = 0.0
-            sentiment = max(-1.0, min(1.0, sentiment))
-            if relation and target:
-                triplets.append([relation, target, sentiment])
+        sections = [
+            "my_expressed_stances",
+            "my_expressed_stance",
+            "my_reaction",
+            "reaction",
+            "beliefs",
+            "stances",
+            "triplets",
+        ]
+        for section in sections:
+            for item in payload.get(section, []) or []:
+                if not isinstance(item, dict):
+                    continue
+                relation = str(item.get("relation", item.get("predicate", ""))).strip()
+                target = str(item.get("target", item.get("object", ""))).strip()
+                try:
+                    sentiment = float(item.get("sentiment", item.get("score", 0.0)) or 0.0)
+                except (TypeError, ValueError):
+                    sentiment = 0.0
+                sentiment = max(-1.0, min(1.0, sentiment))
+                if relation and target:
+                    triplets.append([relation, target, sentiment])
         return triplets
 
     def extract_ghostkg_absorb_triplets(
@@ -2592,7 +2694,7 @@ class VLLMService:
             system_template, user_template.format(text=text, author=author, agent_name=agent_name)
         )
         try:
-            outputs = self.llm.generate([prompt], self.sampling_params)
+            outputs = self.llm.generate([prompt], self.extraction_sampling_params)
             raw = outputs[0].outputs[0].text
             return self._sanitize_absorb_triplets(self._extract_json_block(raw))
         except Exception as e:
@@ -2609,7 +2711,7 @@ class VLLMService:
         user_template = cfg.get("user_template", DEFAULT_GHOSTKG_REFLECTION_PROMPTS["user_template"])
         prompt = self._format_prompt(system_template, user_template.format(text=text, agent_name=agent_name))
         try:
-            outputs = self.llm.generate([prompt], self.sampling_params)
+            outputs = self.llm.generate([prompt], self.extraction_sampling_params)
             raw = outputs[0].outputs[0].text
             return self._sanitize_reflection_triplets(self._extract_json_block(raw))
         except Exception as e:
@@ -2639,7 +2741,7 @@ class VLLMService:
                 prompts.append(prompt)
             if not prompts:
                 return []
-            outputs = self.llm.generate(prompts, self.sampling_params)
+            outputs = self.llm.generate(prompts, self.extraction_sampling_params)
             triplets: List[List[List[Any]]] = []
             for output in outputs:
                 raw = output.outputs[0].text
@@ -2670,7 +2772,7 @@ class VLLMService:
                 )
             if not prompts:
                 return []
-            outputs = self.llm.generate(prompts, self.sampling_params)
+            outputs = self.llm.generate(prompts, self.extraction_sampling_params)
             triplets: List[List[List[Any]]] = []
             for output in outputs:
                 raw = output.outputs[0].text

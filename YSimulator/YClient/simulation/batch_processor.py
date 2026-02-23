@@ -377,6 +377,15 @@ class BatchProcessor:
             action.memory_metadata = {"ghostkg_absorb_triplets": triplets}
 
     @staticmethod
+    def _resolve_author_label(post_data: Optional[Dict[str, Any]], fallback: str = "Author") -> str:
+        if isinstance(post_data, dict):
+            candidate = post_data.get("author") or post_data.get("user_id")
+            candidate_txt = str(candidate or "").strip()
+            if candidate_txt:
+                return candidate_txt
+        return fallback
+
+    @staticmethod
     def _filter_absorb_triplets_for_author(
         triplets: List[List[Any]], agent_id: str, author: Optional[str]
     ) -> List[List[Any]]:
@@ -1112,7 +1121,7 @@ class BatchProcessor:
                     action,
                     str(a_id),
                     post_data.get("tweet", "") if post_data else None,
-                    author="Author",
+                    author=self._resolve_author_label(post_data),
                 )
                 self._record_generated_content_memory(
                     agent_id=str(a_id),
@@ -1231,7 +1240,7 @@ class BatchProcessor:
                         action,
                         str(a_id),
                         post_data.get("tweet", "") if post_data else None,
-                        author="Author",
+                        author=self._resolve_author_label(post_data),
                     )
                     if post_data:
                         secondary_follow_candidates.append(
@@ -1489,7 +1498,7 @@ class BatchProcessor:
                 action,
                 str(agent_id),
                 post_data.get("tweet", "") if post_data else metadata.get("post_content", ""),
-                author=metadata.get("author_name") or "Author",
+                author=self._resolve_author_label(post_data, metadata.get("author_name") or "Author"),
             )
             reflection_triplets = self._extract_reflection_triplets(str(agent_id), comment_text)
             self._record_generated_content_memory(
@@ -1829,7 +1838,7 @@ class BatchProcessor:
                     action,
                     str(agent_id),
                     post_data.get("tweet", "") if post_data else item[4].get("post_content", ""),
-                    author="Author",
+                    author=self._resolve_author_label(post_data),
                 )
                 self._record_generated_content_memory(
                     agent_id=str(agent_id),
@@ -1891,7 +1900,7 @@ class BatchProcessor:
                     action,
                     str(agent_id),
                     post_data.get("tweet", "") if post_data else item[4].get("post_content", ""),
-                    author="Author",
+                    author=self._resolve_author_label(post_data),
                 )
 
                 # Track for secondary follow (simple reaction)
@@ -2079,7 +2088,7 @@ class BatchProcessor:
                     action,
                     str(agent_id),
                     post_data.get("tweet", "") if post_data else metadata.get("post_content", ""),
-                    author="Author",
+                    author=self._resolve_author_label(post_data),
                 )
                 self._record_generated_content_memory(
                     agent_id=str(agent_id),
@@ -2147,7 +2156,7 @@ class BatchProcessor:
                     action,
                     str(agent_id),
                     post_data.get("tweet", "") if post_data else metadata.get("post_content", ""),
-                    author="Author",
+                    author=self._resolve_author_label(post_data),
                 )
                 self._record_generated_content_memory(
                     agent_id=str(agent_id),
@@ -2194,7 +2203,7 @@ class BatchProcessor:
                     action,
                     str(agent_id),
                     post_data.get("tweet", "") if post_data else metadata.get("post_content", ""),
-                    author="Author",
+                    author=self._resolve_author_label(post_data),
                 )
 
                 # Track for secondary follow

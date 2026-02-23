@@ -3,6 +3,7 @@ import os
 import random
 import json
 import re
+import ast
 from typing import Any, Dict, List, Optional
 
 # Fix langchain verbose attribute error
@@ -1375,7 +1376,7 @@ class LLMService:
             return "NEUTRAL"
 
     @staticmethod
-    def _extract_json_block(raw_text: str) -> Dict[str, Any]:
+    def _extract_json_block(raw_text: str) -> Any:
         text = str(raw_text or "").strip()
         if not text:
             return {}
@@ -1395,25 +1396,92 @@ class LLMService:
             try:
                 return json.loads(text[start : end + 1])
             except Exception:
-                return {}
+                pass
+            try:
+                obj = ast.literal_eval(text[start : end + 1])
+                if isinstance(obj, (dict, list)):
+                    return obj
+            except Exception:
+                pass
+        # Try list payload
+        lstart = text.find("[")
+        lend = text.rfind("]")
+        if lstart >= 0 and lend > lstart:
+            try:
+                return json.loads(text[lstart : lend + 1])
+            except Exception:
+                pass
+            try:
+                obj = ast.literal_eval(text[lstart : lend + 1])
+                if isinstance(obj, (dict, list)):
+                    return obj
+            except Exception:
+                pass
+        # Robust fallback: parse first decodable JSON object/array embedded in text.
+        decoder = json.JSONDecoder()
+        for idx, ch in enumerate(text):
+            if ch not in "{[":
+                continue
+            try:
+                obj, _ = decoder.raw_decode(text[idx:])
+                return obj
+            except Exception:
+                continue
+        # Last-resort parser for single-quoted python-like dict/list outputs.
+        try:
+            obj = ast.literal_eval(text)
+            if isinstance(obj, (dict, list)):
+                return obj
+        except Exception:
+            pass
         return {}
 
     @staticmethod
     def _sanitize_absorb_triplets(payload: Any) -> List[List[Any]]:
+        if payload is None:
+            return []
+
+        # Accept direct list-of-triplets payloads too.
+        if isinstance(payload, list):
+            cleaned: List[List[Any]] = []
+            for item in payload:
+                if isinstance(item, (list, tuple)) and len(item) == 3:
+                    source = str(item[0]).strip()
+                    relation = str(item[1]).strip()
+                    target = str(item[2]).strip()
+                    if source and relation and target and not LLMService._looks_like_uuid(target):
+                        cleaned.append([source, relation, target])
+            if cleaned:
+                return cleaned
+            return []
+
         if not isinstance(payload, dict):
             return []
         triplets: List[List[Any]] = []
         sections = [
             ("world_facts", False),
             ("partner_stance", False),
+            ("facts", False),
+            ("partner_beliefs", False),
+            ("triplets", False),
         ]
         for section_name, force_i_source in sections:
             for item in payload.get(section_name, []) or []:
-                if not isinstance(item, dict):
+                source = ""
+                relation = ""
+                target = ""
+                if isinstance(item, dict):
+                    source = "I" if force_i_source else str(
+                        item.get("source", item.get("subject", ""))
+                    ).strip()
+                    relation = str(item.get("relation", item.get("predicate", ""))).strip()
+                    target = str(item.get("target", item.get("object", ""))).strip()
+                elif isinstance(item, (list, tuple)) and len(item) == 3:
+                    source = "I" if force_i_source else str(item[0]).strip()
+                    relation = str(item[1]).strip()
+                    target = str(item[2]).strip()
+                else:
                     continue
-                source = "I" if force_i_source else str(item.get("source", "")).strip()
-                relation = str(item.get("relation", "")).strip()
-                target = str(item.get("target", "")).strip()
                 if LLMService._looks_like_uuid(source):
                     source = "Author" if not force_i_source else "I"
                 if LLMService._looks_like_uuid(target):
@@ -1436,21 +1504,59 @@ class LLMService:
 
     @staticmethod
     def _sanitize_reflection_triplets(payload: Any) -> List[List[Any]]:
+        if payload is None:
+            return []
+
+        if isinstance(payload, list):
+            cleaned: List[List[Any]] = []
+            for item in payload:
+                if isinstance(item, dict):
+                    relation = str(item.get("relation", item.get("predicate", ""))).strip()
+                    target = str(item.get("target", item.get("object", ""))).strip()
+                    sentiment_raw = item.get("sentiment", 0.0)
+                elif isinstance(item, (list, tuple)) and len(item) >= 2:
+                    relation = str(item[0]).strip()
+                    target = str(item[1]).strip()
+                    sentiment_raw = item[2] if len(item) > 2 else 0.0
+                else:
+                    continue
+                try:
+                    sentiment = float(sentiment_raw or 0.0)
+                except (TypeError, ValueError):
+                    sentiment = 0.0
+                sentiment = max(-1.0, min(1.0, sentiment))
+                if relation and target:
+                    cleaned.append([relation, target, sentiment])
+            if cleaned:
+                return cleaned
+            return []
+
         if not isinstance(payload, dict):
             return []
         triplets: List[List[Any]] = []
-        for item in payload.get("my_expressed_stances", []) or []:
-            if not isinstance(item, dict):
-                continue
-            relation = str(item.get("relation", "")).strip()
-            target = str(item.get("target", "")).strip()
-            try:
-                sentiment = float(item.get("sentiment", 0.0) or 0.0)
-            except (TypeError, ValueError):
-                sentiment = 0.0
-            sentiment = max(-1.0, min(1.0, sentiment))
-            if relation and target:
-                triplets.append([relation, target, sentiment])
+        sections = [
+            "my_expressed_stances",
+            "my_expressed_stance",
+            "my_reaction",
+            "reaction",
+            "beliefs",
+            "stances",
+            "triplets",
+        ]
+        for section in sections:
+            section_items = payload.get(section, []) or []
+            for item in section_items:
+                if not isinstance(item, dict):
+                    continue
+                relation = str(item.get("relation", item.get("predicate", ""))).strip()
+                target = str(item.get("target", item.get("object", ""))).strip()
+                try:
+                    sentiment = float(item.get("sentiment", item.get("score", 0.0)) or 0.0)
+                except (TypeError, ValueError):
+                    sentiment = 0.0
+                sentiment = max(-1.0, min(1.0, sentiment))
+                if relation and target:
+                    triplets.append([relation, target, sentiment])
         return triplets
 
     def extract_ghostkg_absorb_triplets(
@@ -1462,7 +1568,7 @@ class LLMService:
         user_msg = user_template.format(text=text, author=author, agent_name=agent_name)
         prompt = ChatPromptTemplate.from_messages([("system", system_template), ("user", user_msg)])
         try:
-            chain = prompt | self.llm | StrOutputParser()
+            chain = prompt | self.llm.bind(temperature=0.1) | StrOutputParser()
             raw = chain.invoke({})
             return self._sanitize_absorb_triplets(self._extract_json_block(raw))
         except Exception as e:
@@ -1480,7 +1586,7 @@ class LLMService:
         user_msg = user_template.format(text=text, agent_name=agent_name)
         prompt = ChatPromptTemplate.from_messages([("system", system_template), ("user", user_msg)])
         try:
-            chain = prompt | self.llm | StrOutputParser()
+            chain = prompt | self.llm.bind(temperature=0.1) | StrOutputParser()
             raw = chain.invoke({})
             return self._sanitize_reflection_triplets(self._extract_json_block(raw))
         except Exception as e:
