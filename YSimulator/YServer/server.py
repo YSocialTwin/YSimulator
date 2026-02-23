@@ -1492,6 +1492,7 @@ class OrchestratorServer:
                     memory_event = {
                         "action_type": act.action_type,
                         "agent_id": str(act.agent_id),
+                        "content": getattr(act, "content", None),
                         "target_post_id": getattr(act, "target_post_id", None),
                         "target_user_id": getattr(act, "target_user_id", None),
                         "topic": getattr(act, "topic", None),

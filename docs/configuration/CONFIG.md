@@ -1537,6 +1537,102 @@ python run_client.py --config shared_config
 
 ---
 
+## Agent Memory (Pluggable Backends)
+
+YSimulator supports pluggable memory backends through `agent_memory`:
+- `none`: disable memory features (safe fallback)
+- `native`: built-in YSimulator semantic memory
+- `ghostkg`: GhostKG-backed memory adapter
+
+### `simulation_config.json` Example
+
+```json
+{
+  "agent_memory": {
+    "enabled": true,
+    "backend": "ghostkg",
+    "retrieval_top_k": 5,
+    "forgetting_cycle_interval_rounds": 24,
+
+    "max_memories_per_agent": 500,
+    "time_decay_lambda": 0.015,
+    "reinforce_gain": 0.08,
+    "soft_forget_threshold": 0.12,
+    "hard_delete_after_days": 14,
+
+    "ghostkg": {
+      "db_path": "database_server.db",
+      "db_url": null,
+      "store_log_content": false,
+
+      "extraction_mode": "triplets",
+      "relation_whitelist": [
+        "posts_about",
+        "comments_about",
+        "follows",
+        "unfollows",
+        "mentions"
+      ],
+
+      "llm_provider": "ollama",
+      "llm_model": "llama3.2",
+      "llm_base_url": "http://localhost:11434",
+      "llm_api_key": null,
+      "llm_api_key_env": "OPENAI_API_KEY"
+    }
+  }
+}
+```
+
+### Core Parameters
+
+- `agent_memory.enabled` (bool): Master switch.
+- `agent_memory.backend` (`none|native|ghostkg`): Select runtime backend.
+- `agent_memory.retrieval_top_k` (int): Retrieval size hint for generators.
+- `agent_memory.forgetting_cycle_interval_rounds` (int): Forgetting run cadence.
+
+### Native Backend Parameters
+
+- `agent_memory.max_memories_per_agent` (int): Capacity guard.
+- `agent_memory.time_decay_lambda` (float): Per-cycle decay factor.
+- `agent_memory.reinforce_gain` (float): Strength/confidence reinforcement gain.
+- `agent_memory.soft_forget_threshold` (float): Soft-forget cutoff.
+- `agent_memory.hard_delete_after_days` (int): Hard-delete window for forgotten items.
+
+### GhostKG Parameters
+
+- `agent_memory.ghostkg.db_path` (str): Database file path (default shares simulation DB file).
+- `agent_memory.ghostkg.db_url` (str|null): Optional SQLAlchemy URL (takes precedence over `db_path`).
+- `agent_memory.ghostkg.store_log_content` (bool): Store full content in GhostKG logs vs UUID references.
+
+#### Triplet Extraction Mode
+
+- `agent_memory.ghostkg.extraction_mode` controls how knowledge is ingested:
+  - `triplets`: cheapest mode, YSimulator maps actions directly to deterministic triplets (recommended default for scale).
+  - `fast`: content-based extraction using GhostKG fast mode (`fast_mode=True`) when content is available.
+  - `llm`: content-based extraction using GhostKG LLM path (`fast_mode=False`), requires LLM provider config/dependencies.
+
+#### Relation Control
+
+- `agent_memory.ghostkg.relation_whitelist` (list[str]): Allowed relations for direct-triplet mode.
+  - If generated relation is not whitelisted, adapter falls back to `mentions`.
+
+#### LLM Extraction Parameters (for `extraction_mode=llm`)
+
+- `agent_memory.ghostkg.llm_provider` (str): `ollama`, `openai`, `anthropic`, `google`, `cohere`, etc.
+- `agent_memory.ghostkg.llm_model` (str): Model identifier for selected provider.
+- `agent_memory.ghostkg.llm_base_url` (str|null): Host/base URL (e.g., Ollama endpoint).
+- `agent_memory.ghostkg.llm_api_key` (str|null): API key inline.
+- `agent_memory.ghostkg.llm_api_key_env` (str|null): Environment variable name for API key fallback.
+
+### Recommended Mode Selection
+
+- `triplets`: best for large-scale simulation throughput and deterministic behavior.
+- `fast`: middle ground when you want automatic extraction without full LLM cost.
+- `llm`: highest semantic flexibility; use only when compute budget allows.
+
+---
+
 ## Related Documentation
 
 - **[LOGGING_CONFIG.md](../logging/LOGGING_CONFIG.md)** - Comprehensive logging configuration guide
