@@ -421,7 +421,7 @@ class BatchProcessor:
 
     @staticmethod
     def _ensure_topic_subject_triplets(
-        triplets: List[List[Any]], selected_topics: List[str]
+        triplets: List[List[Any]], selected_topics: List[str], generated_content: Optional[str] = None
     ) -> List[List[Any]]:
         result = [list(item) for item in (triplets or []) if isinstance(item, list) and len(item) == 3]
         existing_sources = {
@@ -429,6 +429,10 @@ class BatchProcessor:
             for item in result
             if str(item[0]).strip()
         }
+        content_text = " ".join(str(generated_content or "").split()).strip()
+        if len(content_text) > 120:
+            content_text = content_text[:117].rstrip() + "..."
+        anchor_target = content_text or "generated_post"
         for topic in selected_topics:
             source = str(topic).strip()
             if not source:
@@ -436,8 +440,8 @@ class BatchProcessor:
             source_key = source.lower()
             if source_key in existing_sources:
                 continue
-            # Enforce topic-as-subject anchor for each selected generation topic.
-            result.append([source, "is_topic_of", "generated_post"])
+            # Enforce topic-as-subject anchor per selected topic, tied to generated text.
+            result.append([source, "is_expressed_in", anchor_target])
             existing_sources.add(source_key)
         return result
 
@@ -451,9 +455,9 @@ class BatchProcessor:
     ) -> None:
         selected_topics = self._extract_selected_post_topics(explicit_topic_or_article, agent_attrs)
         triplets = self._extract_absorb_triplets(
-            agent_id, str(generated_content or ""), author=str(agent_id)
+            agent_id, str(generated_content or ""), author="Self"
         )
-        triplets = self._ensure_topic_subject_triplets(triplets, selected_topics)
+        triplets = self._ensure_topic_subject_triplets(triplets, selected_topics, generated_content)
         if triplets:
             action.memory_metadata = {"ghostkg_absorb_triplets": triplets}
 
@@ -1095,7 +1099,7 @@ class BatchProcessor:
                     action,
                     str(a_id),
                     post_data.get("tweet", "") if post_data else None,
-                    author=str(post_data.get("user_id")) if post_data and post_data.get("user_id") else None,
+                    author="Author",
                 )
                 self._record_generated_content_memory(
                     agent_id=str(a_id),
@@ -1196,7 +1200,7 @@ class BatchProcessor:
                         action,
                         str(a_id),
                         post_content,
-                        author=str(author_id) if author_id else None,
+                        author=author_name if author_name else "Author",
                     )
                     # Track for secondary follow (share action)
                     if post_data:
@@ -1214,7 +1218,7 @@ class BatchProcessor:
                         action,
                         str(a_id),
                         post_data.get("tweet", "") if post_data else None,
-                        author=str(post_data.get("user_id")) if post_data and post_data.get("user_id") else None,
+                        author="Author",
                     )
                     if post_data:
                         secondary_follow_candidates.append(
@@ -1472,7 +1476,7 @@ class BatchProcessor:
                 action,
                 str(agent_id),
                 post_data.get("tweet", "") if post_data else metadata.get("post_content", ""),
-                author=str(post_data.get("user_id")) if post_data and post_data.get("user_id") else metadata.get("author_name"),
+                author=metadata.get("author_name") or "Author",
             )
             reflection_triplets = self._extract_reflection_triplets(str(agent_id), comment_text)
             self._record_generated_content_memory(
@@ -1639,7 +1643,7 @@ class BatchProcessor:
                 action,
                 str(agent_id),
                 post_data.get("tweet", "") if post_data else item[4].get("post_content", ""),
-                author=str(post_data.get("user_id")) if post_data and post_data.get("user_id") else item[4].get("author_name"),
+                author=item[4].get("author_name") or "Author",
             )
             reflection_triplets = self._extract_reflection_triplets(str(agent_id), share_text)
             self._record_generated_content_memory(
@@ -1812,7 +1816,7 @@ class BatchProcessor:
                     action,
                     str(agent_id),
                     post_data.get("tweet", "") if post_data else item[4].get("post_content", ""),
-                    author=str(post_data.get("user_id")) if post_data and post_data.get("user_id") else None,
+                    author="Author",
                 )
                 self._record_generated_content_memory(
                     agent_id=str(agent_id),
@@ -1874,7 +1878,7 @@ class BatchProcessor:
                     action,
                     str(agent_id),
                     post_data.get("tweet", "") if post_data else item[4].get("post_content", ""),
-                    author=str(post_data.get("user_id")) if post_data and post_data.get("user_id") else None,
+                    author="Author",
                 )
 
                 # Track for secondary follow (simple reaction)
@@ -2062,7 +2066,7 @@ class BatchProcessor:
                     action,
                     str(agent_id),
                     post_data.get("tweet", "") if post_data else metadata.get("post_content", ""),
-                    author=str(post_data.get("user_id")) if post_data and post_data.get("user_id") else None,
+                    author="Author",
                 )
                 self._record_generated_content_memory(
                     agent_id=str(agent_id),
@@ -2130,7 +2134,7 @@ class BatchProcessor:
                     action,
                     str(agent_id),
                     post_data.get("tweet", "") if post_data else metadata.get("post_content", ""),
-                    author=str(post_data.get("user_id")) if post_data and post_data.get("user_id") else None,
+                    author="Author",
                 )
                 self._record_generated_content_memory(
                     agent_id=str(agent_id),
@@ -2177,7 +2181,7 @@ class BatchProcessor:
                     action,
                     str(agent_id),
                     post_data.get("tweet", "") if post_data else metadata.get("post_content", ""),
-                    author=str(post_data.get("user_id")) if post_data and post_data.get("user_id") else None,
+                    author="Author",
                 )
 
                 # Track for secondary follow

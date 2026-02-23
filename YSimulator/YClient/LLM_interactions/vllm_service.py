@@ -18,15 +18,24 @@ import ray
 logger = logging.getLogger(__name__)
 
 DEFAULT_GHOSTKG_ABSORB_PROMPTS = {
-    "system_template": "You are an information extraction assistant. Return only valid JSON.",
+    "system_template": "You are a semantic triplet extraction assistant. Return only valid JSON.",
     "user_template": (
-        "Analyze this text by {author}. Extract semantic triplets.\n"
-        "Text: \"{text}\"\n\n"
-        "Return ONLY JSON with this schema:\n"
+        "You are {agent_name}. Analyze this text by {author}: \"{text}\"\n\n"
+        "Goal: Build a Semantic Knowledge Graph.\n\n"
+        "CRITICAL INSTRUCTIONS:\n"
+        "1. EXTRACT MEANING, NOT GRAMMAR.\n"
+        "   - BAD: \"Bob\" -> \"noun\" -> \"UBI\"\n"
+        "   - BAD: \"Text\" -> \"adverb\" -> \"strongly\"\n"
+        "   - GOOD: \"Bob\" -> \"supports\" -> \"UBI\"\n"
+        "   - GOOD: \"UBI\" -> \"reduces\" -> \"poverty\"\n\n"
+        "2. World Facts: Objective SVO triplets.\n"
+        "3. Partner Stance: What {author} explicitly believes.\n"
+        "4. Your Reaction: Your opinion (Source MUST be \"I\").\n\n"
+        "Return JSON:\n"
         "{\n"
-        "  \"world_facts\": [{\"source\": \"\", \"relation\": \"\", \"target\": \"\"}],\n"
-        "  \"partner_stance\": [{\"source\": \"\", \"relation\": \"\", \"target\": \"\", \"sentiment\": 0.0}],\n"
-        "  \"my_reaction\": [{\"source\": \"I\", \"relation\": \"\", \"target\": \"\", \"rating\": 3, \"sentiment\": 0.0}]\n"
+        "  \"world_facts\": [{\"source\": \"Concept\", \"relation\": \"active_verb\", \"target\": \"Concept\"}],\n"
+        "  \"partner_stance\": [{\"source\": \"{author}\", \"relation\": \"active_verb\", \"target\": \"Concept\"}],\n"
+        "  \"my_reaction\": [{\"source\": \"I\", \"relation\": \"active_verb\", \"target\": \"Concept\", \"rating\": 3, \"sentiment\": 0.0}]\n"
         "}"
     ),
 }
@@ -2535,9 +2544,25 @@ class VLLMService:
                 source = "I" if force_i_source else str(item.get("source", "")).strip()
                 relation = str(item.get("relation", "")).strip()
                 target = str(item.get("target", "")).strip()
+                if VLLMService._looks_like_uuid(source):
+                    source = "Author" if not force_i_source else "I"
+                if VLLMService._looks_like_uuid(target):
+                    continue
                 if source and relation and target:
                     triplets.append([source, relation, target])
         return triplets
+
+    @staticmethod
+    def _looks_like_uuid(value: str) -> bool:
+        if not value:
+            return False
+        import uuid
+
+        try:
+            uuid.UUID(str(value))
+            return True
+        except Exception:
+            return False
 
     @staticmethod
     def _sanitize_reflection_triplets(payload: Any) -> List[List[Any]]:
