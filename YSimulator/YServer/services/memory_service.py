@@ -112,4 +112,9 @@ class MemoryService:
     def health_check(self) -> Dict[str, Any]:
         """Return backend health as dictionary for RPC compatibility."""
         health = self.backend.health_check()
-        return {"ok": health.ok, "backend": health.backend, "details": health.details}
+        return {
+            "ok": health.ok,
+            "backend": health.backend,
+            "enabled": self.settings.enabled,
+            "details": health.details,
+        }

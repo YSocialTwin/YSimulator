@@ -1531,6 +1531,7 @@ class OrchestratorServer:
                         "slot": self.slot,
                         "num_actions": len(actions),
                         "num_posts": len(new_ids),
+                        "memory_backend": self.memory_service.get_backend_name(),
                         "execution_time_ms": execution_time,
                     }
                 },
@@ -1560,6 +1561,15 @@ class OrchestratorServer:
             int: Current day number
         """
         return self.day
+
+    def get_memory_backend_status(self) -> Dict[str, Any]:
+        """
+        Get health/status information for the configured memory backend.
+
+        Returns:
+            Dictionary with backend health and enabled flag
+        """
+        return self.memory_service.health_check()
 
     def get_agent_memory(
         self, agent_id: str, query: dict, client_id: Optional[str] = None
