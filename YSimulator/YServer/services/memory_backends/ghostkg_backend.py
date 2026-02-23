@@ -45,7 +45,13 @@ class GhostKGMemoryBackend(MemoryBackend):
 
     def initialize(self, simulation_context: Dict[str, Any]) -> None:
         try:
-            from ghost_kg import AgentManager, Rating
+            # Prefer direct submodule imports to avoid triggering optional
+            # heavy extraction dependencies during top-level package import.
+            try:
+                from ghost_kg.core.manager import AgentManager
+                from ghost_kg.memory.fsrs import Rating
+            except Exception:
+                from ghost_kg import AgentManager, Rating
 
             # Resolution priority:
             # 1) explicit ghostkg.db_url
