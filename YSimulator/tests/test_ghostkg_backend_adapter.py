@@ -190,3 +190,53 @@ def test_ghostkg_backend_write_back_updates_personal_beliefs(monkeypatch):
     assert backend.manager.update_calls == 1
     assert backend.manager.last_triplets == [("stated_about", "ai", 0.0)]
     assert "Known facts" in backend.manager.last_context
+
+
+def test_ghostkg_backend_defaults_to_engine_db_url(monkeypatch):
+    class FakeRating:
+        Good = 3
+        Hard = 2
+
+    class FakeManager:
+        def __init__(self, db_path="db", db_url=None, store_log_content=False):
+            self.db_path = db_path
+            self.db_url = db_url
+
+        def create_agent(self, name, llm_service=None):
+            return None
+
+    fake_module = types.SimpleNamespace(AgentManager=FakeManager, Rating=FakeRating)
+    monkeypatch.setitem(sys.modules, "ghost_kg", fake_module)
+
+    engine = types.SimpleNamespace(url="sqlite:////tmp/main_simulation.db")
+    backend = GhostKGMemoryBackend(backend_config={}, engine=engine)
+    backend.initialize({})
+
+    assert backend.health_check().ok is True
+    assert backend.manager.db_url == "sqlite:////tmp/main_simulation.db"
+    assert backend.manager.db_path is None
+
+
+def test_ghostkg_backend_explicit_db_path_overrides_engine(monkeypatch):
+    class FakeRating:
+        Good = 3
+        Hard = 2
+
+    class FakeManager:
+        def __init__(self, db_path="db", db_url=None, store_log_content=False):
+            self.db_path = db_path
+            self.db_url = db_url
+
+        def create_agent(self, name, llm_service=None):
+            return None
+
+    fake_module = types.SimpleNamespace(AgentManager=FakeManager, Rating=FakeRating)
+    monkeypatch.setitem(sys.modules, "ghost_kg", fake_module)
+
+    engine = types.SimpleNamespace(url="sqlite:////tmp/main_simulation.db")
+    backend = GhostKGMemoryBackend(backend_config={"db_path": "/tmp/ghostkg_only.db"}, engine=engine)
+    backend.initialize({})
+
+    assert backend.health_check().ok is True
+    assert backend.manager.db_url is None
+    assert backend.manager.db_path == "/tmp/ghostkg_only.db"

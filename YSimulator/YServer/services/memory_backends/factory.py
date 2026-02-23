@@ -34,6 +34,7 @@ class MemoryBackendFactory:
         if backend_normalized == "ghostkg":
             return GhostKGMemoryBackend(
                 backend_config=backend_config,
+                engine=engine,
                 logger=logger,
             )
 

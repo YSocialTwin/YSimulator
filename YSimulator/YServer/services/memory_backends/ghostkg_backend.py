@@ -21,9 +21,10 @@ from YSimulator.YServer.services.memory_backends.base import (
 class GhostKGMemoryBackend(MemoryBackend):
     """Adapter that bridges YSimulator memory contract to GhostKG APIs."""
 
-    def __init__(self, backend_config: Dict[str, Any], logger: Any = None):
+    def __init__(self, backend_config: Dict[str, Any], engine: Any = None, logger: Any = None):
         self.config = backend_config or {}
         self.backend_config = self.config.get("ghostkg", {}) if isinstance(self.config.get("ghostkg"), dict) else {}
+        self.engine = engine
         self.logger = logger or logging.getLogger(__name__)
         self.manager = None
         self.rating = None
@@ -43,9 +44,13 @@ class GhostKGMemoryBackend(MemoryBackend):
         try:
             from ghost_kg import AgentManager, Rating
 
-            # Prefer explicit db_url/db_path if provided, otherwise default to shared db file.
-            db_path = self._cfg("db_path") or self._resolve_default_db_path(simulation_context)
-            db_url = self._cfg("db_url")
+            # Resolution priority:
+            # 1) explicit ghostkg.db_url
+            # 2) explicit ghostkg.db_path
+            # 3) server SQL engine URL (shared simulation DB)
+            # 4) config_path/database_server.db fallback
+            db_url = self._resolve_db_url()
+            db_path = self._resolve_db_path(simulation_context, db_url=db_url)
             store_log_content = bool(self._cfg("store_log_content", False))
             self.manager = AgentManager(
                 db_path=db_path,
@@ -357,10 +362,32 @@ class GhostKGMemoryBackend(MemoryBackend):
             return "\n".join(f"- {line}" for line in lines)
         return str(context_used).strip() or None
 
-    def _resolve_default_db_path(self, simulation_context: Dict[str, Any]) -> str:
+    def _resolve_db_url(self) -> Optional[str]:
+        configured_url = self._cfg("db_url")
+        if configured_url:
+            return str(configured_url)
+
+        # Explicit db_path takes precedence over engine fallback.
+        if self._cfg("db_path"):
+            return None
+
+        if self.engine is None:
+            return None
+
+        try:
+            return str(self.engine.url)
+        except Exception:
+            return None
+
+    def _resolve_db_path(self, simulation_context: Dict[str, Any], db_url: Optional[str] = None) -> Optional[str]:
         configured = self._cfg("db_path")
         if configured:
-            return configured
+            return str(configured)
+
+        # When db_url is present, AgentManager should use URL as source of truth.
+        if db_url:
+            return None
+
         config_path = simulation_context.get("config_path")
         if config_path:
             return os.path.join(str(config_path), "database_server.db")
