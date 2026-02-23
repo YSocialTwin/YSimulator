@@ -116,6 +116,14 @@ class GhostKGMemoryBackend(MemoryBackend):
             reflection_triplets = self._normalize_reflection_triplets(
                 metadata.get("ghostkg_reflection_triplets")
             )
+            self._log_triplet_event(
+                agent_id=agent_id,
+                action_type=action_type,
+                content=str(content or ""),
+                absorb_triplets=absorb_triplets,
+                reflection_triplets=reflection_triplets,
+                context=context,
+            )
 
             # Write-back phase: generated text should reinforce personal beliefs.
             if str(metadata.get("memory_phase", "")).lower() == "write_back":
@@ -166,6 +174,39 @@ class GhostKGMemoryBackend(MemoryBackend):
         except Exception as e:
             self.logger.error(f"GhostKG ingest failed: {e}")
             return IngestResult(success=False, error=str(e))
+
+    def _log_triplet_event(
+        self,
+        agent_id: str,
+        action_type: str,
+        content: str,
+        absorb_triplets: List[tuple[str, str, str]],
+        reflection_triplets: List[tuple[str, str, float]],
+        context: Dict[str, Any],
+    ) -> None:
+        """Emit structured extraction logs to memory.log for debugging and evaluation."""
+        try:
+            self.logger.info(
+                "GhostKG triplet extraction",
+                extra={
+                    "extra_data": {
+                        "operation": "ghostkg_triplets",
+                        "backend": self.name,
+                        "agent_id": str(agent_id),
+                        "action_type": str(action_type or ""),
+                        "day": int(context.get("day", 0) or 0),
+                        "slot": int(context.get("slot", 0) or 0),
+                        "content": str(content or ""),
+                        "absorb_triplets": [list(t) for t in (absorb_triplets or [])],
+                        "reflection_triplets": [list(t) for t in (reflection_triplets or [])],
+                        "absorb_triplets_count": len(absorb_triplets or []),
+                        "reflection_triplets_count": len(reflection_triplets or []),
+                    }
+                },
+            )
+        except Exception:
+            # Logging must never block memory ingestion.
+            pass
 
     def retrieve(
         self, agent_id: str, query: MemoryQuery, context: Dict[str, Any]
