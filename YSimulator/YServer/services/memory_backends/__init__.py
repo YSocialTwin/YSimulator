@@ -9,6 +9,10 @@ from .base import (
     MemoryQuery,
     ReinforceResult,
 )
+from .factory import MemoryBackendFactory
+from .ghostkg_backend import GhostKGMemoryBackend
+from .native_backend import NativeMemoryBackend
+from .none_backend import NoMemoryBackend
 
 __all__ = [
     "MemoryBackend",
@@ -18,4 +22,8 @@ __all__ = [
     "ReinforceResult",
     "ForgetResult",
     "BackendHealth",
+    "MemoryBackendFactory",
+    "NoMemoryBackend",
+    "NativeMemoryBackend",
+    "GhostKGMemoryBackend",
 ]

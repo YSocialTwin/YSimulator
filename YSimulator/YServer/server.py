@@ -248,7 +248,10 @@ class OrchestratorServer:
                 simulation_service,
                 metadata_service,
                 mention_service,
-            ) = create_all_services(db_config, str(self.config_path), self.logger)
+                memory_service,
+            ) = create_all_services(
+                db_config, str(self.config_path), self.logger, self.simulation_config
+            )
 
             # Phase 5: Expose services directly for explicit usage
             self.user_service = user_service
@@ -261,6 +264,7 @@ class OrchestratorServer:
             self.simulation_service = simulation_service
             self.metadata_service = metadata_service
             self.mention_service = mention_service
+            self.memory_service = memory_service
             self.redis_client = redis_client
             self.use_redis = redis_client is not None
 
@@ -283,7 +287,7 @@ class OrchestratorServer:
                 "Orchestrator server initialized - Repository/Service pattern 100% with direct service access!",
                 extra={
                     "migration_status": "PHASE_5_COMPLETE",
-                    "services": "User, Post, Follow, Interest, Article, Image, Content, Simulation, Metadata, Mention",
+                    "services": "User, Post, Follow, Interest, Article, Image, Content, Simulation, Metadata, Mention, Memory",
                     "service_access": "Direct - no adapter facade",
                     "legacy_middleware": "None - fully eliminated",
                 },
@@ -369,6 +373,16 @@ class OrchestratorServer:
         # Initialize first round using RoundManager (no need to store, accessed via property)
         self.round_manager.initialize_first_round()
 
+        # Initialize memory backend with simulation context.
+        self.memory_service.initialize(
+            {
+                "day": self.day,
+                "slot": self.slot,
+                "current_round_id": self.current_round_id,
+                "num_slots_per_day": self.num_slots_per_day,
+            }
+        )
+
         # Expose properties for backward compatibility
         self.registered_clients = self.client_manager.registered_clients
         self.completed_clients = self.client_manager.completed_clients
@@ -396,6 +410,7 @@ class OrchestratorServer:
                         "SimulationService",
                         "MetadataService",
                         "MentionService",
+                        "MemoryService",
                     ],
                     "legacy_middleware": "None - fully removed",
                 }
@@ -1470,6 +1485,27 @@ class OrchestratorServer:
                 if result.success and result.new_ids:
                     new_ids.extend(result.new_ids)
 
+                # Ingest memory event through selected backend (no-op when backend=none).
+                if result.success:
+                    memory_event = {
+                        "action_type": act.action_type,
+                        "agent_id": str(act.agent_id),
+                        "target_post_id": getattr(act, "target_post_id", None),
+                        "target_user_id": getattr(act, "target_user_id", None),
+                        "topic": getattr(act, "topic", None),
+                        "new_ids": result.new_ids,
+                        "metadata": result.metadata,
+                    }
+                    self.memory_service.ingest_event(
+                        str(act.agent_id),
+                        memory_event,
+                        {
+                            "day": self.day,
+                            "slot": self.slot,
+                            "current_round_id": self.current_round_id,
+                        },
+                    )
+
             # Update recent posts cache
             if new_ids:
                 self.recent_posts_cache.extend(new_ids)
@@ -1518,6 +1554,120 @@ class OrchestratorServer:
             int: Current day number
         """
         return self.day
+
+    def get_agent_memory(
+        self, agent_id: str, query: dict, client_id: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
+        """
+        Retrieve memory items for an agent via configured memory backend.
+
+        Args:
+            agent_id: Agent UUID
+            query: Retrieval query payload
+            client_id: Optional client identifier for logging
+
+        Returns:
+            List of memory dictionaries for RPC compatibility
+        """
+        items = self.memory_service.retrieve(
+            agent_id,
+            query or {},
+            {
+                "day": self.day,
+                "slot": self.slot,
+                "current_round_id": self.current_round_id,
+                "client_id": client_id,
+            },
+        )
+        return [
+            {
+                "memory_id": item.memory_id,
+                "memory_text": item.memory_text,
+                "relevance_score": item.relevance_score,
+                "confidence": item.confidence,
+                "strength": item.strength,
+                "sentiment": item.sentiment,
+                "metadata": item.metadata,
+            }
+            for item in items
+        ]
+
+    def record_memory_usage(
+        self, agent_id: str, memory_ids: List[str], client_id: Optional[str] = None
+    ) -> bool:
+        """
+        Record memory usage for reinforcement.
+
+        Args:
+            agent_id: Agent UUID
+            memory_ids: Used memory IDs
+            client_id: Optional client identifier for logging
+
+        Returns:
+            bool: True on success
+        """
+        result = self.memory_service.reinforce(
+            agent_id,
+            memory_ids or [],
+            {
+                "day": self.day,
+                "slot": self.slot,
+                "current_round_id": self.current_round_id,
+                "client_id": client_id,
+            },
+        )
+        return result.success
+
+    def ingest_memory_event(
+        self, agent_id: str, event: dict, client_id: Optional[str] = None
+    ) -> bool:
+        """
+        Explicit memory ingestion endpoint for client-side generated events.
+
+        Args:
+            agent_id: Agent UUID
+            event: Event payload
+            client_id: Optional client identifier
+
+        Returns:
+            bool: True on success
+        """
+        result = self.memory_service.ingest_event(
+            agent_id,
+            event or {},
+            {
+                "day": self.day,
+                "slot": self.slot,
+                "current_round_id": self.current_round_id,
+                "client_id": client_id,
+            },
+        )
+        return result.success
+
+    def run_memory_forgetting(self, current_round_id: Optional[str] = None) -> Dict[str, Any]:
+        """
+        Run memory forgetting cycle on demand.
+
+        Args:
+            current_round_id: Optional override round ID
+
+        Returns:
+            Dictionary with forgetting cycle statistics
+        """
+        result = self.memory_service.forget_cycle(
+            {
+                "day": self.day,
+                "slot": self.slot,
+                "current_round_id": current_round_id or self.current_round_id,
+            }
+        )
+        return {
+            "success": result.success,
+            "decayed": result.decayed,
+            "soft_forgotten": result.soft_forgotten,
+            "hard_deleted": result.hard_deleted,
+            "error": result.error,
+        }
 
     def get_current_round_id(self) -> str:
         """

@@ -34,6 +34,7 @@ try:
     from YSimulator.YServer.services.image_service import ImageService
     from YSimulator.YServer.services.interest_service import InterestService
     from YSimulator.YServer.services.mention_service import MentionService
+    from YSimulator.YServer.services.memory_service import MemoryService
     from YSimulator.YServer.services.metadata_service import MetadataService
     from YSimulator.YServer.services.post_service import PostService
     from YSimulator.YServer.services.simulation_service import SimulationService
@@ -124,6 +125,7 @@ def create_all_services(
     db_config: Dict[str, Any],
     config_path: str = ".",
     logger: Optional[logging.Logger] = None,
+    simulation_config: Optional[Dict[str, Any]] = None,
 ):
     """
     Create all service instances with repository dependencies.
@@ -136,7 +138,7 @@ def create_all_services(
     Returns:
         Tuple of (UserService, PostService, FollowService, InterestService,
         ArticleService, ImageService, ContentService, SimulationService,
-        MetadataService, MentionService)
+        MetadataService, MentionService, MemoryService)
     """
     if not SERVICES_AVAILABLE:
         raise ImportError(
@@ -147,6 +149,8 @@ def create_all_services(
 
     if logger is None:
         logger = logging.getLogger(__name__)
+    if simulation_config is None:
+        simulation_config = {}
 
     # Create database engine and initialize tables
     engine = create_database_engine(db_config, config_path, logger)
@@ -219,6 +223,11 @@ def create_all_services(
         logger=logger,
     )
 
+    memory_service = MemoryService(
+        simulation_config=simulation_config,
+        logger=logger,
+    )
+
     return (
         user_service,
         post_service,
@@ -230,6 +239,7 @@ def create_all_services(
         simulation_service,
         metadata_service,
         mention_service,
+        memory_service,
     )
 
 
