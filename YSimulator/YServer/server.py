@@ -381,6 +381,7 @@ class OrchestratorServer:
                 "slot": self.slot,
                 "current_round_id": self.current_round_id,
                 "num_slots_per_day": self.num_slots_per_day,
+                "config_path": str(self.config_path),
             }
         )
 
