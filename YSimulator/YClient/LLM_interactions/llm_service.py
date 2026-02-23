@@ -1445,12 +1445,27 @@ class LLMService:
         if isinstance(payload, list):
             cleaned: List[List[Any]] = []
             for item in payload:
+                source = ""
+                relation = ""
+                target = ""
                 if isinstance(item, (list, tuple)) and len(item) == 3:
                     source = str(item[0]).strip()
                     relation = str(item[1]).strip()
                     target = str(item[2]).strip()
-                    if source and relation and target and not LLMService._looks_like_uuid(target):
-                        cleaned.append([source, relation, target])
+                elif isinstance(item, dict):
+                    if isinstance(item.get("triplet"), (list, tuple)) and len(item.get("triplet")) == 3:
+                        triplet = item.get("triplet")
+                        source = str(triplet[0]).strip()
+                        relation = str(triplet[1]).strip()
+                        target = str(triplet[2]).strip()
+                    else:
+                        source = str(item.get("source", item.get("subject", item.get("head", "")))).strip()
+                        relation = str(item.get("relation", item.get("predicate", item.get("edge", "")))).strip()
+                        target = str(item.get("target", item.get("object", item.get("tail", "")))).strip()
+                if LLMService._looks_like_uuid(source):
+                    source = "Author"
+                if source and relation and target and not LLMService._looks_like_uuid(target):
+                    cleaned.append([source, relation, target])
             if cleaned:
                 return cleaned
             return []
@@ -1460,9 +1475,14 @@ class LLMService:
         triplets: List[List[Any]] = []
         sections = [
             ("world_facts", False),
+            ("world_knowledge", False),
             ("partner_stance", False),
+            ("partner_stances", False),
+            ("partner_view", False),
             ("facts", False),
             ("partner_beliefs", False),
+            ("semantic_triplets", False),
+            ("extracted_triplets", False),
             ("triplets", False),
         ]
         for section_name, force_i_source in sections:

@@ -18,6 +18,16 @@ def test_sanitize_absorb_triplets_accepts_list_triplets():
     assert ["Fact", "reduces", "costs"] in out
 
 
+def test_sanitize_absorb_triplets_accepts_list_of_dict_triplets():
+    payload = [
+        {"source": "NewsPage", "relation": "announces", "target": "new model"},
+        {"subject": "Policy", "predicate": "affects", "object": "startups"},
+    ]
+    out = LLMService._sanitize_absorb_triplets(payload)
+    assert ["NewsPage", "announces", "new model"] in out
+    assert ["Policy", "affects", "startups"] in out
+
+
 def test_sanitize_reflection_triplets_accepts_alternative_section_names():
     payload = {"my_reaction": [{"predicate": "support", "object": "open science", "score": 0.8}]}
     out = LLMService._sanitize_reflection_triplets(payload)
@@ -45,3 +55,13 @@ def test_safe_template_format_vllm_preserves_literal_json_braces():
     rendered = VLLMService._safe_format_template(template, {"text": "hello"})
     assert "hello" in rendered
     assert "\"my_expressed_stances\"" in rendered
+
+
+def test_sanitize_absorb_triplets_vllm_accepts_list_of_dict_triplets():
+    payload = [
+        {"source": "Researcher", "relation": "reports", "target": "benchmark gains"},
+        {"subject": "Model", "predicate": "outperforms", "object": "baseline"},
+    ]
+    out = VLLMService._sanitize_absorb_triplets(payload)
+    assert ["Researcher", "reports", "benchmark gains"] in out
+    assert ["Model", "outperforms", "baseline"] in out
