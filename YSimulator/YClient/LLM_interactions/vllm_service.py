@@ -30,12 +30,12 @@ DEFAULT_GHOSTKG_ABSORB_PROMPTS = {
         "   - GOOD: \"UBI\" -> \"reduces\" -> \"poverty\"\n\n"
         "2. World Facts: Objective SVO triplets.\n"
         "3. Partner Stance: What {author} explicitly believes.\n"
-        "4. Your Reaction: Your opinion (Source MUST be \"I\").\n\n"
+        "4. Prioritize EXTERNAL knowledge from the text (facts + partner stance), not your own stance.\n"
+        "5. Extract at least one triplet for world_facts and one for partner_stance when possible.\n\n"
         "Return JSON:\n"
         "{\n"
         "  \"world_facts\": [{\"source\": \"Concept\", \"relation\": \"active_verb\", \"target\": \"Concept\"}],\n"
-        "  \"partner_stance\": [{\"source\": \"{author}\", \"relation\": \"active_verb\", \"target\": \"Concept\"}],\n"
-        "  \"my_reaction\": [{\"source\": \"I\", \"relation\": \"active_verb\", \"target\": \"Concept\", \"rating\": 3, \"sentiment\": 0.0}]\n"
+        "  \"partner_stance\": [{\"source\": \"{author}\", \"relation\": \"active_verb\", \"target\": \"Concept\"}]\n"
         "}"
     ),
 }

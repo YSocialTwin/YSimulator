@@ -303,7 +303,7 @@ class BatchProcessor:
                             [
                                 {
                                     "text": str(req.get("text", "") or ""),
-                                    "author": str(req.get("agent_id", "User") or "User"),
+                                    "author": str(req.get("author", "User") or "User"),
                                     "agent_name": str(req.get("agent_id", "Agent") or "Agent"),
                                 }
                                 for _, req in grouped

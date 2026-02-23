@@ -44,3 +44,41 @@ def test_filter_absorb_triplets_for_peer_removes_i_subject():
     assert ["I", "support", "X"] not in filtered
     assert ["Author", "claims", "Y"] in filtered
     assert ["Topic", "is_expressed_in", "text"] in filtered
+
+
+def test_extract_absorb_triplets_batch_uses_request_author(monkeypatch):
+    class _RemoteMethod:
+        def __init__(self, fn):
+            self._fn = fn
+
+        def remote(self, *args, **kwargs):
+            return self._fn(*args, **kwargs)
+
+    class _Actor:
+        def __init__(self):
+            self.captured = None
+            self.extract_ghostkg_absorb_triplets_batch = _RemoteMethod(self._batch)
+
+        def _batch(self, payload):
+            self.captured = payload
+            return [[["Peer", "supports", "topic"]]]
+
+    actor = _Actor()
+    bp = BatchProcessor(
+        server=None,
+        client_id="c1",
+        llm=object(),
+        enable_sentiment=False,
+        enable_toxicity=False,
+        enable_emotions=False,
+        perspective_api_key=None,
+        logger=__import__("logging").getLogger("test"),
+    )
+    bp._get_llm_actor = lambda agent_id=None: actor
+    monkeypatch.setattr("YSimulator.YClient.simulation.batch_processor.ray.get", lambda x: x)
+
+    out = bp._extract_absorb_triplets_batch(
+        [{"agent_id": "agent-1", "author": "peer_user", "text": "Some content"}]
+    )
+    assert out == [[["Peer", "supports", "topic"]]]
+    assert actor.captured[0]["author"] == "peer_user"
