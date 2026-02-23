@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List
 
-from YSimulator.YServer.services.memory_backends.base import (
+from YSimulator.YClient.memory.backends.base import (
     BackendHealth,
     ForgetResult,
     IngestResult,

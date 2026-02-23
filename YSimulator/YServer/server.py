@@ -18,6 +18,8 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import ray
+from sqlalchemy import text
+from sqlalchemy.orm import Session
 
 from YSimulator.YClient.classes.ray_models import SimulationInstruction
 from YSimulator.YServer.classes.models import Recommendation
@@ -249,7 +251,6 @@ class OrchestratorServer:
                 simulation_service,
                 metadata_service,
                 mention_service,
-                memory_service,
             ) = create_all_services(
                 db_config, str(self.config_path), self.logger, self.simulation_config
             )
@@ -265,9 +266,6 @@ class OrchestratorServer:
             self.simulation_service = simulation_service
             self.metadata_service = metadata_service
             self.mention_service = mention_service
-            self.memory_service = memory_service
-            if self.memory_logger is not None:
-                self.memory_service.bind_logger(self.memory_logger)
             self.redis_client = redis_client
             self.use_redis = redis_client is not None
 
@@ -290,7 +288,7 @@ class OrchestratorServer:
                 "Orchestrator server initialized - Repository/Service pattern 100% with direct service access!",
                 extra={
                     "migration_status": "PHASE_5_COMPLETE",
-                    "services": "User, Post, Follow, Interest, Article, Image, Content, Simulation, Metadata, Mention, Memory",
+                    "services": "User, Post, Follow, Interest, Article, Image, Content, Simulation, Metadata, Mention",
                     "service_access": "Direct - no adapter facade",
                     "legacy_middleware": "None - fully eliminated",
                 },
@@ -376,16 +374,8 @@ class OrchestratorServer:
         # Initialize first round using RoundManager (no need to store, accessed via property)
         self.round_manager.initialize_first_round()
 
-        # Initialize memory backend with simulation context.
-        self.memory_service.initialize(
-            {
-                "day": self.day,
-                "slot": self.slot,
-                "current_round_id": self.current_round_id,
-                "num_slots_per_day": self.num_slots_per_day,
-                "config_path": str(self.config_path),
-            }
-        )
+        # Memory computation is client-owned; server exposes persistence/query hooks only.
+        self._ensure_memory_hook_tables()
 
         # Expose properties for backward compatibility
         self.registered_clients = self.client_manager.registered_clients
@@ -414,7 +404,6 @@ class OrchestratorServer:
                         "SimulationService",
                         "MetadataService",
                         "MentionService",
-                        "MemoryService",
                     ],
                     "legacy_middleware": "None - fully removed",
                 }
@@ -1549,14 +1538,11 @@ class OrchestratorServer:
                         "slot": self.slot,
                         "num_actions": len(actions),
                         "num_posts": len(new_ids),
-                        "memory_backend": self.memory_service.get_backend_name(),
+                        "memory_backend": "client",
                         "execution_time_ms": execution_time,
                     }
                 },
             )
-
-            # Trigger periodic memory forgetting cycle according to configuration.
-            self._maybe_run_memory_forgetting_cycle()
 
         except Exception as e:
             self.logger.error(
@@ -1587,7 +1573,12 @@ class OrchestratorServer:
         Returns:
             Dictionary with backend health and enabled flag
         """
-        return self.memory_service.health_check()
+        return {
+            "ok": True,
+            "backend": "client",
+            "enabled": bool(self.simulation_config.get("agent_memory", {}).get("enabled", False)),
+            "details": {"mode": "hooks_only"},
+        }
 
     def get_agent_memory(
         self, agent_id: str, query: dict, client_id: Optional[str] = None
@@ -1603,28 +1594,7 @@ class OrchestratorServer:
         Returns:
             List of memory dictionaries for RPC compatibility
         """
-        items = self.memory_service.retrieve(
-            agent_id,
-            query or {},
-            {
-                "day": self.day,
-                "slot": self.slot,
-                "current_round_id": self.current_round_id,
-                "client_id": client_id,
-            },
-        )
-        return [
-            {
-                "memory_id": item.memory_id,
-                "memory_text": item.memory_text,
-                "relevance_score": item.relevance_score,
-                "confidence": item.confidence,
-                "strength": item.strength,
-                "sentiment": item.sentiment,
-                "metadata": item.metadata,
-            }
-            for item in items
-        ]
+        return self._hook_get_agent_memory(agent_id, query or {})
 
     def record_memory_usage(
         self, agent_id: str, memory_ids: List[str], client_id: Optional[str] = None
@@ -1640,17 +1610,7 @@ class OrchestratorServer:
         Returns:
             bool: True on success
         """
-        result = self.memory_service.reinforce(
-            agent_id,
-            memory_ids or [],
-            {
-                "day": self.day,
-                "slot": self.slot,
-                "current_round_id": self.current_round_id,
-                "client_id": client_id,
-            },
-        )
-        return result.success
+        return self._hook_record_memory_usage(agent_id, memory_ids or [])
 
     def ingest_memory_event(
         self, agent_id: str, event: dict, client_id: Optional[str] = None
@@ -1666,17 +1626,7 @@ class OrchestratorServer:
         Returns:
             bool: True on success
         """
-        result = self.memory_service.ingest_event(
-            agent_id,
-            event or {},
-            {
-                "day": self.day,
-                "slot": self.slot,
-                "current_round_id": self.current_round_id,
-                "client_id": client_id,
-            },
-        )
-        return result.success
+        return self._hook_ingest_memory_event(agent_id, event or {}, client_id)
 
     def run_memory_forgetting(self, current_round_id: Optional[str] = None) -> Dict[str, Any]:
         """
@@ -1688,69 +1638,153 @@ class OrchestratorServer:
         Returns:
             Dictionary with forgetting cycle statistics
         """
-        result = self.memory_service.forget_cycle(
-            {
-                "day": self.day,
-                "slot": self.slot,
-                "current_round_id": current_round_id or self.current_round_id,
-            }
-        )
         return {
-            "success": result.success,
-            "decayed": result.decayed,
-            "soft_forgotten": result.soft_forgotten,
-            "hard_deleted": result.hard_deleted,
-            "error": result.error,
+            "success": True,
+            "decayed": 0,
+            "soft_forgotten": 0,
+            "hard_deleted": 0,
+            "error": None,
         }
 
     def _maybe_run_memory_forgetting_cycle(self) -> None:
         """Run forgetting cycle at configured round intervals."""
-        memory_cfg = self.simulation_config.get("agent_memory", {})
-        if not memory_cfg.get("enabled", False):
-            return
+        # Forgetting is handled in client-side memory backends.
+        return
 
-        interval = int(memory_cfg.get("forgetting_cycle_interval_rounds", 24))
-        if interval <= 0:
-            return
+    def _memory_engine(self):
+        post_repo = getattr(self.post_service, "post_repository", None)
+        return getattr(post_repo, "engine", None)
 
-        # 1-based index to avoid negative values
-        current_idx = ((self.day - 1) * self.num_slots_per_day) + self.slot
-        if current_idx <= 0:
+    def _ensure_memory_hook_tables(self) -> None:
+        engine = self._memory_engine()
+        if engine is None:
             return
-        if current_idx - self._last_memory_forget_cycle_round_idx < interval:
-            return
+        session = Session(engine)
+        try:
+            session.execute(
+                text(
+                    """
+                    CREATE TABLE IF NOT EXISTS agent_memory_events (
+                        id TEXT PRIMARY KEY,
+                        agent_id TEXT NOT NULL,
+                        day INTEGER,
+                        slot INTEGER,
+                        round_id TEXT,
+                        client_id TEXT,
+                        action_type TEXT,
+                        content TEXT,
+                        topic TEXT,
+                        target_post_id TEXT,
+                        target_user_id TEXT,
+                        metadata_json TEXT,
+                        created_at TEXT NOT NULL
+                    )
+                    """
+                )
+            )
+            session.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS idx_agent_memory_events_agent_created "
+                    "ON agent_memory_events(agent_id, created_at DESC)"
+                )
+            )
+            session.commit()
+        finally:
+            session.close()
 
-        result = self.memory_service.forget_cycle(
-            {
-                "day": self.day,
-                "slot": self.slot,
-                "current_round_id": self.current_round_id,
-            }
-        )
-        if result.success:
-            self._last_memory_forget_cycle_round_idx = current_idx
-            self.logger.info(
-                "Memory forgetting cycle completed",
-                extra={
-                    "extra_data": {
-                        "backend": self.memory_service.get_backend_name(),
-                        "decayed": result.decayed,
-                        "soft_forgotten": result.soft_forgotten,
-                        "hard_deleted": result.hard_deleted,
-                        "round_index": current_idx,
-                    }
+    def _hook_ingest_memory_event(
+        self, agent_id: str, event: Dict[str, Any], client_id: Optional[str] = None
+    ) -> bool:
+        engine = self._memory_engine()
+        if engine is None:
+            return False
+        session = Session(engine)
+        try:
+            self._ensure_memory_hook_tables()
+            session.execute(
+                text(
+                    """
+                    INSERT INTO agent_memory_events (
+                        id, agent_id, day, slot, round_id, client_id,
+                        action_type, content, topic, target_post_id, target_user_id,
+                        metadata_json, created_at
+                    ) VALUES (
+                        :id, :agent_id, :day, :slot, :round_id, :client_id,
+                        :action_type, :content, :topic, :target_post_id, :target_user_id,
+                        :metadata_json, :created_at
+                    )
+                    """
+                ),
+                {
+                    "id": str(uuid.uuid4()),
+                    "agent_id": str(agent_id),
+                    "day": int(self.day),
+                    "slot": int(self.slot),
+                    "round_id": str(self.current_round_id),
+                    "client_id": str(client_id) if client_id else None,
+                    "action_type": str(event.get("action_type", "") or ""),
+                    "content": event.get("content"),
+                    "topic": event.get("topic"),
+                    "target_post_id": event.get("target_post_id"),
+                    "target_user_id": event.get("target_user_id"),
+                    "metadata_json": json.dumps(event.get("metadata", {})),
+                    "created_at": datetime.now(timezone.utc).isoformat(),
                 },
             )
-        else:
-            self.logger.warning(
-                f"Memory forgetting cycle failed: {result.error}",
-                extra={
-                    "extra_data": {
-                        "backend": self.memory_service.get_backend_name(),
-                        "round_index": current_idx,
-                    }
-                },
+            session.commit()
+            return True
+        except Exception as e:
+            session.rollback()
+            self.logger.debug(f"Memory hook ingest failed: {e}")
+            return False
+        finally:
+            session.close()
+
+    def _hook_get_agent_memory(self, agent_id: str, query: Dict[str, Any]) -> List[Dict[str, Any]]:
+        engine = self._memory_engine()
+        if engine is None:
+            return []
+        max_items = max(1, int(query.get("max_items", 5)))
+        session = Session(engine)
+        try:
+            rows = session.execute(
+                text(
+                    """
+                    SELECT id, content, metadata_json
+                    FROM agent_memory_events
+                    WHERE agent_id=:agent_id
+                    ORDER BY created_at DESC
+                    LIMIT :limit
+                    """
+                ),
+                {"agent_id": str(agent_id), "limit": max_items},
+            ).mappings().all()
+        except Exception:
+            rows = []
+        finally:
+            session.close()
+
+        memories: List[Dict[str, Any]] = []
+        for idx, row in enumerate(rows):
+            text_val = str(row.get("content") or "").strip()
+            if not text_val:
+                continue
+            memories.append(
+                {
+                    "memory_id": str(row.get("id") or f"event:{agent_id}:{idx}"),
+                    "memory_text": text_val,
+                    "relevance_score": max(0.0, 1.0 - (idx * 0.1)),
+                    "confidence": 0.5,
+                    "strength": 0.5,
+                    "sentiment": 0.0,
+                    "metadata": {},
+                }
             )
+        return memories
+
+    def _hook_record_memory_usage(self, agent_id: str, memory_ids: List[str]) -> bool:
+        # Hooks-only server path does not perform reinforcement logic.
+        return bool(agent_id) and bool(memory_ids is not None)
 
     def get_current_round_id(self) -> str:
         """

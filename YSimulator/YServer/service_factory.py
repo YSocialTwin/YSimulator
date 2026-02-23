@@ -34,7 +34,6 @@ try:
     from YSimulator.YServer.services.image_service import ImageService
     from YSimulator.YServer.services.interest_service import InterestService
     from YSimulator.YServer.services.mention_service import MentionService
-    from YSimulator.YServer.services.memory_service import MemoryService
     from YSimulator.YServer.services.metadata_service import MetadataService
     from YSimulator.YServer.services.post_service import PostService
     from YSimulator.YServer.services.simulation_service import SimulationService
@@ -138,7 +137,7 @@ def create_all_services(
     Returns:
         Tuple of (UserService, PostService, FollowService, InterestService,
         ArticleService, ImageService, ContentService, SimulationService,
-        MetadataService, MentionService, MemoryService)
+        MetadataService, MentionService)
     """
     if not SERVICES_AVAILABLE:
         raise ImportError(
@@ -223,12 +222,6 @@ def create_all_services(
         logger=logger,
     )
 
-    memory_service = MemoryService(
-        simulation_config=simulation_config,
-        logger=logger,
-        engine=engine,
-    )
-
     return (
         user_service,
         post_service,
@@ -240,7 +233,6 @@ def create_all_services(
         simulation_service,
         metadata_service,
         mention_service,
-        memory_service,
     )
 
 

@@ -4,7 +4,7 @@ import logging
 
 from sqlalchemy import create_engine
 
-from YSimulator.YServer.services.memory_service import MemoryService
+from YSimulator.YClient.memory.service import MemoryService
 
 
 def test_memory_service_health_reports_none_backend_when_disabled():

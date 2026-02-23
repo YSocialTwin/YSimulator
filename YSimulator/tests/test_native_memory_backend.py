@@ -3,7 +3,7 @@
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session
 
-from YSimulator.YServer.services.memory_backends.native_backend import NativeMemoryBackend
+from YSimulator.YClient.memory.backends.native_backend import NativeMemoryBackend
 
 
 def test_native_backend_ingest_retrieve_and_reinforce(tmp_path):
@@ -75,6 +75,6 @@ def test_native_backend_forget_cycle_soft_forgets_items(tmp_path):
 
 
 def _query(topic=None, action_type=None, max_items=5):
-    from YSimulator.YServer.services.memory_backends.base import MemoryQuery
+    from YSimulator.YClient.memory.backends.base import MemoryQuery
 
     return MemoryQuery(topic=topic, action_type=action_type, max_items=max_items)

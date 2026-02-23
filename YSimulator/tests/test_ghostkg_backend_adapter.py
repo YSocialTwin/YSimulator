@@ -3,8 +3,8 @@
 import types
 import sys
 
-from YSimulator.YServer.services.memory_backends.ghostkg_backend import GhostKGMemoryBackend
-from YSimulator.YServer.services.memory_backends.base import MemoryQuery
+from YSimulator.YClient.memory.backends.ghostkg_backend import GhostKGMemoryBackend
+from YSimulator.YClient.memory.backends.base import MemoryQuery
 
 
 def test_ghostkg_backend_unavailable_is_safe():

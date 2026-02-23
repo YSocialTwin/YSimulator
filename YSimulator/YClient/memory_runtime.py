@@ -8,7 +8,7 @@ from typing import Any, Dict, List, Optional
 
 from sqlalchemy import create_engine
 
-from YSimulator.YServer.services.memory_backends import MemoryBackendFactory, MemoryQuery
+from YSimulator.YClient.memory.backends import MemoryBackendFactory, MemoryQuery
 
 
 class ClientMemoryRuntime:

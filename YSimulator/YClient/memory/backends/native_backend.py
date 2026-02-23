@@ -10,7 +10,7 @@ from typing import Any, Dict, List, Optional
 from sqlalchemy import bindparam, text
 from sqlalchemy.orm import Session
 
-from YSimulator.YServer.services.memory_backends.base import (
+from YSimulator.YClient.memory.backends.base import (
     BackendHealth,
     ForgetResult,
     IngestResult,

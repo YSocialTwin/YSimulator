@@ -9,7 +9,6 @@ and implement complex business operations.
 from .article_service import ArticleService
 from .image_service import ImageService
 from .interest_service import InterestService
-from .memory_service import MemoryService
 from .post_service import PostService
 from .recommendation_service import RecommendationService
 from .user_service import UserService
@@ -19,7 +18,6 @@ __all__ = [
     "PostService",
     "RecommendationService",
     "InterestService",
-    "MemoryService",
     "ArticleService",
     "ImageService",
 ]

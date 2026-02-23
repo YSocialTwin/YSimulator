@@ -4,10 +4,10 @@ from __future__ import annotations
 
 from typing import Any
 
-from YSimulator.YServer.services.memory_backends.base import MemoryBackend
-from YSimulator.YServer.services.memory_backends.ghostkg_backend import GhostKGMemoryBackend
-from YSimulator.YServer.services.memory_backends.native_backend import NativeMemoryBackend
-from YSimulator.YServer.services.memory_backends.none_backend import NoMemoryBackend
+from YSimulator.YClient.memory.backends.base import MemoryBackend
+from YSimulator.YClient.memory.backends.ghostkg_backend import GhostKGMemoryBackend
+from YSimulator.YClient.memory.backends.native_backend import NativeMemoryBackend
+from YSimulator.YClient.memory.backends.none_backend import NoMemoryBackend
 
 
 class MemoryBackendFactory:

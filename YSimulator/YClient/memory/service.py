@@ -9,7 +9,7 @@ from __future__ import annotations
 import logging
 from typing import Any, Dict, List, Optional
 
-from YSimulator.YServer.services.memory_backends import (
+from YSimulator.YClient.memory.backends import (
     ForgetResult,
     IngestResult,
     MemoryBackendFactory,
@@ -17,7 +17,7 @@ from YSimulator.YServer.services.memory_backends import (
     MemoryQuery,
     ReinforceResult,
 )
-from YSimulator.YServer.services.memory_config import resolve_memory_settings
+from YSimulator.YClient.memory.config import resolve_memory_settings
 
 
 class MemoryService:

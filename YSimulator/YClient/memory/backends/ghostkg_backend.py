@@ -9,7 +9,7 @@ import traceback
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
-from YSimulator.YServer.services.memory_backends.base import (
+from YSimulator.YClient.memory.backends.base import (
     BackendHealth,
     ForgetResult,
     IngestResult,

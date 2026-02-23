@@ -1,7 +1,7 @@
 """Tests for memory backend factory and no-op service behavior."""
 
-from YSimulator.YServer.services.memory_backends.factory import MemoryBackendFactory
-from YSimulator.YServer.services.memory_service import MemoryService
+from YSimulator.YClient.memory.backends.factory import MemoryBackendFactory
+from YSimulator.YClient.memory.service import MemoryService
 
 
 def test_backend_factory_creates_expected_backends():

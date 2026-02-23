@@ -2,7 +2,7 @@
 
 import pytest
 
-from YSimulator.YServer.services.memory_config import resolve_memory_settings
+from YSimulator.YClient.memory.config import resolve_memory_settings
 
 
 def test_memory_disabled_forces_none_backend():
