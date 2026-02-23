@@ -117,11 +117,27 @@ class SearchGenerator(BaseActionGenerator):
             # LLM: Ask LLM to decide which action to perform (comment/share/react)
             # Get opinions for the topics in this post
             opinion_info = self._get_opinions_for_post(agent.id, target_post)
+            content_topics = self._resolve_content_topics(target_post, opinion_info["topics"])
+            if content_topics:
+                agent_attrs["post_topics"] = content_topics
             if opinion_info["topics"]:
                 # Add opinion information to agent attrs
-                agent_attrs["post_topics"] = opinion_info["topics"]
                 agent_attrs["post_opinions"] = opinion_info["opinions"]
                 agent_attrs["post_opinion_values"] = opinion_info["opinion_values"]
+
+            # Inject memory using content-associated topics (entry point), not only opinion topics.
+            self._inject_memory_context(
+                str(agent.id),
+                agent_attrs,
+                self._build_interaction_memory_query(
+                    post_id=target_post,
+                    action_type="SEARCH",
+                    post_data=post_data,
+                    fallback_topics=opinion_info["topics"] or [selected_topic],
+                    target_user_id=str(post_author_id) if post_author_id else None,
+                ),
+                metadata=result.metadata,
+            )
 
             # Check if vLLM batching should be used
             if _should_use_vllm_batching(self.context.llm):

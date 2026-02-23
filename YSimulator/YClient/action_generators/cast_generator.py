@@ -36,7 +36,19 @@ class CastGenerator(BaseActionGenerator):
 
         # Extract agent attributes for context
         agent_attrs = self._extract_agent_attrs(agent)
-        selected_topic = agent_attrs.get("topic")
+        selected_topic = self._select_topic_from_agent_interests(agent, agent_attrs.get("topic"))
+        agent_attrs["topic"] = selected_topic
+
+        # Reuse post-memory path for broadcast posts.
+        self._inject_memory_context(
+            str(agent.id),
+            agent_attrs,
+            {
+                "topic": selected_topic,
+                "action_type": "POST",
+            },
+            metadata=result.metadata,
+        )
 
         if agent_type == "llm":
             # LLM: Fire off async call (similar to POST)

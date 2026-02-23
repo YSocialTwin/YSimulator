@@ -141,9 +141,11 @@ class ReadGenerator(BaseActionGenerator):
 
                 # Get opinions for the topics in this post
                 opinion_info = self._get_opinions_for_post(agent.id, target_post)
+                content_topics = self._resolve_content_topics(target_post, opinion_info["topics"])
+                if content_topics:
+                    agent_attrs["post_topics"] = content_topics
                 if opinion_info["topics"]:
                     # Add opinion information to agent attrs
-                    agent_attrs["post_topics"] = opinion_info["topics"]
                     agent_attrs["post_opinions"] = opinion_info["opinions"]
                     agent_attrs["post_opinion_values"] = opinion_info["opinion_values"]
 
@@ -151,11 +153,12 @@ class ReadGenerator(BaseActionGenerator):
                 self._inject_memory_context(
                     str(agent.id),
                     agent_attrs,
-                    {
-                        "topic": opinion_info["topics"][0] if opinion_info["topics"] else None,
-                        "thread_id": post_data.get("thread_id"),
-                        "action_type": "READ",
-                    },
+                    self._build_interaction_memory_query(
+                        post_id=target_post,
+                        action_type="READ",
+                        post_data=post_data,
+                        fallback_topics=opinion_info["topics"],
+                    ),
                     metadata=result.metadata,
                 )
 

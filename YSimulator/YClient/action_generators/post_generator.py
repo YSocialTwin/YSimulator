@@ -36,7 +36,9 @@ class PostGenerator(BaseActionGenerator):
 
         # Extract agent attributes (interests, opinions, etc.) for context
         agent_attrs = self._extract_agent_attrs(agent)
-        selected_topic = agent_attrs.get("topic")  # Get the sampled topic
+        # For post actions, always use active agent interests as topic source.
+        selected_topic = self._select_topic_from_agent_interests(agent, agent_attrs.get("topic"))
+        agent_attrs["topic"] = selected_topic
 
         # Retrieve memory context using shared bounded helper.
         self._inject_memory_context(

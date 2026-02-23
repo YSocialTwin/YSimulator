@@ -8,7 +8,10 @@ and implement the generate() method.
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
+import random
 from typing import Any, Dict, List, Optional
+
+import ray
 
 from YSimulator.YClient.classes.ray_models import ActionDTO, AgentProfile
 
@@ -311,3 +314,85 @@ class BaseActionGenerator(ABC):
         if metadata is not None:
             metadata["memory_items_used"] = len(snippets)
             metadata["memory_chars_used"] = used_chars
+
+    def _select_topic_from_agent_interests(
+        self, agent: AgentProfile, current_topic: Optional[str]
+    ) -> Optional[str]:
+        """
+        Ensure post-like actions have a topic sampled from active agent interests.
+        """
+        if current_topic:
+            return current_topic
+        interests = getattr(agent, "interests", None)
+        if (
+            isinstance(interests, (list, tuple))
+            and len(interests) == 2
+            and isinstance(interests[0], list)
+            and isinstance(interests[1], list)
+            and interests[0]
+            and len(interests[0]) == len(interests[1])
+        ):
+            topics = interests[0]
+            counts = interests[1]
+            try:
+                return random.choices(topics, weights=counts, k=1)[0]
+            except Exception:
+                return str(topics[0]) if topics else None
+        return None
+
+    def _resolve_content_topics(
+        self, post_id: Optional[str], fallback_topics: Optional[List[str]] = None
+    ) -> List[str]:
+        """
+        Resolve topics tied to content as primary memory entry points.
+        """
+        topics: List[str] = []
+        if post_id:
+            try:
+                topic_ids = ray.get(
+                    self.context.server.get_post_topics.remote(
+                        post_id, client_id=self.context.client_id
+                    )
+                )
+                for topic_id in topic_ids or []:
+                    topic_name = ray.get(
+                        self.context.server.get_topic_name_from_id.remote(
+                            topic_id, client_id=self.context.client_id
+                        )
+                    )
+                    if topic_name:
+                        topics.append(str(topic_name))
+            except Exception as e:
+                if self.context.logger:
+                    self.context.logger.debug(
+                        f"Could not resolve content topics for post {post_id}: {e}"
+                    )
+
+        for topic in fallback_topics or []:
+            if topic and topic not in topics:
+                topics.append(str(topic))
+
+        return topics
+
+    def _build_interaction_memory_query(
+        self,
+        post_id: Optional[str],
+        action_type: str,
+        post_data: Optional[Dict[str, Any]] = None,
+        fallback_topics: Optional[List[str]] = None,
+        target_user_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        Build memory query using content-associated topics as entry point.
+        """
+        topics = self._resolve_content_topics(post_id, fallback_topics=fallback_topics)
+        query: Dict[str, Any] = {
+            "topic": topics[0] if topics else None,
+            "action_type": action_type,
+        }
+        if target_user_id:
+            query["target_user_id"] = str(target_user_id)
+        if post_data and post_data.get("thread_id"):
+            query["thread_id"] = post_data.get("thread_id")
+        query["metadata"] = {"topics": topics}
+        return query
