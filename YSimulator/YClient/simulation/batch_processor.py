@@ -200,14 +200,6 @@ class BatchProcessor:
         try:
             if self.ingest_memory_event_fn:
                 self.ingest_memory_event_fn(str(agent_id), event)
-            else:
-                ray.get(
-                    self.server.ingest_memory_event.remote(
-                        str(agent_id),
-                        event,
-                        client_id=self.client_id,
-                    )
-                )
         except Exception as e:
             self.logger.debug(f"Memory write-back failed for agent {agent_id}: {e}")
 
