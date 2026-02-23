@@ -43,6 +43,8 @@ class ActionContext:
         infer_page_agent_opinion_fn: Function to infer page agent opinion
         get_opinions_for_post_fn: Function to get agent opinions on post topics
         calculate_opinion_updates_fn: Function to calculate opinion updates from interactions
+        fetch_agent_memory_fn: Function to retrieve agent memory context
+        record_memory_usage_fn: Function to reinforce used memory items
     """
 
     day: int
@@ -72,6 +74,8 @@ class ActionContext:
     infer_page_agent_opinion_fn: Optional[Any] = None
     get_opinions_for_post_fn: Optional[Any] = None
     calculate_opinion_updates_fn: Optional[Any] = None
+    fetch_agent_memory_fn: Optional[Any] = None
+    record_memory_usage_fn: Optional[Any] = None
 
 
 @dataclass
@@ -214,3 +218,33 @@ class BaseActionGenerator(ABC):
                 agent_id, parent_post_id, parent_post_data
             )
         return None
+
+    def _fetch_agent_memory(self, agent_id: str, query: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """
+        Fetch memory context for an agent from the configured backend.
+
+        Args:
+            agent_id: Agent UUID
+            query: Retrieval query payload
+
+        Returns:
+            List of memory items as dictionaries
+        """
+        if self.context.fetch_agent_memory_fn:
+            return self.context.fetch_agent_memory_fn(agent_id, query)
+        return []
+
+    def _record_memory_usage(self, agent_id: str, memory_ids: List[str]) -> bool:
+        """
+        Record memory usage so backend can reinforce retrieved items.
+
+        Args:
+            agent_id: Agent UUID
+            memory_ids: Used memory item IDs
+
+        Returns:
+            bool: True on success
+        """
+        if self.context.record_memory_usage_fn:
+            return self.context.record_memory_usage_fn(agent_id, memory_ids)
+        return False

@@ -346,6 +346,8 @@ class SimulationClient:
             infer_page_agent_opinion_fn=self.opinion_manager.infer_page_agent_opinion,
             get_opinions_for_post_fn=self.opinion_manager.get_opinions_for_post,
             calculate_opinion_updates_fn=self.opinion_manager.calculate_opinion_updates,
+            fetch_agent_memory_fn=self._fetch_agent_memory,
+            record_memory_usage_fn=self._record_memory_usage,
         )
 
         return ActionGeneratorFactory(context)
@@ -740,6 +742,50 @@ class SimulationClient:
             self._is_opinion_dynamics_enabled,
             self._map_opinion_to_group,
         )
+
+    def _fetch_agent_memory(self, agent_id: str, query: dict) -> list:
+        """
+        Fetch memory context for an agent from the server memory API.
+
+        Args:
+            agent_id: Agent UUID
+            query: Retrieval query payload
+
+        Returns:
+            List of memory dictionaries (empty on error)
+        """
+        try:
+            return ray.get(
+                self.server.get_agent_memory.remote(
+                    str(agent_id), query or {}, client_id=self.client_id
+                )
+            )
+        except Exception as e:
+            self.logger.debug(f"Memory retrieval failed for agent {agent_id}: {e}")
+            return []
+
+    def _record_memory_usage(self, agent_id: str, memory_ids: list) -> bool:
+        """
+        Record used memory item IDs for backend reinforcement.
+
+        Args:
+            agent_id: Agent UUID
+            memory_ids: List of used memory item IDs
+
+        Returns:
+            bool: True on success, False otherwise
+        """
+        try:
+            return bool(
+                ray.get(
+                    self.server.record_memory_usage.remote(
+                        str(agent_id), memory_ids or [], client_id=self.client_id
+                    )
+                )
+            )
+        except Exception as e:
+            self.logger.debug(f"Memory reinforcement failed for agent {agent_id}: {e}")
+            return False
 
     def _save_updated_agent_population(self, updated_interests: dict):
         """

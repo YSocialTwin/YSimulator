@@ -21,6 +21,10 @@ from YSimulator.YServer.services.memory_backends.base import (
 class GhostKGMemoryBackend(MemoryBackend):
     """Placeholder adapter for GhostKG-backed memory."""
 
+    def __init__(self, backend_config: Dict[str, Any], logger: Any = None):
+        self.config = backend_config or {}
+        self.logger = logger
+
     @property
     def name(self) -> str:
         return "ghostkg"

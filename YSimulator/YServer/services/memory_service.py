@@ -23,13 +23,24 @@ from YSimulator.YServer.services.memory_config import resolve_memory_settings
 class MemoryService:
     """Facade over configurable memory backend implementations."""
 
-    def __init__(self, simulation_config: Optional[Dict[str, Any]] = None, logger=None):
+    def __init__(
+        self,
+        simulation_config: Optional[Dict[str, Any]] = None,
+        logger=None,
+        engine: Any = None,
+    ):
         self.logger = logger or logging.getLogger(__name__)
         self.simulation_config = simulation_config or {}
+        self.engine = engine
 
         settings = resolve_memory_settings(self.simulation_config)
         self.settings = settings
-        self.backend = MemoryBackendFactory.create(settings.backend, logger=self.logger)
+        self.backend = MemoryBackendFactory.create(
+            settings.backend,
+            logger=self.logger,
+            backend_config=settings.raw_config,
+            engine=self.engine,
+        )
 
     def initialize(self, simulation_context: Optional[Dict[str, Any]] = None) -> None:
         context = simulation_context or {}

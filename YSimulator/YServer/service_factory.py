@@ -226,6 +226,7 @@ def create_all_services(
     memory_service = MemoryService(
         simulation_config=simulation_config,
         logger=logger,
+        engine=engine,
     )
 
     return (

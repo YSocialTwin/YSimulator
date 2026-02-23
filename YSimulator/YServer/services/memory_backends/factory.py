@@ -14,14 +14,27 @@ class MemoryBackendFactory:
     """Resolves backend string to concrete backend implementation."""
 
     @staticmethod
-    def create(backend: str, logger: Any = None) -> MemoryBackend:
+    def create(
+        backend: str,
+        logger: Any = None,
+        backend_config: dict | None = None,
+        engine: Any = None,
+    ) -> MemoryBackend:
         backend_normalized = backend.lower().strip()
+        backend_config = backend_config or {}
 
         if backend_normalized == "none":
             return NoMemoryBackend()
         if backend_normalized == "native":
-            return NativeMemoryBackend()
+            return NativeMemoryBackend(
+                backend_config=backend_config,
+                engine=engine,
+                logger=logger,
+            )
         if backend_normalized == "ghostkg":
-            return GhostKGMemoryBackend()
+            return GhostKGMemoryBackend(
+                backend_config=backend_config,
+                logger=logger,
+            )
 
         raise ValueError(f"Unknown memory backend: {backend}")

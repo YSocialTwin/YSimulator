@@ -220,6 +220,7 @@ class OrchestratorServer:
 
         # Simulation state (will be managed by RoundManager)
         self.recent_posts_cache = []
+        self._last_memory_forget_cycle_round_idx = -1
 
         # Set up logging first
         self._setup_logging()
@@ -1533,6 +1534,9 @@ class OrchestratorServer:
                 },
             )
 
+            # Trigger periodic memory forgetting cycle according to configuration.
+            self._maybe_run_memory_forgetting_cycle()
+
         except Exception as e:
             self.logger.error(
                 f"DB Error during action submission: {e}",
@@ -1668,6 +1672,55 @@ class OrchestratorServer:
             "hard_deleted": result.hard_deleted,
             "error": result.error,
         }
+
+    def _maybe_run_memory_forgetting_cycle(self) -> None:
+        """Run forgetting cycle at configured round intervals."""
+        memory_cfg = self.simulation_config.get("agent_memory", {})
+        if not memory_cfg.get("enabled", False):
+            return
+
+        interval = int(memory_cfg.get("forgetting_cycle_interval_rounds", 24))
+        if interval <= 0:
+            return
+
+        # 1-based index to avoid negative values
+        current_idx = ((self.day - 1) * self.num_slots_per_day) + self.slot
+        if current_idx <= 0:
+            return
+        if current_idx - self._last_memory_forget_cycle_round_idx < interval:
+            return
+
+        result = self.memory_service.forget_cycle(
+            {
+                "day": self.day,
+                "slot": self.slot,
+                "current_round_id": self.current_round_id,
+            }
+        )
+        if result.success:
+            self._last_memory_forget_cycle_round_idx = current_idx
+            self.logger.info(
+                "Memory forgetting cycle completed",
+                extra={
+                    "extra_data": {
+                        "backend": self.memory_service.get_backend_name(),
+                        "decayed": result.decayed,
+                        "soft_forgotten": result.soft_forgotten,
+                        "hard_deleted": result.hard_deleted,
+                        "round_index": current_idx,
+                    }
+                },
+            )
+        else:
+            self.logger.warning(
+                f"Memory forgetting cycle failed: {result.error}",
+                extra={
+                    "extra_data": {
+                        "backend": self.memory_service.get_backend_name(),
+                        "round_index": current_idx,
+                    }
+                },
+            )
 
     def get_current_round_id(self) -> str:
         """
