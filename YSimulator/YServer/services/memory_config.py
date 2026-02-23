@@ -27,13 +27,18 @@ def resolve_memory_settings(simulation_config: Dict[str, Any]) -> MemorySettings
 
     Rules:
     1. If `agent_memory.enabled` is falsey -> backend forced to `none`
-    2. If enabled and backend missing -> default `native`
-    3. If enabled and backend invalid -> raise ValueError
+    2. If `agent_memory.compute_location=client` -> server backend forced to `none`
+    3. If enabled and backend missing -> default `native`
+    4. If enabled and backend invalid -> raise ValueError
     """
     agent_memory_cfg = simulation_config.get("agent_memory", {})
     enabled = bool(agent_memory_cfg.get("enabled", False))
+    compute_location = str(agent_memory_cfg.get("compute_location", "client")).strip().lower()
 
     if not enabled:
+        return MemorySettings(enabled=False, backend="none", raw_config=agent_memory_cfg)
+    if compute_location == "client":
+        # In client-compute mode the server remains persistence-only.
         return MemorySettings(enabled=False, backend="none", raw_config=agent_memory_cfg)
 
     backend = str(agent_memory_cfg.get("backend", "native")).strip().lower()

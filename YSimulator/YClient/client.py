@@ -13,13 +13,14 @@ import shutil
 from datetime import datetime
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
-from typing import Optional
+from typing import Any, Dict, List, Optional
 
 import ray
 
 # Phase 5: Removed ActionExecutorMixin - dead code replaced by action generators in Phase 1
 from YSimulator.YClient.action_generators import ActionContext, ActionGeneratorFactory
 from YSimulator.YClient.classes.ray_models import ActionDTO, AgentProfile
+from YSimulator.YClient.memory_runtime import ClientMemoryRuntime
 from YSimulator.YClient.recsys import (
     CommonInterests,
     CommonUserInterests,
@@ -224,6 +225,15 @@ class SimulationClient:
 
         # Connect to the Named Server Actor
         self.server = ray.get_actor("Orchestrator")
+        self._memory_day = 1
+        self._memory_slot = 0
+        self._memory_round_id = None
+        self.memory_runtime = ClientMemoryRuntime(
+            simulation_config=self.simulation_config,
+            config_path=self.config_path,
+            logger=self.logger,
+        )
+        self.memory_runtime.initialize()
 
         # Initialize agent manager (Phase 6 refactoring - NEW)
         # Centralized agent lifecycle management
@@ -336,7 +346,7 @@ class SimulationClient:
                 "max_length_thread_reading": self.max_length_thread_reading,
             },
             memory_settings={
-                "enabled": self.simulation_config.get("agent_memory", {}).get("enabled", False),
+                "enabled": self.memory_runtime.active,
                 "retrieval_top_k": self.simulation_config.get("agent_memory", {}).get(
                     "retrieval_top_k", 3
                 ),
@@ -407,6 +417,7 @@ class SimulationClient:
             perspective_api_key=self.perspective_api_key,
             logger=self.logger,
             cost_tracker=self.cost_tracker,  # Phase 3: Pass cost tracker
+            ingest_memory_event_fn=self._ingest_memory_event,
         )
 
         # Initialize LifecycleManager
@@ -474,6 +485,8 @@ class SimulationClient:
             log_hourly_summary_fn=self._log_hourly_summary,
             log_daily_summary_fn=self._log_daily_summary,
             update_round_info_fn=self._update_round_info,
+            set_memory_context_fn=self._set_memory_context,
+            ingest_actions_memory_fn=self._ingest_actions_memory,
         )
 
         self.logger.info("Simulation orchestrator initialized (Phase 2)")
@@ -757,7 +770,7 @@ class SimulationClient:
 
     def _fetch_agent_memory(self, agent_id: str, query: dict) -> list:
         """
-        Fetch memory context for an agent from the server memory API.
+        Fetch memory context for an agent.
 
         Args:
             agent_id: Agent UUID
@@ -767,6 +780,10 @@ class SimulationClient:
             List of memory dictionaries (empty on error)
         """
         try:
+            if self.memory_runtime.active:
+                return self.memory_runtime.retrieve(
+                    str(agent_id), query or {}, self._build_memory_context()
+                )
             return ray.get(
                 self.server.get_agent_memory.remote(
                     str(agent_id), query or {}, client_id=self.client_id
@@ -788,6 +805,10 @@ class SimulationClient:
             bool: True on success, False otherwise
         """
         try:
+            if self.memory_runtime.active:
+                return self.memory_runtime.reinforce(
+                    str(agent_id), memory_ids or [], self._build_memory_context()
+                )
             return bool(
                 ray.get(
                     self.server.record_memory_usage.remote(
@@ -798,6 +819,59 @@ class SimulationClient:
         except Exception as e:
             self.logger.debug(f"Memory reinforcement failed for agent {agent_id}: {e}")
             return False
+
+    def _set_memory_context(self, day: int, slot: int) -> None:
+        self._memory_day = int(day)
+        self._memory_slot = int(slot)
+        try:
+            self._memory_round_id = ray.get(self.server.get_current_round_id.remote())
+        except Exception:
+            self._memory_round_id = None
+
+    def _build_memory_context(self) -> Dict[str, Any]:
+        return {
+            "day": int(self._memory_day),
+            "slot": int(self._memory_slot),
+            "current_round_id": self._memory_round_id,
+            "client_id": self.client_id,
+        }
+
+    def _ingest_memory_event(self, agent_id: str, event: Dict[str, Any]) -> bool:
+        try:
+            if self.memory_runtime.active:
+                return self.memory_runtime.ingest_event(
+                    str(agent_id), event or {}, self._build_memory_context()
+                )
+            return bool(
+                ray.get(
+                    self.server.ingest_memory_event.remote(
+                        str(agent_id), event or {}, client_id=self.client_id
+                    )
+                )
+            )
+        except Exception as e:
+            self.logger.debug(f"Memory ingest failed for agent {agent_id}: {e}")
+            return False
+
+    def _ingest_actions_memory(self, actions: List[ActionDTO], day: int, slot: int) -> None:
+        self._set_memory_context(day, slot)
+        if not self.memory_runtime.active:
+            return
+        for act in actions:
+            event = {
+                "action_type": getattr(act, "action_type", None),
+                "agent_id": str(getattr(act, "agent_id", "")),
+                "content": getattr(act, "content", None),
+                "target_post_id": getattr(act, "target_post_id", None),
+                "target_user_id": getattr(act, "target_user_id", None),
+                "topic": getattr(act, "topic", None),
+                "metadata": (
+                    dict(getattr(act, "memory_metadata", {}))
+                    if isinstance(getattr(act, "memory_metadata", None), dict)
+                    else {}
+                ),
+            }
+            self._ingest_memory_event(str(getattr(act, "agent_id", "")), event)
 
     def _save_updated_agent_population(self, updated_interests: dict):
         """

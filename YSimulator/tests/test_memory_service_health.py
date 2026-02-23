@@ -20,7 +20,13 @@ def test_memory_service_health_reports_native_backend_when_enabled(tmp_path):
     db_file = tmp_path / "memory_health.db"
     engine = create_engine(f"sqlite:///{db_file}")
     service = MemoryService(
-        simulation_config={"agent_memory": {"enabled": True, "backend": "native"}},
+        simulation_config={
+            "agent_memory": {
+                "enabled": True,
+                "compute_location": "server",
+                "backend": "native",
+            }
+        },
         engine=engine,
     )
     service.initialize({"day": 1, "slot": 1, "current_round_id": "r1"})
@@ -33,7 +39,13 @@ def test_memory_service_health_reports_native_backend_when_enabled(tmp_path):
 def test_memory_service_bind_logger_propagates_to_backend():
     engine = create_engine("sqlite:///:memory:")
     service = MemoryService(
-        simulation_config={"agent_memory": {"enabled": True, "backend": "native"}},
+        simulation_config={
+            "agent_memory": {
+                "enabled": True,
+                "compute_location": "server",
+                "backend": "native",
+            }
+        },
         engine=engine,
     )
     memory_logger = logging.getLogger("test.memory")

@@ -63,6 +63,7 @@ class BatchProcessor:
         perspective_api_key: Optional[str],
         logger: logging.Logger,
         cost_tracker: Optional[CostTracker] = None,
+        ingest_memory_event_fn: Optional[Any] = None,
     ):
         """
         Initialize the BatchProcessor.
@@ -86,6 +87,7 @@ class BatchProcessor:
         self.enable_emotions = enable_emotions
         self.perspective_api_key = perspective_api_key
         self.logger = logger
+        self.ingest_memory_event_fn = ingest_memory_event_fn
 
         # Phase 3: Initialize all LLM utilities modules
         self.llm_manager = LLMManager(llm, logger=logger)  # Wrap LLM for consistent interface
@@ -196,13 +198,16 @@ class BatchProcessor:
         }
 
         try:
-            ray.get(
-                self.server.ingest_memory_event.remote(
-                    str(agent_id),
-                    event,
-                    client_id=self.client_id,
+            if self.ingest_memory_event_fn:
+                self.ingest_memory_event_fn(str(agent_id), event)
+            else:
+                ray.get(
+                    self.server.ingest_memory_event.remote(
+                        str(agent_id),
+                        event,
+                        client_id=self.client_id,
+                    )
                 )
-            )
         except Exception as e:
             self.logger.debug(f"Memory write-back failed for agent {agent_id}: {e}")
 

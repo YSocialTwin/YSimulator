@@ -59,6 +59,8 @@ class Simulator:
         log_hourly_summary_fn,
         log_daily_summary_fn,
         update_round_info_fn=None,
+        set_memory_context_fn=None,
+        ingest_actions_memory_fn=None,
     ):
         """
         Initialize the Simulator.
@@ -105,6 +107,8 @@ class Simulator:
         self.log_hourly_summary_fn = log_hourly_summary_fn
         self.log_daily_summary_fn = log_daily_summary_fn
         self.update_round_info_fn = update_round_info_fn
+        self.set_memory_context_fn = set_memory_context_fn
+        self.ingest_actions_memory_fn = ingest_actions_memory_fn
 
     def run(self, calculate_opinion_updates_fn) -> None:
         """
@@ -220,6 +224,8 @@ class Simulator:
 
                 # Process simulation round
                 sim_start = time.time()
+                if self.set_memory_context_fn:
+                    self.set_memory_context_fn(instruction.day, instruction.slot)
                 actions, active_agent_ids = self._simulate_round(
                     instruction.day,
                     instruction.slot,
@@ -256,6 +262,8 @@ class Simulator:
 
                 # Submit actions
                 submit_start = time.time()
+                if self.ingest_actions_memory_fn:
+                    self.ingest_actions_memory_fn(actions, instruction.day, instruction.slot)
                 ray.get(self.server.submit_actions.remote(self.client_id, actions))
                 submit_time = (time.time() - submit_start) * 1000
 

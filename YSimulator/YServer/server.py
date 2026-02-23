@@ -1527,32 +1527,6 @@ class OrchestratorServer:
                 if result.success and result.new_ids:
                     new_ids.extend(result.new_ids)
 
-                # Ingest memory event through selected backend (no-op when backend=none).
-                if result.success:
-                    metadata = dict(result.metadata or {})
-                    extra_memory_metadata = getattr(act, "memory_metadata", None)
-                    if isinstance(extra_memory_metadata, dict):
-                        metadata.update(extra_memory_metadata)
-                    memory_event = {
-                        "action_type": act.action_type,
-                        "agent_id": str(act.agent_id),
-                        "content": getattr(act, "content", None),
-                        "target_post_id": getattr(act, "target_post_id", None),
-                        "target_user_id": getattr(act, "target_user_id", None),
-                        "topic": getattr(act, "topic", None),
-                        "new_ids": result.new_ids,
-                        "metadata": metadata,
-                    }
-                    self.memory_service.ingest_event(
-                        str(act.agent_id),
-                        memory_event,
-                        {
-                            "day": self.day,
-                            "slot": self.slot,
-                            "current_round_id": self.current_round_id,
-                        },
-                    )
-
             # Update recent posts cache
             if new_ids:
                 self.recent_posts_cache.extend(new_ids)
