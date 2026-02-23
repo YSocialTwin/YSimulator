@@ -121,12 +121,23 @@ class GhostKGMemoryBackend(MemoryBackend):
                 else:
                     self._ingest_with_direct_triplet(agent_id, action_type, topic, target_user_id)
             except Exception as primary_error:
-                # Compatibility fallback for older GhostKG timestamp constraints.
-                if "created_at" not in str(primary_error):
+                # Compatibility fallback for known GhostKG runtime incompatibilities.
+                if not self._is_compat_fallback_error(primary_error):
                     raise
-                self._set_agent_synthetic_datetime(agent_id, context)
-                if self._extraction_mode in {"fast", "llm"} and content:
-                    self._ingest_with_content_extraction(agent_id, content, action_type, target_user_id)
+                self.logger.warning(
+                    "GhostKG extraction fallback triggered: %s. Falling back to direct triplet ingest.",
+                    primary_error,
+                )
+                if "created_at" in str(primary_error):
+                    self._set_agent_synthetic_datetime(agent_id, context)
+                    if self._extraction_mode in {"fast", "llm"} and content:
+                        self._ingest_with_content_extraction(
+                            agent_id, content, action_type, target_user_id
+                        )
+                    else:
+                        self._ingest_with_direct_triplet(
+                            agent_id, action_type, topic, target_user_id
+                        )
                 else:
                     self._ingest_with_direct_triplet(agent_id, action_type, topic, target_user_id)
 
@@ -423,6 +434,14 @@ class GhostKGMemoryBackend(MemoryBackend):
         if config_path:
             return os.path.join(str(config_path), "database_server.db")
         return "database_server.db"
+
+    def _is_compat_fallback_error(self, err: Exception) -> bool:
+        msg = str(err)
+        return (
+            "created_at" in msg
+            or "list indices must be integers or slices, not float" in msg
+            or "'str' object has no attribute 'get'" in msg
+        )
 
     def _normalize_sqlite_url(self, db_url: str, simulation_context: Dict[str, Any]) -> str:
         """
