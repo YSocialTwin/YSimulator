@@ -24,6 +24,17 @@ from YSimulator.utils.init_db import database_exists, initialize_database
 from YSimulator.YServer.server import OrchestratorServer
 
 
+def deep_merge_dict(base: dict, override: dict) -> dict:
+    """Recursively merge two dictionaries with override precedence."""
+    result = dict(base)
+    for key, value in override.items():
+        if isinstance(value, dict) and isinstance(result.get(key), dict):
+            result[key] = deep_merge_dict(result[key], value)
+        else:
+            result[key] = value
+    return result
+
+
 def compress_rotated_log(source, dest):
     """
     Compress a rotated log file using gzip.
@@ -165,12 +176,34 @@ if __name__ == "__main__":
         db_config[db_type]["database"] = unique_db_name
 
     redis_config = config.get("redis")  # Redis configuration (optional)
-    simulation_config = config.get("simulation", {})  # Simulation configuration (optional)
+    # Build server-side simulation config by merging:
+    # 1) optional simulation_config.json in same config directory (base)
+    # 2) selected sections from server_config.json (override)
+    simulation_config = {}
+    simulation_file = config_dir / "simulation_config.json"
+    if simulation_file.exists():
+        try:
+            with open(simulation_file, "r") as f:
+                simulation_config = json.load(f)
+        except json.JSONDecodeError as e:
+            print(f"❌ Error: Invalid JSON in '{simulation_file}': {e}")
+            sys.exit(1)
 
-    # Add posts configuration to simulation_config for consistency
-    posts_config = config.get("posts", {})
-    if posts_config:
-        simulation_config["posts"] = posts_config
+    server_overlay = {}
+    for section in (
+        "simulation",
+        "posts",
+        "agents",
+        "agent_memory",
+        "opinion_dynamics",
+        "recommendations",
+        "logging",
+    ):
+        value = config.get(section)
+        if isinstance(value, dict):
+            server_overlay[section] = value
+
+    simulation_config = deep_merge_dict(simulation_config, server_overlay)
 
     # Set up logging in config directory
     logging_config = config.get("logging", {})
@@ -196,6 +229,8 @@ if __name__ == "__main__":
                 "config_file": str(config_file),
                 "db_type": db_config.get("type", "sqlite"),
                 "db_name": db_name,
+                "memory_enabled": bool(simulation_config.get("agent_memory", {}).get("enabled", False)),
+                "memory_backend": simulation_config.get("agent_memory", {}).get("backend", "none"),
                 "execution_time_ms": load_time,
             }
         },
