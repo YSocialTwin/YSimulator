@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
+import traceback
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
@@ -78,7 +79,9 @@ class GhostKGMemoryBackend(MemoryBackend):
         except Exception as e:
             self._available = False
             self._initialized = False
-            self.logger.warning(f"GhostKG backend unavailable, running inert adapter: {e}")
+            self.logger.error(
+                f"GhostKG backend unavailable, running inert adapter: {e}\n{traceback.format_exc()}"
+            )
 
     def ingest_event(
         self, agent_id: str, event: Dict[str, Any], context: Dict[str, Any]
