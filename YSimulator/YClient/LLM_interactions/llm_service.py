@@ -317,6 +317,25 @@ class LLMService:
             "Use this context to keep your response consistent with what you know and believe."
         )
 
+    def _render_user_template(
+        self,
+        user_template: str,
+        format_kwargs: Dict[str, Any],
+        agent_attrs: Optional[dict] = None,
+        memory_header: str = "MEMORY CONTEXT",
+    ) -> str:
+        """
+        Render a user template with optional memory placeholder support.
+        If `{memory_context_instruction}` is missing from the template, append memory text as fallback.
+        """
+        memory_instruction = self._build_memory_instruction(agent_attrs, header=memory_header)
+        kwargs = dict(format_kwargs or {})
+        kwargs["memory_context_instruction"] = memory_instruction
+        rendered = user_template.format(**kwargs)
+        if memory_instruction and "{memory_context_instruction}" not in user_template:
+            rendered += memory_instruction
+        return rendered
+
     def _build_persona(self, cluster_id: int, agent_attrs: dict = None) -> str:
         """
         Build a persona string for an agent using either attributes or fallback.
@@ -396,14 +415,18 @@ class LLMService:
             topic_instruction = ""
 
         # Format user message with all placeholders
-        user_msg = user_template.format(
-            persona=persona,
-            toxicity=toxicity,
-            day=day,
-            slot=slot,
-            topic_instruction=topic_instruction,
+        user_msg = self._render_user_template(
+            user_template,
+            {
+                "persona": persona,
+                "toxicity": toxicity,
+                "day": day,
+                "slot": slot,
+                "topic_instruction": topic_instruction,
+            },
+            agent_attrs=agent_attrs,
+            memory_header="KNOWN CONTEXT",
         )
-        user_msg += self._build_memory_instruction(agent_attrs, header="KNOWN CONTEXT")
 
         # Log the prompt for debugging
         self._log_prompt("generate_post", system_msg, user_msg, agent_attrs)
@@ -584,18 +607,22 @@ class LLMService:
         system_msg = (
             system_template.format(persona=persona, toxicity=toxicity) if system_template else ""
         )
-        user_msg = user_template.format(
-            persona=persona,
-            toxicity=toxicity,
-            author_name=author_name,
-            post_content=post_content,
-            thread_context_instruction=thread_context_instruction,
+        user_msg = self._render_user_template(
+            user_template,
+            {
+                "persona": persona,
+                "toxicity": toxicity,
+                "author_name": author_name,
+                "post_content": post_content,
+                "thread_context_instruction": thread_context_instruction,
+            },
+            agent_attrs=agent_attrs,
+            memory_header="CONVERSATION MEMORY",
         )
 
         # Add opinion instruction if available
         if opinion_instruction:
             user_msg += opinion_instruction
-        user_msg += self._build_memory_instruction(agent_attrs, header="CONVERSATION MEMORY")
 
         # Log the prompt for debugging
         self._log_prompt("generate_comment", system_msg, user_msg, agent_attrs)
@@ -673,17 +700,21 @@ class LLMService:
         system_msg = (
             system_template.format(persona=persona, toxicity=toxicity) if system_template else ""
         )
-        user_msg = user_template.format(
-            persona=persona,
-            toxicity=toxicity,
-            author_name=author_name,
-            post_content=post_content,
+        user_msg = self._render_user_template(
+            user_template,
+            {
+                "persona": persona,
+                "toxicity": toxicity,
+                "author_name": author_name,
+                "post_content": post_content,
+            },
+            agent_attrs=agent_attrs,
+            memory_header="CONVERSATION MEMORY",
         )
 
         # Add opinion instruction if available
         if opinion_instruction:
             user_msg += opinion_instruction
-        user_msg += self._build_memory_instruction(agent_attrs, header="CONVERSATION MEMORY")
 
         prompt = ChatPromptTemplate.from_messages([("system", system_msg), ("user", user_msg)])
 
@@ -743,7 +774,12 @@ class LLMService:
 
         # Format templates
         system_msg = system_template.format(persona=persona) if system_template else ""
-        user_msg = user_template.format(persona=persona, post_content=post_content)
+        user_msg = self._render_user_template(
+            user_template,
+            {"persona": persona, "post_content": post_content},
+            agent_attrs=agent_attrs,
+            memory_header="CONVERSATION MEMORY",
+        )
 
         # Add opinion instruction if available
         if opinion_instruction:
@@ -853,7 +889,12 @@ class LLMService:
 
         # Format templates
         system_msg = system_template.format(persona=persona) if system_template else ""
-        user_msg = user_template.format(persona=persona, post_content=post_content)
+        user_msg = self._render_user_template(
+            user_template,
+            {"persona": persona, "post_content": post_content},
+            agent_attrs=agent_attrs,
+            memory_header="CONVERSATION MEMORY",
+        )
 
         # Add opinion instruction if available
         if opinion_instruction:
@@ -1205,8 +1246,14 @@ class LLMService:
 
         # Format templates
         system_msg = system_template.format(persona=persona, toxicity=toxicity)
-        user_msg = user_template.format(
-            image_description=image_description, topics_instruction=topics_instruction
+        user_msg = self._render_user_template(
+            user_template,
+            {
+                "image_description": image_description,
+                "topics_instruction": topics_instruction,
+            },
+            agent_attrs=agent_attrs,
+            memory_header="CONVERSATION MEMORY",
         )
 
         # Build prompts

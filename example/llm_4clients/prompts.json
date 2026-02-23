@@ -8,7 +8,7 @@
   },
   "generate_post": {
     "system_template": "You are {persona}. Stay consistent with your profile and prior beliefs. If MEMORY CONTEXT is provided in the prompt, use it to keep continuity and factual consistency. Follow output constraints exactly.",
-    "user_template": "Task: Generate a social media post that follows the persona, constraints, and requested topic stance.\n\nWrite a social media post for Day {day} Slot {slot}.{topic_instruction} Keep it under 280 characters. Be authentic to your persona. You can use #hashtags to categorize your post. Output ONLY the post text."
+    "user_template": "Task: Generate a social media post that follows the persona, constraints, and requested topic stance.\n\nWrite a social media post for Day {day} Slot {slot}.{topic_instruction} Keep it under 280 characters. Be authentic to your persona. You can use #hashtags to categorize your post. Output ONLY the post text.\n\n{memory_context_instruction}"
   },
   "decide_reaction": {
     "system_template": "You are {persona}. Stay consistent with your profile and prior beliefs. If MEMORY CONTEXT is provided in the prompt, use it to keep continuity and factual consistency. Follow output constraints exactly.",
@@ -16,15 +16,15 @@
   },
   "generate_comment": {
     "system_template": "You are {persona}. Stay consistent with your profile and prior beliefs. If MEMORY CONTEXT is provided in the prompt, use it to keep continuity and factual consistency. Follow output constraints exactly.",
-    "user_template": "Task: Generate a concise reply/comment to the target post, respecting thread context and constraints.\n\n{author_name} posted this:\n\n\"{post_content}\"\n\n{thread_context_instruction}Write a brief, thoughtful comment. You can tag the author with @{author_name} (under 100 characters). Be authentic to your persona. Output ONLY the comment text."
+    "user_template": "Task: Generate a concise reply/comment to the target post, respecting thread context and constraints.\n\n{author_name} posted this:\n\n\"{post_content}\"\n\n{thread_context_instruction}Write a brief, thoughtful comment. You can tag the author with @{author_name} (under 100 characters). Be authentic to your persona. Output ONLY the comment text.\n\n{memory_context_instruction}"
   },
   "generate_read_reaction": {
     "system_template": "You are {persona}. Stay consistent with your profile and prior beliefs. If MEMORY CONTEXT is provided in the prompt, use it to keep continuity and factual consistency. Follow output constraints exactly.",
-    "user_template": "Task: Choose exactly one reaction label for the target post based on persona and context.\n\nYou found this post:\n\n\"{post_content}\"\n\nHow do you react? Reply with ONLY ONE WORD from these options:\n- LIKE (positive, agree)\n- LOVE (strongly positive)\n- LAUGH (funny, humorous)\n- ANGRY (negative, disagree, dislike)\n- SAD (disappointing, concerning)\n- IGNORE (not interested, skip)\n\nYour reaction:"
+    "user_template": "Task: Choose exactly one reaction label for the target post based on persona and context.\n\nYou found this post:\n\n\"{post_content}\"\n\nHow do you react? Reply with ONLY ONE WORD from these options:\n- LIKE (positive, agree)\n- LOVE (strongly positive)\n- LAUGH (funny, humorous)\n- ANGRY (negative, disagree, dislike)\n- SAD (disappointing, concerning)\n- IGNORE (not interested, skip)\n\nYour reaction:\n\n{memory_context_instruction}"
   },
   "decide_search_action": {
     "system_template": "You are {persona}. Stay consistent with your profile and prior beliefs. If MEMORY CONTEXT is provided in the prompt, use it to keep continuity and factual consistency. Follow output constraints exactly.",
-    "user_template": "Task: Decide how to engage with the searched post and return exactly one allowed action.\n\nYou found this post on your topic of interest:\n\n\"{post_content}\"\n\nHow do you want to engage? Reply with ONLY ONE WORD from these options:\n- COMMENT (engage in discussion, share your thoughts)\n- SHARE (reshare with your followers)\n- LIKE (positive, agree)\n- LOVE (strongly positive)\n- LAUGH (funny, humorous)\n- ANGRY (negative, disagree)\n- SAD (disappointing, concerning)\n- IGNORE (not interested, skip)\n\nYour choice:",
+    "user_template": "Task: Decide how to engage with the searched post and return exactly one allowed action.\n\nYou found this post on your topic of interest:\n\n\"{post_content}\"\n\nHow do you want to engage? Reply with ONLY ONE WORD from these options:\n- COMMENT (engage in discussion, share your thoughts)\n- SHARE (reshare with your followers)\n- LIKE (positive, agree)\n- LOVE (strongly positive)\n- LAUGH (funny, humorous)\n- ANGRY (negative, disagree)\n- SAD (disappointing, concerning)\n- IGNORE (not interested, skip)\n\nYour choice:\n\n{memory_context_instruction}",
     "note": "Used when agents perform search action to decide engagement with discovered posts"
   },
   "generate_news_commentary": {
@@ -62,7 +62,7 @@
   },
   "generate_image_commentary": {
     "system_template": "You are {persona}. Stay consistent with your profile and prior beliefs. If MEMORY CONTEXT is provided in the prompt, use it to keep continuity and factual consistency. Follow output constraints exactly.",
-    "user_template": "Task: Generate an image-sharing post aligned with persona, topics, and constraints.\n\nYou are sharing an image described as: \"{image_description}\"\n\n{topics_instruction}Write a brief, engaging post to share this image (under 280 characters). Be authentic to your persona and reference the image content. You can use #hashtags to categorize your post. Output ONLY the post text."
+    "user_template": "Task: Generate an image-sharing post aligned with persona, topics, and constraints.\n\nYou are sharing an image described as: \"{image_description}\"\n\n{topics_instruction}Write a brief, engaging post to share this image (under 280 characters). Be authentic to your persona and reference the image content. You can use #hashtags to categorize your post. Output ONLY the post text.\n\n{memory_context_instruction}"
   },
   "infer_article_opinion": {
     "system_template": "You are an opinion classification assistant. Follow the task exactly and return one valid option.",
@@ -74,6 +74,6 @@
   },
   "generate_share_commentary": {
     "system_template": "You are {persona}. Stay consistent with your profile and prior beliefs. If MEMORY CONTEXT is provided in the prompt, use it to keep continuity and factual consistency. Follow output constraints exactly.",
-    "user_template": "Task: Generate short share commentary aligned with persona and constraints.\n\n{author_name} posted this:\n\n\"{post_content}\"\n\nWrite a brief commentary explaining why you're resharing this (under 200 characters). Add your perspective based on your persona and opinions. Be authentic. You can use #hashtags in your commentary. Output ONLY the commentary text."
+    "user_template": "Task: Generate short share commentary aligned with persona and constraints.\n\n{author_name} posted this:\n\n\"{post_content}\"\n\nWrite a brief commentary explaining why you're resharing this (under 200 characters). Add your perspective based on your persona and opinions. Be authentic. You can use #hashtags in your commentary. Output ONLY the commentary text.\n\n{memory_context_instruction}"
   }
 }
