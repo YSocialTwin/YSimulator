@@ -108,3 +108,27 @@ def test_heuristic_fallback_generates_non_empty_triplets():
 def test_get_post_text_supports_text_and_tweet_keys():
     assert BatchProcessor._get_post_text({"text": "hello"}) == "hello"
     assert BatchProcessor._get_post_text({"tweet": "world"}) == "world"
+
+
+def test_resolve_author_label_prefers_username_over_uuid(monkeypatch):
+    class _Server:
+        class _GetUser:
+            @staticmethod
+            def remote(user_id, client_id=None):
+                return {"id": user_id, "username": "news_page"}
+
+        get_user = _GetUser()
+
+    bp = BatchProcessor(
+        server=_Server(),
+        client_id="c1",
+        llm=object(),
+        enable_sentiment=False,
+        enable_toxicity=False,
+        enable_emotions=False,
+        perspective_api_key=None,
+        logger=__import__("logging").getLogger("test"),
+    )
+    monkeypatch.setattr("YSimulator.YClient.simulation.batch_processor.ray.get", lambda x: x)
+    author = bp._resolve_author_label({"user_id": "4ef8052b-608d-50f2-9785-91b2bce1d72a"})
+    assert author == "news_page"

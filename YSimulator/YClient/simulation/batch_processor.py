@@ -98,6 +98,7 @@ class BatchProcessor:
         )  # Add retry logic
         self.response_parser = ResponseParser(logger=logger)
         self.cost_tracker = cost_tracker  # Optional cost tracking
+        self._author_name_cache: Dict[str, str] = {}
 
     def _get_llm_actor(self, agent_id: Optional[str] = None):
         """
@@ -427,12 +428,32 @@ class BatchProcessor:
         if triplets:
             action.memory_metadata = {"ghostkg_absorb_triplets": triplets}
 
-    @staticmethod
-    def _resolve_author_label(post_data: Optional[Dict[str, Any]], fallback: str = "Author") -> str:
+    def _resolve_author_label(self, post_data: Optional[Dict[str, Any]], fallback: str = "Author") -> str:
         if isinstance(post_data, dict):
+            # Prefer explicit username fields if available.
+            for key in ("author_name", "username"):
+                name_val = str(post_data.get(key) or "").strip()
+                if name_val:
+                    return name_val
+
             candidate = post_data.get("author") or post_data.get("user_id")
             candidate_txt = str(candidate or "").strip()
             if candidate_txt:
+                # Convert UUID-like identifiers to usernames when possible.
+                if self._is_uuid_like(candidate_txt):
+                    cached = self._author_name_cache.get(candidate_txt)
+                    if cached:
+                        return cached
+                    try:
+                        user_data = ray.get(
+                            self.server.get_user.remote(candidate_txt, client_id=self.client_id)
+                        )
+                        username = str((user_data or {}).get("username") or "").strip()
+                        if username:
+                            self._author_name_cache[candidate_txt] = username
+                            return username
+                    except Exception:
+                        pass
                 return candidate_txt
         return fallback
 
