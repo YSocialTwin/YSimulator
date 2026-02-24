@@ -222,8 +222,9 @@ class TestOpinionInferencer:
             feed_url="https://example.com",
         )
 
-        # Mock LLM response
-        with patch("ray.get", return_value=0.85):
+        # Mock server responses
+        with patch("YSimulator.YClient.opinion.opinion_inferencer.ray") as mock_ray:
+            mock_ray.get.return_value = 0.85
             opinion = inferencer.infer_opinion(
                 agent_profile=agent,
                 article_content="Article about renewable energy benefits",
@@ -297,9 +298,9 @@ class TestOpinionCalculator:
         )
 
         # Mock server responses
-        with patch("ray.get") as mock_ray_get:
+        with patch("YSimulator.YClient.opinion.opinion_calculator.ray") as mock_ray:
             # Setup mock return values in order
-            mock_ray_get.side_effect = [
+            mock_ray.get.side_effect = [
                 ["topic_1"],  # get_post_topics
                 "climate_change",  # get_topic_name_from_id
                 0.5,  # get_latest_agent_opinion (agent)
@@ -358,8 +359,8 @@ class TestOpinionCalculator:
         )
 
         # Mock server responses
-        with patch("ray.get") as mock_ray_get:
-            mock_ray_get.side_effect = [
+        with patch("YSimulator.YClient.opinion.opinion_calculator.ray") as mock_ray:
+            mock_ray.get.side_effect = [
                 ["topic_1"],  # get_post_topics
                 "climate_change",  # get_topic_name_from_id
                 0.5,  # get_latest_agent_opinion (agent)
@@ -481,8 +482,8 @@ class TestOpinionManager:
         )
 
         # Mock server responses
-        with patch("ray.get") as mock_ray_get:
-            mock_ray_get.side_effect = [
+        with patch("YSimulator.YClient.opinion.opinion_manager.ray") as mock_ray:
+            mock_ray.get.side_effect = [
                 ["topic_1"],  # get_post_topics
                 "climate_change",  # get_topic_name_from_id
             ]

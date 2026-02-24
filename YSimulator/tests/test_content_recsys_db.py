@@ -1000,11 +1000,12 @@ class TestRecommendHybridLinearRanker(unittest.TestCase):
         # Mock chainable methods
         mock_query.join.return_value = mock_query
         mock_query.filter.return_value = mock_query
-        mock_query.count.return_value = 5  # 5 likes
+        # Return 5 for likes count, 0 for comments count
+        mock_query.count.side_effect = [5, 0]
 
         affinity = _calculate_user_author_affinity_sql(mock_session, "agent1", "author1")
 
-        # Should return log(1 + interactions)
+        # Should return log(1 + interactions) where interactions = 5 likes + 0 comments
         expected = math.log(1 + 5)
         assert abs(affinity - expected) < 0.01
 

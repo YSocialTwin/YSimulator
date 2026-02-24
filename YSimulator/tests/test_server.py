@@ -18,19 +18,26 @@ pytestmark = pytest.mark.xdist_group(name="server_tests")
 @pytest.fixture(scope="module", autouse=True)
 def mock_ray_remote_for_server_tests():
     """Patch ray.remote ONLY for this test module."""
-    # Import ray here to ensure we're patching the right thing
+    import importlib
     import ray
+    import YSimulator.YServer.server as server_module
 
     # Store original
     original_remote = ray.remote
 
-    # Replace with identity function
+    # Replace with identity function so @ray.remote becomes a no-op decorator
     ray.remote = lambda x: x
+
+    # Force-reload the server module so OrchestratorServer is re-decorated with
+    # the identity function, even if it was already imported by another test file
+    # (e.g. test_reply_pipeline.py) that caused it to become a real Ray actor.
+    importlib.reload(server_module)
 
     yield
 
-    # Restore original
+    # Restore original ray.remote and reload again to re-apply the real decorator
     ray.remote = original_remote
+    importlib.reload(server_module)
 
 
 class TestLogServerRequestDecorator:

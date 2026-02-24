@@ -30,6 +30,8 @@ class TestGPUMemoryInfo(unittest.TestCase):
         mock_torch = sys.modules["torch"]
         mock_torch.cuda.is_available.return_value = True
         mock_torch.cuda.device_count.return_value = 2
+        # Clear any side_effect left by other tests before setting return_value
+        mock_torch.cuda.mem_get_info.side_effect = None
         mock_torch.cuda.mem_get_info.return_value = (
             10 * 1024**3,  # 10 GB free
             40 * 1024**3,  # 40 GB total
