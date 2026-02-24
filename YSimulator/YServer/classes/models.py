@@ -573,3 +573,116 @@ class Agent_Opinion(Base):
     # Relationships
     topic = relationship("Interest", back_populates="agent_opinions")
     post = relationship("Post")
+
+
+# ================================================
+# MEMORY SUBSYSTEM TABLES
+# ================================================
+
+
+class AgentMemoryEvent(Base):
+    """Raw memory ingestion events persisted by server hooks."""
+
+    __tablename__ = "agent_memory_events"
+
+    id = Column(String(36), primary_key=True)
+    agent_id = Column(String(36), nullable=False)
+    day = Column(Integer)
+    slot = Column(Integer)
+    round_id = Column(String(36))
+    client_id = Column(String(100))
+    action_type = Column(String(32))
+    content = Column(Text)
+    topic = Column(Text)
+    target_post_id = Column(String(36))
+    target_user_id = Column(String(36))
+    metadata_json = Column(Text)
+    created_at = Column(String(64), nullable=False)
+
+
+Index("idx_agent_memory_events_agent_created", AgentMemoryEvent.agent_id, AgentMemoryEvent.created_at)
+
+
+class AgentMemoryItem(Base):
+    """Native semantic memory items with forgetting-related fields."""
+
+    __tablename__ = "agent_memory_items"
+
+    memory_id = Column(String(36), primary_key=True)
+    agent_id = Column(String(36), nullable=False)
+    memory_text = Column(Text, nullable=False)
+    topic = Column(Text)
+    target_user_id = Column(String(36))
+    thread_id = Column(String(36))
+    action_type = Column(String(32))
+    confidence = Column(Float, default=0.5)
+    strength = Column(Float, default=0.5)
+    sentiment = Column(Float, default=0.0)
+    reuse_count = Column(Integer, default=0)
+    forgotten = Column(Integer, default=0)
+    created_round_id = Column(String(36))
+    created_day = Column(Integer)
+    created_slot = Column(Integer)
+    last_access_round_id = Column(String(36))
+    last_access_day = Column(Integer)
+    last_access_slot = Column(Integer)
+    metadata_json = Column(Text)
+
+
+Index("idx_memory_agent_forgotten", AgentMemoryItem.agent_id, AgentMemoryItem.forgotten)
+Index("idx_memory_agent_strength", AgentMemoryItem.agent_id, AgentMemoryItem.strength)
+
+
+class KGNode(Base):
+    """GhostKG node persisted by server-side storage hooks."""
+
+    __tablename__ = "kg_nodes"
+
+    owner_id = Column(String(36), primary_key=True)
+    id = Column(Text, primary_key=True)
+    stability = Column(Float, default=0.0)
+    difficulty = Column(Float, default=0.0)
+    last_review = Column(String(64))
+    reps = Column(Integer, default=0)
+    state = Column(Integer, default=0)
+    created_at = Column(String(64), nullable=False)
+    sim_day = Column(Integer)
+    sim_hour = Column(Integer)
+
+
+class KGEdge(Base):
+    """GhostKG edge persisted by server-side storage hooks."""
+
+    __tablename__ = "kg_edges"
+
+    owner_id = Column(String(36), primary_key=True)
+    source = Column(Text, primary_key=True)
+    target = Column(Text, primary_key=True)
+    relation = Column(Text, primary_key=True)
+    weight = Column(Float, default=1.0)
+    sentiment = Column(Float, default=0.0)
+    created_at = Column(String(64), nullable=False)
+    sim_day = Column(Integer)
+    sim_hour = Column(Integer)
+
+
+Index("idx_kg_edges_owner_created", KGEdge.owner_id, KGEdge.created_at)
+
+
+class KGLog(Base):
+    """GhostKG ingestion logs persisted by server-side storage hooks."""
+
+    __tablename__ = "kg_logs"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    agent_name = Column(String(36))
+    action_type = Column(String(32))
+    content = Column(Text)
+    content_uuid = Column(String(36))
+    annotations = Column(Text)
+    timestamp = Column(String(64), nullable=False)
+    sim_day = Column(Integer)
+    sim_hour = Column(Integer)
+
+
+Index("idx_kg_logs_agent_time", KGLog.agent_name, KGLog.timestamp)
