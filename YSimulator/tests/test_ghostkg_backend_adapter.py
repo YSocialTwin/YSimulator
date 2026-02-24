@@ -132,6 +132,64 @@ def test_normalize_absorb_triplets_rewrites_self_to_i():
     assert ("I", "likes", "entity") in out
 
 
+def test_ghostkg_backend_reaction_reflection_triplets_update_beliefs(monkeypatch):
+    class FakeRating:
+        Good = 3
+        Hard = 2
+
+    class FakeAgent:
+        def set_time(self, _time):
+            return None
+
+    class FakeManager:
+        def __init__(self, db_path="db", db_url=None, store_log_content=False):
+            self._agents = {}
+            self.update_calls = 0
+            self.last_triplets = None
+
+        def create_agent(self, name, llm_service=None):
+            self._agents[name] = FakeAgent()
+            return self._agents[name]
+
+        def get_agent(self, name):
+            return self._agents[name]
+
+        def absorb_content(self, *args, **kwargs):
+            return None
+
+        def learn_triplet(self, *args, **kwargs):
+            return None
+
+        def update_with_response(self, agent_name, response, triplets=None, context=None):
+            self.update_calls += 1
+            self.last_triplets = triplets
+            return None
+
+        def get_context(self, agent_name, topic):
+            return "- memory item"
+
+    fake_module = types.SimpleNamespace(AgentManager=FakeManager, Rating=FakeRating)
+    monkeypatch.setitem(sys.modules, "ghost_kg", fake_module)
+
+    backend = GhostKGMemoryBackend(backend_config={"extraction_mode": "triplets", "db_path": "fake.db"})
+    backend.initialize({"day": 1, "slot": 1})
+    ingest = backend.ingest_event(
+        "agent-1",
+        {
+            "action_type": "LIKE",
+            "content": "LIKE",
+            "metadata": {
+                "ghostkg_absorb_triplets": [["author", "mentions", "topic"]],
+                "ghostkg_reflection_triplets": [["LIKE", "sample content", 0.3]],
+            },
+        },
+        {"day": 1, "slot": 1},
+    )
+    assert ingest.success is True
+    assert backend.manager.update_calls == 1
+    assert backend.manager.last_triplets == [("LIKE", "sample content", 0.3)]
+
+
 def test_ghostkg_backend_fast_extraction_mode_uses_absorb_content(monkeypatch):
     class FakeRating:
         Good = 3

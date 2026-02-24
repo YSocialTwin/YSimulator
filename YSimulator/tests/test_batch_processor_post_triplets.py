@@ -172,3 +172,24 @@ def test_normalize_absorb_triplet_entities_maps_self_and_uuid_target(monkeypatch
         [["self", "mentions", "4ef8052b-608d-50f2-9785-91b2bce1d72a"]], "agent-1"
     )
     assert out == [["I", "mentions", "target_user"]]
+
+
+def test_build_reaction_reflection_triplet_uses_reaction_as_relation():
+    bp = BatchProcessor(
+        server=None,
+        client_id="c1",
+        llm=object(),
+        enable_sentiment=False,
+        enable_toxicity=False,
+        enable_emotions=False,
+        perspective_api_key=None,
+        logger=__import__("logging").getLogger("test"),
+    )
+    out = bp._build_reaction_reflection_triplets(
+        reaction_type="LIKE",
+        observed_content="This post discusses open-source AI tooling",
+        target_post_id="p-1",
+    )
+    assert len(out) == 1
+    assert out[0][0] == "LIKE"
+    assert "open-source ai tooling" in out[0][1].lower()

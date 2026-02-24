@@ -31,6 +31,13 @@ from YSimulator.YClient.text_support.text_annotator import annotate_text
 
 # Constants
 REACTION_TYPES = ["LIKE", "LOVE", "LAUGH", "ANGRY", "SAD", "IGNORE"]
+REACTION_REFLECTION_SENTIMENT = {
+    "LIKE": 0.3,
+    "LOVE": 0.8,
+    "LAUGH": 0.2,
+    "ANGRY": -0.8,
+    "SAD": -0.4,
+}
 
 # Token estimation constants (Phase 3: LLM usage tracking)
 # Rough estimates for tracking purposes - actual tokens may vary
@@ -549,6 +556,56 @@ class BatchProcessor:
             triplets = self._heuristic_absorb_triplets(str(observed_content or ""), str(author or "Author"))
         if triplets:
             action.memory_metadata = {"ghostkg_absorb_triplets": triplets}
+
+    def _set_reaction_memory_metadata(
+        self,
+        action: ActionDTO,
+        agent_id: str,
+        reaction_type: str,
+        observed_content: Optional[str],
+        author: Optional[str] = None,
+        target_post_id: Optional[str] = None,
+    ) -> None:
+        self._set_absorb_memory_metadata(action, agent_id, observed_content, author=author)
+        reflection = self._build_reaction_reflection_triplets(
+            reaction_type=reaction_type,
+            observed_content=observed_content,
+            target_post_id=target_post_id,
+        )
+        if not reflection:
+            return
+        meta = (
+            dict(getattr(action, "memory_metadata", {}))
+            if isinstance(getattr(action, "memory_metadata", None), dict)
+            else {}
+        )
+        meta["ghostkg_reflection_triplets"] = reflection
+        action.memory_metadata = meta
+
+    @staticmethod
+    def _reaction_content_anchor(
+        observed_content: Optional[str], target_post_id: Optional[str] = None
+    ) -> str:
+        text = re.sub(r"\s+", " ", str(observed_content or "")).strip().strip('"')
+        if text:
+            return text[:220]
+        if target_post_id:
+            return f"post:{target_post_id}"
+        return "content_item"
+
+    def _build_reaction_reflection_triplets(
+        self,
+        reaction_type: str,
+        observed_content: Optional[str],
+        target_post_id: Optional[str] = None,
+    ) -> List[List[Any]]:
+        reaction = str(reaction_type or "").strip().upper()
+        if reaction not in REACTION_REFLECTION_SENTIMENT:
+            return []
+        target = self._reaction_content_anchor(observed_content, target_post_id=target_post_id)
+        sentiment = REACTION_REFLECTION_SENTIMENT[reaction]
+        # Reflection format implies source "I": I -> REACTION -> content
+        return [[reaction, target, sentiment]]
 
     def _resolve_author_label(self, post_data: Optional[Dict[str, Any]], fallback: str = "Author") -> str:
         if isinstance(post_data, dict):
@@ -1452,11 +1509,14 @@ class BatchProcessor:
                     post_data = ray.get(
                         self.server.get_post.remote(target, client_id=self.client_id)
                     )
-                    self._set_absorb_memory_metadata(
+                    post_text = self._get_post_text(post_data) if post_data else None
+                    self._set_reaction_memory_metadata(
                         action,
                         str(a_id),
-                        self._get_post_text(post_data) if post_data else None,
+                        str(res_act or "").upper(),
+                        post_text,
                         author=self._resolve_author_label(post_data),
+                        target_post_id=target,
                     )
                     if post_data:
                         secondary_follow_candidates.append(
@@ -2112,11 +2172,18 @@ class BatchProcessor:
                     updated_opinions=None,  # Will be updated by batch processing
                 )
                 actions.append(action)
-                self._set_absorb_memory_metadata(
+                post_text = (
+                    self._get_post_text(post_data)
+                    if post_data
+                    else item[4].get("post_content", "")
+                )
+                self._set_reaction_memory_metadata(
                     action,
                     str(agent_id),
-                    self._get_post_text(post_data) if post_data else item[4].get("post_content", ""),
+                    reaction_type.upper(),
+                    post_text,
                     author=self._resolve_author_label(post_data),
+                    target_post_id=target_post,
                 )
 
                 # Track for secondary follow (simple reaction)
@@ -2415,11 +2482,18 @@ class BatchProcessor:
                     updated_opinions=None,
                 )
                 actions.append(action)
-                self._set_absorb_memory_metadata(
+                post_text = (
+                    self._get_post_text(post_data)
+                    if post_data
+                    else metadata.get("post_content", "")
+                )
+                self._set_reaction_memory_metadata(
                     action,
                     str(agent_id),
-                    self._get_post_text(post_data) if post_data else metadata.get("post_content", ""),
+                    action_decision,
+                    post_text,
                     author=self._resolve_author_label(post_data),
+                    target_post_id=target_post,
                 )
 
                 # Track for secondary follow

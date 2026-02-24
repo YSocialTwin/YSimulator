@@ -171,6 +171,23 @@ class GhostKGMemoryBackend(MemoryBackend):
                 else:
                     self._ingest_with_direct_triplet(agent_id, action_type, topic, target_user_id)
 
+            # For reaction events, persist explicit self-reaction reflection triplets
+            # (I -> LIKE/LOVE/... -> content anchor) as personal beliefs.
+            if reflection_triplets and action_type in {"LIKE", "LOVE", "LAUGH", "ANGRY", "SAD"}:
+                try:
+                    anchor = reflection_triplets[0][1] if reflection_triplets else str(content or "content_item")
+                    self._update_personal_beliefs_from_response(
+                        agent_id=agent_id,
+                        response_text=f"{action_type} {anchor}",
+                        context_used=metadata.get("context_used"),
+                        topic=topic,
+                        target_user_id=target_user_id,
+                        simulation_context=context,
+                        triplets=reflection_triplets,
+                    )
+                except Exception as e:
+                    self.logger.warning(f"GhostKG reaction reflection update failed: {e}")
+
             return IngestResult(success=True, created=1)
         except Exception as e:
             self.logger.error(f"GhostKG ingest failed: {e}")
