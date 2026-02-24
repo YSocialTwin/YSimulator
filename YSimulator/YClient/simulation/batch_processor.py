@@ -287,6 +287,7 @@ class BatchProcessor:
                 )
             )
             cleaned = self._sanitize_absorb_triplets(raw)
+            cleaned = self._ground_absorb_triplets(cleaned, content_text, str(author or "Author"))
             return cleaned if cleaned else self._heuristic_absorb_triplets(content_text, str(author or "Author"))
         except Exception as e:
             self.logger.debug(f"GhostKG absorb extraction failed for agent {agent_id}: {e}")
@@ -335,8 +336,14 @@ class BatchProcessor:
                 self.logger.debug(f"GhostKG batch absorb extraction failed: {e}")
                 raw_batch = [[] for _ in grouped]
 
-            for (original_idx, _), raw in zip(grouped, raw_batch):
-                results[original_idx] = self._sanitize_absorb_triplets(raw)
+            for (original_idx, req), raw in zip(grouped, raw_batch):
+                cleaned = self._sanitize_absorb_triplets(raw)
+                cleaned = self._ground_absorb_triplets(
+                    cleaned,
+                    str(req.get("text", "") or ""),
+                    str(req.get("author", "Author") or "Author"),
+                )
+                results[original_idx] = cleaned
         return results
 
     @staticmethod
@@ -401,6 +408,65 @@ class BatchProcessor:
                 break
         return deduped
 
+    @staticmethod
+    def _ground_absorb_triplets(
+        triplets: List[List[Any]], text: str, author: str
+    ) -> List[List[Any]]:
+        """
+        Keep absorb triplets grounded in observed content to reduce prompt-example leakage.
+        """
+        if not triplets:
+            return []
+        text_tokens = set(re.findall(r"[a-z0-9_#-]{3,}", str(text or "").lower()))
+        author_tokens = set(re.findall(r"[a-z0-9_#-]{3,}", str(author or "").lower()))
+        stop = {
+            "the",
+            "and",
+            "for",
+            "with",
+            "that",
+            "this",
+            "from",
+            "about",
+            "have",
+            "just",
+            "been",
+            "into",
+            "over",
+            "your",
+            "their",
+        }
+
+        grounded: List[List[Any]] = []
+        for item in triplets:
+            if not (isinstance(item, list) and len(item) == 3):
+                continue
+            source = str(item[0]).strip()
+            relation = str(item[1]).strip()
+            target = str(item[2]).strip()
+            if not (source and relation and target):
+                continue
+            if source.lower() in {"i", "self"}:
+                grounded.append([source, relation, target])
+                continue
+            src_tokens = {
+                t for t in re.findall(r"[a-z0-9_#-]{3,}", source.lower()) if t not in stop
+            }
+            tgt_tokens = {
+                t for t in re.findall(r"[a-z0-9_#-]{3,}", target.lower()) if t not in stop
+            }
+            candidate_tokens = src_tokens | tgt_tokens
+            if not candidate_tokens:
+                grounded.append([source, relation, target])
+                continue
+            if candidate_tokens & text_tokens:
+                grounded.append([source, relation, target])
+                continue
+            if src_tokens and (src_tokens & author_tokens):
+                grounded.append([source, relation, target])
+                continue
+        return grounded
+
     def _heuristic_absorb_triplets(self, text: str, author: str) -> List[List[Any]]:
         kws = self._extract_keywords_for_triplets(text)
         author_label = str(author or "Author").strip() or "Author"
@@ -425,6 +491,10 @@ class BatchProcessor:
     ) -> None:
         triplets = self._extract_absorb_triplets(agent_id, str(observed_content or ""), author=author)
         triplets = self._filter_absorb_triplets_for_author(triplets, agent_id=agent_id, author=author)
+        if not triplets:
+            # If model output gets filtered out (e.g., peer triplets emitted with "I" source),
+            # force a non-empty absorb signal from observed content.
+            triplets = self._heuristic_absorb_triplets(str(observed_content or ""), str(author or "Author"))
         if triplets:
             action.memory_metadata = {"ghostkg_absorb_triplets": triplets}
 
@@ -478,12 +548,21 @@ class BatchProcessor:
         is_self_absorb = author_norm in {"self", "i", "me", "myself", str(agent_id).lower()}
         if is_self_absorb:
             return triplets
-        # For peer-content absorption, never keep self-subject triplets.
-        return [
-            t
-            for t in triplets
-            if isinstance(t, list) and len(t) == 3 and str(t[0]).strip().lower() != "i"
-        ]
+        # For peer-content absorption, salvage malformed self-subject output by mapping it to author.
+        author_label = str(author or "Author").strip() or "Author"
+        cleaned: List[List[Any]] = []
+        for t in triplets:
+            if not (isinstance(t, list) and len(t) == 3):
+                continue
+            source = str(t[0]).strip()
+            relation = str(t[1]).strip()
+            target = str(t[2]).strip()
+            if not (source and relation and target):
+                continue
+            if source.lower() == "i":
+                source = author_label
+            cleaned.append([source, relation, target])
+        return cleaned
 
     @staticmethod
     def _is_uuid_like(value: Optional[str]) -> bool:

@@ -61,7 +61,7 @@ def test_extract_absorb_triplets_batch_uses_request_author(monkeypatch):
 
         def _batch(self, payload):
             self.captured = payload
-            return [[["Peer", "supports", "topic"]]]
+            return [[["Peer", "supports", "content"]]]
 
     actor = _Actor()
     bp = BatchProcessor(
@@ -80,7 +80,7 @@ def test_extract_absorb_triplets_batch_uses_request_author(monkeypatch):
     out = bp._extract_absorb_triplets_batch(
         [{"agent_id": "agent-1", "author": "peer_user", "text": "Some content"}]
     )
-    assert out == [[["Peer", "supports", "topic"]]]
+    assert out == [[["Peer", "supports", "content"]]]
     assert actor.captured[0]["author"] == "peer_user"
 
 
@@ -103,6 +103,17 @@ def test_heuristic_fallback_generates_non_empty_triplets():
     )
     assert len(absorb) >= 1
     assert len(reflection) >= 1
+
+
+def test_ground_absorb_triplets_drops_unrelated_prompt_example_triplets():
+    input_triplets = [
+        ["UBI", "reduces", "poverty"],
+        ["NewsPage", "announces", "new model"],
+    ]
+    text = "NewsPage announces a new AI model for edge devices."
+    grounded = BatchProcessor._ground_absorb_triplets(input_triplets, text, "NewsPage")
+    assert ["NewsPage", "announces", "new model"] in grounded
+    assert ["UBI", "reduces", "poverty"] not in grounded
 
 
 def test_get_post_text_supports_text_and_tweet_keys():
