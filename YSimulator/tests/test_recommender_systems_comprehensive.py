@@ -133,7 +133,7 @@ class TestContentRecSysClient:
         from YSimulator.YClient.recsys.ContentRecSys import RandomOrder
 
         recsys = RandomOrder(n_posts=10)
-        assert recsys.mode == "ContentRecSys"
+        assert recsys.mode == "random"
         assert recsys.n_posts == 10
 
     def test_common_interests(self):

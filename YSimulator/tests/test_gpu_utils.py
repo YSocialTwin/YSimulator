@@ -24,10 +24,10 @@ MEMORY_ESTIMATION_TOLERANCE = 0.1
 class TestGPUMemoryInfo(unittest.TestCase):
     """Test GPU memory information functions."""
 
-    @patch("YSimulator.YClient.llm_utils.gpu_utils.torch")
-    def test_get_gpu_memory_info(self, mock_torch):
+    def test_get_gpu_memory_info(self):
         """Test getting memory info for a single GPU."""
-        # Mock CUDA availability
+        # torch is mocked at module level via sys.modules["torch"] = MagicMock()
+        mock_torch = sys.modules["torch"]
         mock_torch.cuda.is_available.return_value = True
         mock_torch.cuda.device_count.return_value = 2
         mock_torch.cuda.mem_get_info.return_value = (
@@ -35,48 +35,53 @@ class TestGPUMemoryInfo(unittest.TestCase):
             40 * 1024**3,  # 40 GB total
         )
 
-        from YSimulator.YClient.llm_utils.gpu_utils import get_gpu_memory_info
-
-        free_gb, total_gb = get_gpu_memory_info(device_id=0)
+        with patch.dict("sys.modules", {"pynvml": None}):
+            from importlib import reload
+            import YSimulator.YClient.llm_utils.gpu_utils as gpu_utils_mod
+            reload(gpu_utils_mod)
+            free_gb, total_gb = gpu_utils_mod.get_gpu_memory_info(device_id=0)
 
         self.assertAlmostEqual(free_gb, 10.0, places=1)
         self.assertAlmostEqual(total_gb, 40.0, places=1)
-        mock_torch.cuda.mem_get_info.assert_called_once_with(0)
+        mock_torch.cuda.mem_get_info.assert_called_with(0)
 
-    @patch("YSimulator.YClient.llm_utils.gpu_utils.torch")
-    def test_get_gpu_memory_info_no_cuda(self, mock_torch):
+    def test_get_gpu_memory_info_no_cuda(self):
         """Test error when CUDA is not available."""
+        mock_torch = sys.modules["torch"]
         mock_torch.cuda.is_available.return_value = False
 
-        from YSimulator.YClient.llm_utils.gpu_utils import get_gpu_memory_info
-
-        with self.assertRaises(RuntimeError) as cm:
-            get_gpu_memory_info(device_id=0)
+        with patch.dict("sys.modules", {"pynvml": None}):
+            from importlib import reload
+            import YSimulator.YClient.llm_utils.gpu_utils as gpu_utils_mod
+            reload(gpu_utils_mod)
+            with self.assertRaises(RuntimeError) as cm:
+                gpu_utils_mod.get_gpu_memory_info(device_id=0)
 
         self.assertIn("CUDA is not available", str(cm.exception))
 
-    @patch("YSimulator.YClient.llm_utils.gpu_utils.torch")
-    def test_get_all_gpu_memory_info(self, mock_torch):
+    def test_get_all_gpu_memory_info(self):
         """Test getting memory info for all GPUs."""
+        mock_torch = sys.modules["torch"]
         mock_torch.cuda.is_available.return_value = True
         mock_torch.cuda.device_count.return_value = 2
 
-        # Mock different memory for each GPU
         def mock_mem_get_info(device_id):
             if device_id == 0:
-                return (5 * 1024**3, 40 * 1024**3)  # 5/40 GB
+                return (5 * 1024**3, 40 * 1024**3)
             else:
-                return (15 * 1024**3, 40 * 1024**3)  # 15/40 GB
+                return (15 * 1024**3, 40 * 1024**3)
 
         mock_torch.cuda.mem_get_info.side_effect = mock_mem_get_info
 
-        from YSimulator.YClient.llm_utils.gpu_utils import get_all_gpu_memory_info
-
-        gpu_info = get_all_gpu_memory_info()
+        with patch.dict("sys.modules", {"pynvml": None}):
+            from importlib import reload
+            import YSimulator.YClient.llm_utils.gpu_utils as gpu_utils_mod
+            reload(gpu_utils_mod)
+            gpu_info = gpu_utils_mod.get_all_gpu_memory_info()
 
         self.assertEqual(len(gpu_info), 2)
-        self.assertEqual(gpu_info[0][0], 0)  # device_id
-        self.assertAlmostEqual(gpu_info[0][1], 5.0, places=1)  # free GB
+        self.assertEqual(gpu_info[0][0], 0)
+        self.assertAlmostEqual(gpu_info[0][1], 5.0, places=1)
         self.assertEqual(gpu_info[1][0], 1)
         self.assertAlmostEqual(gpu_info[1][1], 15.0, places=1)
 
@@ -357,26 +362,30 @@ class TestMemoryEstimation(unittest.TestCase):
 class TestGPUCount(unittest.TestCase):
     """Test GPU count detection."""
 
-    @patch("YSimulator.YClient.llm_utils.gpu_utils.torch")
-    def test_get_total_gpu_count(self, mock_torch):
+    def test_get_total_gpu_count(self):
         """Test getting total GPU count."""
+        mock_torch = sys.modules["torch"]
         mock_torch.cuda.is_available.return_value = True
         mock_torch.cuda.device_count.return_value = 4
 
-        from YSimulator.YClient.llm_utils.gpu_utils import get_total_gpu_count
-
-        count = get_total_gpu_count()
+        with patch.dict("sys.modules", {"pynvml": None}):
+            from importlib import reload
+            import YSimulator.YClient.llm_utils.gpu_utils as gpu_utils_mod
+            reload(gpu_utils_mod)
+            count = gpu_utils_mod.get_total_gpu_count()
 
         self.assertEqual(count, 4)
 
-    @patch("YSimulator.YClient.llm_utils.gpu_utils.torch")
-    def test_get_total_gpu_count_no_cuda(self, mock_torch):
+    def test_get_total_gpu_count_no_cuda(self):
         """Test getting GPU count when CUDA is not available."""
+        mock_torch = sys.modules["torch"]
         mock_torch.cuda.is_available.return_value = False
 
-        from YSimulator.YClient.llm_utils.gpu_utils import get_total_gpu_count
-
-        count = get_total_gpu_count()
+        with patch.dict("sys.modules", {"pynvml": None}):
+            from importlib import reload
+            import YSimulator.YClient.llm_utils.gpu_utils as gpu_utils_mod
+            reload(gpu_utils_mod)
+            count = gpu_utils_mod.get_total_gpu_count()
 
         self.assertEqual(count, 0)
 
