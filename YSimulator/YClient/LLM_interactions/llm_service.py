@@ -13,6 +13,7 @@ os.environ.setdefault("LANGCHAIN_VERBOSE", "false")
 import ray
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_ollama import ChatOllama
 
 # Initialize logger
@@ -1589,10 +1590,12 @@ class LLMService:
             user_template,
             {"text": text, "author": author, "agent_name": agent_name},
         )
-        prompt = ChatPromptTemplate.from_messages([("system", system_template), ("user", user_msg)])
         try:
-            chain = prompt | self.llm.bind(temperature=0.1) | StrOutputParser()
-            raw = chain.invoke({})
+            # Avoid ChatPromptTemplate variable parsing on JSON braces in already-rendered user_msg.
+            response = self.llm.invoke(
+                [SystemMessage(content=system_template), HumanMessage(content=user_msg)]
+            )
+            raw = str(getattr(response, "content", response))
             return self._sanitize_absorb_triplets(self._extract_json_block(raw))
         except Exception as e:
             logger.warning(f"GhostKG absorb extraction failed: {e}")
@@ -1610,10 +1613,12 @@ class LLMService:
             user_template,
             {"text": text, "agent_name": agent_name},
         )
-        prompt = ChatPromptTemplate.from_messages([("system", system_template), ("user", user_msg)])
         try:
-            chain = prompt | self.llm.bind(temperature=0.1) | StrOutputParser()
-            raw = chain.invoke({})
+            # Avoid ChatPromptTemplate variable parsing on JSON braces in already-rendered user_msg.
+            response = self.llm.invoke(
+                [SystemMessage(content=system_template), HumanMessage(content=user_msg)]
+            )
+            raw = str(getattr(response, "content", response))
             return self._sanitize_reflection_triplets(self._extract_json_block(raw))
         except Exception as e:
             logger.warning(f"GhostKG reflection extraction failed: {e}")
