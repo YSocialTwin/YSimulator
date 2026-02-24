@@ -526,7 +526,7 @@ class TestRecommendCommonInterests(unittest.TestCase):
 
                 mock_session.query.side_effect = [mock_query1, mock_query2]
 
-                result = recommend_common_interests(mock_session, "agent1", 1, 0, 5, 0.6)
+                result, from_cache = recommend_common_interests(mock_session, "agent1", 1, 0, 5, 0.6)
 
                 assert len(result) == 5
                 assert "post1" in result
@@ -570,7 +570,7 @@ class TestRecommendCommonInterests(unittest.TestCase):
 
                 mock_session.query.side_effect = [mock_query1, mock_query2]
 
-                result = recommend_common_interests(mock_session, "agent1", 1, 0, 5, 0.6)
+                result, from_cache = recommend_common_interests(mock_session, "agent1", 1, 0, 5, 0.6)
 
                 assert len(result) == 3
                 assert "post1" in result
@@ -619,7 +619,7 @@ class TestRecommendCommonUserInterests(unittest.TestCase):
 
                     mock_session.query.side_effect = [mock_query1, mock_query2]
 
-                    result = recommend_common_user_interests(mock_session, "agent1", 1, 0, 5, 0.6)
+                    result, from_cache = recommend_common_user_interests(mock_session, "agent1", 1, 0, 5, 0.6)
 
                     assert len(result) == 5
                     assert "post1" in result
@@ -667,7 +667,7 @@ class TestRecommendCommonUserInterests(unittest.TestCase):
 
                     mock_session.query.side_effect = [mock_query1, mock_query2]
 
-                    result = recommend_common_user_interests(mock_session, "agent1", 1, 0, 5, 0.6)
+                    result, from_cache = recommend_common_user_interests(mock_session, "agent1", 1, 0, 5, 0.6)
 
                     assert len(result) == 3
                     assert "post1" in result
@@ -701,7 +701,7 @@ class TestRecommendSimilarUsersReact(unittest.TestCase):
                 mock_query.limit.return_value = mock_query
                 mock_query.all.return_value = [("post1",), ("post2",)]
 
-                result = recommend_similar_users_react(mock_session, "agent1", 1, 0, 2)
+                result, from_cache = recommend_similar_users_react(mock_session, "agent1", 1, 0, 2)
 
                 assert result == ["post1", "post2"]
                 # Verify aliased was called for user aliases
@@ -728,7 +728,7 @@ class TestRecommendSimilarUsersReact(unittest.TestCase):
                 mock_query.limit.return_value = mock_query
                 mock_query.all.return_value = [("post1",)]
 
-                result = recommend_similar_users_react(mock_session, "agent1", 1, 0, 1)
+                result, from_cache = recommend_similar_users_react(mock_session, "agent1", 1, 0, 1)
 
                 assert result == ["post1"]
                 # Verify filter was called (includes reaction type == 'like')
@@ -759,7 +759,7 @@ class TestRecommendSimilarUsersPosts(unittest.TestCase):
                 mock_query.limit.return_value = mock_query
                 mock_query.all.return_value = [("post1",), ("post2",), ("post3",)]
 
-                result = recommend_similar_users_posts(mock_session, "agent1", 1, 0, 3)
+                result, from_cache = recommend_similar_users_posts(mock_session, "agent1", 1, 0, 3)
 
                 assert result == ["post1", "post2", "post3"]
                 # Verify aliased was called for user aliases
@@ -784,7 +784,7 @@ class TestRecommendSimilarUsersPosts(unittest.TestCase):
                 mock_query.limit.return_value = mock_query
                 mock_query.all.return_value = [("post1",)]
 
-                result = recommend_similar_users_posts(mock_session, "agent1", 1, 0, 1)
+                result, from_cache = recommend_similar_users_posts(mock_session, "agent1", 1, 0, 1)
 
                 assert result == ["post1"]
                 # Verify filter was called (includes OR conditions for similarity)
@@ -809,7 +809,7 @@ class TestRecommendSimilarUsersPosts(unittest.TestCase):
                 mock_query.limit.return_value = mock_query
                 mock_query.all.return_value = []  # No posts (agent's posts excluded)
 
-                result = recommend_similar_users_posts(mock_session, "agent1", 1, 0, 5)
+                result, from_cache = recommend_similar_users_posts(mock_session, "agent1", 1, 0, 5)
 
                 assert result == []
 
@@ -897,19 +897,18 @@ class TestRecommendHybridLinearRanker(unittest.TestCase):
         mock_query = Mock()
         mock_session.query.return_value = mock_query
 
-        # Mock Round query for current round
+        # Make all chained query methods return mock_query so full chain works
         mock_query.order_by.return_value = mock_query
-        mock_query.first.return_value = Mock(day=10, hour=5)
-
-        # Mock followed users query
         mock_query.filter.return_value = mock_query
-        mock_query.all.return_value = [("user1",)]
-
-        # Mock user interests query
-        mock_query.all.return_value = [("topic1",)]
-
-        # Mock posts query with metadata
         mock_query.join.return_value = mock_query
+        mock_query.group_by.return_value = mock_query
+        mock_query.having.return_value = mock_query
+        mock_query.limit.return_value = mock_query
+        mock_query.distinct.return_value = mock_query
+        mock_query.subquery.return_value = mock_query
+        mock_query.count.return_value = 5  # for _calculate_user_author_affinity_sql
+
+        mock_query.first.return_value = Mock(day=10, hour=5)
         mock_posts = [
             ("post1", "user1", "round1", 5, 10, 4),
             ("post2", "user2", "round2", 3, 10, 3),
@@ -966,19 +965,18 @@ class TestRecommendHybridLinearRanker(unittest.TestCase):
         mock_query = Mock()
         mock_session.query.return_value = mock_query
 
-        # Mock current round
+        # Make all chained query methods return mock_query so full chain works
         mock_query.order_by.return_value = mock_query
-        mock_query.first.return_value = Mock(day=5, hour=10)
-
-        # Mock followed users
         mock_query.filter.return_value = mock_query
-        mock_query.all.return_value = [("user1",)]
-
-        # Mock user interests
-        mock_query.all.return_value = [("topic1",)]
-
-        # Mock post metadata
         mock_query.join.return_value = mock_query
+        mock_query.group_by.return_value = mock_query
+        mock_query.having.return_value = mock_query
+        mock_query.limit.return_value = mock_query
+        mock_query.distinct.return_value = mock_query
+        mock_query.subquery.return_value = mock_query
+        mock_query.count.return_value = 5  # for _calculate_user_author_affinity_sql
+
+        mock_query.first.return_value = Mock(day=5, hour=10)
         mock_query.all.return_value = [("post1", "user1", "round1", 5, 5, 9)]
 
         result, used_fallback = recommend_hybrid_linear_ranker(mock_session, "agent1", 1, 0, 1)

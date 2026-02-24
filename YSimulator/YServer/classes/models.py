@@ -573,3 +573,7 @@ class Agent_Opinion(Base):
     # Relationships
     topic = relationship("Interest", back_populates="agent_opinions")
     post = relationship("Post")
+
+
+# Alias for backwards compatibility with code that references Reply
+Reply = Mention

@@ -194,7 +194,7 @@ class TestGenerateNewsPostAsync:
             "website_id": "website1",
         }
 
-        commentary_future, article_id = generate_news_post_async(
+        commentary_future, article_id, returned_article = generate_news_post_async(
             mock_news_service, mock_llm_service, agent_cluster=1, article=article
         )
 
@@ -202,6 +202,7 @@ class TestGenerateNewsPostAsync:
         mock_ray.get.assert_called_once_with(mock_article_id_future)
         assert article_id == "article123"
         assert commentary_future == mock_commentary_future
+        assert returned_article == article
 
     @patch("YSimulator.YClient.actions.llm_actions.ray")
     @patch("YSimulator.YClient.actions.llm_actions.generate_llm_news_commentary")
@@ -218,7 +219,7 @@ class TestGenerateNewsPostAsync:
 
         article = {"title": "News", "summary": "Summary", "link": "http://news.com"}
 
-        commentary_future, article_id = generate_news_post_async(
+        commentary_future, article_id, _ = generate_news_post_async(
             mock_news_service,
             mock_llm_service,
             agent_cluster=2,
@@ -244,7 +245,7 @@ class TestGenerateNewsPostAsync:
 
         article = {}
 
-        commentary_future, article_id = generate_news_post_async(
+        commentary_future, article_id, _ = generate_news_post_async(
             mock_news_service, mock_llm_service, agent_cluster=1, article=article
         )
 
@@ -526,120 +527,74 @@ class TestGenerateImagePostAsync:
     """Test suite for generate_image_post_async."""
 
     def test_generate_image_post_async_basic(self, mock_ollama_llm):
-        """Test basic image post generation."""
-        mock_server = MagicMock()
-        mock_llm_service = MagicMock()
-        mock_commentary_future = MagicMock()
-        mock_llm_service.generate_image_commentary.remote.return_value = mock_commentary_future
+        """Test basic image post generation returns a future."""
+        mock_llm = mock_ollama_llm
+        mock_ref = MagicMock()
+        mock_llm.generate_post.remote.return_value = mock_ref
 
-        image_data = {
-            "id": "img123",
-            "url": "http://example.com/image.jpg",
-            "description": "A beautiful sunset",
-            "article_id": "article1",
-        }
+        future = generate_image_post_async(mock_llm, cluster_id=1, day=1, slot=0)
 
-        commentary_future, image_id = generate_image_post_async(
-            mock_server, mock_llm_service, agent_cluster=1, image_data=image_data
-        )
-
-        mock_llm_service.generate_image_commentary.remote.assert_called_once_with(
-            "A beautiful sunset", None, None, 1
-        )
-        assert image_id == "img123"
-        assert commentary_future == mock_commentary_future
-
-    def test_generate_image_post_async_with_topics(self, mock_ollama_llm):
-        """Test image post generation with topics."""
-        mock_server = MagicMock()
-        mock_llm_service = MagicMock()
-        mock_commentary_future = MagicMock()
-        mock_llm_service.generate_image_commentary.remote.return_value = mock_commentary_future
-
-        image_data = {
-            "id": "img456",
-            "url": "http://example.com/photo.jpg",
-            "description": "Mountain landscape",
-        }
-        topics = ["nature", "photography", "travel"]
-
-        commentary_future, image_id = generate_image_post_async(
-            mock_server,
-            mock_llm_service,
-            agent_cluster=2,
-            image_data=image_data,
-            topics=topics,
-        )
-
-        mock_llm_service.generate_image_commentary.remote.assert_called_once_with(
-            "Mountain landscape", topics, None, 2
-        )
-        assert image_id == "img456"
+        mock_llm.generate_post.remote.assert_called_once_with(1, 1, 0, None)
+        assert future == mock_ref
 
     def test_generate_image_post_async_with_agent_attrs(self, mock_ollama_llm):
         """Test image post generation with agent attributes."""
-        mock_server = MagicMock()
-        mock_llm_service = MagicMock()
-        mock_commentary_future = MagicMock()
-        mock_llm_service.generate_image_commentary.remote.return_value = mock_commentary_future
+        mock_llm = mock_ollama_llm
+        mock_ref = MagicMock()
+        mock_llm.generate_post.remote.return_value = mock_ref
 
-        image_data = {"id": "img789", "description": "City skyline"}
-        topics = ["urban", "architecture"]
         agent_attrs = {"name": "Frank", "interests": ["photography"]}
 
-        commentary_future, image_id = generate_image_post_async(
-            mock_server,
-            mock_llm_service,
-            agent_cluster=3,
-            image_data=image_data,
-            topics=topics,
+        future = generate_image_post_async(
+            mock_llm,
+            cluster_id=3,
+            day=2,
+            slot=5,
             agent_attrs=agent_attrs,
         )
 
-        mock_llm_service.generate_image_commentary.remote.assert_called_once_with(
-            "City skyline", topics, agent_attrs, 3
-        )
-        assert image_id == "img789"
+        mock_llm.generate_post.remote.assert_called_once_with(3, 2, 5, agent_attrs)
+        assert future == mock_ref
 
-    def test_generate_image_post_async_no_description(self, mock_ollama_llm):
-        """Test image post generation with missing description."""
-        mock_server = MagicMock()
-        mock_llm_service = MagicMock()
-        mock_commentary_future = MagicMock()
-        mock_llm_service.generate_image_commentary.remote.return_value = mock_commentary_future
+    def test_generate_image_post_async_with_agent_id(self, mock_ollama_llm):
+        """Test image post generation with agent_id for load balancing."""
+        mock_llm = mock_ollama_llm
+        mock_ref = MagicMock()
+        mock_llm.generate_post.remote.return_value = mock_ref
 
-        image_data = {"id": "img999", "url": "http://example.com/pic.jpg"}
-
-        commentary_future, image_id = generate_image_post_async(
-            mock_server, mock_llm_service, agent_cluster=1, image_data=image_data
-        )
-
-        mock_llm_service.generate_image_commentary.remote.assert_called_once_with(
-            "An image", None, None, 1
-        )
-        assert image_id == "img999"
-
-    def test_generate_image_post_async_empty_topics(self, mock_ollama_llm):
-        """Test image post generation with empty topics list."""
-        mock_server = MagicMock()
-        mock_llm_service = MagicMock()
-        mock_commentary_future = MagicMock()
-        mock_llm_service.generate_image_commentary.remote.return_value = mock_commentary_future
-
-        image_data = {"id": "img000", "description": "Abstract art"}
-
-        commentary_future, image_id = generate_image_post_async(
-            mock_server,
-            mock_llm_service,
-            agent_cluster=1,
-            image_data=image_data,
-            topics=[],
+        future = generate_image_post_async(
+            mock_llm,
+            cluster_id=2,
+            day=3,
+            slot=1,
+            agent_id="agent-abc",
         )
 
-        mock_llm_service.generate_image_commentary.remote.assert_called_once_with(
-            "Abstract art", [], None, 1
-        )
-        assert image_id == "img000"
+        assert future == mock_ref
+
+    def test_generate_image_post_async_no_agent_attrs(self, mock_ollama_llm):
+        """Test image post generation with no agent attributes defaults to None."""
+        mock_llm = mock_ollama_llm
+        mock_ref = MagicMock()
+        mock_llm.generate_post.remote.return_value = mock_ref
+
+        future = generate_image_post_async(mock_llm, cluster_id=1, day=1, slot=0)
+
+        mock_llm.generate_post.remote.assert_called_once_with(1, 1, 0, None)
+        assert future == mock_ref
+
+    def test_generate_image_post_async_vllm_returns_none(self):
+        """Test that vLLM batching mode returns None as placeholder."""
+        # Create a mock that looks like LLMLoadBalancer (triggers vLLM batching)
+        mock_vllm = MagicMock()
+        mock_vllm.__class__.__name__ = "LLMLoadBalancer"
+        # Give it the generate_post_batch attribute to trigger vLLM path
+        mock_vllm.generate_post_batch = MagicMock()
+
+        result = generate_image_post_async(mock_vllm, cluster_id=1, day=1, slot=0)
+
+        # vLLM batching returns None as placeholder
+        assert result is None
 
 
 class TestLLMActionsIntegration:
