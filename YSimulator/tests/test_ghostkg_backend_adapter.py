@@ -244,6 +244,58 @@ def test_ghostkg_backend_fast_extraction_mode_uses_absorb_content(monkeypatch):
     assert backend.manager.learn_calls == 0
 
 
+def test_ghostkg_backend_keeps_round_clock_without_synthetic_override(monkeypatch):
+    class FakeRating:
+        Good = 3
+        Hard = 2
+
+    class FakeAgent:
+        def __init__(self):
+            self.calls = []
+
+        def set_time(self, t):
+            self.calls.append(t)
+            return None
+
+    class FakeManager:
+        def __init__(self, db_path="db", db_url=None, store_log_content=False):
+            self._agents = {}
+
+        def create_agent(self, name, llm_service=None):
+            self._agents[name] = FakeAgent()
+            return self._agents[name]
+
+        def get_agent(self, name):
+            return self._agents[name]
+
+        def absorb_content(self, *args, **kwargs):
+            return None
+
+        def learn_triplet(self, *args, **kwargs):
+            return None
+
+        def get_context(self, agent_name, topic):
+            return "- memory item"
+
+    fake_module = types.SimpleNamespace(AgentManager=FakeManager, Rating=FakeRating)
+    monkeypatch.setitem(sys.modules, "ghost_kg", fake_module)
+
+    backend = GhostKGMemoryBackend(backend_config={"db_path": "fake.db"})
+    backend.initialize({"day": 1, "slot": 1})
+    backend.ingest_event(
+        "agent-1",
+        {
+            "action_type": "POST",
+            "content": "hello",
+            "metadata": {"ghostkg_absorb_triplets": [["A", "says", "B"]]},
+        },
+        {"day": 3, "slot": 7},
+    )
+    calls = backend.manager.get_agent("agent-1").calls
+    assert calls[0] == (3, 7)
+    assert len(calls) == 1
+
+
 def test_ghostkg_backend_uses_external_absorb_triplets_when_provided(monkeypatch):
     class FakeRating:
         Good = 3

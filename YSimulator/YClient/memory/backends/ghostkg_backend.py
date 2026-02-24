@@ -335,15 +335,15 @@ class GhostKGMemoryBackend(MemoryBackend):
             self._known_agents.add(agent_id)
 
         # Keep GhostKG clock synchronized with simulation day/slot.
-        # Some GhostKG builds persist sim_day/sim_hour but may still produce
-        # NULL created_at unless a concrete datetime is also set.
+        # IMPORTANT: in simulation mode, round tuple is the source of truth.
+        # Avoid overriding with synthetic datetimes unless explicitly requested.
         day = int(context.get("day", 1) or 1)
         slot = int(context.get("slot", 0) or 0)
         safe_day = max(1, day)
         safe_hour = min(23, max(0, slot))
         agent = self.manager.get_agent(agent_id)
         agent.set_time((safe_day, safe_hour))
-        if bool(self._cfg("ensure_datetime_clock", True)):
+        if bool(self._cfg("ensure_datetime_clock", False)):
             synthetic_now = datetime(2025, 1, 1, tzinfo=timezone.utc) + timedelta(
                 days=safe_day - 1, hours=safe_hour
             )
