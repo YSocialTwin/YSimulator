@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import sys
 import traceback
 from datetime import datetime, timedelta, timezone
@@ -217,7 +218,7 @@ class GhostKGMemoryBackend(MemoryBackend):
         try:
             self._ensure_agent(agent_id, context)
             topic = query.topic or "simulation"
-            raw_context = self.manager.get_context(agent_id, topic)
+            raw_context = self._retrieve_context_flexible(agent_id, topic)
             if not raw_context:
                 return []
 
@@ -241,6 +242,47 @@ class GhostKGMemoryBackend(MemoryBackend):
         except Exception as e:
             self.logger.error(f"GhostKG retrieval failed: {e}")
             return []
+
+    def _retrieve_context_flexible(self, agent_id: str, topic: str) -> str:
+        """
+        Retrieve context with flexible matching by probing topic variants/tokens.
+        """
+        candidates = self._build_topic_candidates(topic)
+        merged_lines: List[str] = []
+        seen = set()
+        for candidate in candidates:
+            try:
+                raw = self.manager.get_context(agent_id, candidate)
+            except Exception:
+                continue
+            if not raw:
+                continue
+            for line in str(raw).splitlines():
+                norm = line.strip()
+                key = norm.lower()
+                if not norm or key in seen:
+                    continue
+                seen.add(key)
+                merged_lines.append(norm)
+        return "\n".join(merged_lines)
+
+    @staticmethod
+    def _build_topic_candidates(topic: str) -> List[str]:
+        base = str(topic or "").strip()
+        if not base:
+            return ["simulation"]
+        candidates: List[str] = [base]
+        lowered = base.lower()
+        titled = base.title()
+        for variant in (lowered, titled):
+            if variant not in candidates:
+                candidates.append(variant)
+
+        tokens = re.findall(r"[a-z0-9_#-]{2,}", lowered)
+        for token in tokens[:8]:
+            if token not in candidates:
+                candidates.append(token)
+        return candidates
 
     def reinforce(
         self, agent_id: str, memory_ids: List[str], context: Dict[str, Any]
@@ -622,6 +664,10 @@ class GhostKGMemoryBackend(MemoryBackend):
             source = str(item[0]).strip()
             relation = str(item[1]).strip()
             target = str(item[2]).strip()
+            if source.lower() == "self":
+                source = "I"
+            if target.lower() == "self":
+                target = "I"
             if source and relation and target:
                 cleaned.append((source, relation, target))
         return cleaned

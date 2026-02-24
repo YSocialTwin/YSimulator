@@ -143,3 +143,32 @@ def test_resolve_author_label_prefers_username_over_uuid(monkeypatch):
     monkeypatch.setattr("YSimulator.YClient.simulation.batch_processor.ray.get", lambda x: x)
     author = bp._resolve_author_label({"user_id": "4ef8052b-608d-50f2-9785-91b2bce1d72a"})
     assert author == "news_page"
+
+
+def test_normalize_absorb_triplet_entities_maps_self_and_uuid_target(monkeypatch):
+    class _Server:
+        class _GetUser:
+            @staticmethod
+            def remote(user_id, client_id=None):
+                if user_id == "4ef8052b-608d-50f2-9785-91b2bce1d72a":
+                    return {"id": user_id, "username": "target_user"}
+                return {"id": user_id, "username": "unknown"}
+
+        get_user = _GetUser()
+
+    bp = BatchProcessor(
+        server=_Server(),
+        client_id="c1",
+        llm=object(),
+        enable_sentiment=False,
+        enable_toxicity=False,
+        enable_emotions=False,
+        perspective_api_key=None,
+        logger=__import__("logging").getLogger("test"),
+    )
+    monkeypatch.setattr("YSimulator.YClient.simulation.batch_processor.ray.get", lambda x: x)
+
+    out = bp._normalize_absorb_triplet_entities(
+        [["self", "mentions", "4ef8052b-608d-50f2-9785-91b2bce1d72a"]], "agent-1"
+    )
+    assert out == [["I", "mentions", "target_user"]]

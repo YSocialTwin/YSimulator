@@ -287,6 +287,7 @@ class BatchProcessor:
                 )
             )
             cleaned = self._sanitize_absorb_triplets(raw)
+            cleaned = self._normalize_absorb_triplet_entities(cleaned, agent_id=agent_id)
             cleaned = self._ground_absorb_triplets(cleaned, content_text, str(author or "Author"))
             return cleaned if cleaned else self._heuristic_absorb_triplets(content_text, str(author or "Author"))
         except Exception as e:
@@ -338,6 +339,9 @@ class BatchProcessor:
 
             for (original_idx, req), raw in zip(grouped, raw_batch):
                 cleaned = self._sanitize_absorb_triplets(raw)
+                cleaned = self._normalize_absorb_triplet_entities(
+                    cleaned, agent_id=str(req.get("agent_id", "") or "")
+                )
                 cleaned = self._ground_absorb_triplets(
                     cleaned,
                     str(req.get("text", "") or ""),
@@ -481,6 +485,54 @@ class BatchProcessor:
         for kw in kws[:3]:
             triplets.append(["mentions", kw, 0.0])
         return triplets
+
+    def _normalize_absorb_triplet_entities(
+        self, triplets: List[List[Any]], agent_id: str
+    ) -> List[List[Any]]:
+        """
+        Normalize absorb triplet entities:
+        - source "self" (any case) -> "I"
+        - UUID-like source/target -> username when resolvable
+        """
+        if not triplets:
+            return []
+
+        cleaned: List[List[Any]] = []
+        for item in triplets:
+            if not (isinstance(item, list) and len(item) == 3):
+                continue
+            source = str(item[0]).strip()
+            relation = str(item[1]).strip()
+            target = str(item[2]).strip()
+            if not (source and relation and target):
+                continue
+
+            if source.lower() == "self":
+                source = "I"
+            if target.lower() == "self":
+                target = "I"
+
+            source = self._resolve_uuid_to_username(source, fallback=source)
+            target = self._resolve_uuid_to_username(target, fallback=target)
+            cleaned.append([source, relation, target])
+        return cleaned
+
+    def _resolve_uuid_to_username(self, value: str, fallback: str) -> str:
+        candidate = str(value or "").strip()
+        if not self._is_uuid_like(candidate):
+            return fallback
+        cached = self._author_name_cache.get(candidate)
+        if cached:
+            return cached
+        try:
+            user_data = ray.get(self.server.get_user.remote(candidate, client_id=self.client_id))
+            username = str((user_data or {}).get("username") or "").strip()
+            if username:
+                self._author_name_cache[candidate] = username
+                return username
+        except Exception:
+            pass
+        return fallback
 
     def _set_absorb_memory_metadata(
         self,

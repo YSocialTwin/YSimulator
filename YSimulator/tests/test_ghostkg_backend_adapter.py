@@ -77,6 +77,61 @@ def test_ghostkg_backend_with_fake_module(monkeypatch):
     assert items[0].memory_text
 
 
+def test_ghostkg_retrieve_uses_flexible_topic_candidates(monkeypatch):
+    class FakeRating:
+        Good = 3
+        Hard = 2
+
+    class FakeAgent:
+        def set_time(self, _time):
+            return None
+
+    class FakeManager:
+        def __init__(self, db_path="db", db_url=None, store_log_content=False):
+            self._agents = {}
+            self.queries = []
+
+        def create_agent(self, name, llm_service=None):
+            self._agents[name] = FakeAgent()
+            return self._agents[name]
+
+        def get_agent(self, name):
+            return self._agents[name]
+
+        def get_context(self, agent_name, topic):
+            self.queries.append(topic)
+            if str(topic).lower() == "ai":
+                return "- I discuss AI\n- AI affects work"
+            return ""
+
+        def learn_triplet(self, *args, **kwargs):
+            return None
+
+        def absorb_content(self, *args, **kwargs):
+            return None
+
+    fake_module = types.SimpleNamespace(AgentManager=FakeManager, Rating=FakeRating)
+    monkeypatch.setitem(sys.modules, "ghost_kg", fake_module)
+
+    backend = GhostKGMemoryBackend(backend_config={"db_path": "fake.db"})
+    backend.initialize({"day": 1, "slot": 1})
+    items = backend.retrieve(
+        "agent-1",
+        MemoryQuery(topic="AI in Education", max_items=2),
+        {"day": 1, "slot": 2},
+    )
+    assert len(items) == 2
+    assert any(q == "ai" for q in backend.manager.queries)
+
+
+def test_normalize_absorb_triplets_rewrites_self_to_i():
+    out = GhostKGMemoryBackend._normalize_absorb_triplets(
+        [["self", "mentions", "topic"], ["Self", "likes", "entity"]]
+    )
+    assert ("I", "mentions", "topic") in out
+    assert ("I", "likes", "entity") in out
+
+
 def test_ghostkg_backend_fast_extraction_mode_uses_absorb_content(monkeypatch):
     class FakeRating:
         Good = 3
