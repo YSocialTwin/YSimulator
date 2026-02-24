@@ -1576,8 +1576,10 @@ class OrchestratorServer:
         """
         backend = self._memory_backend_name()
         enabled = self._memory_enabled()
+        engine = self._memory_engine()
+        engine_ready = engine is not None
         return {
-            "ok": True,
+            "ok": (not enabled) or engine_ready,
             "backend": backend,
             "enabled": enabled,
             "details": {
@@ -1585,6 +1587,8 @@ class OrchestratorServer:
                 "compute_location": str(
                     self.simulation_config.get("agent_memory", {}).get("compute_location", "client")
                 ).strip().lower(),
+                "engine_ready": engine_ready,
+                "db_url": str(getattr(engine, "url", "")) if engine_ready else None,
             },
         }
 
@@ -1757,7 +1761,13 @@ class OrchestratorServer:
         return
 
     def _memory_engine(self):
-        post_repo = getattr(self.post_service, "post_repository", None)
+        # Repository/Service layer currently exposes post repository as `post_repo`.
+        # Keep compatibility with historical attribute names used during refactors.
+        post_repo = (
+            getattr(self.post_service, "post_repo", None)
+            or getattr(self.post_service, "post_repository", None)
+            or getattr(self.db, "post_repository", None)
+        )
         return getattr(post_repo, "engine", None)
 
     def _memory_log(self, level: int, message: str, extra_data: Optional[Dict[str, Any]] = None) -> None:
@@ -1943,6 +1953,17 @@ class OrchestratorServer:
     ) -> bool:
         engine = self._memory_engine()
         if engine is None:
+            self._memory_log(
+                logging.ERROR,
+                "Memory ingest failed: missing_engine",
+                {
+                    "operation": "ingest",
+                    "backend": self._memory_backend_name(),
+                    "agent_id": str(agent_id),
+                    "client_id": str(client_id) if client_id else None,
+                    "action_type": str(event.get("action_type", "") or ""),
+                },
+            )
             return False
         session = Session(engine)
         try:
