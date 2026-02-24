@@ -128,15 +128,22 @@ if __name__ == "__main__":
         "--config",
         type=str,
         default=".",
-        help="Path to configuration directory containing server_config.json (default: current directory)",
+        help="Path to configuration directory or server_config.json file (default: current directory)",
     )
     args = parser.parse_args()
 
-    # Validate config directory and check for required file
-    config_dir = validate_config_directory(args.config, required_files=["server_config.json"])
-
-    # Use conventional file name
-    config_file = config_dir / "server_config.json"
+    # Resolve config directory and server config file.
+    # Accept both:
+    # - --config <directory containing server_config.json>
+    # - --config <path/to/server_config.json>
+    config_path = Path(args.config)
+    if config_path.is_file():
+        config_dir = config_path.parent
+        config_file = config_path
+    else:
+        # Validate config directory and check for required file
+        config_dir = validate_config_directory(args.config, required_files=["server_config.json"])
+        config_file = config_dir / "server_config.json"
 
     # Load server configuration
     start_time = time.time()
