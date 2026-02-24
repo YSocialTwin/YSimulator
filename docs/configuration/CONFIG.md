@@ -1567,7 +1567,7 @@ YSimulator supports pluggable memory backends through `agent_memory`:
       "db_url": null,
       "store_log_content": false,
       "external_triplets_only": true,
-      "ensure_datetime_clock": true,
+      "ensure_datetime_clock": false,
 
       "extraction_mode": "triplets",
       "relation_whitelist": [
@@ -1611,7 +1611,7 @@ YSimulator supports pluggable memory backends through `agent_memory`:
 - `agent_memory.ghostkg.db_url` (str|null): Optional SQLAlchemy URL (takes precedence over `db_path`).
 - `agent_memory.ghostkg.store_log_content` (bool): Store full content in GhostKG logs vs UUID references.
 - `agent_memory.ghostkg.external_triplets_only` (bool): If `true` (default), GhostKG adapter never triggers GhostKG internal LLM/fast extraction and only consumes triplets provided by YSimulator metadata.
-- `agent_memory.ghostkg.ensure_datetime_clock` (bool): If `true` (default), backend sets both `(day, hour)` and a synthetic UTC datetime per event to prevent `kg_edges.created_at` NULL errors in some GhostKG builds.
+- `agent_memory.ghostkg.ensure_datetime_clock` (bool): If `false` (default), backend keeps tuple simulation time `(day, hour)` as source of truth. Set to `true` only when you explicitly need synthetic UTC datetime fallback for legacy GhostKG builds.
 
 #### Triplet Extraction Mode
 

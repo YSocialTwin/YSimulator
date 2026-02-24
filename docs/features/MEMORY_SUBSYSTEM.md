@@ -145,6 +145,7 @@ Main config location: `simulation_config.json` under `agent_memory`.
 - `ghostkg.db_url`
 - `ghostkg.store_log_content`
 - `ghostkg.extraction_mode`: `triplets | fast | llm`
+- `ghostkg.ensure_datetime_clock`: `false` by default; preserves simulation tuple clock `(day, hour)` without synthetic datetime override.
 - `ghostkg.relation_whitelist`
 - `ghostkg.llm_provider`
 - `ghostkg.llm_model`
