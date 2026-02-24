@@ -31,6 +31,13 @@ RECOMMENDATION_TTL_SECONDS = 7 * 24 * 60 * 60  # 7 days in seconds
 NETWORK_EDGE_CHECK_LIMIT = 10  # Number of edges to check when verifying network load
 LOG_FILE_MAX_BYTES = 10 * 1024 * 1024  # 10MB
 LOG_FILE_BACKUP_COUNT = 5  # Keep 5 backup files
+UUID_RE = re.compile(
+    r"^[0-9a-fA-F]{8}-"
+    r"[0-9a-fA-F]{4}-"
+    r"[0-9a-fA-F]{4}-"
+    r"[0-9a-fA-F]{4}-"
+    r"[0-9a-fA-F]{12}$"
+)
 
 
 def log_server_request(func: callable) -> callable:
@@ -2422,6 +2429,8 @@ class OrchestratorServer:
                     s = "I"
                 if t.lower() == "self":
                     t = "I"
+                s = self._resolve_kg_entity_label(session, s)
+                t = self._resolve_kg_entity_label(session, t)
                 if s and r and t:
                     out.append([s, r, t])
             return out
@@ -2440,7 +2449,13 @@ class OrchestratorServer:
                 except (TypeError, ValueError):
                     sent = 0.0
                 if r and t:
-                    out.append([r, t, max(-1.0, min(1.0, sent))])
+                    out.append(
+                        [
+                            r,
+                            self._resolve_kg_entity_label(session, t),
+                            max(-1.0, min(1.0, sent)),
+                        ]
+                    )
             return out
 
         absorb = _normalize_absorb(metadata_obj.get("ghostkg_absorb_triplets"))
@@ -2455,7 +2470,16 @@ class OrchestratorServer:
 
         # Guarantee explicit reflection for reaction actions.
         if action_type in {"LIKE", "LOVE", "LAUGH", "ANGRY", "SAD"}:
-            anchor = content or str(event.get("target_post_id") or "content_item")
+            anchor = content
+            if not anchor:
+                target_user_id = str(event.get("target_user_id") or "").strip()
+                target_post_id = str(event.get("target_post_id") or "").strip()
+                if target_user_id:
+                    anchor = self._resolve_kg_entity_label(session, target_user_id)
+                elif target_post_id:
+                    anchor = self._resolve_kg_entity_label(session, target_post_id)
+            if not anchor:
+                anchor = "content_item"
             self._kg_upsert_edge(session, agent_id, "I", action_type, anchor, 0.0, now_iso, day, slot)
 
         session.execute(
@@ -2559,6 +2583,44 @@ class OrchestratorServer:
                 "sim_hour": slot,
             },
         )
+
+    @staticmethod
+    def _is_uuid_like(value: str) -> bool:
+        txt = str(value or "").strip()
+        return bool(txt and UUID_RE.match(txt))
+
+    def _resolve_kg_entity_label(self, session: Session, value: Any) -> str:
+        txt = str(value or "").strip()
+        if not txt:
+            return ""
+        if not self._is_uuid_like(txt):
+            return txt
+
+        # Prefer direct user-id resolution.
+        user_row = session.execute(
+            text("SELECT username FROM user_mgmt WHERE id=:id LIMIT 1"),
+            {"id": txt},
+        ).mappings().first()
+        if user_row and user_row.get("username"):
+            return str(user_row["username"]).strip() or txt
+
+        # If UUID points to a post, resolve to the post author username.
+        post_row = session.execute(
+            text(
+                """
+                SELECT u.username AS username
+                FROM post p
+                JOIN user_mgmt u ON u.id = p.user_id
+                WHERE p.id=:post_id
+                LIMIT 1
+                """
+            ),
+            {"post_id": txt},
+        ).mappings().first()
+        if post_row and post_row.get("username"):
+            return str(post_row["username"]).strip() or txt
+
+        return txt
 
     def get_current_round_id(self) -> str:
         """
