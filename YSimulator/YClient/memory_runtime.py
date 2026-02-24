@@ -6,6 +6,9 @@ import logging
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from YSimulator.YClient.memory.config import normalize_memory_backend
+
+
 class ClientMemoryRuntime:
     """
     Runs memory backend computation on YClient.
@@ -26,7 +29,7 @@ class ClientMemoryRuntime:
         self.cfg = self.simulation_config.get("agent_memory", {})
         self.enabled = bool(self.cfg.get("enabled", False))
         self.compute_location = str(self.cfg.get("compute_location", "client")).strip().lower()
-        self.backend_name = str(self.cfg.get("backend", "none")).strip().lower()
+        self.backend_name = normalize_memory_backend(self.cfg.get("backend", "none"))
         self._initialized = False
 
     @property

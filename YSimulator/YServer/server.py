@@ -1776,7 +1776,12 @@ class OrchestratorServer:
 
     def _memory_backend_name(self) -> str:
         cfg = self.simulation_config.get("agent_memory", {})
-        return str(cfg.get("backend", "none") or "none").strip().lower()
+        backend = str(cfg.get("backend", "none") or "none").strip().lower()
+        alias_map = {
+            "ghost_kg": "ghostkg",
+            "ghost-kg": "ghostkg",
+        }
+        return alias_map.get(backend, backend)
 
     def _ensure_memory_hook_tables(self) -> None:
         engine = self._memory_engine()
@@ -1927,6 +1932,7 @@ class OrchestratorServer:
                 {
                     "operation": "ensure_tables",
                     "backend": backend,
+                    "db_url": str(getattr(engine, "url", "")),
                 },
             )
         finally:

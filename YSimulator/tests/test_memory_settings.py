@@ -43,3 +43,17 @@ def test_memory_enabled_rejects_invalid_backend():
                 }
             }
         )
+
+
+def test_memory_enabled_accepts_ghostkg_alias_ghost_kg():
+    settings = resolve_memory_settings(
+        {
+            "agent_memory": {
+                "enabled": True,
+                "compute_location": "server",
+                "backend": "ghost_kg",
+            }
+        }
+    )
+    assert settings.enabled is True
+    assert settings.backend == "ghostkg"
