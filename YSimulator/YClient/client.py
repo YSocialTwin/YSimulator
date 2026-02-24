@@ -814,14 +814,36 @@ class SimulationClient:
         """
         try:
             if self.memory_runtime.active:
-                return ray.get(
+                result = ray.get(
                     self.server.get_agent_memory.remote(
                         str(agent_id), query or {}, client_id=self.client_id
                     )
                 )
+                if self.memory_logger:
+                    self.memory_logger.info(
+                        "Client memory retrieve",
+                        extra={
+                            "extra_data": {
+                                "operation": "retrieve",
+                                "agent_id": str(agent_id),
+                                "result_count": len(result or []),
+                            }
+                        },
+                    )
+                return result
             return []
         except Exception as e:
             self.logger.debug(f"Memory retrieval failed for agent {agent_id}: {e}")
+            if self.memory_logger:
+                self.memory_logger.error(
+                    f"Client memory retrieve failed: {e}",
+                    extra={
+                        "extra_data": {
+                            "operation": "retrieve",
+                            "agent_id": str(agent_id),
+                        }
+                    },
+                )
             return []
 
     def _record_memory_usage(self, agent_id: str, memory_ids: list) -> bool:
@@ -837,16 +859,40 @@ class SimulationClient:
         """
         try:
             if self.memory_runtime.active:
-                return bool(
+                ok = bool(
                     ray.get(
                         self.server.record_memory_usage.remote(
                             str(agent_id), memory_ids or [], client_id=self.client_id
                         )
                     )
                 )
+                if self.memory_logger:
+                    self.memory_logger.info(
+                        "Client memory reinforce",
+                        extra={
+                            "extra_data": {
+                                "operation": "reinforce",
+                                "agent_id": str(agent_id),
+                                "memory_ids_count": len(memory_ids or []),
+                                "success": ok,
+                            }
+                        },
+                    )
+                return ok
             return False
         except Exception as e:
             self.logger.debug(f"Memory reinforcement failed for agent {agent_id}: {e}")
+            if self.memory_logger:
+                self.memory_logger.error(
+                    f"Client memory reinforce failed: {e}",
+                    extra={
+                        "extra_data": {
+                            "operation": "reinforce",
+                            "agent_id": str(agent_id),
+                            "memory_ids_count": len(memory_ids or []),
+                        }
+                    },
+                )
             return False
 
     def _set_memory_context(self, day: int, slot: int) -> None:
@@ -868,16 +914,40 @@ class SimulationClient:
     def _ingest_memory_event(self, agent_id: str, event: Dict[str, Any]) -> bool:
         try:
             if self.memory_runtime.active:
-                return bool(
+                ok = bool(
                     ray.get(
                         self.server.ingest_memory_event.remote(
                             str(agent_id), event or {}, client_id=self.client_id
                         )
                     )
                 )
+                if self.memory_logger:
+                    self.memory_logger.info(
+                        "Client memory ingest",
+                        extra={
+                            "extra_data": {
+                                "operation": "ingest",
+                                "agent_id": str(agent_id),
+                                "action_type": str((event or {}).get("action_type", "") or ""),
+                                "success": ok,
+                            }
+                        },
+                    )
+                return ok
             return False
         except Exception as e:
             self.logger.debug(f"Memory ingest failed for agent {agent_id}: {e}")
+            if self.memory_logger:
+                self.memory_logger.error(
+                    f"Client memory ingest failed: {e}",
+                    extra={
+                        "extra_data": {
+                            "operation": "ingest",
+                            "agent_id": str(agent_id),
+                            "action_type": str((event or {}).get("action_type", "") or ""),
+                        }
+                    },
+                )
             return False
 
     def _ingest_actions_memory(self, actions: List[ActionDTO], day: int, slot: int) -> None:

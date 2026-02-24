@@ -1647,15 +1647,25 @@ class OrchestratorServer:
             Dictionary with forgetting cycle statistics
         """
         if not self._memory_enabled():
-            return {"success": True, "decayed": 0, "soft_forgotten": 0, "hard_deleted": 0, "error": None}
+            out = {"success": True, "decayed": 0, "soft_forgotten": 0, "hard_deleted": 0, "error": None}
+            self._memory_log(logging.INFO, "Memory forgetting skipped (disabled)", {"operation": "forget_cycle"})
+            return out
 
         backend = self._memory_backend_name()
         if backend != "native":
-            return {"success": True, "decayed": 0, "soft_forgotten": 0, "hard_deleted": 0, "error": None}
+            out = {"success": True, "decayed": 0, "soft_forgotten": 0, "hard_deleted": 0, "error": None}
+            self._memory_log(
+                logging.INFO,
+                "Memory forgetting skipped (unsupported backend)",
+                {"operation": "forget_cycle", "backend": backend},
+            )
+            return out
 
         engine = self._memory_engine()
         if engine is None:
-            return {"success": False, "decayed": 0, "soft_forgotten": 0, "hard_deleted": 0, "error": "missing_engine"}
+            out = {"success": False, "decayed": 0, "soft_forgotten": 0, "hard_deleted": 0, "error": "missing_engine"}
+            self._memory_log(logging.ERROR, "Memory forgetting failed: missing_engine", {"operation": "forget_cycle"})
+            return out
 
         cfg = self.simulation_config.get("agent_memory", {})
         decay_lambda = float(cfg.get("time_decay_lambda", 0.015))
@@ -1705,22 +1715,40 @@ class OrchestratorServer:
                 hard_deleted = int(res.rowcount or 0)
 
             session.commit()
-            return {
+            out = {
                 "success": True,
                 "decayed": decayed,
                 "soft_forgotten": soft_forgotten,
                 "hard_deleted": hard_deleted,
                 "error": None,
             }
+            self._memory_log(
+                logging.INFO,
+                "Memory forgetting cycle completed",
+                {
+                    "operation": "forget_cycle",
+                    "backend": backend,
+                    "decayed": decayed,
+                    "soft_forgotten": soft_forgotten,
+                    "hard_deleted": hard_deleted,
+                },
+            )
+            return out
         except Exception as e:
             session.rollback()
-            return {
+            out = {
                 "success": False,
                 "decayed": 0,
                 "soft_forgotten": 0,
                 "hard_deleted": 0,
                 "error": str(e),
             }
+            self._memory_log(
+                logging.ERROR,
+                f"Memory forgetting cycle failed: {e}",
+                {"operation": "forget_cycle", "backend": backend},
+            )
+            return out
         finally:
             session.close()
 
@@ -1731,6 +1759,17 @@ class OrchestratorServer:
     def _memory_engine(self):
         post_repo = getattr(self.post_service, "post_repository", None)
         return getattr(post_repo, "engine", None)
+
+    def _memory_log(self, level: int, message: str, extra_data: Optional[Dict[str, Any]] = None) -> None:
+        """
+        Emit structured memory logs to dedicated memory logger when available.
+        """
+        logger = self.memory_logger if getattr(self, "memory_logger", None) is not None else self.logger
+        try:
+            logger.log(level, message, extra={"extra_data": extra_data or {}})
+        except Exception:
+            # Never fail memory operations due to logging issues.
+            pass
 
     def _memory_enabled(self) -> bool:
         return bool(self.simulation_config.get("agent_memory", {}).get("enabled", False))
@@ -1882,6 +1921,14 @@ class OrchestratorServer:
                     )
                 )
             session.commit()
+            self._memory_log(
+                logging.INFO,
+                "Memory hook tables ensured",
+                {
+                    "operation": "ensure_tables",
+                    "backend": backend,
+                },
+            )
         finally:
             session.close()
 
@@ -1945,10 +1992,32 @@ class OrchestratorServer:
                     now_iso=now_iso,
                 )
             session.commit()
+            self._memory_log(
+                logging.INFO,
+                "Memory ingest persisted",
+                {
+                    "operation": "ingest",
+                    "backend": backend,
+                    "agent_id": str(agent_id),
+                    "action_type": str(event.get("action_type", "") or ""),
+                    "day": int(self.day),
+                    "slot": int(self.slot),
+                    "client_id": str(client_id) if client_id else None,
+                },
+            )
             return True
         except Exception as e:
             session.rollback()
-            self.logger.debug(f"Memory hook ingest failed: {e}")
+            self._memory_log(
+                logging.ERROR,
+                f"Memory ingest failed: {e}",
+                {
+                    "operation": "ingest",
+                    "backend": self._memory_backend_name(),
+                    "agent_id": str(agent_id),
+                    "client_id": str(client_id) if client_id else None,
+                },
+            )
             return False
         finally:
             session.close()
@@ -2026,7 +2095,17 @@ class OrchestratorServer:
                     ),
                     {"agent_id": str(agent_id), "limit": max_items},
                 ).mappings().all()
-        except Exception:
+        except Exception as e:
+            self._memory_log(
+                logging.ERROR,
+                f"Memory retrieve failed: {e}",
+                {
+                    "operation": "retrieve",
+                    "backend": backend,
+                    "agent_id": str(agent_id),
+                    "query": query or {},
+                },
+            )
             rows = []
         finally:
             session.close()
@@ -2049,11 +2128,31 @@ class OrchestratorServer:
                     "metadata": self._safe_json_loads(row.get("metadata_json")),
                 }
             )
+        self._memory_log(
+            logging.INFO,
+            "Memory retrieve completed",
+            {
+                "operation": "retrieve",
+                "backend": backend,
+                "agent_id": str(agent_id),
+                "result_count": len(memories),
+            },
+        )
         return memories
 
     def _hook_record_memory_usage(self, agent_id: str, memory_ids: List[str]) -> bool:
         backend = self._memory_backend_name()
         if backend != "native":
+            self._memory_log(
+                logging.INFO,
+                "Memory usage recorded (no-op backend)",
+                {
+                    "operation": "reinforce",
+                    "backend": backend,
+                    "agent_id": str(agent_id),
+                    "memory_ids_count": len(memory_ids or []),
+                },
+            )
             return bool(agent_id) and bool(memory_ids is not None)
         if not memory_ids:
             return True
@@ -2099,9 +2198,30 @@ class OrchestratorServer:
                     },
                 )
             session.commit()
+            self._memory_log(
+                logging.INFO,
+                "Memory usage reinforced",
+                {
+                    "operation": "reinforce",
+                    "backend": backend,
+                    "agent_id": str(agent_id),
+                    "requested_ids_count": len(memory_ids or []),
+                    "reinforced_count": len(rows),
+                },
+            )
             return True
-        except Exception:
+        except Exception as e:
             session.rollback()
+            self._memory_log(
+                logging.ERROR,
+                f"Memory reinforce failed: {e}",
+                {
+                    "operation": "reinforce",
+                    "backend": backend,
+                    "agent_id": str(agent_id),
+                    "memory_ids_count": len(memory_ids or []),
+                },
+            )
             return False
         finally:
             session.close()
