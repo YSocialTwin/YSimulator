@@ -1951,6 +1951,7 @@ class OrchestratorServer:
             metadata_obj = event.get("metadata", {})
             if not isinstance(metadata_obj, dict):
                 metadata_obj = {}
+            metadata_json = self._safe_json_dumps(metadata_obj)
             session.execute(
                 text(
                     """
@@ -1977,7 +1978,7 @@ class OrchestratorServer:
                     "topic": event.get("topic"),
                     "target_post_id": event.get("target_post_id"),
                     "target_user_id": event.get("target_user_id"),
-                    "metadata_json": json.dumps(metadata_obj),
+                    "metadata_json": metadata_json,
                     "created_at": now_iso,
                 },
             )
@@ -2009,6 +2010,13 @@ class OrchestratorServer:
                     "day": int(self.day),
                     "slot": int(self.slot),
                     "client_id": str(client_id) if client_id else None,
+                    "has_content": bool(str(event.get("content") or "").strip()),
+                    "has_topic": bool(str(event.get("topic") or "").strip()),
+                    "has_target_user": bool(str(event.get("target_user_id") or "").strip()),
+                    "absorb_triplets_count": len(metadata_obj.get("ghostkg_absorb_triplets", []) or []),
+                    "reflection_triplets_count": len(
+                        metadata_obj.get("ghostkg_reflection_triplets", []) or []
+                    ),
                 },
             )
             return True
@@ -2022,6 +2030,8 @@ class OrchestratorServer:
                     "backend": self._memory_backend_name(),
                     "agent_id": str(agent_id),
                     "client_id": str(client_id) if client_id else None,
+                    "action_type": str(event.get("action_type", "") or ""),
+                    "event_keys": sorted(list((event or {}).keys())),
                 },
             )
             return False
@@ -2243,6 +2253,18 @@ class OrchestratorServer:
         except Exception:
             return {}
 
+    @staticmethod
+    def _safe_json_dumps(value: Any) -> str:
+        if value is None:
+            return "{}"
+        try:
+            return json.dumps(value)
+        except Exception:
+            try:
+                return json.dumps(value, default=str)
+            except Exception:
+                return "{}"
+
     def _server_native_ingest(
         self,
         session: Session,
@@ -2313,7 +2335,7 @@ class OrchestratorServer:
                     "round_id": str(self.current_round_id),
                     "day": int(self.day),
                     "slot": int(self.slot),
-                    "metadata_json": json.dumps(metadata_obj),
+                    "metadata_json": self._safe_json_dumps(metadata_obj),
                 },
             )
             return
@@ -2348,7 +2370,7 @@ class OrchestratorServer:
                 "round_id": str(self.current_round_id),
                 "day": int(self.day),
                 "slot": int(self.slot),
-                "metadata_json": json.dumps(metadata_obj),
+                "metadata_json": self._safe_json_dumps(metadata_obj),
             },
         )
 
@@ -2430,7 +2452,7 @@ class OrchestratorServer:
                 "action_type": action_type or None,
                 "content": content or None,
                 "content_uuid": None,
-                "annotations": json.dumps(metadata_obj),
+                "annotations": self._safe_json_dumps(metadata_obj),
                 "timestamp": now_iso,
                 "sim_day": day,
                 "sim_hour": slot,

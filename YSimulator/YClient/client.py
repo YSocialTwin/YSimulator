@@ -930,9 +930,52 @@ class SimulationClient:
                                 "agent_id": str(agent_id),
                                 "action_type": str((event or {}).get("action_type", "") or ""),
                                 "success": ok,
+                                "has_content": bool(str((event or {}).get("content") or "").strip()),
+                                "has_topic": bool(str((event or {}).get("topic") or "").strip()),
+                                "has_target_post": bool(
+                                    str((event or {}).get("target_post_id") or "").strip()
+                                ),
+                                "has_target_user": bool(
+                                    str((event or {}).get("target_user_id") or "").strip()
+                                ),
+                                "metadata_keys": sorted(
+                                    list(
+                                        ((event or {}).get("metadata") or {}).keys()
+                                        if isinstance((event or {}).get("metadata"), dict)
+                                        else []
+                                    )
+                                ),
+                                "absorb_triplets_count": len(
+                                    (((event or {}).get("metadata") or {}).get("ghostkg_absorb_triplets", []) or [])
+                                    if isinstance((event or {}).get("metadata"), dict)
+                                    else []
+                                ),
+                                "reflection_triplets_count": len(
+                                    (((event or {}).get("metadata") or {}).get(
+                                        "ghostkg_reflection_triplets", []
+                                    ) or [])
+                                    if isinstance((event or {}).get("metadata"), dict)
+                                    else []
+                                ),
                             }
                         },
                     )
+                    if not ok:
+                        try:
+                            status = ray.get(self.server.get_memory_backend_status.remote())
+                        except Exception:
+                            status = {}
+                        self.memory_logger.warning(
+                            "Client memory ingest returned false",
+                            extra={
+                                "extra_data": {
+                                    "operation": "ingest",
+                                    "agent_id": str(agent_id),
+                                    "action_type": str((event or {}).get("action_type", "") or ""),
+                                    "server_memory_status": status,
+                                }
+                            },
+                        )
                 return ok
             return False
         except Exception as e:
