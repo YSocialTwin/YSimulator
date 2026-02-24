@@ -6,17 +6,12 @@ import logging
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from sqlalchemy import create_engine
-
-from YSimulator.YClient.memory.backends import MemoryBackendFactory, MemoryQuery
-
-
 class ClientMemoryRuntime:
     """
     Runs memory backend computation on YClient.
 
-    The runtime writes results directly to the same simulation DB used by YServer
-    while avoiding server-side memory computation.
+    The runtime keeps client-side memory computation enabled/disabled state.
+    Persistence/retrieval/reinforcement are delegated to YServer hooks.
     """
 
     def __init__(
@@ -32,12 +27,16 @@ class ClientMemoryRuntime:
         self.enabled = bool(self.cfg.get("enabled", False))
         self.compute_location = str(self.cfg.get("compute_location", "client")).strip().lower()
         self.backend_name = str(self.cfg.get("backend", "none")).strip().lower()
-        self.backend = None
-        self.engine = None
+        self._initialized = False
 
     @property
     def active(self) -> bool:
-        return self.enabled and self.compute_location == "client" and self.backend is not None
+        return (
+            self._initialized
+            and self.enabled
+            and self.compute_location == "client"
+            and self.backend_name != "none"
+        )
 
     def initialize(self) -> None:
         if not self.enabled or self.compute_location != "client" or self.backend_name == "none":
@@ -53,70 +52,29 @@ class ClientMemoryRuntime:
             )
             return
 
-        db_url = self._resolve_db_url()
-        self.engine = create_engine(db_url)
-        self.backend = MemoryBackendFactory.create(
-            self.backend_name,
-            logger=self.logger,
-            backend_config=self.cfg,
-            engine=self.engine,
-        )
-        self.backend.initialize(
-            {
-                "config_path": str(self.config_path),
-                "day": 1,
-                "slot": 0,
-                "simulation_config": self.simulation_config,
-                "llm": self.simulation_config.get("llm", {}),
-            }
-        )
+        self._initialized = True
         self.logger.info(
             "Client memory runtime initialized",
             extra={
                 "extra_data": {
                     "backend": self.backend_name,
-                    "db_url": db_url,
                     "compute_location": self.compute_location,
+                    "storage": "server_sqlalchemy_hooks",
                 }
             },
         )
 
     def retrieve(self, agent_id: str, query: Dict[str, Any], context: Dict[str, Any]) -> List[Dict[str, Any]]:
-        if not self.active:
-            return []
-        memory_query = MemoryQuery(
-            topic=query.get("topic"),
-            target_user_id=query.get("target_user_id"),
-            thread_id=query.get("thread_id"),
-            action_type=query.get("action_type"),
-            max_items=int(query.get("max_items", 5)),
-            metadata=query.get("metadata", {}),
-        )
-        items = self.backend.retrieve(agent_id, memory_query, context)
-        return [
-            {
-                "memory_id": item.memory_id,
-                "memory_text": item.memory_text,
-                "relevance_score": item.relevance_score,
-                "confidence": item.confidence,
-                "strength": item.strength,
-                "sentiment": item.sentiment,
-                "metadata": item.metadata,
-            }
-            for item in items
-        ]
+        # Storage/retrieval are handled by YServer hooks.
+        return []
 
     def reinforce(self, agent_id: str, memory_ids: List[str], context: Dict[str, Any]) -> bool:
-        if not self.active:
-            return False
-        result = self.backend.reinforce(agent_id, memory_ids or [], context)
-        return bool(result.success)
+        # Reinforcement is handled by YServer hooks.
+        return False
 
     def ingest_event(self, agent_id: str, event: Dict[str, Any], context: Dict[str, Any]) -> bool:
-        if not self.active:
-            return False
-        result = self.backend.ingest_event(agent_id, event or {}, context)
-        return bool(result.success)
+        # Ingestion is handled by YServer hooks.
+        return False
 
     def _resolve_db_url(self) -> str:
         # Use GhostKG-specific DB URL/path settings when backend is ghostkg and custom storage is requested.

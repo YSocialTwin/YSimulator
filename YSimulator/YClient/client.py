@@ -814,8 +814,10 @@ class SimulationClient:
         """
         try:
             if self.memory_runtime.active:
-                return self.memory_runtime.retrieve(
-                    str(agent_id), query or {}, self._build_memory_context()
+                return ray.get(
+                    self.server.get_agent_memory.remote(
+                        str(agent_id), query or {}, client_id=self.client_id
+                    )
                 )
             return []
         except Exception as e:
@@ -835,8 +837,12 @@ class SimulationClient:
         """
         try:
             if self.memory_runtime.active:
-                return self.memory_runtime.reinforce(
-                    str(agent_id), memory_ids or [], self._build_memory_context()
+                return bool(
+                    ray.get(
+                        self.server.record_memory_usage.remote(
+                            str(agent_id), memory_ids or [], client_id=self.client_id
+                        )
+                    )
                 )
             return False
         except Exception as e:
@@ -862,8 +868,12 @@ class SimulationClient:
     def _ingest_memory_event(self, agent_id: str, event: Dict[str, Any]) -> bool:
         try:
             if self.memory_runtime.active:
-                return self.memory_runtime.ingest_event(
-                    str(agent_id), event or {}, self._build_memory_context()
+                return bool(
+                    ray.get(
+                        self.server.ingest_memory_event.remote(
+                            str(agent_id), event or {}, client_id=self.client_id
+                        )
+                    )
                 )
             return False
         except Exception as e:
