@@ -670,3 +670,66 @@ def test_ghostkg_backend_external_triplets_mode_never_builds_server_llm_service(
 
     assert backend.health_check().ok is True
     assert backend._llm_service is None
+
+
+def test_ghostkg_backend_uses_top_level_llm_config_for_internal_llm(monkeypatch):
+    class FakeRating:
+        Good = 3
+        Hard = 2
+
+    class FakeManager:
+        def __init__(self, db_path="db", db_url=None, store_log_content=False):
+            self._agents = {}
+
+        def create_agent(self, name, llm_service=None):
+            self._agents[name] = object()
+            return self._agents[name]
+
+        def get_agent(self, name):
+            class _Agent:
+                def set_time(self, _time):
+                    return None
+
+            return _Agent()
+
+    captured = {}
+
+    def _fake_get_llm_service(provider, model, api_key=None, base_url=None):
+        captured["provider"] = provider
+        captured["model"] = model
+        captured["api_key"] = api_key
+        captured["base_url"] = base_url
+        return object()
+
+    fake_module = types.SimpleNamespace(AgentManager=FakeManager, Rating=FakeRating)
+    monkeypatch.setitem(sys.modules, "ghost_kg", fake_module)
+    monkeypatch.setitem(
+        sys.modules,
+        "ghost_kg.llm",
+        types.SimpleNamespace(get_llm_service=_fake_get_llm_service),
+    )
+
+    backend = GhostKGMemoryBackend(
+        backend_config={"extraction_mode": "llm", "external_triplets_only": False, "db_path": "fake.db"}
+    )
+    backend.initialize(
+        {
+            "day": 1,
+            "slot": 1,
+            "simulation_config": {
+                "llm": {
+                    "backend": "ollama",
+                    "model": "llama3.2",
+                    "address": "localhost",
+                    "port": 11434,
+                    "llm_api_key": "NULL",
+                }
+            },
+        }
+    )
+
+    assert backend.health_check().ok is True
+    assert captured["provider"] == "ollama"
+    assert captured["model"] == "llama3.2"
+    assert captured["base_url"] == "http://localhost:11434"
+    assert captured["api_key"] is None

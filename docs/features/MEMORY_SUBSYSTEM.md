@@ -147,11 +147,7 @@ Main config location: `simulation_config.json` under `agent_memory`.
 - `ghostkg.extraction_mode`: `triplets | fast | llm`
 - `ghostkg.ensure_datetime_clock`: `false` by default; preserves simulation tuple clock `(day, hour)` without synthetic datetime override.
 - `ghostkg.relation_whitelist`
-- `ghostkg.llm_provider`
-- `ghostkg.llm_model`
-- `ghostkg.llm_base_url`
-- `ghostkg.llm_api_key`
-- `ghostkg.llm_api_key_env`
+- LLM settings for `ghostkg.extraction_mode=llm` are inherited from top-level `llm` config.
 
 Notes:
 
@@ -159,6 +155,7 @@ Notes:
 - `fast` uses GhostKG's low-cost extraction path.
 - `llm` uses LLM extraction and has higher semantic flexibility/cost.
 - GhostKG time sync supports simulation tuple time `(day, hour)`.
+- Do not duplicate provider/model/API keys under `agent_memory.ghostkg`; use `simulation_config.llm`.
 
 ## Recommended Adoption Sequence
 

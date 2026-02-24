@@ -136,12 +136,7 @@
         "follows",
         "unfollows",
         "mentions"
-      ],
-      "llm_provider": "ollama",
-      "llm_model": "llama3.2",
-      "llm_base_url": "http://localhost:11434",
-      "llm_api_key": null,
-      "llm_api_key_env": "OPENAI_API_KEY"
+      ]
     }
   },
   "logging": {

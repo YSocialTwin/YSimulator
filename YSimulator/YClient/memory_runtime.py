@@ -61,7 +61,15 @@ class ClientMemoryRuntime:
             backend_config=self.cfg,
             engine=self.engine,
         )
-        self.backend.initialize({"config_path": str(self.config_path), "day": 1, "slot": 0})
+        self.backend.initialize(
+            {
+                "config_path": str(self.config_path),
+                "day": 1,
+                "slot": 0,
+                "simulation_config": self.simulation_config,
+                "llm": self.simulation_config.get("llm", {}),
+            }
+        )
         self.logger.info(
             "Client memory runtime initialized",
             extra={

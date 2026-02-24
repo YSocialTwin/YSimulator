@@ -87,7 +87,7 @@ class GhostKGMemoryBackend(MemoryBackend):
                 },
             )
             self.rating = Rating
-            self._llm_service = self._build_llm_service_if_needed()
+            self._llm_service = self._build_llm_service_if_needed(simulation_context)
             self._available = True
             self._initialized = True
         except Exception as e:
@@ -363,7 +363,68 @@ class GhostKGMemoryBackend(MemoryBackend):
         agent = self.manager.get_agent(agent_id)
         agent.set_time(synthetic_now)
 
-    def _build_llm_service_if_needed(self):
+    @staticmethod
+    def _is_empty_api_key(value: Any) -> bool:
+        text = str(value or "").strip().lower()
+        return text in {"", "null", "none"}
+
+    def _resolve_llm_runtime_config(self, simulation_context: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Resolve GhostKG LLM runtime configuration from simulation_config.llm.
+        Backward compatibility: fallback to agent_memory.ghostkg.llm_* if needed.
+        """
+        context_cfg = simulation_context.get("simulation_config", {}) if isinstance(simulation_context, dict) else {}
+        llm_cfg = context_cfg.get("llm", {}) if isinstance(context_cfg.get("llm"), dict) else {}
+        if not llm_cfg and isinstance(simulation_context.get("llm"), dict):
+            llm_cfg = simulation_context.get("llm", {})
+
+        # Preferred source: top-level llm configuration.
+        backend = str(llm_cfg.get("backend", "ollama")).strip().lower()
+        provider = str(llm_cfg.get("provider", "")).strip().lower()
+        if not provider:
+            provider = "openai" if backend == "vllm" else "ollama"
+
+        model = str(llm_cfg.get("model") or "").strip()
+        base_url = str(llm_cfg.get("base_url") or "").strip()
+        if not base_url:
+            address = str(llm_cfg.get("address") or "").strip()
+            port = llm_cfg.get("port")
+            if address:
+                if address.startswith("http://") or address.startswith("https://"):
+                    base_url = address.rstrip("/")
+                elif port:
+                    base_url = f"http://{address}:{port}"
+                else:
+                    base_url = f"http://{address}"
+
+        api_key = llm_cfg.get("llm_api_key")
+        if self._is_empty_api_key(api_key):
+            api_key = llm_cfg.get("api_key")
+
+        # Backward-compatible fallback (deprecated): agent_memory.ghostkg.llm_*
+        if not model:
+            model = str(self._cfg("llm_model", "llama3.2"))
+        if not base_url:
+            base_url = self._cfg("llm_base_url")
+        if self._is_empty_api_key(api_key):
+            api_key = self._cfg("llm_api_key")
+        if self._is_empty_api_key(api_key):
+            api_key_env = self._cfg("llm_api_key_env")
+            if api_key_env:
+                api_key = os.getenv(str(api_key_env))
+
+        if not provider:
+            provider = str(self._cfg("llm_provider", "ollama")).strip().lower() or "ollama"
+
+        return {
+            "provider": provider,
+            "model": model,
+            "base_url": base_url or None,
+            "api_key": None if self._is_empty_api_key(api_key) else api_key,
+            "source": "simulation.llm" if llm_cfg else "agent_memory.ghostkg (fallback)",
+        }
+
+    def _build_llm_service_if_needed(self, simulation_context: Dict[str, Any]):
         # In external-triplets mode, all LLM calls must happen client-side.
         if self._external_triplets_only:
             return None
@@ -373,13 +434,23 @@ class GhostKGMemoryBackend(MemoryBackend):
         try:
             from ghost_kg.llm import get_llm_service
 
-            provider = str(self._cfg("llm_provider", "ollama"))
-            model = str(self._cfg("llm_model", "llama3.2"))
-            api_key = self._cfg("llm_api_key")
-            api_key_env = self._cfg("llm_api_key_env")
-            if not api_key and api_key_env:
-                api_key = os.getenv(str(api_key_env))
-            base_url = self._cfg("llm_base_url")
+            llm_runtime = self._resolve_llm_runtime_config(simulation_context or {})
+            provider = str(llm_runtime.get("provider", "ollama"))
+            model = str(llm_runtime.get("model", "llama3.2"))
+            api_key = llm_runtime.get("api_key")
+            base_url = llm_runtime.get("base_url")
+            self.logger.info(
+                "GhostKG LLM config resolved",
+                extra={
+                    "extra_data": {
+                        "backend": self.name,
+                        "provider": provider,
+                        "model": model,
+                        "base_url": base_url,
+                        "source": llm_runtime.get("source"),
+                    }
+                },
+            )
             return get_llm_service(
                 provider=provider,
                 model=model,

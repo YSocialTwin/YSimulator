@@ -1576,13 +1576,7 @@ YSimulator supports pluggable memory backends through `agent_memory`:
         "follows",
         "unfollows",
         "mentions"
-      ],
-
-      "llm_provider": "ollama",
-      "llm_model": "llama3.2",
-      "llm_base_url": "http://localhost:11434",
-      "llm_api_key": null,
-      "llm_api_key_env": "OPENAI_API_KEY"
+      ]
     }
   }
 }
@@ -1625,13 +1619,11 @@ YSimulator supports pluggable memory backends through `agent_memory`:
 - `agent_memory.ghostkg.relation_whitelist` (list[str]): Allowed relations for direct-triplet mode.
   - If generated relation is not whitelisted, adapter falls back to `mentions`.
 
-#### LLM Extraction Parameters (for `extraction_mode=llm`)
+#### LLM Source (for `extraction_mode=llm`)
 
-- `agent_memory.ghostkg.llm_provider` (str): `ollama`, `openai`, `anthropic`, `google`, `cohere`, etc.
-- `agent_memory.ghostkg.llm_model` (str): Model identifier for selected provider.
-- `agent_memory.ghostkg.llm_base_url` (str|null): Host/base URL (e.g., Ollama endpoint).
-- `agent_memory.ghostkg.llm_api_key` (str|null): API key inline.
-- `agent_memory.ghostkg.llm_api_key_env` (str|null): Environment variable name for API key fallback.
+- GhostKG inherits model connection settings from top-level `llm` in `simulation_config.json`.
+- Do not duplicate model/provider credentials under `agent_memory.ghostkg`.
+- Backward compatibility for `agent_memory.ghostkg.llm_*` exists, but it is deprecated.
 
 #### Prompt Templates For YSimulator-Side GhostKG Extraction
 

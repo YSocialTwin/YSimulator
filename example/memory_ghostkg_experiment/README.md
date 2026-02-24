@@ -46,12 +46,8 @@ Alternatives:
 - `fast`: low-cost text extraction
 - `llm`: highest semantic flexibility; requires provider/model/API setup
 
-If `llm` mode is used, configure:
-
-- `llm_provider`
-- `llm_model`
-- `llm_base_url`
-- `llm_api_key` or `llm_api_key_env`
+If `llm` mode is used, configure top-level `llm` in `simulation_config.json`.
+Do not duplicate LLM settings under `agent_memory.ghostkg`.
 
 ## Suggested Checks
 
