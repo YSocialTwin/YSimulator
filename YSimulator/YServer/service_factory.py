@@ -80,8 +80,12 @@ def create_database_engine(
         sqlite_config = db_config.get("sqlite", {})
         filename = sqlite_config.get("filename") or db_config.get("path", "simulation.db")
 
-        # Create database file in config directory (same as old middleware)
-        db_path = Path(config_path) / filename
+        # Create database file in config directory (same as old middleware),
+        # and resolve to an absolute path to avoid CWD-dependent behavior.
+        db_path = Path(filename)
+        if not db_path.is_absolute():
+            db_path = Path(config_path) / db_path
+        db_path = db_path.resolve()
         connection_string = f"sqlite:///{db_path}"
     elif db_type == "postgresql":
         host = db_config.get("host", "localhost")

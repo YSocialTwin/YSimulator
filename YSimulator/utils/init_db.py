@@ -38,11 +38,12 @@ def create_database_engine(db_config: dict, config_path: Path = None):
         sqlite_config = db_config.get("sqlite", {})
         db_filename = sqlite_config.get("filename", "simulation.db")
 
-        # If config_path provided, use it; otherwise use current directory
-        if config_path:
-            db_path = config_path / db_filename
-        else:
-            db_path = Path(db_filename)
+        # Resolve to an absolute path to avoid CWD-dependent behavior.
+        db_path = Path(db_filename)
+        if not db_path.is_absolute():
+            if config_path:
+                db_path = Path(config_path) / db_path
+        db_path = db_path.resolve()
 
         connection_string = f"sqlite:///{db_path}"
 
@@ -146,10 +147,11 @@ def database_exists(db_config: dict, config_path: Path = None) -> bool:
         sqlite_config = db_config.get("sqlite", {})
         db_filename = sqlite_config.get("filename", "simulation.db")
 
-        if config_path:
-            db_path = config_path / db_filename
-        else:
-            db_path = Path(db_filename)
+        db_path = Path(db_filename)
+        if not db_path.is_absolute():
+            if config_path:
+                db_path = Path(config_path) / db_path
+        db_path = db_path.resolve()
 
         return db_path.exists()
 

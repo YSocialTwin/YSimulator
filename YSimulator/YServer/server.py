@@ -10,6 +10,7 @@ import gzip
 import json
 import logging
 import os
+import re
 import shutil
 import time
 import uuid
@@ -18,11 +19,20 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import ray
-from sqlalchemy import text
+from sqlalchemy import desc
 from sqlalchemy.orm import Session
 
 from YSimulator.YClient.classes.ray_models import SimulationInstruction
-from YSimulator.YServer.classes.models import Recommendation
+from YSimulator.YServer.classes.models import (
+    AgentMemoryEvent,
+    AgentMemoryItem,
+    KGEdge,
+    KGLog,
+    KGNode,
+    Post,
+    Recommendation,
+    User_mgmt,
+)
 from YSimulator.YServer.interests_modeling import InterestManager
 
 # Constants
@@ -30,6 +40,13 @@ RECOMMENDATION_TTL_SECONDS = 7 * 24 * 60 * 60  # 7 days in seconds
 NETWORK_EDGE_CHECK_LIMIT = 10  # Number of edges to check when verifying network load
 LOG_FILE_MAX_BYTES = 10 * 1024 * 1024  # 10MB
 LOG_FILE_BACKUP_COUNT = 5  # Keep 5 backup files
+UUID_RE = re.compile(
+    r"^[0-9a-fA-F]{8}-"
+    r"[0-9a-fA-F]{4}-"
+    r"[0-9a-fA-F]{4}-"
+    r"[0-9a-fA-F]{4}-"
+    r"[0-9a-fA-F]{12}$"
+)
 
 
 def log_server_request(func: callable) -> callable:
@@ -1573,11 +1590,22 @@ class OrchestratorServer:
         Returns:
             Dictionary with backend health and enabled flag
         """
+        backend = self._memory_backend_name()
+        enabled = self._memory_enabled()
+        engine = self._memory_engine()
+        engine_ready = engine is not None
         return {
-            "ok": True,
-            "backend": "client",
-            "enabled": bool(self.simulation_config.get("agent_memory", {}).get("enabled", False)),
-            "details": {"mode": "hooks_only"},
+            "ok": (not enabled) or engine_ready,
+            "backend": backend,
+            "enabled": enabled,
+            "details": {
+                "mode": "server_sqlalchemy_hooks",
+                "compute_location": str(
+                    self.simulation_config.get("agent_memory", {}).get("compute_location", "client")
+                ).strip().lower(),
+                "engine_ready": engine_ready,
+                "db_url": str(getattr(engine, "url", "")) if engine_ready else None,
+            },
         }
 
     def get_agent_memory(
@@ -1638,104 +1666,252 @@ class OrchestratorServer:
         Returns:
             Dictionary with forgetting cycle statistics
         """
-        return {
-            "success": True,
-            "decayed": 0,
-            "soft_forgotten": 0,
-            "hard_deleted": 0,
-            "error": None,
-        }
+        if not self._memory_enabled():
+            out = {"success": True, "decayed": 0, "soft_forgotten": 0, "hard_deleted": 0, "error": None}
+            self._memory_log(logging.INFO, "Memory forgetting skipped (disabled)", {"operation": "forget_cycle"})
+            return out
+
+        backend = self._memory_backend_name()
+        if backend != "native":
+            out = {"success": True, "decayed": 0, "soft_forgotten": 0, "hard_deleted": 0, "error": None}
+            self._memory_log(
+                logging.INFO,
+                "Memory forgetting skipped (unsupported backend)",
+                {"operation": "forget_cycle", "backend": backend},
+            )
+            return out
+
+        engine = self._memory_engine()
+        if engine is None:
+            out = {"success": False, "decayed": 0, "soft_forgotten": 0, "hard_deleted": 0, "error": "missing_engine"}
+            self._memory_log(logging.ERROR, "Memory forgetting failed: missing_engine", {"operation": "forget_cycle"})
+            return out
+
+        cfg = self.simulation_config.get("agent_memory", {})
+        decay_lambda = float(cfg.get("time_decay_lambda", 0.015))
+        soft_threshold = float(cfg.get("soft_forget_threshold", 0.12))
+        hard_delete_after_days = int(cfg.get("hard_delete_after_days", 14))
+        current_day = int(self.day or 0)
+
+        session = Session(engine)
+        try:
+            rows = session.query(AgentMemoryItem).filter(AgentMemoryItem.forgotten == 0).all()
+
+            decayed = 0
+            soft_forgotten = 0
+            for row in rows:
+                new_strength = max(0.0, float(row.strength or 0.0) * (1.0 - decay_lambda))
+                forgotten = 1 if new_strength < soft_threshold else 0
+                if forgotten:
+                    soft_forgotten += 1
+                row.strength = new_strength
+                row.forgotten = forgotten
+                decayed += 1
+
+            hard_deleted = 0
+            if current_day > 0:
+                cutoff_day = current_day - hard_delete_after_days
+                hard_deleted = (
+                    session.query(AgentMemoryItem)
+                    .filter(
+                        AgentMemoryItem.forgotten == 1,
+                        AgentMemoryItem.last_access_day.isnot(None),
+                        AgentMemoryItem.last_access_day <= cutoff_day,
+                    )
+                    .delete(synchronize_session=False)
+                )
+                hard_deleted = int(hard_deleted or 0)
+
+            session.commit()
+            out = {
+                "success": True,
+                "decayed": decayed,
+                "soft_forgotten": soft_forgotten,
+                "hard_deleted": hard_deleted,
+                "error": None,
+            }
+            self._memory_log(
+                logging.INFO,
+                "Memory forgetting cycle completed",
+                {
+                    "operation": "forget_cycle",
+                    "backend": backend,
+                    "decayed": decayed,
+                    "soft_forgotten": soft_forgotten,
+                    "hard_deleted": hard_deleted,
+                },
+            )
+            return out
+        except Exception as e:
+            session.rollback()
+            out = {
+                "success": False,
+                "decayed": 0,
+                "soft_forgotten": 0,
+                "hard_deleted": 0,
+                "error": str(e),
+            }
+            self._memory_log(
+                logging.ERROR,
+                f"Memory forgetting cycle failed: {e}",
+                {"operation": "forget_cycle", "backend": backend},
+            )
+            return out
+        finally:
+            session.close()
 
     def _maybe_run_memory_forgetting_cycle(self) -> None:
         """Run forgetting cycle at configured round intervals."""
-        # Forgetting is handled in client-side memory backends.
         return
 
     def _memory_engine(self):
-        post_repo = getattr(self.post_service, "post_repository", None)
+        # Repository/Service layer currently exposes post repository as `post_repo`.
+        # Keep compatibility with historical attribute names used during refactors.
+        post_repo = (
+            getattr(self.post_service, "post_repo", None)
+            or getattr(self.post_service, "post_repository", None)
+            or getattr(self.db, "post_repository", None)
+        )
         return getattr(post_repo, "engine", None)
+
+    def _memory_log(self, level: int, message: str, extra_data: Optional[Dict[str, Any]] = None) -> None:
+        """
+        Emit structured memory logs to dedicated memory logger when available.
+        """
+        logger = self.memory_logger if getattr(self, "memory_logger", None) is not None else self.logger
+        try:
+            logger.log(level, message, extra={"extra_data": extra_data or {}})
+        except Exception:
+            # Never fail memory operations due to logging issues.
+            pass
+
+    def _memory_enabled(self) -> bool:
+        return bool(self.simulation_config.get("agent_memory", {}).get("enabled", False))
+
+    def _memory_backend_name(self) -> str:
+        cfg = self.simulation_config.get("agent_memory", {})
+        backend = str(cfg.get("backend", "none") or "none").strip().lower()
+        alias_map = {
+            "ghost_kg": "ghostkg",
+            "ghost-kg": "ghostkg",
+        }
+        return alias_map.get(backend, backend)
 
     def _ensure_memory_hook_tables(self) -> None:
         engine = self._memory_engine()
         if engine is None:
             return
-        session = Session(engine)
-        try:
-            session.execute(
-                text(
-                    """
-                    CREATE TABLE IF NOT EXISTS agent_memory_events (
-                        id TEXT PRIMARY KEY,
-                        agent_id TEXT NOT NULL,
-                        day INTEGER,
-                        slot INTEGER,
-                        round_id TEXT,
-                        client_id TEXT,
-                        action_type TEXT,
-                        content TEXT,
-                        topic TEXT,
-                        target_post_id TEXT,
-                        target_user_id TEXT,
-                        metadata_json TEXT,
-                        created_at TEXT NOT NULL
-                    )
-                    """
-                )
-            )
-            session.execute(
-                text(
-                    "CREATE INDEX IF NOT EXISTS idx_agent_memory_events_agent_created "
-                    "ON agent_memory_events(agent_id, created_at DESC)"
-                )
-            )
-            session.commit()
-        finally:
-            session.close()
+        backend = self._memory_backend_name()
+        tables = [AgentMemoryEvent.__table__]
+        if backend == "native":
+            tables.append(AgentMemoryItem.__table__)
+        elif backend == "ghostkg":
+            tables.extend([KGNode.__table__, KGEdge.__table__, KGLog.__table__])
+        AgentMemoryEvent.metadata.create_all(engine, tables=tables, checkfirst=True)
+        self._memory_log(
+            logging.INFO,
+            "Memory hook tables ensured",
+            {
+                "operation": "ensure_tables",
+                "backend": backend,
+                "db_url": str(getattr(engine, "url", "")),
+            },
+        )
 
     def _hook_ingest_memory_event(
         self, agent_id: str, event: Dict[str, Any], client_id: Optional[str] = None
     ) -> bool:
         engine = self._memory_engine()
         if engine is None:
+            self._memory_log(
+                logging.ERROR,
+                "Memory ingest failed: missing_engine",
+                {
+                    "operation": "ingest",
+                    "backend": self._memory_backend_name(),
+                    "agent_id": str(agent_id),
+                    "client_id": str(client_id) if client_id else None,
+                    "action_type": str(event.get("action_type", "") or ""),
+                },
+            )
             return False
         session = Session(engine)
         try:
             self._ensure_memory_hook_tables()
-            session.execute(
-                text(
-                    """
-                    INSERT INTO agent_memory_events (
-                        id, agent_id, day, slot, round_id, client_id,
-                        action_type, content, topic, target_post_id, target_user_id,
-                        metadata_json, created_at
-                    ) VALUES (
-                        :id, :agent_id, :day, :slot, :round_id, :client_id,
-                        :action_type, :content, :topic, :target_post_id, :target_user_id,
-                        :metadata_json, :created_at
-                    )
-                    """
-                ),
+            now_iso = datetime.now(timezone.utc).isoformat()
+            metadata_obj = event.get("metadata", {})
+            if not isinstance(metadata_obj, dict):
+                metadata_obj = {}
+            metadata_json = self._safe_json_dumps(metadata_obj)
+            session.add(
+                AgentMemoryEvent(
+                    id=str(uuid.uuid4()),
+                    agent_id=str(agent_id),
+                    day=int(self.day),
+                    slot=int(self.slot),
+                    round_id=str(self.current_round_id),
+                    client_id=str(client_id) if client_id else None,
+                    action_type=str(event.get("action_type", "") or ""),
+                    content=event.get("content"),
+                    topic=event.get("topic"),
+                    target_post_id=event.get("target_post_id"),
+                    target_user_id=event.get("target_user_id"),
+                    metadata_json=metadata_json,
+                    created_at=now_iso,
+                )
+            )
+            backend = self._memory_backend_name()
+            if backend == "native":
+                self._server_native_ingest(
+                    session=session,
+                    agent_id=str(agent_id),
+                    event=event,
+                    metadata_obj=metadata_obj,
+                )
+            elif backend == "ghostkg":
+                self._server_ghostkg_ingest(
+                    session=session,
+                    agent_id=str(agent_id),
+                    event=event,
+                    metadata_obj=metadata_obj,
+                    now_iso=now_iso,
+                )
+            session.commit()
+            self._memory_log(
+                logging.INFO,
+                "Memory ingest persisted",
                 {
-                    "id": str(uuid.uuid4()),
+                    "operation": "ingest",
+                    "backend": backend,
                     "agent_id": str(agent_id),
+                    "action_type": str(event.get("action_type", "") or ""),
                     "day": int(self.day),
                     "slot": int(self.slot),
-                    "round_id": str(self.current_round_id),
                     "client_id": str(client_id) if client_id else None,
-                    "action_type": str(event.get("action_type", "") or ""),
-                    "content": event.get("content"),
-                    "topic": event.get("topic"),
-                    "target_post_id": event.get("target_post_id"),
-                    "target_user_id": event.get("target_user_id"),
-                    "metadata_json": json.dumps(event.get("metadata", {})),
-                    "created_at": datetime.now(timezone.utc).isoformat(),
+                    "has_content": bool(str(event.get("content") or "").strip()),
+                    "has_topic": bool(str(event.get("topic") or "").strip()),
+                    "has_target_user": bool(str(event.get("target_user_id") or "").strip()),
+                    "absorb_triplets_count": len(metadata_obj.get("ghostkg_absorb_triplets", []) or []),
+                    "reflection_triplets_count": len(
+                        metadata_obj.get("ghostkg_reflection_triplets", []) or []
+                    ),
                 },
             )
-            session.commit()
             return True
         except Exception as e:
             session.rollback()
-            self.logger.debug(f"Memory hook ingest failed: {e}")
+            self._memory_log(
+                logging.ERROR,
+                f"Memory ingest failed: {e}",
+                {
+                    "operation": "ingest",
+                    "backend": self._memory_backend_name(),
+                    "agent_id": str(agent_id),
+                    "client_id": str(client_id) if client_id else None,
+                    "action_type": str(event.get("action_type", "") or ""),
+                    "event_keys": sorted(list((event or {}).keys())),
+                },
+            )
             return False
         finally:
             session.close()
@@ -1745,46 +1921,468 @@ class OrchestratorServer:
         if engine is None:
             return []
         max_items = max(1, int(query.get("max_items", 5)))
+        backend = self._memory_backend_name()
         session = Session(engine)
         try:
-            rows = session.execute(
-                text(
-                    """
-                    SELECT id, content, metadata_json
-                    FROM agent_memory_events
-                    WHERE agent_id=:agent_id
-                    ORDER BY created_at DESC
-                    LIMIT :limit
-                    """
-                ),
-                {"agent_id": str(agent_id), "limit": max_items},
-            ).mappings().all()
-        except Exception:
+            if backend == "native":
+                rows = (
+                    session.query(AgentMemoryItem)
+                    .filter(
+                        AgentMemoryItem.agent_id == str(agent_id),
+                        AgentMemoryItem.forgotten == 0,
+                    )
+                    .order_by(
+                        desc(AgentMemoryItem.strength),
+                        desc(AgentMemoryItem.confidence),
+                        desc(AgentMemoryItem.reuse_count),
+                    )
+                    .limit(max_items)
+                    .all()
+                )
+            elif backend == "ghostkg":
+                scan_limit = max(50, max_items * 20)
+                edges = (
+                    session.query(KGEdge)
+                    .filter(KGEdge.owner_id == str(agent_id))
+                    .order_by(desc(KGEdge.created_at))
+                    .limit(scan_limit)
+                    .all()
+                )
+                topic = str(query.get("topic", "") or "").strip().lower()
+                tokens = set(re.findall(r"[a-z0-9_#-]{2,}", topic))
+                rows = []
+                for edge in edges:
+                    source = str(getattr(edge, "source", "") or "").strip()
+                    relation = str(getattr(edge, "relation", "") or "").strip()
+                    target = str(getattr(edge, "target", "") or "").strip()
+                    if not (source and relation and target):
+                        continue
+                    if tokens:
+                        hay = f"{source} {relation} {target}".lower()
+                        if not any(tok in hay for tok in tokens):
+                            continue
+                    rows.append(
+                        {
+                            "memory_id": f"ghostkg:{agent_id}:{len(rows)}",
+                            "memory_text": f"{source} {relation} {target}",
+                            "confidence": 0.6,
+                            "strength": 0.7,
+                            "sentiment": float(getattr(edge, "sentiment", 0.0) or 0.0),
+                            "metadata_json": "{}",
+                        }
+                    )
+                    if len(rows) >= max_items:
+                        break
+            else:
+                rows = (
+                    session.query(AgentMemoryEvent)
+                    .filter(AgentMemoryEvent.agent_id == str(agent_id))
+                    .order_by(desc(AgentMemoryEvent.created_at))
+                    .limit(max_items)
+                    .all()
+                )
+        except Exception as e:
+            self._memory_log(
+                logging.ERROR,
+                f"Memory retrieve failed: {e}",
+                {
+                    "operation": "retrieve",
+                    "backend": backend,
+                    "agent_id": str(agent_id),
+                    "query": query or {},
+                },
+            )
             rows = []
         finally:
             session.close()
 
         memories: List[Dict[str, Any]] = []
         for idx, row in enumerate(rows):
-            text_val = str(row.get("content") or "").strip()
+            row_get = row.get if isinstance(row, dict) else lambda k: getattr(row, k, None)
+            text_val = str(row_get("memory_text") or row_get("content") or "").strip()
             if not text_val:
                 continue
+            confidence = float(row_get("confidence") or 0.5)
+            strength = float(row_get("strength") or 0.5)
             memories.append(
                 {
-                    "memory_id": str(row.get("id") or f"event:{agent_id}:{idx}"),
+                    "memory_id": str(row_get("memory_id") or row_get("id") or f"event:{agent_id}:{idx}"),
                     "memory_text": text_val,
-                    "relevance_score": max(0.0, 1.0 - (idx * 0.1)),
-                    "confidence": 0.5,
-                    "strength": 0.5,
-                    "sentiment": 0.0,
-                    "metadata": {},
+                    "relevance_score": (0.65 * strength) + (0.35 * confidence),
+                    "confidence": confidence,
+                    "strength": strength,
+                    "sentiment": float(row_get("sentiment") or 0.0),
+                    "metadata": self._safe_json_loads(row_get("metadata_json")),
                 }
             )
+        self._memory_log(
+            logging.INFO,
+            "Memory retrieve completed",
+            {
+                "operation": "retrieve",
+                "backend": backend,
+                "agent_id": str(agent_id),
+                "result_count": len(memories),
+            },
+        )
         return memories
 
     def _hook_record_memory_usage(self, agent_id: str, memory_ids: List[str]) -> bool:
-        # Hooks-only server path does not perform reinforcement logic.
-        return bool(agent_id) and bool(memory_ids is not None)
+        backend = self._memory_backend_name()
+        if backend != "native":
+            self._memory_log(
+                logging.INFO,
+                "Memory usage recorded (no-op backend)",
+                {
+                    "operation": "reinforce",
+                    "backend": backend,
+                    "agent_id": str(agent_id),
+                    "memory_ids_count": len(memory_ids or []),
+                },
+            )
+            return bool(agent_id) and bool(memory_ids is not None)
+        if not memory_ids:
+            return True
+        engine = self._memory_engine()
+        if engine is None:
+            return False
+        cfg = self.simulation_config.get("agent_memory", {})
+        reinforce_gain = float(cfg.get("reinforce_gain", 0.08))
+        session = Session(engine)
+        try:
+            rows = (
+                session.query(AgentMemoryItem)
+                .filter(
+                    AgentMemoryItem.agent_id == str(agent_id),
+                    AgentMemoryItem.memory_id.in_(list(memory_ids)),
+                    AgentMemoryItem.forgotten == 0,
+                )
+                .all()
+            )
+            for row in rows:
+                row.strength = min(1.0, float(row.strength or 0.0) + reinforce_gain)
+                row.confidence = min(1.0, float(row.confidence or 0.0) + (reinforce_gain * 0.5))
+                row.reuse_count = int(row.reuse_count or 0) + 1
+                row.last_access_round_id = str(self.current_round_id)
+                row.last_access_day = int(self.day)
+                row.last_access_slot = int(self.slot)
+            session.commit()
+            self._memory_log(
+                logging.INFO,
+                "Memory usage reinforced",
+                {
+                    "operation": "reinforce",
+                    "backend": backend,
+                    "agent_id": str(agent_id),
+                    "requested_ids_count": len(memory_ids or []),
+                    "reinforced_count": len(rows),
+                },
+            )
+            return True
+        except Exception as e:
+            session.rollback()
+            self._memory_log(
+                logging.ERROR,
+                f"Memory reinforce failed: {e}",
+                {
+                    "operation": "reinforce",
+                    "backend": backend,
+                    "agent_id": str(agent_id),
+                    "memory_ids_count": len(memory_ids or []),
+                },
+            )
+            return False
+        finally:
+            session.close()
+
+    @staticmethod
+    def _safe_json_loads(value: Any) -> Dict[str, Any]:
+        if not value:
+            return {}
+        if isinstance(value, dict):
+            return value
+        try:
+            return json.loads(str(value))
+        except Exception:
+            return {}
+
+    @staticmethod
+    def _safe_json_dumps(value: Any) -> str:
+        if value is None:
+            return "{}"
+        try:
+            return json.dumps(value)
+        except Exception:
+            try:
+                return json.dumps(value, default=str)
+            except Exception:
+                return "{}"
+
+    def _server_native_ingest(
+        self,
+        session: Session,
+        agent_id: str,
+        event: Dict[str, Any],
+        metadata_obj: Dict[str, Any],
+    ) -> None:
+        cfg = self.simulation_config.get("agent_memory", {})
+        action_type = str(event.get("action_type", "") or "").upper()
+        topic = event.get("topic")
+        target_user_id = event.get("target_user_id")
+        thread_id = event.get("thread_id")
+        memory_text = str(event.get("content") or f"Agent performed {action_type or 'ACTION'}").strip()
+        confidence = float(cfg.get("initial_confidence", 0.6))
+        strength = float(cfg.get("initial_strength", 0.6))
+        sentiment = float(metadata_obj.get("sentiment", 0.0) or 0.0)
+
+        existing = None
+        if action_type:
+            existing = (
+                session.query(AgentMemoryItem)
+                .filter(
+                    AgentMemoryItem.agent_id == agent_id,
+                    AgentMemoryItem.action_type == action_type,
+                    AgentMemoryItem.topic == topic,
+                    AgentMemoryItem.target_user_id == target_user_id,
+                    AgentMemoryItem.thread_id == thread_id,
+                    AgentMemoryItem.forgotten == 0,
+                )
+                .first()
+            )
+
+        if existing:
+            existing.memory_text = memory_text
+            existing.strength = min(1.0, float(existing.strength or 0.0) + 0.05)
+            existing.confidence = min(1.0, float(existing.confidence or 0.0) + 0.02)
+            existing.sentiment = sentiment
+            existing.reuse_count = int(existing.reuse_count or 0) + 1
+            existing.last_access_round_id = str(self.current_round_id)
+            existing.last_access_day = int(self.day)
+            existing.last_access_slot = int(self.slot)
+            existing.metadata_json = self._safe_json_dumps(metadata_obj)
+            return
+
+        session.add(
+            AgentMemoryItem(
+                memory_id=str(uuid.uuid4()),
+                agent_id=agent_id,
+                memory_text=memory_text,
+                topic=topic,
+                target_user_id=target_user_id,
+                thread_id=thread_id,
+                action_type=action_type,
+                confidence=confidence,
+                strength=strength,
+                sentiment=sentiment,
+                reuse_count=0,
+                forgotten=0,
+                created_round_id=str(self.current_round_id),
+                created_day=int(self.day),
+                created_slot=int(self.slot),
+                last_access_round_id=str(self.current_round_id),
+                last_access_day=int(self.day),
+                last_access_slot=int(self.slot),
+                metadata_json=self._safe_json_dumps(metadata_obj),
+            )
+        )
+
+    def _server_ghostkg_ingest(
+        self,
+        session: Session,
+        agent_id: str,
+        event: Dict[str, Any],
+        metadata_obj: Dict[str, Any],
+        now_iso: str,
+    ) -> None:
+        day = int(self.day)
+        slot = int(self.slot)
+        action_type = str(event.get("action_type", "") or "").upper()
+        content = str(event.get("content") or "").strip()
+
+        def _normalize_absorb(value: Any) -> List[List[str]]:
+            if not isinstance(value, list):
+                return []
+            out: List[List[str]] = []
+            for item in value:
+                if not isinstance(item, (list, tuple)) or len(item) != 3:
+                    continue
+                s = str(item[0] or "").strip()
+                r = str(item[1] or "").strip()
+                t = str(item[2] or "").strip()
+                if s.lower() == "self":
+                    s = "I"
+                if t.lower() == "self":
+                    t = "I"
+                s = self._resolve_kg_entity_label(session, s)
+                t = self._resolve_kg_entity_label(session, t)
+                if s and r and t:
+                    out.append([s, r, t])
+            return out
+
+        def _normalize_reflection(value: Any) -> List[List[Any]]:
+            if not isinstance(value, list):
+                return []
+            out: List[List[Any]] = []
+            for item in value:
+                if not isinstance(item, (list, tuple)) or len(item) != 3:
+                    continue
+                r = str(item[0] or "").strip()
+                t = str(item[1] or "").strip()
+                try:
+                    sent = float(item[2] or 0.0)
+                except (TypeError, ValueError):
+                    sent = 0.0
+                if r and t:
+                    out.append(
+                        [
+                            r,
+                            self._resolve_kg_entity_label(session, t),
+                            max(-1.0, min(1.0, sent)),
+                        ]
+                    )
+            return out
+
+        absorb = _normalize_absorb(metadata_obj.get("ghostkg_absorb_triplets"))
+        reflection = _normalize_reflection(metadata_obj.get("ghostkg_reflection_triplets"))
+
+        # Ensure owner self-node exists.
+        self._kg_upsert_node(session, agent_id, "I", now_iso, day, slot)
+        for s, r, t in absorb:
+            self._kg_upsert_edge(session, agent_id, s, r, t, 0.0, now_iso, day, slot)
+        for r, t, sent in reflection:
+            self._kg_upsert_edge(session, agent_id, "I", r, t, float(sent), now_iso, day, slot)
+
+        # Guarantee explicit reflection for reaction actions.
+        if action_type in {"LIKE", "LOVE", "LAUGH", "ANGRY", "SAD"}:
+            anchor = content
+            if not anchor:
+                target_user_id = str(event.get("target_user_id") or "").strip()
+                target_post_id = str(event.get("target_post_id") or "").strip()
+                if target_user_id:
+                    anchor = self._resolve_kg_entity_label(session, target_user_id)
+                elif target_post_id:
+                    anchor = self._resolve_kg_entity_label(session, target_post_id)
+            if not anchor:
+                anchor = "content_item"
+            self._kg_upsert_edge(session, agent_id, "I", action_type, anchor, 0.0, now_iso, day, slot)
+
+        session.add(
+            KGLog(
+                agent_name=agent_id,
+                action_type=action_type or None,
+                content=content or None,
+                content_uuid=None,
+                annotations=self._safe_json_dumps(metadata_obj),
+                timestamp=now_iso,
+                sim_day=day,
+                sim_hour=slot,
+            )
+        )
+
+    def _kg_upsert_node(
+        self,
+        session: Session,
+        owner_id: str,
+        node_id: str,
+        now_iso: str,
+        day: int,
+        slot: int,
+    ) -> None:
+        node_txt = str(node_id or "").strip()
+        if not node_txt:
+            return
+        existing = session.get(KGNode, {"owner_id": owner_id, "id": node_txt})
+        if existing is None:
+            session.add(
+                KGNode(
+                    owner_id=owner_id,
+                    id=node_txt,
+                    stability=0.0,
+                    difficulty=0.0,
+                    last_review=None,
+                    reps=0,
+                    state=0,
+                    created_at=now_iso,
+                    sim_day=day,
+                    sim_hour=slot,
+                )
+            )
+            return
+        existing.sim_day = day
+        existing.sim_hour = slot
+
+    def _kg_upsert_edge(
+        self,
+        session: Session,
+        owner_id: str,
+        source: str,
+        relation: str,
+        target: str,
+        sentiment: float,
+        now_iso: str,
+        day: int,
+        slot: int,
+    ) -> None:
+        s = str(source or "").strip()
+        r = str(relation or "").strip()
+        t = str(target or "").strip()
+        if not (s and r and t):
+            return
+        self._kg_upsert_node(session, owner_id, s, now_iso, day, slot)
+        self._kg_upsert_node(session, owner_id, t, now_iso, day, slot)
+        sent = max(-1.0, min(1.0, float(sentiment or 0.0)))
+        existing = session.get(
+            KGEdge,
+            {"owner_id": owner_id, "source": s, "target": t, "relation": r},
+        )
+        if existing is None:
+            session.add(
+                KGEdge(
+                    owner_id=owner_id,
+                    source=s,
+                    target=t,
+                    relation=r,
+                    weight=1.0,
+                    sentiment=sent,
+                    created_at=now_iso,
+                    sim_day=day,
+                    sim_hour=slot,
+                )
+            )
+            return
+        existing.sentiment = sent
+        existing.created_at = now_iso
+        existing.sim_day = day
+        existing.sim_hour = slot
+
+    @staticmethod
+    def _is_uuid_like(value: str) -> bool:
+        txt = str(value or "").strip()
+        return bool(txt and UUID_RE.match(txt))
+
+    def _resolve_kg_entity_label(self, session: Session, value: Any) -> str:
+        txt = str(value or "").strip()
+        if not txt:
+            return ""
+        if not self._is_uuid_like(txt):
+            return txt
+
+        # Prefer direct user-id resolution.
+        user_row = session.query(User_mgmt.username).filter(User_mgmt.id == txt).first()
+        if user_row and user_row[0]:
+            return str(user_row[0]).strip() or txt
+
+        # If UUID points to a post, resolve to the post author username.
+        post_row = (
+            session.query(User_mgmt.username)
+            .join(Post, Post.user_id == User_mgmt.id)
+            .filter(Post.id == txt)
+            .first()
+        )
+        if post_row and post_row[0]:
+            return str(post_row[0]).strip() or txt
+
+        return txt
 
     def get_current_round_id(self) -> str:
         """

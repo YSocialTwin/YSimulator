@@ -12,6 +12,16 @@ from typing import Any, Dict
 VALID_MEMORY_BACKENDS = {"none", "native", "ghostkg"}
 
 
+def normalize_memory_backend(value: Any) -> str:
+    """Normalize backend aliases to canonical names."""
+    backend = str(value or "none").strip().lower()
+    alias_map = {
+        "ghost_kg": "ghostkg",
+        "ghost-kg": "ghostkg",
+    }
+    return alias_map.get(backend, backend)
+
+
 @dataclass(frozen=True)
 class MemorySettings:
     """Resolved memory runtime settings."""
@@ -41,7 +51,7 @@ def resolve_memory_settings(simulation_config: Dict[str, Any]) -> MemorySettings
         # In client-compute mode the server remains persistence-only.
         return MemorySettings(enabled=False, backend="none", raw_config=agent_memory_cfg)
 
-    backend = str(agent_memory_cfg.get("backend", "native")).strip().lower()
+    backend = normalize_memory_backend(agent_memory_cfg.get("backend", "native"))
     if backend not in VALID_MEMORY_BACKENDS:
         raise ValueError(
             f"Invalid memory backend '{backend}'. Expected one of: {sorted(VALID_MEMORY_BACKENDS)}"
