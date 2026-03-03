@@ -391,6 +391,9 @@ Controls simulation parameters, agent behavior, and LLM settings.
     },
     "emotion_annotation": false
   },
+  "recommendations": {
+    "default_limit": 12
+  },
   "agents": {
     "reading_from_follower_ratio": 0.6,
     "max_length_thread_reading": 5,
@@ -437,6 +440,10 @@ Controls simulation parameters, agent behavior, and LLM settings.
 **Activity Patterns:**
 - `simulation.activity_profiles` (object): Named activity patterns (hour ranges)
 - `simulation.hourly_activity` (object): Probability distribution across hours
+
+**Recommendations:**
+- `recommendations.default_limit` (number, default: 5): Number of posts requested by the client for each recommendation call
+- This value is enforced by the client and sent to the server on every recommendation request
 
 #### LLM Configuration
 

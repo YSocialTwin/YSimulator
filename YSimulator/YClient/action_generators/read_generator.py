@@ -111,7 +111,7 @@ class ReadGenerator(BaseActionGenerator):
                 },
             )
 
-        recsys_n_posts = self.context.recsys_settings.get("recsys_n_posts", 10)
+        recsys_n_posts = self.context.recsys_settings.get("recsys_n_posts")
         recsys = recsys_class(n_posts=recsys_n_posts)
 
         # Get recommended posts from server

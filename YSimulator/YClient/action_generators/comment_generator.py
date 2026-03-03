@@ -98,7 +98,7 @@ class CommentGenerator(BaseActionGenerator):
             "recsys_mode", "rchrono"
         )
         recsys_class = recsys_class_map.get(agent_recsys_mode, RandomOrder)
-        recsys_n_posts = self.context.recsys_settings.get("recsys_n_posts", 10)
+        recsys_n_posts = self.context.recsys_settings.get("recsys_n_posts")
         recsys = recsys_class(n_posts=recsys_n_posts)
 
         # Get recommended posts from server

@@ -58,7 +58,19 @@ class TestContentRecommender:
         recommender = ContentRecommender(mock_db_adapter, visibility_rounds=36)
         assert recommender.db == mock_db_adapter
         assert recommender.visibility_rounds == 36
+        assert recommender.default_limit == 5
         assert recommender.logger is not None
+
+    @patch("YSimulator.YServer.recommendation.content_recommender.content_recsys_db")
+    def test_get_recommended_posts_uses_configured_default_limit(self, mock_recsys_db, mock_db_adapter):
+        """Test that configured default_limit is used when request limit is omitted."""
+        mock_recsys_db.recommend_random = Mock(return_value=["post1", "post2", "post3"])
+
+        recommender = ContentRecommender(mock_db_adapter, visibility_rounds=36, default_limit=12)
+        _ = recommender.get_recommended_posts(agent_id="agent1", mode="random", day=1, slot=5)
+
+        args = mock_recsys_db.recommend_random.call_args.args
+        assert args[4] == 12
 
     @patch("YSimulator.YServer.recommendation.content_recommender.content_recsys_db")
     def test_get_recommended_posts_sql(self, mock_recsys_db, mock_db_adapter):

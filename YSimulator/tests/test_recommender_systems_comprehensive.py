@@ -57,6 +57,22 @@ class TestContentRecSysClient:
         mock_server.get_recommended_posts.remote.assert_called_once()
 
     @patch("YSimulator.YClient.recsys.ContentRecSys.ray.get")
+    def test_content_recsys_allows_server_default_limit(self, mock_ray_get):
+        """Test that n_posts=None forwards limit=None to server."""
+        from YSimulator.YClient.recsys.ContentRecSys import ContentRecSys
+
+        mock_ray_get.return_value = ["post-1"]
+        mock_server = Mock()
+        mock_server.get_recommended_posts = Mock()
+        mock_server.get_recommended_posts.remote = Mock()
+
+        recsys = ContentRecSys(mode="ReverseChronoFollowersPopularity", n_posts=None)
+        _ = recsys.get_recommendations(mock_server, "agent-1", "client-1")
+
+        kwargs = mock_server.get_recommended_posts.remote.call_args.kwargs
+        assert kwargs["limit"] is None
+
+    @patch("YSimulator.YClient.recsys.ContentRecSys.ray.get")
     def test_content_recsys_get_recommendations_empty(self, mock_ray_get):
         """Test recommendations when server returns None."""
         from YSimulator.YClient.recsys.ContentRecSys import ContentRecSys

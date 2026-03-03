@@ -176,6 +176,12 @@ if __name__ == "__main__":
     logging_config = config.get("logging", {})
     logger = setup_logging(config_dir, server_name, logging_config)
 
+    if "recommendations" in config:
+        logger.warning(
+            "Ignoring server_config recommendations.default_limit; "
+            "configure recommendation limits in client simulation_config.json under recommendations.default_limit"
+        )
+
     load_time = (time.time() - start_time) * 1000
 
     # Get database name for logging

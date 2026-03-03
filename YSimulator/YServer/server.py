@@ -207,10 +207,9 @@ class OrchestratorServer:
         # Store visibility_rounds for server use
         self.visibility_rounds = simulation_config.get("posts", {}).get("visibility_rounds", 36)
 
-        # Store default_limit for recommendations
-        self.default_recommendation_limit = simulation_config.get("recommendations", {}).get(
-            "default_limit", 5
-        )
+        # Recommendation limit is client-config driven (`simulation_config.json` on client side).
+        # Keep a server-side fallback only for callers that omit `limit` entirely.
+        self.default_recommendation_limit = 5
 
         # Store attention_window for interest decay (sliding window)
         self.attention_window = simulation_config.get("agents", {}).get("attention_window", 336)
@@ -318,7 +317,11 @@ class OrchestratorServer:
         from YSimulator.YServer.recommendation import ContentRecommender, FollowRecommender
 
         self.content_recommender = ContentRecommender(
-            self.db, self.visibility_rounds, self.num_slots_per_day, self.logger
+            self.db,
+            self.visibility_rounds,
+            self.num_slots_per_day,
+            default_limit=self.default_recommendation_limit,
+            logger=self.logger,
         )
         self.follow_recommender = FollowRecommender(self.db, self.logger)
         self.logger.info(

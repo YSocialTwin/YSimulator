@@ -182,8 +182,13 @@ class SimulationClient:
 
         # Load recommendation system configuration
         recsys_config = simulation_config["simulation"].get("recsys", {})
+        recommendations_config = simulation_config.get("recommendations", {})
         self.recsys_mode = recsys_config.get("mode", "random")  # "random" or "rchrono"
-        self.recsys_n_posts = recsys_config.get("n_posts", 5)
+        # Source of truth is client config: recommendations.default_limit.
+        # Keep simulation.recsys.n_posts as backwards-compatible fallback.
+        self.recsys_n_posts = int(
+            recommendations_config.get("default_limit", recsys_config.get("n_posts", 5))
+        )
 
         # Load agent behavior configuration
         agents_config = simulation_config.get("agents", {})

@@ -23,6 +23,7 @@ class ContentRecommender:
         db_adapter,
         visibility_rounds: int,
         num_slots_per_day: int = 24,
+        default_limit: int = 5,
         logger: Optional[logging.Logger] = None,
     ):
         """
@@ -32,18 +33,20 @@ class ContentRecommender:
             db_adapter: Database adapter (with engine, redis_client, use_redis flag)
             visibility_rounds: Number of rounds posts remain visible
             num_slots_per_day: Number of time slots per simulation day (default: 24)
+            default_limit: Default number of posts when request limit is not specified
             logger: Logger instance
         """
         self.db = db_adapter
         self.visibility_rounds = visibility_rounds
         self.num_slots_per_day = num_slots_per_day
+        self.default_limit = default_limit
         self.logger = logger or logging.getLogger(__name__)
 
     def get_recommended_posts(
         self,
         agent_id: str,
         mode: str = "random",
-        limit: int = 5,
+        limit: Optional[int] = None,
         followers_ratio: float = 0.6,
         day: int = None,
         slot: int = None,
@@ -63,6 +66,9 @@ class ContentRecommender:
             List of post UUIDs recommended for the agent
         """
         try:
+            if limit is None:
+                limit = self.default_limit
+
             # Debug logging for incoming request
             self.logger.debug(
                 f"get_recommended_posts called: agent={agent_id}, mode={mode}, limit={limit}",
