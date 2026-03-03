@@ -62,7 +62,9 @@ class TestContentRecommender:
         assert recommender.logger is not None
 
     @patch("YSimulator.YServer.recommendation.content_recommender.content_recsys_db")
-    def test_get_recommended_posts_uses_configured_default_limit(self, mock_recsys_db, mock_db_adapter):
+    def test_get_recommended_posts_uses_configured_default_limit(
+        self, mock_recsys_db, mock_db_adapter
+    ):
         """Test that configured default_limit is used when request limit is omitted."""
         mock_recsys_db.recommend_random = Mock(return_value=["post1", "post2", "post3"])
 
