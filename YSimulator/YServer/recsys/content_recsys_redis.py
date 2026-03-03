@@ -794,7 +794,9 @@ def recommend_similar_users_posts_redis(
             if post_data:
                 author_id = post_data.get("user_id")
                 if author_id and author_id != agent_id:
-                    author_data = _get_user_profile(author_id, redis_client, redis_key_fn, db_engine)
+                    author_data = _get_user_profile(
+                        author_id, redis_client, redis_key_fn, db_engine
+                    )
                     if author_data:
                         similarity_score = 0
                         if author_data.get("age_group") == agent_age_group:
@@ -979,6 +981,7 @@ def recommend_collaborative_user_user_redis(
         result = recommend_random_redis(valid_posts_with_data, limit)
         return result, True
 
+
 def recommend_collaborative_item_item_redis(
     valid_posts_with_data: List[Dict[str, Any]],
     limit: int,
@@ -1068,6 +1071,7 @@ def recommend_collaborative_item_item_redis(
         # No likes yet, cold start fallback to random posts
         result = recommend_random_redis(valid_posts_with_data, limit)
         return result, True
+
 
 def recommend_content_based_features_redis(
     valid_posts_with_data: List[Dict[str, Any]],
