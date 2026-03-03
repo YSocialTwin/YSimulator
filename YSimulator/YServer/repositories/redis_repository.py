@@ -391,6 +391,16 @@ class RedisPostRepository(PostRepository):
 
             # Store interaction data
             self.redis_client.hset(key, mapping=redis_data)
+
+            # Maintain lightweight indexes used by Redis recommenders.
+            # Only LIKE reactions are considered for recommendation signals.
+            reaction_type = str(interaction_data.get("type", "")).upper()
+            post_id = interaction_data.get("post_id")
+            user_id = interaction_data.get("user_id")
+            if reaction_type == "LIKE" and post_id and user_id:
+                self.redis_client.sadd(self._redis_key("post", post_id) + ":reactions", user_id)
+                self.redis_client.sadd(self._redis_key("user", user_id) + ":likes", post_id)
+
             return True
         except Exception as e:
             self.logger.error(
@@ -884,13 +894,27 @@ class RedisFollowRepository(FollowRepository):
         try:
             # Generate UUID for follow record
             follow_id = str(uuid.uuid4())
-            follow_data["id"] = follow_id
+            mapped = dict(follow_data)
+            mapped["id"] = follow_id
+            mapped["user_id"] = mapped.get("followee_id") or mapped.get("user_id")
+            mapped["action"] = mapped.get("action", "follow")
+            mapped["round"] = mapped.get("round") or mapped.get("round_id")
 
             # Store follow relationship in Redis as a hash
             key = self._redis_key("follow", follow_id)
             # Filter out None values for Redis
-            redis_data = {k: str(v) if v is not None else "" for k, v in follow_data.items()}
+            redis_data = {k: str(v) if v is not None else "" for k, v in mapped.items()}
             self.redis_client.hset(key, mapping=redis_data)
+
+            # Maintain follows index used by Redis recommenders.
+            follower_id = mapped.get("follower_id")
+            followee_id = mapped.get("user_id")
+            if follower_id and followee_id:
+                follows_key = self._redis_key("user", follower_id) + ":follows"
+                if mapped["action"] == "follow":
+                    self.redis_client.sadd(follows_key, followee_id)
+                elif mapped["action"] == "unfollow":
+                    self.redis_client.srem(follows_key, followee_id)
 
             return True
         except Exception as e:
@@ -905,17 +929,28 @@ class RedisFollowRepository(FollowRepository):
             return 0
 
         try:
-            # Generate UUIDs for all follow records
-            for follow_data in follows_data:
-                follow_data["id"] = str(uuid.uuid4())
-
             # Store follow relationships in Redis
             count = 0
             for follow_data in follows_data:
-                key = self._redis_key("follow", follow_data["id"])
+                mapped = dict(follow_data)
+                mapped["id"] = mapped.get("id", str(uuid.uuid4()))
+                mapped["user_id"] = mapped.get("followee_id") or mapped.get("user_id")
+                mapped["action"] = mapped.get("action", "follow")
+                mapped["round"] = mapped.get("round") or mapped.get("round_id")
+
+                key = self._redis_key("follow", mapped["id"])
                 # Filter out None values for Redis
-                redis_data = {k: str(v) if v is not None else "" for k, v in follow_data.items()}
+                redis_data = {k: str(v) if v is not None else "" for k, v in mapped.items()}
                 self.redis_client.hset(key, mapping=redis_data)
+
+                follower_id = mapped.get("follower_id")
+                followee_id = mapped.get("user_id")
+                if follower_id and followee_id:
+                    follows_key = self._redis_key("user", follower_id) + ":follows"
+                    if mapped["action"] == "follow":
+                        self.redis_client.sadd(follows_key, followee_id)
+                    elif mapped["action"] == "unfollow":
+                        self.redis_client.srem(follows_key, followee_id)
                 count += 1
 
             return count

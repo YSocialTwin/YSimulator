@@ -41,14 +41,25 @@ class TestHybridLinearRankerRedis:
         db_engine = Mock()
         logger = Mock()
 
-        # Mock SQL session to return empty results
-        with patch("YSimulator.YServer.recsys.content_recsys_redis.Session") as mock_session:
-            mock_session_instance = Mock()
-            mock_session_instance.__enter__ = Mock(return_value=mock_session_instance)
-            mock_session_instance.__exit__ = Mock(return_value=False)
-            mock_session_instance.query = Mock(return_value=Mock(all=Mock(return_value=[])))
-            mock_session.return_value = mock_session_instance
-
+        with patch(
+            "YSimulator.YServer.recsys.content_recsys_redis._get_user_follows",
+            return_value=set(),
+        ), patch(
+            "YSimulator.YServer.recsys.content_recsys_redis._get_user_interests",
+            return_value=set(),
+        ), patch(
+            "YSimulator.YServer.recsys.content_recsys_redis._get_user_likes",
+            return_value=set(),
+        ), patch(
+            "YSimulator.YServer.recsys.content_recsys_redis._get_post_topics",
+            return_value=set(),
+        ), patch(
+            "YSimulator.YServer.recsys.content_recsys_redis._get_post_reaction_users",
+            return_value=set(),
+        ), patch(
+            "YSimulator.YServer.recsys.content_recsys_redis._get_user_profile",
+            return_value={},
+        ):
             result, used_fallback = recommend_hybrid_linear_ranker_redis(
                 valid_posts_with_data=posts,
                 limit=5,
@@ -105,7 +116,22 @@ class TestHybridLinearRankerRedis:
         db_engine = Mock()
         logger = Mock()
 
-        with patch("YSimulator.YServer.recsys.content_recsys_redis.Session"):
+        with patch(
+            "YSimulator.YServer.recsys.content_recsys_redis._get_user_interests",
+            return_value=set(),
+        ), patch(
+            "YSimulator.YServer.recsys.content_recsys_redis._get_user_likes",
+            return_value=set(),
+        ), patch(
+            "YSimulator.YServer.recsys.content_recsys_redis._get_post_topics",
+            return_value=set(),
+        ), patch(
+            "YSimulator.YServer.recsys.content_recsys_redis._get_post_reaction_users",
+            return_value=set(),
+        ), patch(
+            "YSimulator.YServer.recsys.content_recsys_redis._get_user_profile",
+            return_value={},
+        ):
             result, used_fallback = recommend_hybrid_linear_ranker_redis(
                 valid_posts_with_data=posts,
                 limit=3,
@@ -230,7 +256,10 @@ class TestFriendsOfFriendsCandidates:
         db_engine = Mock()
         logger = Mock()
 
-        with patch("YSimulator.YServer.recsys.content_recsys_redis.Session"):
+        with patch(
+            "YSimulator.YServer.recsys.content_recsys_redis._get_followed_users_redis",
+            return_value=set(),
+        ):
             result, used_fallback = _get_friends_of_friends_candidates_redis(
                 valid_posts_with_data=posts,
                 limit=5,
@@ -271,17 +300,15 @@ class TestFeatureCalculation:
         )
 
         redis_client = Mock()
-        redis_client.exists = Mock(return_value=False)
+        redis_client.exists = Mock(return_value=True)
+        redis_client.hgetall = Mock(return_value={"user_id": "author1"})
         redis_key_fn = Mock(side_effect=lambda *args: ":".join(args))
         db_engine = Mock()
 
-        with patch("YSimulator.YServer.recsys.content_recsys_redis.Session") as mock_session:
-            mock_session_instance = Mock()
-            mock_session_instance.__enter__ = Mock(return_value=mock_session_instance)
-            mock_session_instance.__exit__ = Mock(return_value=False)
-            mock_session_instance.query = Mock(return_value=Mock(count=Mock(return_value=5)))
-            mock_session.return_value = mock_session_instance
-
+        with patch(
+            "YSimulator.YServer.recsys.content_recsys_redis._get_user_likes",
+            return_value={"post1", "post2", "post3", "post4", "post5"},
+        ):
             affinity = _calculate_user_author_affinity_redis(
                 agent_id="agent1",
                 author_id="author1",
@@ -397,21 +424,45 @@ class TestHybridSQLBackend:
             recommend_hybrid_linear_ranker,
         )
 
-        # Mock session
         session = Mock()
+        q = Mock()
+        q.order_by.return_value = q
+        q.first.return_value = Mock(day=1, hour=1)
+        q.filter.return_value = q
+        q.join.return_value = q
+        q.all.return_value = []
+        session.query.return_value = q
 
-        # Mock query results for different strategies
-        mock_query = Mock()
-        mock_query.all = Mock(return_value=[("post1",), ("post2",), ("post3",)])
-        session.query = Mock(return_value=mock_query)
+        with patch(
+            "YSimulator.YServer.recsys.content_recsys_db.recommend_rchrono_followers"
+        ) as mock_followers, patch(
+            "YSimulator.YServer.recsys.content_recsys_db.recommend_rchrono_popularity"
+        ) as mock_popularity, patch(
+            "YSimulator.YServer.recsys.content_recsys_db.recommend_collaborative_user_user"
+        ) as mock_collab, patch(
+            "YSimulator.YServer.recsys.content_recsys_db.recommend_random"
+        ) as mock_random, patch(
+            "YSimulator.YServer.recsys.content_recsys_db._calculate_user_author_affinity_sql",
+            return_value=0.0,
+        ), patch(
+            "YSimulator.YServer.recsys.content_recsys_db._calculate_content_topic_similarity_sql",
+            return_value=0.0,
+        ), patch(
+            "YSimulator.YServer.recsys.content_recsys_db._calculate_similar_user_author_score_sql",
+            return_value=0.0,
+        ):
+            mock_followers.return_value = (["post1", "post2"], False)
+            mock_popularity.return_value = ["post2", "post3"]
+            mock_collab.return_value = (["post3"], False)
+            mock_random.return_value = ["post1", "post2", "post3"]
 
-        result, used_fallback = recommend_hybrid_linear_ranker(
-            session=session,
-            agent_id="agent1",
-            visibility_day=1,
-            visibility_hour=0,
-            limit=5,
-        )
+            result, used_fallback = recommend_hybrid_linear_ranker(
+                session=session,
+                agent_id="agent1",
+                visibility_day=1,
+                visibility_hour=0,
+                limit=5,
+            )
 
         # Should return some results
         assert isinstance(result, list)

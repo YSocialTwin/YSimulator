@@ -42,7 +42,7 @@ class ContentRecommender:
     def get_recommended_posts(
         self,
         agent_id: str,
-        mode: str = "ContentRecSys",
+        mode: str = "random",
         limit: int = 5,
         followers_ratio: float = 0.6,
         day: int = None,

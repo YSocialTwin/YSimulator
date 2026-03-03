@@ -526,7 +526,9 @@ class TestRecommendCommonInterests(unittest.TestCase):
 
                 mock_session.query.side_effect = [mock_query1, mock_query2]
 
-                result = recommend_common_interests(mock_session, "agent1", 1, 0, 5, 0.6)
+                result, used_fallback = recommend_common_interests(
+                    mock_session, "agent1", 1, 0, 5, 0.6
+                )
 
                 assert len(result) == 5
                 assert "post1" in result
@@ -534,6 +536,7 @@ class TestRecommendCommonInterests(unittest.TestCase):
                 assert "post3" in result
                 assert "post4" in result
                 assert "post5" in result
+                assert used_fallback is False
                 # Verify joins for PostTopic, UserInterest, Follow
                 assert mock_query1.join.call_count >= 3
 
@@ -570,12 +573,15 @@ class TestRecommendCommonInterests(unittest.TestCase):
 
                 mock_session.query.side_effect = [mock_query1, mock_query2]
 
-                result = recommend_common_interests(mock_session, "agent1", 1, 0, 5, 0.6)
+                result, used_fallback = recommend_common_interests(
+                    mock_session, "agent1", 1, 0, 5, 0.6
+                )
 
                 assert len(result) == 3
                 assert "post1" in result
                 assert "post2" in result
                 assert "post3" in result
+                assert used_fallback is False
 
 
 class TestRecommendCommonUserInterests(unittest.TestCase):
@@ -619,7 +625,9 @@ class TestRecommendCommonUserInterests(unittest.TestCase):
 
                     mock_session.query.side_effect = [mock_query1, mock_query2]
 
-                    result = recommend_common_user_interests(mock_session, "agent1", 1, 0, 5, 0.6)
+                    result, used_fallback = recommend_common_user_interests(
+                        mock_session, "agent1", 1, 0, 5, 0.6
+                    )
 
                     assert len(result) == 5
                     assert "post1" in result
@@ -627,6 +635,7 @@ class TestRecommendCommonUserInterests(unittest.TestCase):
                     assert "post3" in result
                     assert "post4" in result
                     assert "post5" in result
+                    assert used_fallback is False
                     # Verify aliased was called 4 times (2 for first query, 2 for additional)
                     assert mock_aliased.call_count == 4
 
@@ -667,12 +676,15 @@ class TestRecommendCommonUserInterests(unittest.TestCase):
 
                     mock_session.query.side_effect = [mock_query1, mock_query2]
 
-                    result = recommend_common_user_interests(mock_session, "agent1", 1, 0, 5, 0.6)
+                    result, used_fallback = recommend_common_user_interests(
+                        mock_session, "agent1", 1, 0, 5, 0.6
+                    )
 
                     assert len(result) == 3
                     assert "post1" in result
                     assert "post2" in result
                     assert "post3" in result
+                    assert used_fallback is False
 
 
 class TestRecommendSimilarUsersReact(unittest.TestCase):
@@ -701,9 +713,12 @@ class TestRecommendSimilarUsersReact(unittest.TestCase):
                 mock_query.limit.return_value = mock_query
                 mock_query.all.return_value = [("post1",), ("post2",)]
 
-                result = recommend_similar_users_react(mock_session, "agent1", 1, 0, 2)
+                result, used_fallback = recommend_similar_users_react(
+                    mock_session, "agent1", 1, 0, 2
+                )
 
                 assert result == ["post1", "post2"]
+                assert used_fallback is False
                 # Verify aliased was called for user aliases
                 assert mock_aliased.call_count == 2
 
@@ -728,9 +743,12 @@ class TestRecommendSimilarUsersReact(unittest.TestCase):
                 mock_query.limit.return_value = mock_query
                 mock_query.all.return_value = [("post1",)]
 
-                result = recommend_similar_users_react(mock_session, "agent1", 1, 0, 1)
+                result, used_fallback = recommend_similar_users_react(
+                    mock_session, "agent1", 1, 0, 1
+                )
 
                 assert result == ["post1"]
+                assert used_fallback is False
                 # Verify filter was called (includes reaction type == 'like')
                 assert mock_query.filter.called
 
@@ -759,9 +777,12 @@ class TestRecommendSimilarUsersPosts(unittest.TestCase):
                 mock_query.limit.return_value = mock_query
                 mock_query.all.return_value = [("post1",), ("post2",), ("post3",)]
 
-                result = recommend_similar_users_posts(mock_session, "agent1", 1, 0, 3)
+                result, used_fallback = recommend_similar_users_posts(
+                    mock_session, "agent1", 1, 0, 3
+                )
 
                 assert result == ["post1", "post2", "post3"]
+                assert used_fallback is False
                 # Verify aliased was called for user aliases
                 assert mock_aliased.call_count == 2
 
@@ -784,9 +805,12 @@ class TestRecommendSimilarUsersPosts(unittest.TestCase):
                 mock_query.limit.return_value = mock_query
                 mock_query.all.return_value = [("post1",)]
 
-                result = recommend_similar_users_posts(mock_session, "agent1", 1, 0, 1)
+                result, used_fallback = recommend_similar_users_posts(
+                    mock_session, "agent1", 1, 0, 1
+                )
 
                 assert result == ["post1"]
+                assert used_fallback is False
                 # Verify filter was called (includes OR conditions for similarity)
                 assert mock_query.filter.called
 
@@ -809,9 +833,12 @@ class TestRecommendSimilarUsersPosts(unittest.TestCase):
                 mock_query.limit.return_value = mock_query
                 mock_query.all.return_value = []  # No posts (agent's posts excluded)
 
-                result = recommend_similar_users_posts(mock_session, "agent1", 1, 0, 5)
+                result, used_fallback = recommend_similar_users_posts(
+                    mock_session, "agent1", 1, 0, 5
+                )
 
                 assert result == []
+                assert used_fallback is True
 
 
 class TestEdgeCases(unittest.TestCase):
@@ -883,7 +910,18 @@ class TestRecommendHybridLinearRanker(unittest.TestCase):
     @patch("YSimulator.YServer.recsys.content_recsys_db.recommend_rchrono_followers")
     @patch("YSimulator.YServer.recsys.content_recsys_db.recommend_rchrono_popularity")
     @patch("YSimulator.YServer.recsys.content_recsys_db.recommend_collaborative_user_user")
-    def test_hybrid_basic(self, mock_collab, mock_popularity, mock_followers):
+    @patch("YSimulator.YServer.recsys.content_recsys_db._calculate_user_author_affinity_sql")
+    @patch("YSimulator.YServer.recsys.content_recsys_db._calculate_content_topic_similarity_sql")
+    @patch("YSimulator.YServer.recsys.content_recsys_db._calculate_similar_user_author_score_sql")
+    def test_hybrid_basic(
+        self,
+        mock_similar_author,
+        mock_topic_similarity,
+        mock_author_affinity,
+        mock_collab,
+        mock_popularity,
+        mock_followers,
+    ):
         """Test basic hybrid linear ranker functionality."""
         from YSimulator.YServer.recsys.content_recsys_db import recommend_hybrid_linear_ranker
 
@@ -891,6 +929,9 @@ class TestRecommendHybridLinearRanker(unittest.TestCase):
         mock_followers.return_value = (["post1", "post2"], False)
         mock_popularity.return_value = ["post2", "post3"]
         mock_collab.return_value = (["post3", "post4"], False)
+        mock_author_affinity.return_value = 0.2
+        mock_topic_similarity.return_value = 0.1
+        mock_similar_author.return_value = 0.05
 
         # Mock session for feature extraction
         mock_session = Mock(spec=Session)
@@ -953,7 +994,18 @@ class TestRecommendHybridLinearRanker(unittest.TestCase):
     @patch("YSimulator.YServer.recsys.content_recsys_db.recommend_rchrono_followers")
     @patch("YSimulator.YServer.recsys.content_recsys_db.recommend_rchrono_popularity")
     @patch("YSimulator.YServer.recsys.content_recsys_db.recommend_collaborative_user_user")
-    def test_hybrid_feature_extraction(self, mock_collab, mock_popularity, mock_followers):
+    @patch("YSimulator.YServer.recsys.content_recsys_db._calculate_user_author_affinity_sql")
+    @patch("YSimulator.YServer.recsys.content_recsys_db._calculate_content_topic_similarity_sql")
+    @patch("YSimulator.YServer.recsys.content_recsys_db._calculate_similar_user_author_score_sql")
+    def test_hybrid_feature_extraction(
+        self,
+        mock_similar_author,
+        mock_topic_similarity,
+        mock_author_affinity,
+        mock_collab,
+        mock_popularity,
+        mock_followers,
+    ):
         """Test that feature extraction helper functions are called."""
         from YSimulator.YServer.recsys.content_recsys_db import recommend_hybrid_linear_ranker
 
@@ -961,6 +1013,9 @@ class TestRecommendHybridLinearRanker(unittest.TestCase):
         mock_followers.return_value = (["post1"], False)
         mock_popularity.return_value = ["post1"]
         mock_collab.return_value = (["post1"], False)
+        mock_author_affinity.return_value = 0.2
+        mock_topic_similarity.return_value = 0.1
+        mock_similar_author.return_value = 0.05
 
         mock_session = Mock(spec=Session)
         mock_query = Mock()

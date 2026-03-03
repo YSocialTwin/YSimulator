@@ -75,11 +75,9 @@ class TestRecommendRchronoPopularityRedis:
 
         result = recommend_rchrono_popularity_redis(posts, limit=3)
 
-        # Should sort by index first, then by reaction_count desc
+        # Should sort by reaction_count first, then recency
         assert len(result) == 3
-        assert result[0] in ["post1", "post2"]  # Same index
-        assert result[1] in ["post1", "post2"]
-        assert result[2] == "post3"
+        assert result == ["post3", "post2", "post1"]
 
     def test_rchrono_popularity_with_limit(self):
         """Test with specific limit."""
@@ -121,7 +119,7 @@ class TestRecommendRchronoFollowersRedis:
         mock_query.all.return_value = [("user1",)]
         mock_session.query.return_value.filter.return_value = mock_query
 
-        with patch("sqlalchemy.orm.Session") as mock_session_class:
+        with patch("YSimulator.YServer.recsys.content_recsys_redis.Session") as mock_session_class:
             mock_session_class.return_value.__enter__.return_value = mock_session
             mock_session_class.return_value.__exit__.return_value = None
 
@@ -154,7 +152,7 @@ class TestRecommendRchronoFollowersRedis:
         mock_query.all.return_value = [("user0",), ("user1",)]
         mock_session.query.return_value.filter.return_value = mock_query
 
-        with patch("sqlalchemy.orm.Session") as mock_session_class:
+        with patch("YSimulator.YServer.recsys.content_recsys_redis.Session") as mock_session_class:
             mock_session_class.return_value.__enter__.return_value = mock_session
             mock_session_class.return_value.__exit__.return_value = None
 
@@ -185,7 +183,7 @@ class TestRecommendRchronoFollowersRedis:
         mock_query.all.return_value = []  # No followed users
         mock_session.query.return_value.filter.return_value = mock_query
 
-        with patch("sqlalchemy.orm.Session") as mock_session_class:
+        with patch("YSimulator.YServer.recsys.content_recsys_redis.Session") as mock_session_class:
             mock_session_class.return_value.__enter__.return_value = mock_session
             mock_session_class.return_value.__exit__.return_value = None
 
@@ -225,7 +223,7 @@ class TestRecommendRchronoFollowersPopularityRedis:
         mock_query.all.return_value = [("user1",)]
         mock_session.query.return_value.filter.return_value = mock_query
 
-        with patch("sqlalchemy.orm.Session") as mock_session_class:
+        with patch("YSimulator.YServer.recsys.content_recsys_redis.Session") as mock_session_class:
             mock_session_class.return_value.__enter__.return_value = mock_session
             mock_session_class.return_value.__exit__.return_value = None
 
@@ -361,7 +359,7 @@ class TestRecommendCommonUserInterestsRedis:
         mock_session = MagicMock()
 
         # Complex mocking required - simplified for basic test
-        with patch("sqlalchemy.orm.Session") as mock_session_class:
+        with patch("YSimulator.YServer.recsys.content_recsys_redis.Session") as mock_session_class:
             mock_session_class.return_value.__enter__.return_value = mock_session
             mock_session_class.return_value.__exit__.return_value = None
 
@@ -403,7 +401,7 @@ class TestRecommendSimilarUsersReactRedis:
         mock_engine = Mock()
         mock_session = MagicMock()
 
-        with patch("sqlalchemy.orm.Session") as mock_session_class:
+        with patch("YSimulator.YServer.recsys.content_recsys_redis.Session") as mock_session_class:
             mock_session_class.return_value.__enter__.return_value = mock_session
             mock_session_class.return_value.__exit__.return_value = None
 
@@ -457,7 +455,7 @@ class TestRecommendSimilarUsersPostsRedis:
         mock_engine = Mock()
         mock_session = MagicMock()
 
-        with patch("sqlalchemy.orm.Session") as mock_session_class:
+        with patch("YSimulator.YServer.recsys.content_recsys_redis.Session") as mock_session_class:
             mock_session_class.return_value.__enter__.return_value = mock_session
             mock_session_class.return_value.__exit__.return_value = None
 
@@ -580,7 +578,7 @@ class TestEdgeCases:
         mock_query.all.return_value = []
         mock_session.query.return_value.filter.return_value = mock_query
 
-        with patch("sqlalchemy.orm.Session") as mock_session_class:
+        with patch("YSimulator.YServer.recsys.content_recsys_redis.Session") as mock_session_class:
             mock_session_class.return_value.__enter__.return_value = mock_session
             mock_session_class.return_value.__exit__.return_value = None
 

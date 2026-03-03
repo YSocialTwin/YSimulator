@@ -20,6 +20,16 @@ from YSimulator.YServer.classes.models import (
     UserInterest,
 )
 
+
+def _safe_numeric(value) -> int:
+    """Convert DB aggregate results to an int, tolerating mocked/non-numeric values."""
+    if isinstance(value, (int, float)):
+        return int(value)
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return 0
+
 # Constants for hybrid linear ranker (shared with Redis implementation)
 RECENT_AFFINITY_DISCOUNT = 0.5  # Weight for recent interactions (50% of total affinity)
 SIMILAR_USERS_SAMPLE_LIMIT = 100  # Max users to consider for similarity calculation (performance)
@@ -179,16 +189,15 @@ def recommend_rchrono_followers(
         List of post UUIDs
     """
     follower_posts_limit = int(limit * followers_ratio)
-    additional_posts_limit = limit - follower_posts_limit
 
     # Get posts from followed users
     query_followers = (
         session.query(Post.id)
         .distinct()
         .join(Round, Post.round == Round.id)
-        .join(Follow, Post.user_id == Follow.follower_id)
+        .join(Follow, Post.user_id == Follow.user_id)
         .filter(
-            Follow.user_id == agent_id,
+            Follow.follower_id == agent_id,
             Follow.action == "follow",
             or_(
                 Round.day > visibility_day,
@@ -203,7 +212,8 @@ def recommend_rchrono_followers(
     post_ids = [row[0] for row in query_followers.all()]
 
     # If we need more posts, get additional ones
-    if len(post_ids) < limit and additional_posts_limit > 0:
+    if len(post_ids) < limit:
+        remaining = limit - len(post_ids)
         if post_ids:
             query_additional = (
                 session.query(Post.id)
@@ -217,7 +227,7 @@ def recommend_rchrono_followers(
                     Post.id.notin_(post_ids),
                 )
                 .order_by(desc(Round.day), desc(Round.hour))
-                .limit(additional_posts_limit)
+                .limit(remaining)
             )
         else:
             # No existing posts, skip the NOT IN clause
@@ -232,7 +242,7 @@ def recommend_rchrono_followers(
                     Post.user_id != agent_id,
                 )
                 .order_by(desc(Round.day), desc(Round.hour))
-                .limit(additional_posts_limit)
+                .limit(remaining)
             )
 
         post_ids.extend([row[0] for row in query_additional.all()])
@@ -274,9 +284,9 @@ def recommend_rchrono_followers_popularity(
         session.query(Post.id)
         .distinct()
         .join(Round, Post.round == Round.id)
-        .join(Follow, Post.user_id == Follow.follower_id)
+        .join(Follow, Post.user_id == Follow.user_id)
         .filter(
-            Follow.user_id == agent_id,
+            Follow.follower_id == agent_id,
             Follow.action == "follow",
             or_(
                 Round.day > visibility_day,
@@ -392,7 +402,7 @@ def recommend_rchrono_comments(
                 and_(Round.day == visibility_day, Round.hour >= visibility_hour),
             ),
             Post.user_id != agent_id,
-            Post.comment_to.is_(None),
+            or_(Post.comment_to.is_(None), Post.comment_to == "-1"),
         )
         .group_by(Post.id)
         .order_by(desc(func.count(CommentPost.id)), desc(Round.day), desc(Round.hour))
@@ -435,10 +445,10 @@ def recommend_common_interests(
         .join(Round, Post.round == Round.id)
         .join(PostTopic, Post.id == PostTopic.post_id)
         .join(UserInterest, PostTopic.topic_id == UserInterest.interest_id)
-        .join(Follow, Post.user_id == Follow.follower_id)
+        .join(Follow, Post.user_id == Follow.user_id)
         .filter(
             UserInterest.user_id == agent_id,
-            Follow.user_id == agent_id,
+            Follow.follower_id == agent_id,
             Follow.action == "follow",
             or_(
                 Round.day > visibility_day,
@@ -544,10 +554,10 @@ def recommend_common_user_interests(
         .join(User_mgmt, Reaction.user_id == User_mgmt.id)
         .join(UserInterest1, User_mgmt.id == UserInterest1.user_id)
         .join(UserInterest2, UserInterest1.interest_id == UserInterest2.interest_id)
-        .join(Follow, User_mgmt.id == Follow.follower_id)
+        .join(Follow, User_mgmt.id == Follow.user_id)
         .filter(
             UserInterest2.user_id == agent_id,
-            Follow.user_id == agent_id,
+            Follow.follower_id == agent_id,
             Follow.action == "follow",
             or_(
                 Round.day > visibility_day,
@@ -1016,9 +1026,13 @@ def recommend_hybrid_linear_ranker(
 
     # 1. rchrono_followers
     try:
-        cand1, fb1 = recommend_rchrono_followers(
+        cand1_result = recommend_rchrono_followers(
             session, agent_id, visibility_day, visibility_hour, candidate_limit, followers_ratio=0.6
         )
+        if isinstance(cand1_result, tuple):
+            cand1, fb1 = cand1_result
+        else:
+            cand1, fb1 = cand1_result, False
         candidates_set.update(cand1)
         used_fallback = used_fallback or fb1
     except Exception:
@@ -1177,7 +1191,7 @@ def _calculate_user_author_affinity_sql(session, agent_id: str, author_id: str) 
     except ImportError:
         comments_count = 0
 
-    interactions = likes_count + comments_count
+    interactions = _safe_numeric(likes_count) + _safe_numeric(comments_count)
     return math.log(1 + interactions)
 
 

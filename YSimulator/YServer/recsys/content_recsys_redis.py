@@ -5,7 +5,9 @@ Each function implements a specific recommendation algorithm using Redis key-val
 """
 
 import random
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional, Set
+
+from sqlalchemy.orm import Session, aliased
 
 from YSimulator.YServer.classes.models import (
     Follow,
@@ -19,6 +21,143 @@ from YSimulator.YServer.classes.models import (
 # Constants for hybrid linear ranker
 RECENT_AFFINITY_DISCOUNT = 0.5  # Weight for recent interactions (50% of total affinity)
 SIMILAR_USERS_SAMPLE_LIMIT = 100  # Max users to consider for similarity calculation (performance)
+
+
+def _normalize_set(values) -> Set[str]:
+    """Normalize Redis/SQL iterable values to a set of strings."""
+    return {
+        (v.decode() if isinstance(v, bytes) else str(v))
+        for v in (values or [])
+        if v is not None and str(v) != ""
+    }
+
+
+def _read_set(redis_client, key: str) -> Set[str]:
+    """Read a Redis set if it exists."""
+    if redis_client.exists(key):
+        return _normalize_set(redis_client.smembers(key))
+    return set()
+
+
+def _get_user_interests(
+    agent_id: str,
+    redis_client,
+    redis_key_fn,
+    db_engine=None,
+) -> Set[str]:
+    """Get user interests from Redis with SQL fallback."""
+    candidates = [
+        redis_key_fn("user", agent_id) + ":interests",
+        redis_key_fn("user_interests", agent_id),
+    ]
+    for key in candidates:
+        if redis_client.exists(key):
+            return _normalize_set(redis_client.smembers(key))
+
+    if db_engine is None:
+        return set()
+
+    with Session(db_engine) as session:
+        query = session.query(UserInterest.interest_id).filter(UserInterest.user_id == agent_id)
+        return {row[0] for row in query.all()}
+
+
+def _get_post_topics(
+    post_id: str,
+    redis_client,
+    redis_key_fn,
+    db_engine=None,
+) -> Set[str]:
+    """Get post topics from Redis with SQL fallback."""
+    candidates = [
+        redis_key_fn("post", post_id) + ":topics",
+        redis_key_fn("post_topics", post_id),
+    ]
+    for key in candidates:
+        if redis_client.exists(key):
+            return _normalize_set(redis_client.smembers(key))
+
+    if db_engine is None:
+        return set()
+
+    with Session(db_engine) as session:
+        query = session.query(PostTopic.topic_id).filter(PostTopic.post_id == post_id)
+        return {row[0] for row in query.all()}
+
+
+def _get_post_reaction_users(
+    post_id: str,
+    redis_client,
+    redis_key_fn,
+    db_engine=None,
+) -> Set[str]:
+    """Get users who liked a post from Redis with SQL fallback."""
+    key = redis_key_fn("post", post_id) + ":reactions"
+    if redis_client.exists(key):
+        return _normalize_set(redis_client.smembers(key))
+
+    if db_engine is None:
+        return set()
+
+    with Session(db_engine) as session:
+        query = session.query(Reaction.user_id).filter(
+            Reaction.post_id == post_id, Reaction.type == "LIKE"
+        )
+        return {row[0] for row in query.all()}
+
+
+def _get_user_likes(user_id: str, redis_client, redis_key_fn, db_engine=None) -> Set[str]:
+    """Get posts liked by user from Redis with SQL fallback."""
+    key = redis_key_fn("user", user_id) + ":likes"
+    if redis_client.exists(key):
+        return _normalize_set(redis_client.smembers(key))
+
+    if db_engine is None:
+        return set()
+
+    with Session(db_engine) as session:
+        query = session.query(Reaction.post_id).filter(
+            Reaction.user_id == user_id, Reaction.type == "LIKE"
+        )
+        return {row[0] for row in query.all()}
+
+
+def _get_user_follows(user_id: str, redis_client, redis_key_fn, db_engine=None) -> Set[str]:
+    """Get users followed by user from Redis with SQL fallback."""
+    key = redis_key_fn("user", user_id) + ":follows"
+    if redis_client.exists(key):
+        return _normalize_set(redis_client.smembers(key))
+
+    if db_engine is None:
+        return set()
+
+    with Session(db_engine) as session:
+        query = session.query(Follow.user_id).filter(
+            Follow.follower_id == user_id, Follow.action == "follow"
+        )
+        return {row[0] for row in query.all()}
+
+
+def _get_user_profile(user_id: str, redis_client, redis_key_fn, db_engine=None) -> Dict[str, Any]:
+    """Get user profile (age_group/gender/leaning) from Redis with SQL fallback."""
+    for key in (redis_key_fn("users", user_id), redis_key_fn("user_mgmt", user_id)):
+        if redis_client.exists(key):
+            data = redis_client.hgetall(key)
+            if data:
+                return data
+
+    if db_engine is None:
+        return {}
+
+    with Session(db_engine) as session:
+        user = session.query(User_mgmt).filter(User_mgmt.id == user_id).first()
+        if not user:
+            return {}
+        return {
+            "age_group": getattr(user, "age_group", None),
+            "gender": user.gender,
+            "leaning": user.leaning,
+        }
 
 
 def recommend_rchrono_redis(
@@ -55,8 +194,8 @@ def recommend_rchrono_popularity_redis(
     Returns:
         List of post IDs sorted by time then popularity (always `limit` items or all available)
     """
-    # Sort by index (time proxy) first, then by reaction_count (including 0)
-    sorted_posts = sorted(valid_posts_with_data, key=lambda x: (x["index"], -x["reaction_count"]))
+    # Sort by popularity first, then recency (lower index = newer).
+    sorted_posts = sorted(valid_posts_with_data, key=lambda x: (-x["reaction_count"], x["index"]))
     return [p["id"] for p in sorted_posts[:limit]]
 
 
@@ -86,11 +225,8 @@ def recommend_rchrono_followers_redis(
         Tuple of (List of post IDs prioritizing followed users, False indicating no fallback used)
     """
     follower_posts_limit = int(limit * followers_ratio)
-    additional_posts_limit = limit - follower_posts_limit
 
     # Get followed user IDs from database using SQLAlchemy ORM
-    from sqlalchemy.orm import Session
-
     with Session(db_engine) as session:
         query = session.query(Follow.user_id).filter(
             Follow.follower_id == agent_id, Follow.action == "follow"
@@ -113,7 +249,8 @@ def recommend_rchrono_followers_redis(
     # Take from followers first, then fill with others
     post_ids = [p["id"] for p in follower_posts[:follower_posts_limit]]
     if len(post_ids) < limit:
-        post_ids.extend([p["id"] for p in other_posts[:additional_posts_limit]])
+        remaining = limit - len(post_ids)
+        post_ids.extend([p["id"] for p in other_posts[:remaining]])
 
     return post_ids, False
 
@@ -151,8 +288,6 @@ def recommend_rchrono_followers_popularity_redis(
     follower_posts_limit = int(limit * followers_ratio)
 
     # Get follow relationships using SQLAlchemy ORM
-    from sqlalchemy.orm import Session
-
     with Session(db_engine) as session:
         query = session.query(Follow.user_id).filter(
             Follow.follower_id == agent_id, Follow.action == "follow"
@@ -172,9 +307,9 @@ def recommend_rchrono_followers_popularity_redis(
         else:
             other_posts.append(post)
 
-    # Sort by index (time) then popularity (including 0)
-    follower_posts_sorted = sorted(follower_posts, key=lambda x: (x["index"], -x["reaction_count"]))
-    other_posts_sorted = sorted(other_posts, key=lambda x: (x["index"], -x["reaction_count"]))
+    # Sort by popularity first, then recency.
+    follower_posts_sorted = sorted(follower_posts, key=lambda x: (-x["reaction_count"], x["index"]))
+    other_posts_sorted = sorted(other_posts, key=lambda x: (-x["reaction_count"], x["index"]))
 
     # Build result ensuring we get the full limit
     post_ids = [p["id"] for p in follower_posts_sorted[:follower_posts_limit]]
@@ -264,24 +399,28 @@ def recommend_common_interests_redis(
     Returns:
         Tuple of (List of post IDs with matching topic interests, bool indicating if fallback was used)
     """
-    # Try to get user interests from Redis
-    user_interests_key = redis_key_fn("user", agent_id) + ":interests"
-    if redis_client.exists(user_interests_key):
-        # Redis implementation when data is available
-        user_interests = redis_client.smembers(user_interests_key)
+    user_interests = _get_user_interests(
+        agent_id=agent_id,
+        redis_client=redis_client,
+        redis_key_fn=redis_key_fn,
+        db_engine=db_engine,
+    )
+    if user_interests:
 
         # Score posts by number of matching interests
         posts_with_scores = []
         for post in valid_posts_with_data:
-            post_topics_key = redis_key_fn("post", post["id"]) + ":topics"
-            if redis_client.exists(post_topics_key):
-                post_topics = redis_client.smembers(post_topics_key)
-                # Calculate intersection (common interests)
-                common_count = len(user_interests & post_topics)
-                if common_count > 0:
-                    posts_with_scores.append(
-                        {"id": post["id"], "index": post["index"], "score": common_count}
-                    )
+            post_topics = _get_post_topics(
+                post_id=post["id"],
+                redis_client=redis_client,
+                redis_key_fn=redis_key_fn,
+                db_engine=db_engine,
+            )
+            common_count = len(user_interests & post_topics)
+            if common_count > 0:
+                posts_with_scores.append(
+                    {"id": post["id"], "index": post["index"], "score": common_count}
+                )
 
         # Sort by score desc, then by recency
         sorted_posts = sorted(posts_with_scores, key=lambda x: (-x["score"], x["index"]))
@@ -303,8 +442,6 @@ def recommend_common_interests_redis(
         logger.info(
             "Mode common_interests - Redis cache for interests/topics not available yet, using SQLAlchemy ORM"
         )
-        from sqlalchemy.orm import Session
-
         with Session(db_engine) as session:
             from sqlalchemy import desc
 
@@ -376,10 +513,13 @@ def recommend_common_user_interests_redis(
     Returns:
         Tuple of (List of post IDs liked by users with common interests, bool indicating if fallback was used)
     """
-    user_interests_key = redis_key_fn("user", agent_id) + ":interests"
-    if redis_client.exists(user_interests_key):
-        # Redis implementation when data is available
-        user_interests = redis_client.smembers(user_interests_key)
+    user_interests = _get_user_interests(
+        agent_id=agent_id,
+        redis_client=redis_client,
+        redis_key_fn=redis_key_fn,
+        db_engine=db_engine,
+    )
+    if user_interests:
 
         # Find users with common interests
         user_ids_key = redis_key_fn("user_mgmt", "ids")
@@ -390,25 +530,31 @@ def recommend_common_user_interests_redis(
         similar_users = set()
         for uid in all_user_ids:
             if uid != agent_id:
-                other_interests_key = redis_key_fn("user", uid) + ":interests"
-                if redis_client.exists(other_interests_key):
-                    other_interests = redis_client.smembers(other_interests_key)
-                    if len(user_interests & other_interests) > 0:
-                        similar_users.add(uid)
+                other_interests = _get_user_interests(
+                    agent_id=uid,
+                    redis_client=redis_client,
+                    redis_key_fn=redis_key_fn,
+                    db_engine=db_engine,
+                )
+                if len(user_interests & other_interests) > 0:
+                    similar_users.add(uid)
 
         # Get posts liked by similar users
         posts_with_scores = []
 
         for post in valid_posts_with_data:
             # Check if any similar user liked this post
-            post_reactions_key = redis_key_fn("post", post["id"]) + ":reactions"
-            if redis_client.exists(post_reactions_key):
-                reaction_user_ids = redis_client.smembers(post_reactions_key)
-                common_users = similar_users & reaction_user_ids
-                if common_users:
-                    posts_with_scores.append(
-                        {"id": post["id"], "index": post["index"], "score": len(common_users)}
-                    )
+            reaction_user_ids = _get_post_reaction_users(
+                post_id=post["id"],
+                redis_client=redis_client,
+                redis_key_fn=redis_key_fn,
+                db_engine=db_engine,
+            )
+            common_users = similar_users & reaction_user_ids
+            if common_users:
+                posts_with_scores.append(
+                    {"id": post["id"], "index": post["index"], "score": len(common_users)}
+                )
 
         sorted_posts = sorted(posts_with_scores, key=lambda x: (-x["score"], x["index"]))
         post_ids = [p["id"] for p in sorted_posts[:limit]]
@@ -429,7 +575,7 @@ def recommend_common_user_interests_redis(
             "Mode common_user_interests - Redis cache for interests not available yet, using SQLAlchemy ORM"
         )
         from sqlalchemy import desc
-        from sqlalchemy.orm import Session, aliased
+        from sqlalchemy.orm import aliased
 
         with Session(db_engine) as session:
             # Get user interests
@@ -500,9 +646,8 @@ def recommend_similar_users_react_redis(
     Returns:
         Tuple of (List of post IDs liked by similar users, bool indicating if fallback was used)
     """
-    # Get agent demographics from Redis
-    agent_key = redis_key_fn("users", agent_id)
-    agent_data = redis_client.hgetall(agent_key) if redis_client.exists(agent_key) else {}
+    # Get agent demographics from Redis/SQL
+    agent_data = _get_user_profile(agent_id, redis_client, redis_key_fn, db_engine)
 
     if agent_data:
         # Redis implementation using cached user data
@@ -516,28 +661,28 @@ def recommend_similar_users_react_redis(
         posts_with_scores = []
         for post in valid_posts_with_data:
             # Check reactions for this post
-            post_reactions_key = redis_key_fn("post", post["id"]) + ":reactions"
-            if redis_client.exists(post_reactions_key):
-                reaction_user_ids = redis_client.smembers(post_reactions_key)
-                similar_count = 0
-                for uid in reaction_user_ids:
-                    user_key = redis_key_fn("users", uid)
-                    user_data = (
-                        redis_client.hgetall(user_key) if redis_client.exists(user_key) else {}
-                    )
-                    if user_data:
-                        # Check similarity
-                        if (
-                            user_data.get("age_group") == agent_age_group
-                            or user_data.get("gender") == agent_gender
-                            or user_data.get("leaning") == agent_leaning
-                        ):
-                            similar_count += 1
+            reaction_user_ids = _get_post_reaction_users(
+                post_id=post["id"],
+                redis_client=redis_client,
+                redis_key_fn=redis_key_fn,
+                db_engine=db_engine,
+            )
+            similar_count = 0
+            for uid in reaction_user_ids:
+                user_data = _get_user_profile(uid, redis_client, redis_key_fn, db_engine)
+                if user_data:
+                    # Check similarity
+                    if (
+                        user_data.get("age_group") == agent_age_group
+                        or user_data.get("gender") == agent_gender
+                        or user_data.get("leaning") == agent_leaning
+                    ):
+                        similar_count += 1
 
-                if similar_count > 0:
-                    posts_with_scores.append(
-                        {"id": post["id"], "index": post["index"], "score": similar_count}
-                    )
+            if similar_count > 0:
+                posts_with_scores.append(
+                    {"id": post["id"], "index": post["index"], "score": similar_count}
+                )
 
         sorted_posts = sorted(posts_with_scores, key=lambda x: (-x["score"], x["index"]))
         post_ids = [p["id"] for p in sorted_posts[:limit]]
@@ -557,7 +702,7 @@ def recommend_similar_users_react_redis(
         # Fallback to SQLAlchemy ORM query
         logger.info("Mode similar_users_react - Using SQLAlchemy ORM for user demographics query")
         from sqlalchemy import desc, or_
-        from sqlalchemy.orm import Session, aliased
+        from sqlalchemy.orm import aliased
 
         with Session(db_engine) as session:
             ReactorUser = aliased(User_mgmt)
@@ -630,9 +775,8 @@ def recommend_similar_users_posts_redis(
     Returns:
         Tuple of (List of post IDs from similar users, bool indicating if fallback was used)
     """
-    # Get agent demographics from Redis
-    agent_key = redis_key_fn("users", agent_id)
-    agent_data = redis_client.hgetall(agent_key) if redis_client.exists(agent_key) else {}
+    # Get agent demographics from Redis/SQL
+    agent_data = _get_user_profile(agent_id, redis_client, redis_key_fn, db_engine)
 
     if agent_data:
         # Redis implementation using cached user data
@@ -650,10 +794,7 @@ def recommend_similar_users_posts_redis(
             if post_data:
                 author_id = post_data.get("user_id")
                 if author_id and author_id != agent_id:
-                    author_key = redis_key_fn("users", author_id)
-                    author_data = (
-                        redis_client.hgetall(author_key) if redis_client.exists(author_key) else {}
-                    )
+                    author_data = _get_user_profile(author_id, redis_client, redis_key_fn, db_engine)
                     if author_data:
                         similarity_score = 0
                         if author_data.get("age_group") == agent_age_group:
@@ -690,7 +831,7 @@ def recommend_similar_users_posts_redis(
         # Fallback to SQLAlchemy ORM query
         logger.info("Mode similar_users_posts - Using SQLAlchemy ORM for user demographics query")
         from sqlalchemy import desc, or_
-        from sqlalchemy.orm import Session, aliased
+        from sqlalchemy.orm import aliased
 
         with Session(db_engine) as session:
             PostAuthor = aliased(User_mgmt)
@@ -780,15 +921,9 @@ def recommend_collaborative_user_user_redis(
     Returns:
         Tuple of (List of post IDs, bool indicating if fallback was used)
     """
-    # Try to get liked posts from Redis
-    agent_likes_key = redis_key_fn("user", agent_id) + ":likes"
-    if redis_client.exists(agent_likes_key):
-        agent_likes = redis_client.smembers(agent_likes_key)
-
-        if not agent_likes:
-            # No likes yet, cold start fallback to random posts
-            result = recommend_random_redis(valid_posts_with_data, limit)
-            return result, True
+    # Try to get liked posts from Redis/SQL.
+    agent_likes = _get_user_likes(agent_id, redis_client, redis_key_fn, db_engine)
+    if agent_likes:
 
         # Find similar users based on like overlap
         user_ids_key = redis_key_fn("user_mgmt", "ids")
@@ -800,12 +935,10 @@ def recommend_collaborative_user_user_redis(
         user_similarities = []
         for uid in all_user_ids:
             if uid != agent_id:
-                user_likes_key = redis_key_fn("user", uid) + ":likes"
-                if redis_client.exists(user_likes_key):
-                    user_likes = redis_client.smembers(user_likes_key)
-                    overlap = len(agent_likes & user_likes)
-                    if overlap > 0:
-                        user_similarities.append({"user_id": uid, "overlap": overlap})
+                user_likes = _get_user_likes(uid, redis_client, redis_key_fn, db_engine)
+                overlap = len(agent_likes & user_likes)
+                if overlap > 0:
+                    user_similarities.append({"user_id": uid, "overlap": overlap})
 
         # Sort by overlap
         user_similarities.sort(key=lambda x: -x["overlap"])
@@ -815,14 +948,17 @@ def recommend_collaborative_user_user_redis(
         posts_with_scores = []
         for post in valid_posts_with_data:
             if post["id"] not in agent_likes:  # Not already liked
-                post_reactions_key = redis_key_fn("post", post["id"]) + ":reactions"
-                if redis_client.exists(post_reactions_key):
-                    reaction_user_ids = redis_client.smembers(post_reactions_key)
-                    similar_user_likes = len(similar_users & reaction_user_ids)
-                    if similar_user_likes > 0:
-                        posts_with_scores.append(
-                            {"id": post["id"], "index": post["index"], "score": similar_user_likes}
-                        )
+                reaction_user_ids = _get_post_reaction_users(
+                    post_id=post["id"],
+                    redis_client=redis_client,
+                    redis_key_fn=redis_key_fn,
+                    db_engine=db_engine,
+                )
+                similar_user_likes = len(similar_users & reaction_user_ids)
+                if similar_user_likes > 0:
+                    posts_with_scores.append(
+                        {"id": post["id"], "index": post["index"], "score": similar_user_likes}
+                    )
 
         sorted_posts = sorted(posts_with_scores, key=lambda x: (-x["score"], x["index"]))
         post_ids = [p["id"] for p in sorted_posts[:limit]]
@@ -839,73 +975,9 @@ def recommend_collaborative_user_user_redis(
 
         return post_ids, False
     else:
-        # Fallback to SQLAlchemy ORM
-        logger.info(
-            "Mode collaborative_user_user - Redis cache not available yet, using SQLAlchemy ORM"
-        )
-        from sqlalchemy import desc
-        from sqlalchemy.orm import Session
-
-        with Session(db_engine) as session:
-            from YSimulator.YServer.classes.models import Post, Reaction
-
-            # Get agent's liked posts
-            agent_likes_query = session.query(Reaction.post_id).filter(
-                Reaction.user_id == agent_id, Reaction.type == "LIKE"
-            )
-            agent_likes_ids = [row[0] for row in agent_likes_query.all()]
-
-            if not agent_likes_ids:
-                # No likes, cold start fallback to random posts
-                result = recommend_random_redis(valid_posts_with_data, limit)
-                return result, True
-            else:
-                # Find similar users
-                similar_users_query = (
-                    session.query(Reaction.user_id)
-                    .filter(
-                        Reaction.post_id.in_(agent_likes_ids),
-                        Reaction.user_id != agent_id,
-                        Reaction.type == "LIKE",
-                    )
-                    .distinct()
-                    .limit(50)
-                )
-                similar_user_ids = [row[0] for row in similar_users_query.all()]
-
-                if similar_user_ids:
-                    # Get posts liked by similar users
-                    posts_query = (
-                        session.query(Reaction.post_id)
-                        .join(Post, Reaction.post_id == Post.id)
-                        .join(Round, Post.round == Round.id)
-                        .filter(
-                            Reaction.user_id.in_(similar_user_ids),
-                            Reaction.type == "LIKE",
-                            Post.user_id != agent_id,
-                            Reaction.post_id.notin_(agent_likes_ids),
-                        )
-                        .distinct()
-                        .order_by(desc(Round.day), desc(Round.hour))
-                        .limit(limit)
-                    )
-                    sql_post_ids = [row[0] for row in posts_query.all()]
-                    post_ids = [pid for pid in sql_post_ids if pid in all_post_ids][:limit]
-                else:
-                    post_ids = []
-
-                # Check if we need cold start fallback
-                if not post_ids:
-                    result = recommend_random_redis(valid_posts_with_data, limit)
-                    return result, True
-
-                # Fill with random posts if needed (partial results, not full cold start)
-                if len(post_ids) < limit:
-                    additional = [p["id"] for p in valid_posts_with_data if p["id"] not in post_ids]
-                    post_ids.extend(additional[: limit - len(post_ids)])
-
-        return post_ids, False
-
+        # No likes yet, cold start fallback to random posts
+        result = recommend_random_redis(valid_posts_with_data, limit)
+        return result, True
 
 def recommend_collaborative_item_item_redis(
     valid_posts_with_data: List[Dict[str, Any]],
@@ -937,15 +1009,9 @@ def recommend_collaborative_item_item_redis(
     Returns:
         Tuple of (List of post IDs, bool indicating if fallback was used)
     """
-    # Try to get liked posts from Redis
-    agent_likes_key = redis_key_fn("user", agent_id) + ":likes"
-    if redis_client.exists(agent_likes_key):
-        agent_likes = redis_client.smembers(agent_likes_key)
-
-        if not agent_likes:
-            # No likes yet, cold start fallback to random posts
-            result = recommend_random_redis(valid_posts_with_data, limit)
-            return result, True
+    # Try to get liked posts from Redis/SQL
+    agent_likes = _get_user_likes(agent_id, redis_client, redis_key_fn, db_engine)
+    if agent_likes:
 
         # For each post the agent liked, find users who also liked it
         # Then find other posts those users liked (co-occurrence)
@@ -953,21 +1019,24 @@ def recommend_collaborative_item_item_redis(
 
         for liked_post_id in agent_likes:
             # Get users who liked this post
-            liked_post_reactions_key = redis_key_fn("post", liked_post_id) + ":reactions"
-            if redis_client.exists(liked_post_reactions_key):
-                users_who_liked = redis_client.smembers(liked_post_reactions_key)
+            users_who_liked = _get_post_reaction_users(
+                post_id=liked_post_id,
+                redis_client=redis_client,
+                redis_key_fn=redis_key_fn,
+                db_engine=db_engine,
+            )
 
-                # Find other posts these users liked
-                for user_id in users_who_liked:
-                    if user_id != agent_id:
-                        user_likes_key = redis_key_fn("user", user_id) + ":likes"
-                        if redis_client.exists(user_likes_key):
-                            user_other_likes = redis_client.smembers(user_likes_key)
-                            for other_post_id in user_other_likes:
-                                if other_post_id not in agent_likes:
-                                    post_co_occurrences[other_post_id] = (
-                                        post_co_occurrences.get(other_post_id, 0) + 1
-                                    )
+            # Find other posts these users liked
+            for user_id in users_who_liked:
+                if user_id != agent_id:
+                    user_other_likes = _get_user_likes(
+                        user_id, redis_client, redis_key_fn, db_engine
+                    )
+                    for other_post_id in user_other_likes:
+                        if other_post_id not in agent_likes:
+                            post_co_occurrences[other_post_id] = (
+                                post_co_occurrences.get(other_post_id, 0) + 1
+                            )
 
         # Score valid posts based on co-occurrence
         posts_with_scores = []
@@ -996,61 +1065,9 @@ def recommend_collaborative_item_item_redis(
 
         return post_ids, False
     else:
-        # Fallback to SQLAlchemy ORM
-        logger.info(
-            "Mode collaborative_item_item - Redis cache not available yet, using SQLAlchemy ORM"
-        )
-        from sqlalchemy import desc
-        from sqlalchemy.orm import Session, aliased
-
-        with Session(db_engine) as session:
-            from YSimulator.YServer.classes.models import Post, Reaction
-
-            # Get agent's liked posts
-            agent_likes_query = session.query(Reaction.post_id).filter(
-                Reaction.user_id == agent_id, Reaction.type == "LIKE"
-            )
-            agent_likes_ids = [row[0] for row in agent_likes_query.all()]
-
-            if not agent_likes_ids:
-                # No likes, cold start fallback to random posts
-                result = recommend_random_redis(valid_posts_with_data, limit)
-                return result, True
-            else:
-                # Find posts liked by users who liked the same posts as agent
-                Reaction2 = aliased(Reaction)
-                posts_query = (
-                    session.query(Reaction2.post_id)
-                    .join(Reaction, Reaction.user_id == Reaction2.user_id)
-                    .join(Post, Reaction2.post_id == Post.id)
-                    .join(Round, Post.round == Round.id)
-                    .filter(
-                        Reaction.post_id.in_(agent_likes_ids),
-                        Reaction.type == "LIKE",
-                        Reaction2.type == "LIKE",
-                        Reaction2.user_id != agent_id,
-                        Post.user_id != agent_id,
-                        Reaction2.post_id.notin_(agent_likes_ids),
-                    )
-                    .distinct()
-                    .order_by(desc(Round.day), desc(Round.hour))
-                    .limit(limit)
-                )
-                sql_post_ids = [row[0] for row in posts_query.all()]
-                post_ids = [pid for pid in sql_post_ids if pid in all_post_ids][:limit]
-
-                # Cold start check: if no results, return random posts
-                if not post_ids:
-                    result = recommend_random_redis(valid_posts_with_data, limit)
-                    return result, True
-
-                # Fill with random posts if needed (partial results, not full cold start)
-                if len(post_ids) < limit:
-                    additional = [p["id"] for p in valid_posts_with_data if p["id"] not in post_ids]
-                    post_ids.extend(additional[: limit - len(post_ids)])
-
-        return post_ids, False
-
+        # No likes yet, cold start fallback to random posts
+        result = recommend_random_redis(valid_posts_with_data, limit)
+        return result, True
 
 def recommend_content_based_features_redis(
     valid_posts_with_data: List[Dict[str, Any]],
@@ -1082,23 +1099,16 @@ def recommend_content_based_features_redis(
     Returns:
         Tuple of (List of post IDs, bool indicating if fallback was used)
     """
-    # Try to get liked posts from Redis
-    agent_likes_key = redis_key_fn("user", agent_id) + ":likes"
-    if redis_client.exists(agent_likes_key):
-        agent_likes = redis_client.smembers(agent_likes_key)
-
-        if not agent_likes:
-            # No likes yet, cold start fallback to random posts
-            result = recommend_random_redis(valid_posts_with_data, limit)
-            return result, True
+    # Try to get liked posts from Redis/SQL
+    agent_likes = _get_user_likes(agent_id, redis_client, redis_key_fn, db_engine)
+    if agent_likes:
 
         # Extract topics from liked posts
         liked_topics = set()
         for liked_post_id in agent_likes:
-            post_topics_key = redis_key_fn("post", liked_post_id) + ":topics"
-            if redis_client.exists(post_topics_key):
-                post_topics = redis_client.smembers(post_topics_key)
-                liked_topics.update(post_topics)
+            liked_topics.update(
+                _get_post_topics(liked_post_id, redis_client, redis_key_fn, db_engine)
+            )
 
         if not liked_topics:
             # No topic data available, cold start fallback to random posts
@@ -1109,14 +1119,12 @@ def recommend_content_based_features_redis(
         posts_with_scores = []
         for post in valid_posts_with_data:
             if post["id"] not in agent_likes:  # Not already liked
-                post_topics_key = redis_key_fn("post", post["id"]) + ":topics"
-                if redis_client.exists(post_topics_key):
-                    post_topics = redis_client.smembers(post_topics_key)
-                    topic_match = len(liked_topics & post_topics)
-                    if topic_match > 0:
-                        posts_with_scores.append(
-                            {"id": post["id"], "index": post["index"], "score": topic_match}
-                        )
+                post_topics = _get_post_topics(post["id"], redis_client, redis_key_fn, db_engine)
+                topic_match = len(liked_topics & post_topics)
+                if topic_match > 0:
+                    posts_with_scores.append(
+                        {"id": post["id"], "index": post["index"], "score": topic_match}
+                    )
 
         sorted_posts = sorted(posts_with_scores, key=lambda x: (-x["score"], x["index"]))
         post_ids = [p["id"] for p in sorted_posts[:limit]]
@@ -1133,59 +1141,8 @@ def recommend_content_based_features_redis(
 
         return post_ids, False
     else:
-        # Fallback to SQLAlchemy ORM
-        logger.info(
-            "Mode content_based_features - Redis cache not available yet, using SQLAlchemy ORM"
-        )
-        from sqlalchemy import desc
-        from sqlalchemy.orm import Session
-
-        with Session(db_engine) as session:
-            from YSimulator.YServer.classes.models import Post, PostTopic, Reaction
-
-            # Get topics from liked posts
-            liked_topics_query = (
-                session.query(PostTopic.topic_id)
-                .join(Reaction, PostTopic.post_id == Reaction.post_id)
-                .filter(Reaction.user_id == agent_id, Reaction.type == "LIKE")
-                .distinct()
-            )
-            liked_topic_ids = [row[0] for row in liked_topics_query.all()]
-
-            if not liked_topic_ids:
-                # Cold start fallback to random posts
-                result = recommend_random_redis(valid_posts_with_data, limit)
-                return result, True
-            else:
-                # Find posts with matching topics
-                posts_query = (
-                    session.query(PostTopic.post_id)
-                    .join(Post, PostTopic.post_id == Post.id)
-                    .join(Round, Post.round == Round.id)
-                    .outerjoin(Reaction, Reaction.post_id == Post.id)
-                    .filter(
-                        PostTopic.topic_id.in_(liked_topic_ids),
-                        Post.user_id != agent_id,
-                        Reaction.id.is_(None),
-                    )
-                    .distinct()
-                    .order_by(desc(Round.day), desc(Round.hour))
-                    .limit(limit)
-                )
-                sql_post_ids = [row[0] for row in posts_query.all()]
-                post_ids = [pid for pid in sql_post_ids if pid in all_post_ids][:limit]
-
-                # Cold start check: if no results, return random posts
-                if not post_ids:
-                    result = recommend_random_redis(valid_posts_with_data, limit)
-                    return result, True
-
-                # Fill with random posts if needed (partial results, not full cold start)
-                if len(post_ids) < limit:
-                    additional = [p["id"] for p in valid_posts_with_data if p["id"] not in post_ids]
-                    post_ids.extend(additional[: limit - len(post_ids)])
-
-        return post_ids, False
+        result = recommend_random_redis(valid_posts_with_data, limit)
+        return result, True
 
 
 def recommend_content_based_vector_redis(
@@ -1218,24 +1175,16 @@ def recommend_content_based_vector_redis(
     Returns:
         Tuple of (List of post IDs, bool indicating if fallback was used)
     """
-    # Try to get liked posts from Redis
-    agent_likes_key = redis_key_fn("user", agent_id) + ":likes"
-    if redis_client.exists(agent_likes_key):
-        agent_likes = redis_client.smembers(agent_likes_key)
-
-        if not agent_likes:
-            # No likes yet, cold start fallback to random posts
-            result = recommend_random_redis(valid_posts_with_data, limit)
-            return result, True
+    # Try to get liked posts from Redis/SQL
+    agent_likes = _get_user_likes(agent_id, redis_client, redis_key_fn, db_engine)
+    if agent_likes:
 
         # Build preference vector: topic -> weight (frequency)
         preference_vector = {}
         for liked_post_id in agent_likes:
-            post_topics_key = redis_key_fn("post", liked_post_id) + ":topics"
-            if redis_client.exists(post_topics_key):
-                post_topics = redis_client.smembers(post_topics_key)
-                for topic in post_topics:
-                    preference_vector[topic] = preference_vector.get(topic, 0) + 1
+            post_topics = _get_post_topics(liked_post_id, redis_client, redis_key_fn, db_engine)
+            for topic in post_topics:
+                preference_vector[topic] = preference_vector.get(topic, 0) + 1
 
         if not preference_vector:
             # No topic data available, cold start fallback to random posts
@@ -1246,15 +1195,13 @@ def recommend_content_based_vector_redis(
         posts_with_scores = []
         for post in valid_posts_with_data:
             if post["id"] not in agent_likes:  # Not already liked
-                post_topics_key = redis_key_fn("post", post["id"]) + ":topics"
-                if redis_client.exists(post_topics_key):
-                    post_topics = redis_client.smembers(post_topics_key)
-                    # Calculate dot product (simple similarity)
-                    similarity_score = sum(preference_vector.get(topic, 0) for topic in post_topics)
-                    if similarity_score > 0:
-                        posts_with_scores.append(
-                            {"id": post["id"], "index": post["index"], "score": similarity_score}
-                        )
+                post_topics = _get_post_topics(post["id"], redis_client, redis_key_fn, db_engine)
+                # Calculate dot product (simple similarity)
+                similarity_score = sum(preference_vector.get(topic, 0) for topic in post_topics)
+                if similarity_score > 0:
+                    posts_with_scores.append(
+                        {"id": post["id"], "index": post["index"], "score": similarity_score}
+                    )
 
         sorted_posts = sorted(posts_with_scores, key=lambda x: (-x["score"], x["index"]))
         post_ids = [p["id"] for p in sorted_posts[:limit]]
@@ -1271,59 +1218,8 @@ def recommend_content_based_vector_redis(
 
         return post_ids, False
     else:
-        # Fallback to SQLAlchemy ORM
-        logger.info(
-            "Mode content_based_vector - Redis cache not available yet, using SQLAlchemy ORM"
-        )
-        from sqlalchemy import desc, func
-        from sqlalchemy.orm import Session
-
-        with Session(db_engine) as session:
-            from YSimulator.YServer.classes.models import Post, PostTopic, Reaction
-
-            # Build preference vector from liked posts
-            user_topics_query = (
-                session.query(PostTopic.topic_id, func.count(PostTopic.topic_id).label("weight"))
-                .join(Reaction, PostTopic.post_id == Reaction.post_id)
-                .filter(Reaction.user_id == agent_id, Reaction.type == "LIKE")
-                .group_by(PostTopic.topic_id)
-            )
-            user_topics = {row[0]: row[1] for row in user_topics_query.all()}
-
-            if not user_topics:
-                # Cold start fallback to random posts
-                result = recommend_random_redis(valid_posts_with_data, limit)
-                return result, True
-            else:
-                # Find posts with matching topics, weighted by preference
-                posts_query = (
-                    session.query(PostTopic.post_id)
-                    .join(Post, PostTopic.post_id == Post.id)
-                    .join(Round, Post.round == Round.id)
-                    .outerjoin(Reaction, Reaction.post_id == Post.id)
-                    .filter(
-                        PostTopic.topic_id.in_(user_topics.keys()),
-                        Post.user_id != agent_id,
-                        Reaction.id.is_(None),
-                    )
-                    .distinct()
-                    .order_by(desc(Round.day), desc(Round.hour))
-                    .limit(limit)
-                )
-                sql_post_ids = [row[0] for row in posts_query.all()]
-                post_ids = [pid for pid in sql_post_ids if pid in all_post_ids][:limit]
-
-                # Cold start check: if no results, return random posts
-                if not post_ids:
-                    result = recommend_random_redis(valid_posts_with_data, limit)
-                    return result, True
-
-                # Fill with random posts if needed (partial results, not full cold start)
-                if len(post_ids) < limit:
-                    additional = [p["id"] for p in valid_posts_with_data if p["id"] not in post_ids]
-                    post_ids.extend(additional[: limit - len(post_ids)])
-
-        return post_ids, False
+        result = recommend_random_redis(valid_posts_with_data, limit)
+        return result, True
 
 
 def recommend_hybrid_linear_ranker_redis(
@@ -1554,12 +1450,7 @@ def recommend_hybrid_linear_ranker_redis(
     followed_users = _get_followed_users_redis(agent_id, redis_client, redis_key_fn, db_engine)
 
     # Get user's topic interests
-    user_interests_key = redis_key_fn("user", agent_id) + ":interests"
-    user_interests = (
-        redis_client.smembers(user_interests_key)
-        if redis_client.exists(user_interests_key)
-        else set()
-    )
+    user_interests = _get_user_interests(agent_id, redis_client, redis_key_fn, db_engine)
 
     # Score each candidate post
     post_scores = []
@@ -1593,7 +1484,7 @@ def recommend_hybrid_linear_ranker_redis(
 
         # Feature 5: Content topic similarity (Jaccard similarity as proxy for cosine)
         content_topic_similarity = _calculate_content_topic_similarity_redis(
-            agent_id, post_id, user_interests, redis_client, redis_key_fn
+            agent_id, post_id, user_interests, redis_client, redis_key_fn, db_engine
         )
 
         # Feature 6: Similar user author score (people like you follow/like this author)
@@ -1663,8 +1554,6 @@ def _get_friends_of_friends_candidates_redis(
     Returns:
         Tuple of (List of post IDs, bool indicating if fallback was used)
     """
-    from sqlalchemy.orm import Session
-
     # Get users that current agent follows
     followed_users = _get_followed_users_redis(agent_id, redis_client, redis_key_fn, db_engine)
 
@@ -1680,10 +1569,7 @@ def _get_friends_of_friends_candidates_redis(
 
     # Try Redis first
     for followed_user_id in followed_users:
-        follows_key = redis_key_fn("user", followed_user_id) + ":follows"
-        if redis_client.exists(follows_key):
-            user_follows = redis_client.smembers(follows_key)
-            fof_users.update(user_follows)
+        fof_users.update(_get_user_follows(followed_user_id, redis_client, redis_key_fn, db_engine))
 
     # Remove agent and direct follows
     fof_users.discard(agent_id)
@@ -1694,11 +1580,11 @@ def _get_friends_of_friends_candidates_redis(
         with Session(db_engine) as session:
             # Get follows of follows
             fof_query = (
-                session.query(Follow.follower_id)
+                session.query(Follow.user_id)
                 .filter(
-                    Follow.user_id.in_(followed_users),
-                    Follow.follower_id != agent_id,
-                    Follow.follower_id.notin_(followed_users),
+                    Follow.follower_id.in_(followed_users),
+                    Follow.user_id != agent_id,
+                    Follow.user_id.notin_(followed_users),
                     Follow.action == "follow",
                 )
                 .distinct()
@@ -1734,19 +1620,20 @@ def _get_friends_of_friends_candidates_redis(
 
 def _get_followed_users_redis(agent_id: str, redis_client, redis_key_fn, db_engine) -> set:
     """Get set of users that the agent follows."""
-    from sqlalchemy.orm import Session
-
     # Try Redis first
-    follows_key = redis_key_fn("user", agent_id) + ":follows"
-    if redis_client.exists(follows_key):
-        return redis_client.smembers(follows_key)
+    follows = _get_user_follows(agent_id, redis_client, redis_key_fn, db_engine)
+    if follows:
+        return follows
 
     # Fallback to SQL
-    with Session(db_engine) as session:
-        query = session.query(Follow.user_id).filter(
-            Follow.follower_id == agent_id, Follow.action == "follow"
-        )
-        return set(row[0] for row in query.all())
+    try:
+        with Session(db_engine) as session:
+            query = session.query(Follow.user_id).filter(
+                Follow.follower_id == agent_id, Follow.action == "follow"
+            )
+            return set(row[0] for row in query.all())
+    except Exception:
+        return set()
 
 
 def _calculate_user_author_affinity_redis(
@@ -1758,47 +1645,54 @@ def _calculate_user_author_affinity_redis(
     """
     import math
 
-    from sqlalchemy.orm import Session
-
     # Try Redis: count interactions (likes/comments)
     interactions = 0
 
     # Check likes
-    user_likes_key = redis_key_fn("user", agent_id) + ":likes"
-    if redis_client.exists(user_likes_key):
-        user_likes = redis_client.smembers(user_likes_key)
-        # Count how many of these posts are by the author
-        for post_id in user_likes:
-            post_key = redis_key_fn("posts", post_id)
-            if redis_client.exists(post_key):
-                post_data = redis_client.hgetall(post_key)
-                if post_data.get("user_id") == author_id:
-                    interactions += 1
+    user_likes = _get_user_likes(agent_id, redis_client, redis_key_fn, db_engine)
+    # Count how many of these posts are by the author
+    for post_id in user_likes:
+        post_key = redis_key_fn("posts", post_id)
+        if redis_client.exists(post_key):
+            post_data = redis_client.hgetall(post_key)
+            if post_data.get("user_id") == author_id:
+                interactions += 1
 
     # If Redis doesn't have data, fall back to SQL
     if interactions == 0:
-        with Session(db_engine) as session:
-            from YSimulator.YServer.classes.models import Post, Reply
+        try:
+            with Session(db_engine) as session:
+                from YSimulator.YServer.classes.models import Post
 
-            # Count likes on author's posts
-            likes_count = (
-                session.query(Reaction)
-                .join(Post, Reaction.post_id == Post.id)
-                .filter(
-                    Reaction.user_id == agent_id, Post.user_id == author_id, Reaction.type == "LIKE"
+                # Count likes on author's posts
+                likes_count = (
+                    session.query(Reaction)
+                    .join(Post, Reaction.post_id == Post.id)
+                    .filter(
+                        Reaction.user_id == agent_id,
+                        Post.user_id == author_id,
+                        Reaction.type == "LIKE",
+                    )
+                    .count()
                 )
-                .count()
-            )
 
-            # Count comments on author's posts
-            comments_count = (
-                session.query(Reply)
-                .join(Post, Reply.post_id == Post.id)
-                .filter(Reply.user_id == agent_id, Post.user_id == author_id)
-                .count()
-            )
+                # Comments are posts whose `comment_to` points to a parent post
+                parent_post = aliased(Post)
+                comments_count = (
+                    session.query(Post)
+                    .join(parent_post, Post.comment_to == parent_post.id)
+                    .filter(
+                        Post.user_id == agent_id,
+                        Post.comment_to.isnot(None),
+                        Post.comment_to != "-1",
+                        parent_post.user_id == author_id,
+                    )
+                    .count()
+                )
 
-            interactions = likes_count + comments_count
+                interactions = likes_count + comments_count
+        except Exception:
+            interactions = 0
 
     # Log scale
     return math.log(1 + interactions)
@@ -1829,18 +1723,19 @@ def _calculate_recent_user_author_affinity_redis(
 
 
 def _calculate_content_topic_similarity_redis(
-    agent_id: str, post_id: str, user_interests: set, redis_client, redis_key_fn
+    agent_id: str,
+    post_id: str,
+    user_interests: set,
+    redis_client,
+    redis_key_fn,
+    db_engine=None,
 ) -> float:
     """
     Calculate content topic similarity using cosine similarity.
     Simplified: Jaccard similarity (intersection / union) of topics.
     """
-    # Get post topics
-    post_topics_key = redis_key_fn("post", post_id) + ":topics"
-    if not redis_client.exists(post_topics_key):
-        return 0.0
-
-    post_topics = redis_client.smembers(post_topics_key)
+    # Get post topics (Redis with SQL fallback)
+    post_topics = _get_post_topics(post_id, redis_client, redis_key_fn, db_engine)
 
     if not user_interests or not post_topics:
         return 0.0
@@ -1865,11 +1760,7 @@ def _calculate_similar_user_author_score_redis(
     import math
 
     # Get agent's likes
-    agent_likes_key = redis_key_fn("user", agent_id) + ":likes"
-    if not redis_client.exists(agent_likes_key):
-        return 0.0
-
-    agent_likes = redis_client.smembers(agent_likes_key)
+    agent_likes = _get_user_likes(agent_id, redis_client, redis_key_fn, db_engine)
     if not agent_likes:
         return 0.0
 
@@ -1881,22 +1772,18 @@ def _calculate_similar_user_author_score_redis(
     # Calculate overlap for each user (simplified - take top N with overlap)
     for uid in list(all_user_ids)[:SIMILAR_USERS_SAMPLE_LIMIT]:
         if uid != agent_id:
-            user_likes_key = redis_key_fn("user", uid) + ":likes"
-            if redis_client.exists(user_likes_key):
-                user_likes = redis_client.smembers(user_likes_key)
-                overlap = len(agent_likes & user_likes)
-                if overlap > 0:
-                    similar_users.add(uid)
+            user_likes = _get_user_likes(uid, redis_client, redis_key_fn, db_engine)
+            overlap = len(agent_likes & user_likes)
+            if overlap > 0:
+                similar_users.add(uid)
 
     # Count how many similar users follow or liked posts by this author
     count = 0
     for user_id in similar_users:
         # Check if they follow the author
-        follows_key = redis_key_fn("user", user_id) + ":follows"
-        if redis_client.exists(follows_key):
-            user_follows = redis_client.smembers(follows_key)
-            if author_id in user_follows:
-                count += 1
+        user_follows = _get_user_follows(user_id, redis_client, redis_key_fn, db_engine)
+        if author_id in user_follows:
+            count += 1
 
     # Log scale
     return math.log(1 + count)

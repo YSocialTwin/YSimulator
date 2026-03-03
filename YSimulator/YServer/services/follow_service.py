@@ -28,7 +28,9 @@ class FollowService:
         self.follow_repo = follow_repository
         self.logger = logger or logging.getLogger(__name__)
 
-    def add_follow(self, follower_id: str, followee_id: str, round_id: str) -> bool:
+    def add_follow(
+        self, follower_id: str, followee_id: str, round_id: str, action: str = "follow"
+    ) -> bool:
         """
         Add a follow relationship.
 
@@ -44,6 +46,8 @@ class FollowService:
             follow_data = {
                 "follower_id": follower_id,
                 "followee_id": followee_id,
+                "action": action,
+                "round": round_id,
                 "round_id": round_id,
             }
             return self.follow_repo.add_follow(follow_data)

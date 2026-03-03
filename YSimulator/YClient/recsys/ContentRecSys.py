@@ -42,7 +42,7 @@ class ContentRecSys:
         followers_ratio (float): Ratio of posts from followers vs others
     """
 
-    def __init__(self, mode="ContentRecSys", n_posts=5, followers_ratio=0.6):
+    def __init__(self, mode="random", n_posts=5, followers_ratio=0.6):
         """
         Initialize the content recommendation system.
 

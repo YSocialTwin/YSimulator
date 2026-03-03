@@ -65,6 +65,7 @@ class FollowProcessor(BaseActionProcessor):
                 follower_id=str(action.agent_id),
                 followee_id=str(action.target_user_id),
                 round_id=context.current_round_id,
+                action="follow",
             )
 
             if not success:

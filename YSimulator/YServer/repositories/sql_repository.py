@@ -1159,8 +1159,8 @@ class SQLFollowRepository(FollowRepository):
                     "id": follow_data.get("id", str(uuid.uuid4())),
                     "user_id": follow_data.get("followee_id") or follow_data.get("user_id"),
                     "follower_id": follow_data.get("follower_id"),
-                    "action": follow_data.get("action"),
-                    "round": follow_data.get("round"),
+                    "action": follow_data.get("action", "follow"),
+                    "round": follow_data.get("round") or follow_data.get("round_id"),
                 }
                 # Filter out None values
                 mapped_data = {k: v for k, v in mapped_data.items() if v is not None}
@@ -1199,8 +1199,8 @@ class SQLFollowRepository(FollowRepository):
                         "id": follow_data.get("id", str(uuid.uuid4())),
                         "user_id": follow_data.get("followee_id") or follow_data.get("user_id"),
                         "follower_id": follow_data.get("follower_id"),
-                        "action": follow_data.get("action"),
-                        "round": follow_data.get("round"),
+                        "action": follow_data.get("action", "follow"),
+                        "round": follow_data.get("round") or follow_data.get("round_id"),
                     }
                     # Filter out None values
                     mapped_data = {k: v for k, v in mapped_data.items() if v is not None}
