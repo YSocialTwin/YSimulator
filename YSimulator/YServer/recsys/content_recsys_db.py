@@ -30,6 +30,7 @@ def _safe_numeric(value) -> int:
     except (TypeError, ValueError):
         return 0
 
+
 # Constants for hybrid linear ranker (shared with Redis implementation)
 RECENT_AFFINITY_DISCOUNT = 0.5  # Weight for recent interactions (50% of total affinity)
 SIMILAR_USERS_SAMPLE_LIMIT = 100  # Max users to consider for similarity calculation (performance)
