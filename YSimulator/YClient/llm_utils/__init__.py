@@ -30,7 +30,9 @@ try:
         LLMActorPool,
         LLMLoadBalancer,
         LoadBalancingStrategy,
+        acquire_llm_pool_lease,
         create_llm_actors,
+        release_llm_pool_lease,
     )
     from YSimulator.YClient.llm_utils.retry_handler import RetryHandler
 except ImportError:
@@ -41,7 +43,9 @@ except ImportError:
     LLMLoadBalancer = None
     LLMActorPool = None
     LoadBalancingStrategy = None
+    acquire_llm_pool_lease = None
     create_llm_actors = None
+    release_llm_pool_lease = None
 
 __all__ = [
     "LLMManager",
@@ -52,5 +56,7 @@ __all__ = [
     "LLMLoadBalancer",
     "LLMActorPool",
     "LoadBalancingStrategy",
+    "acquire_llm_pool_lease",
     "create_llm_actors",
+    "release_llm_pool_lease",
 ]
