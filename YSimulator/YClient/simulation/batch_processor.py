@@ -1845,7 +1845,9 @@ class BatchProcessor:
             # Try true vLLM batching for llm_evaluation opinion dynamics first.
             # If requirements are not met, safely fall back to the standard path.
             opinion_manager = getattr(calculate_opinion_updates_fn, "__self__", None)
-            opinion_config = getattr(opinion_manager, "opinion_config", {}) if opinion_manager else {}
+            opinion_config = (
+                getattr(opinion_manager, "opinion_config", {}) if opinion_manager else {}
+            )
             model_name = opinion_config.get("model_name", "bounded_confidence")
 
             llm_actor = self._get_llm_actor()
@@ -1898,7 +1900,9 @@ class BatchProcessor:
 
                 for topic_id in topic_ids:
                     topic_name = ray.get(
-                        self.server.get_topic_name_from_id.remote(topic_id, client_id=self.client_id)
+                        self.server.get_topic_name_from_id.remote(
+                            topic_id, client_id=self.client_id
+                        )
                     )
                     if not topic_name:
                         continue
@@ -2003,7 +2007,9 @@ class BatchProcessor:
 
         except Exception as e:
             self.logger.error(f"Failed to batch evaluate opinions: {e}")
-            self._apply_standard_opinion_updates(opinion_requests, actions, calculate_opinion_updates_fn)
+            self._apply_standard_opinion_updates(
+                opinion_requests, actions, calculate_opinion_updates_fn
+            )
 
     def _apply_standard_opinion_updates(
         self,
