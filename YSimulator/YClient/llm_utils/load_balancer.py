@@ -71,7 +71,9 @@ def _get_or_create_lease_registry():
     try:
         return ray.get_actor(LEASE_REGISTRY_ACTOR_NAME)
     except ValueError:
-        return LLMLeaseRegistry.options(name=LEASE_REGISTRY_ACTOR_NAME, lifetime="detached").remote()
+        return LLMLeaseRegistry.options(
+            name=LEASE_REGISTRY_ACTOR_NAME, lifetime="detached"
+        ).remote()
 
 
 def acquire_llm_pool_lease(
