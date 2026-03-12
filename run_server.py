@@ -7,6 +7,7 @@ the simulation, coordinates clients, and handles agent registration.
 
 import argparse
 import gzip
+import hashlib
 import json
 import logging
 import os
@@ -106,6 +107,60 @@ def setup_logging(
         logger.addHandler(console_handler)
 
     return logger
+
+
+def _get_short_ray_temp_dir(config_dir: Path, ray_config: dict) -> Path:
+    """
+    Return a Ray temp dir path short enough for AF_UNIX socket limits.
+
+    Ray appends a long session/sockets suffix under _temp_dir. On HPC systems the
+    experiment directory path can exceed the 107-byte Unix socket pathname limit,
+    so we create a short alias path pointing to the real storage directory.
+    """
+    configured = ray_config.get("temp_dir")
+    if configured:
+        target_dir = Path(configured)
+        if not target_dir.is_absolute():
+            target_dir = config_dir / target_dir
+    else:
+        target_dir = config_dir / "ray"
+
+    target_dir.mkdir(parents=True, exist_ok=True)
+
+    # Conservative allowance for Ray's generated suffix:
+    # /session_<timestamp>_<pid>/sockets/plasma_store
+    max_base_len = 35
+    if len(str(target_dir)) <= max_base_len:
+        return target_dir
+
+    short_roots = [
+        Path(os.environ.get("YSIM_RAY_ALIAS_ROOT", "")).expanduser()
+        if os.environ.get("YSIM_RAY_ALIAS_ROOT")
+        else None,
+        Path("/dev/shm"),
+        Path("/var/tmp"),
+        Path("/tmp"),
+    ]
+
+    short_roots = [root for root in short_roots if root and root.exists() and os.access(root, os.W_OK)]
+    target_hash = hashlib.sha1(str(target_dir).encode("utf-8")).hexdigest()[:12]
+
+    for root in short_roots:
+        alias_path = root / f"ysr_{target_hash}"
+        try:
+            if alias_path.exists() or alias_path.is_symlink():
+                if alias_path.is_symlink() and alias_path.resolve() == target_dir.resolve():
+                    return alias_path
+                if alias_path.is_dir() and alias_path.resolve() == target_dir.resolve():
+                    return alias_path
+                continue
+
+            os.symlink(str(target_dir), str(alias_path), target_is_directory=True)
+            return alias_path
+        except Exception:
+            continue
+
+    return target_dir
 
 
 if __name__ == "__main__":
@@ -274,16 +329,9 @@ if __name__ == "__main__":
     else:
         # Start a new local Ray cluster
         print("--- Starting new local Ray cluster ---")
-        # Avoid relying on /tmp, which is often space-constrained on HPC systems.
-        ray_temp_dir = ray_config.get("temp_dir")
-        if ray_temp_dir:
-            ray_temp_dir = Path(ray_temp_dir)
-            if not ray_temp_dir.is_absolute():
-                ray_temp_dir = config_dir / ray_temp_dir
-        else:
-            ray_temp_dir = config_dir / "ray"
-
-        ray_temp_dir.mkdir(parents=True, exist_ok=True)
+        # Avoid relying on /tmp and keep the effective path short enough for
+        # Ray's Unix socket files on HPC systems.
+        ray_temp_dir = _get_short_ray_temp_dir(config_dir, ray_config)
         init_kwargs["_temp_dir"] = str(ray_temp_dir)
 
         if port:
