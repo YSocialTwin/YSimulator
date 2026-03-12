@@ -166,6 +166,7 @@ if __name__ == "__main__":
 
     redis_config = config.get("redis")  # Redis configuration (optional)
     simulation_config = config.get("simulation", {})  # Simulation configuration (optional)
+    ray_config = config.get("ray", {})  # Ray configuration (optional)
 
     # Add posts configuration to simulation_config for consistency
     posts_config = config.get("posts", {})
@@ -273,6 +274,18 @@ if __name__ == "__main__":
     else:
         # Start a new local Ray cluster
         print("--- Starting new local Ray cluster ---")
+        # Avoid relying on /tmp, which is often space-constrained on HPC systems.
+        ray_temp_dir = ray_config.get("temp_dir")
+        if ray_temp_dir:
+            ray_temp_dir = Path(ray_temp_dir)
+            if not ray_temp_dir.is_absolute():
+                ray_temp_dir = config_dir / ray_temp_dir
+        else:
+            ray_temp_dir = config_dir / "ray"
+
+        ray_temp_dir.mkdir(parents=True, exist_ok=True)
+        init_kwargs["_temp_dir"] = str(ray_temp_dir)
+
         if port:
             print(f"⚠️  Warning: Port {port} specified but will be ignored.")
             print(f"    When starting a new cluster, Ray assigns a random port.")
@@ -281,6 +294,7 @@ if __name__ == "__main__":
                 f"      ray start --head --port={port} --node-ip-address={address if address != 'auto' else '127.0.0.1'}"
             )
             print(f"    Then set 'address': 'auto' in server_config.json")
+        print(f"--- Ray temp directory: {ray_temp_dir} ---")
 
     # Start or connect to Ray cluster
     init_start = time.time()
