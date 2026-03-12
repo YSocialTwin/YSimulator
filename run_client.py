@@ -394,6 +394,8 @@ if __name__ == "__main__":
     # Support both Ollama (default) and vLLM backends
     llm_start = time.time()
     llm_config = sim_config["llm"]
+    # Attach client identity for shared actor lease tracking.
+    llm_config["client_name"] = client_name
     llm_v_config = sim_config.get("llm_v")  # Get vision LLM config if available
 
     # Determine which LLM backend to use
@@ -566,4 +568,17 @@ if __name__ == "__main__":
         )
         raise
     finally:
+        try:
+            if llm_backend == "vllm":
+                from YSimulator.YClient.llm_utils import release_llm_pool_lease
+
+                release_llm_pool_lease(
+                    backend=llm_backend,
+                    actor_name_prefix=actor_name_prefix,
+                    num_actors=num_llm_actors,
+                    client_id=client_name,
+                    logger=logger,
+                )
+        except Exception as cleanup_error:
+            logger.warning(f"Failed to release LLM pool lease cleanly: {cleanup_error}")
         logger.info("Client shutdown complete")

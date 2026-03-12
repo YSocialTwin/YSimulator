@@ -1,0 +1,107 @@
+from unittest.mock import Mock
+
+from YSimulator.YClient.llm_utils.load_balancer import (
+    acquire_llm_pool_lease,
+    release_llm_pool_lease,
+)
+
+
+class _RemoteCall:
+    def __init__(self, fn):
+        self._fn = fn
+
+    def remote(self, *args, **kwargs):
+        return self._fn(*args, **kwargs)
+
+
+class _FakeRegistry:
+    def __init__(self, release_result):
+        self._release_result = release_result
+        self.acquire = _RemoteCall(self._acquire)
+        self.release = _RemoteCall(self._release)
+        self.acquire_calls = []
+        self.release_calls = []
+
+    def _acquire(self, pool_key, client_id, actor_names):
+        self.acquire_calls.append((pool_key, client_id, actor_names))
+        return 2
+
+    def _release(self, pool_key, client_id):
+        self.release_calls.append((pool_key, client_id))
+        return self._release_result
+
+
+def test_acquire_lease_calls_registry(monkeypatch):
+    fake_registry = _FakeRegistry(release_result=(1, []))
+    monkeypatch.setattr(
+        "YSimulator.YClient.llm_utils.load_balancer._get_or_create_lease_registry",
+        lambda: fake_registry,
+    )
+    monkeypatch.setattr("YSimulator.YClient.llm_utils.load_balancer.ray.get", lambda x: x)
+
+    active = acquire_llm_pool_lease(
+        backend="vllm",
+        actor_name_prefix="ysim_llm",
+        num_actors=2,
+        client_id="client1",
+        actor_names=["ysim_llm_vllm_0", "ysim_llm_vllm_1"],
+    )
+
+    assert active == 2
+    assert fake_registry.acquire_calls == [
+        ("vllm:ysim_llm:2", "client1", ["ysim_llm_vllm_0", "ysim_llm_vllm_1"])
+    ]
+
+
+def test_release_lease_no_kill_when_clients_still_active(monkeypatch):
+    fake_registry = _FakeRegistry(release_result=(1, ["ysim_llm_vllm_0"]))
+    monkeypatch.setattr(
+        "YSimulator.YClient.llm_utils.load_balancer._get_or_create_lease_registry",
+        lambda: fake_registry,
+    )
+    monkeypatch.setattr("YSimulator.YClient.llm_utils.load_balancer.ray.get", lambda x: x)
+
+    kill_mock = Mock()
+    monkeypatch.setattr("YSimulator.YClient.llm_utils.load_balancer.ray.kill", kill_mock)
+    monkeypatch.setattr(
+        "YSimulator.YClient.llm_utils.load_balancer.ray.get_actor",
+        lambda name: Mock(name=f"actor-{name}"),
+    )
+
+    active = release_llm_pool_lease(
+        backend="vllm",
+        actor_name_prefix="ysim_llm",
+        num_actors=2,
+        client_id="client1",
+    )
+
+    assert active == 1
+    kill_mock.assert_not_called()
+
+
+def test_release_lease_kills_actors_when_last_client_leaves(monkeypatch):
+    actor_names = ["ysim_llm_vllm_0", "ysim_llm_vllm_1"]
+    fake_registry = _FakeRegistry(release_result=(0, actor_names))
+    monkeypatch.setattr(
+        "YSimulator.YClient.llm_utils.load_balancer._get_or_create_lease_registry",
+        lambda: fake_registry,
+    )
+    monkeypatch.setattr("YSimulator.YClient.llm_utils.load_balancer.ray.get", lambda x: x)
+
+    actors = {name: Mock(name=f"actor-{name}") for name in actor_names}
+    monkeypatch.setattr(
+        "YSimulator.YClient.llm_utils.load_balancer.ray.get_actor",
+        lambda name: actors[name],
+    )
+    kill_mock = Mock()
+    monkeypatch.setattr("YSimulator.YClient.llm_utils.load_balancer.ray.kill", kill_mock)
+
+    active = release_llm_pool_lease(
+        backend="vllm",
+        actor_name_prefix="ysim_llm",
+        num_actors=2,
+        client_id="client2",
+    )
+
+    assert active == 0
+    assert kill_mock.call_count == 2

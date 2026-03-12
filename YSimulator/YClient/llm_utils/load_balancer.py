@@ -31,6 +31,107 @@ class LoadBalancingStrategy(Enum):
     LEAST_LOADED = "least_loaded"  # Route to least busy actor (future enhancement)
 
 
+LEASE_REGISTRY_ACTOR_NAME = "ysim_llm_lease_registry"
+
+
+@ray.remote
+class LLMLeaseRegistry:
+    """Tracks active clients per LLM pool to support safe shared-actor cleanup."""
+
+    def __init__(self):
+        self.pool_clients = {}  # pool_key -> set(client_id)
+        self.pool_actor_names = {}  # pool_key -> list[str]
+
+    def acquire(self, pool_key: str, client_id: str, actor_names: List[str]) -> int:
+        clients = self.pool_clients.setdefault(pool_key, set())
+        clients.add(client_id)
+        if actor_names:
+            self.pool_actor_names[pool_key] = actor_names
+        return len(clients)
+
+    def release(self, pool_key: str, client_id: str) -> tuple[int, List[str]]:
+        clients = self.pool_clients.get(pool_key, set())
+        clients.discard(client_id)
+        if clients:
+            self.pool_clients[pool_key] = clients
+            return len(clients), []
+
+        self.pool_clients.pop(pool_key, None)
+        actor_names = self.pool_actor_names.pop(pool_key, [])
+        return 0, actor_names
+
+
+def _build_pool_key(backend: str, actor_name_prefix: str, num_actors: int) -> str:
+    """Build a deterministic key for a shared actor pool."""
+    return f"{backend.lower()}:{actor_name_prefix}:{num_actors}"
+
+
+def _get_or_create_lease_registry():
+    """Get or create the detached lease registry actor."""
+    try:
+        return ray.get_actor(LEASE_REGISTRY_ACTOR_NAME)
+    except ValueError:
+        return LLMLeaseRegistry.options(
+            name=LEASE_REGISTRY_ACTOR_NAME, lifetime="detached"
+        ).remote()
+
+
+def acquire_llm_pool_lease(
+    backend: str,
+    actor_name_prefix: str,
+    num_actors: int,
+    client_id: str,
+    actor_names: List[str],
+    logger: Optional[logging.Logger] = None,
+) -> int:
+    """Register client usage of an LLM actor pool."""
+    pool_key = _build_pool_key(backend, actor_name_prefix, num_actors)
+    registry = _get_or_create_lease_registry()
+    active = ray.get(registry.acquire.remote(pool_key, client_id, actor_names))
+    if logger:
+        logger.info(
+            f"Acquired LLM pool lease: key={pool_key}, client={client_id}, active_clients={active}"
+        )
+    return active
+
+
+def release_llm_pool_lease(
+    backend: str,
+    actor_name_prefix: str,
+    num_actors: int,
+    client_id: str,
+    logger: Optional[logging.Logger] = None,
+) -> int:
+    """
+    Release client usage of an LLM actor pool.
+
+    If this is the last client, all detached actors in the pool are terminated.
+    """
+    pool_key = _build_pool_key(backend, actor_name_prefix, num_actors)
+    registry = _get_or_create_lease_registry()
+    active, actor_names = ray.get(registry.release.remote(pool_key, client_id))
+    if logger:
+        logger.info(
+            f"Released LLM pool lease: key={pool_key}, client={client_id}, active_clients={active}"
+        )
+
+    if active == 0 and actor_names:
+        for actor_name in actor_names:
+            try:
+                actor = ray.get_actor(actor_name)
+                ray.kill(actor, no_restart=True)
+                if logger:
+                    logger.info(f"Terminated idle LLM actor: {actor_name}")
+            except ValueError:
+                # Actor already gone, ignore.
+                continue
+            except Exception as exc:
+                if logger:
+                    logger.warning(f"Failed to terminate LLM actor {actor_name}: {exc}")
+
+    return active
+
+
 class LLMLoadBalancer:
     """
     Load balancer for multiple LLM actor instances.
@@ -446,12 +547,22 @@ def create_llm_actors(
             if actor_name:
                 options["name"] = actor_name
 
-            return VLLMService.options(**options).remote(
+            actor = VLLMService.options(**options).remote(
                 llm_config=llm_config,
                 prompts_config=prompts_config,
                 llm_v_config=llm_v_config,
                 logging_config=logging_config,
             )
+            if actor_name and reuse_actors and llm_config.get("client_name"):
+                acquire_llm_pool_lease(
+                    backend=backend_lower,
+                    actor_name_prefix=actor_name_prefix,
+                    num_actors=1,
+                    client_id=llm_config["client_name"],
+                    actor_names=[actor_name],
+                    logger=logger,
+                )
+            return actor
         else:
             from YSimulator.YClient.LLM_interactions.llm_service import LLMService
 
@@ -460,16 +571,26 @@ def create_llm_actors(
             if actor_name:
                 options["name"] = actor_name
 
-            return LLMService.options(**options).remote(
+            actor = LLMService.options(**options).remote(
                 llm_config=llm_config,
                 prompts_config=prompts_config,
                 llm_v_config=llm_v_config,
                 logging_config=logging_config,
             )
+            if actor_name and reuse_actors and llm_config.get("client_name"):
+                acquire_llm_pool_lease(
+                    backend=backend_lower,
+                    actor_name_prefix=actor_name_prefix,
+                    num_actors=1,
+                    client_id=llm_config["client_name"],
+                    actor_names=[actor_name],
+                    logger=logger,
+                )
+            return actor
 
     # Multiple actors - use load balancing
     if enable_monitoring:
-        return LLMActorPool(
+        pool = LLMActorPool(
             llm_config=llm_config,
             prompts_config=prompts_config,
             num_actors=num_actors,
@@ -481,8 +602,19 @@ def create_llm_actors(
             reuse_actors=reuse_actors,
             actor_name_prefix=actor_name_prefix,
         )
+        if llm_config.get("client_name"):
+            actor_names = [f"{actor_name_prefix}_{backend_lower}_{i}" for i in range(num_actors)]
+            acquire_llm_pool_lease(
+                backend=backend_lower,
+                actor_name_prefix=actor_name_prefix,
+                num_actors=num_actors,
+                client_id=llm_config["client_name"],
+                actor_names=actor_names,
+                logger=logger,
+            )
+        return pool
     else:
-        return LLMLoadBalancer(
+        balancer = LLMLoadBalancer(
             llm_config=llm_config,
             prompts_config=prompts_config,
             num_actors=num_actors,
@@ -493,3 +625,14 @@ def create_llm_actors(
             reuse_actors=reuse_actors,
             actor_name_prefix=actor_name_prefix,
         )
+        if llm_config.get("client_name"):
+            actor_names = [f"{actor_name_prefix}_{backend_lower}_{i}" for i in range(num_actors)]
+            acquire_llm_pool_lease(
+                backend=backend_lower,
+                actor_name_prefix=actor_name_prefix,
+                num_actors=num_actors,
+                client_id=llm_config["client_name"],
+                actor_names=actor_names,
+                logger=logger,
+            )
+        return balancer

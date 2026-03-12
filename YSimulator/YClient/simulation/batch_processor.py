@@ -14,6 +14,7 @@ Updated in Phase 3 to use LLM service layer.
 
 import logging
 import uuid
+from collections import Counter
 from typing import Dict, List, Optional, Tuple, Union
 
 import ray
@@ -1841,25 +1842,191 @@ class BatchProcessor:
             return
 
         try:
-            # For now, use standard opinion calculation (parallel path approach)
-            # Future optimization: detect LLM evaluation and batch those calls
-            self.logger.info(
-                f"Calculating opinions for {len(opinion_requests)} interactions (standard path)"
+            # Try true vLLM batching for llm_evaluation opinion dynamics first.
+            # If requirements are not met, safely fall back to the standard path.
+            opinion_manager = getattr(calculate_opinion_updates_fn, "__self__", None)
+            opinion_config = (
+                getattr(opinion_manager, "opinion_config", {}) if opinion_manager else {}
             )
+            model_name = opinion_config.get("model_name", "bounded_confidence")
+
+            llm_actor = self._get_llm_actor()
+            supports_batch_eval = hasattr(llm_actor, "evaluate_opinion_batch")
+
+            if model_name != "llm_evaluation" or not supports_batch_eval or opinion_manager is None:
+                self._apply_standard_opinion_updates(
+                    opinion_requests, actions, calculate_opinion_updates_fn
+                )
+                return
+
+            from YSimulator.YClient.opinion_dynamics.llm_evaluation import Direction, shift_class
+            from YSimulator.YClient.opinion_dynamics.utils import get_opinion_group
+
+            params = opinion_config.get("parameters", {})
+            evaluation_scope = params.get("evaluation_scope", "interlocutor_only")
+            cold_start = params.get("cold_start", "neutral")
+            opinion_groups = opinion_config.get("opinion_groups", {})
+
+            if not opinion_groups:
+                # Missing classes makes class-shift undefined; keep behavior safe.
+                self._apply_standard_opinion_updates(
+                    opinion_requests, actions, calculate_opinion_updates_fn
+                )
+                return
+
+            batch_requests = []
+            request_mappings = []
+            action_topic_updates: Dict[int, Dict[str, float]] = {}
 
             for req in opinion_requests:
                 agent_id = req["agent_id"]
                 target_post = req["target_post"]
-                post_data = req["post_data"]
+                post_data = req["post_data"] or {}
                 action_idx = req["action_index"]
+                parent_author_id = post_data.get("user_id")
+                post_content = post_data.get("tweet") or post_data.get("text") or ""
 
-                # Call standard opinion calculation
-                updated_opinions = calculate_opinion_updates_fn(agent_id, target_post, post_data)
+                if action_idx not in action_topic_updates:
+                    action_topic_updates[action_idx] = {}
 
-                # Update action with calculated opinions
+                if not parent_author_id:
+                    continue
+
+                topic_ids = ray.get(
+                    self.server.get_post_topics.remote(target_post, client_id=self.client_id)
+                )
+                if not topic_ids:
+                    continue
+
+                for topic_id in topic_ids:
+                    topic_name = ray.get(
+                        self.server.get_topic_name_from_id.remote(
+                            topic_id, client_id=self.client_id
+                        )
+                    )
+                    if not topic_name:
+                        continue
+
+                    agent_opinion = ray.get(
+                        self.server.get_latest_agent_opinion.remote(
+                            agent_id, topic_id, client_id=self.client_id
+                        )
+                    )
+                    author_opinion = ray.get(
+                        self.server.get_latest_agent_opinion.remote(
+                            parent_author_id, topic_id, client_id=self.client_id
+                        )
+                    )
+
+                    # Preserve existing behavior: skip if author has no opinion.
+                    if author_opinion is None:
+                        continue
+
+                    # Cold-start handling mirrors llm_evaluation() without needing an LLM call.
+                    if agent_opinion is None:
+                        if cold_start == "inherited":
+                            action_topic_updates[action_idx][topic_id] = author_opinion
+                        else:
+                            action_topic_updates[action_idx][topic_id] = 0.5
+                        continue
+
+                    agent_label = get_opinion_group(agent_opinion, opinion_groups)
+                    author_label = get_opinion_group(author_opinion, opinion_groups)
+
+                    peers_opinions = None
+                    if evaluation_scope == "neighbors":
+                        neighbor_values = ray.get(
+                            self.server.get_neighbors_opinions.remote(
+                                agent_id, topic_id, client_id=self.client_id
+                            )
+                        )
+                        if neighbor_values:
+                            neighbor_labels = [
+                                get_opinion_group(val, opinion_groups) for val in neighbor_values
+                            ]
+                            peers_opinions = list(Counter(neighbor_labels).items())
+
+                    batch_requests.append(
+                        {
+                            "agent_opinion": agent_label,
+                            "author_opinion": author_label,
+                            "post_text": post_content,
+                            "topic": topic_name,
+                            "peers_opinions": (
+                                peers_opinions if evaluation_scope != "interlocutor_only" else None
+                            ),
+                        }
+                    )
+                    request_mappings.append(
+                        {
+                            "action_idx": action_idx,
+                            "topic_id": topic_id,
+                            "agent_opinion_value": agent_opinion,
+                            "agent_opinion_label": agent_label,
+                            "author_opinion_label": author_label,
+                        }
+                    )
+
+            # No batchable LLM opinion requests found; apply deterministic updates only.
+            if not batch_requests:
+                for action_idx, topic_updates in action_topic_updates.items():
+                    if action_idx < len(actions):
+                        actions[action_idx].updated_opinions = topic_updates or None
+                return
+
+            self.logger.info(
+                f"Batch evaluating {len(batch_requests)} LLM opinion interactions with vLLM"
+            )
+            batch_future = llm_actor.evaluate_opinion_batch.remote(batch_requests)
+            responses = self.retry_handler.retry_with_backoff(
+                lambda f: ray.get(f),
+                batch_future,
+                error_message="vLLM batch opinion evaluation",
+            )
+
+            for i, response in enumerate(responses):
+                mapping = request_mappings[i]
+                action_idx = mapping["action_idx"]
+                topic_id = mapping["topic_id"]
+                x_value = mapping["agent_opinion_value"]
+                x_label = mapping["agent_opinion_label"]
+                y_label = mapping["author_opinion_label"]
+
+                decision = (response or "").upper()
+                new_value = x_value
+                if "AGREE" in decision:
+                    _, new_value = shift_class(x_label, y_label, Direction.AGREE, opinion_groups)
+                elif "DISAGREE" in decision:
+                    _, new_value = shift_class(x_label, y_label, Direction.DISAGREE, opinion_groups)
+
+                action_topic_updates[action_idx][topic_id] = new_value
+
+            for action_idx, topic_updates in action_topic_updates.items():
                 if action_idx < len(actions):
-                    actions[action_idx].updated_opinions = updated_opinions
+                    actions[action_idx].updated_opinions = topic_updates or None
 
         except Exception as e:
             self.logger.error(f"Failed to batch evaluate opinions: {e}")
-            # Opinions remain None on error (non-critical)
+            self._apply_standard_opinion_updates(
+                opinion_requests, actions, calculate_opinion_updates_fn
+            )
+
+    def _apply_standard_opinion_updates(
+        self,
+        opinion_requests: List[Dict],
+        actions: List[ActionDTO],
+        calculate_opinion_updates_fn,
+    ) -> None:
+        """Apply existing per-request opinion update behavior."""
+        self.logger.info(
+            f"Calculating opinions for {len(opinion_requests)} interactions (standard path)"
+        )
+        for req in opinion_requests:
+            agent_id = req["agent_id"]
+            target_post = req["target_post"]
+            post_data = req["post_data"]
+            action_idx = req["action_index"]
+
+            updated_opinions = calculate_opinion_updates_fn(agent_id, target_post, post_data)
+            if action_idx < len(actions):
+                actions[action_idx].updated_opinions = updated_opinions
