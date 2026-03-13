@@ -434,6 +434,15 @@ if __name__ == "__main__":
                 reuse_actors=reuse_actors,
                 actor_name_prefix=actor_name_prefix,
             )
+            resolved_num_llm_actors = llm_config.get("_resolved_num_actors", num_llm_actors)
+            resolved_actor_name_prefix = llm_config.get(
+                "_resolved_actor_name_prefix", actor_name_prefix
+            )
+            if llm_config.get("_reused_existing_pool"):
+                logger.info(
+                    f"Attached to existing local vLLM pool: model={llm_config.get('model')}, "
+                    f"actors={resolved_num_llm_actors}, prefix={resolved_actor_name_prefix}"
+                )
         except ImportError as e:
             logger.error(f"Failed to import vLLM: {e}")
             print(f"❌ Error: vLLM not available: {e}")
@@ -500,6 +509,9 @@ if __name__ == "__main__":
                 )
             else:
                 llm_service = LLMService.remote(llm_config, prompts_config, llm_v_config, logging_config)
+
+    resolved_num_llm_actors = llm_config.get("_resolved_num_actors", num_llm_actors)
+    resolved_actor_name_prefix = llm_config.get("_resolved_actor_name_prefix", actor_name_prefix)
 
     llm_time = (time.time() - llm_start) * 1000
 
@@ -574,8 +586,8 @@ if __name__ == "__main__":
 
                 release_llm_pool_lease(
                     backend=llm_backend,
-                    actor_name_prefix=actor_name_prefix,
-                    num_actors=num_llm_actors,
+                    actor_name_prefix=resolved_actor_name_prefix,
+                    num_actors=resolved_num_llm_actors,
                     client_id=client_name,
                     logger=logger,
                 )

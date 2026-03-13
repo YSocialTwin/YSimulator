@@ -34,6 +34,26 @@ class LoadBalancingStrategy(Enum):
 LEASE_REGISTRY_ACTOR_NAME = "ysim_llm_lease_registry"
 
 
+def _build_vllm_pool_prefix(model_name: str) -> str:
+    """Create a stable actor-name prefix for a vLLM model."""
+    normalized = (model_name or "unknown-model").strip().lower()
+    model_hash = hashlib.sha256(normalized.encode()).hexdigest()[:12]
+    return f"ysim_vllm_{model_hash}"
+
+
+def _discover_named_actor_count(actor_name_prefix: str, backend: str) -> int:
+    """Return how many consecutively named actors already exist for this pool."""
+    count = 0
+    while True:
+        actor_name = f"{actor_name_prefix}_{backend}_{count}"
+        try:
+            ray.get_actor(actor_name)
+            count += 1
+        except ValueError:
+            break
+    return count
+
+
 @ray.remote
 class LLMLeaseRegistry:
     """Tracks active clients per LLM pool to support safe shared-actor cleanup."""
@@ -519,6 +539,26 @@ def create_llm_actors(
     """
     backend_lower = backend.lower()
 
+    if backend_lower == "vllm":
+        resolved_prefix = _build_vllm_pool_prefix(llm_config.get("model", "unknown-model"))
+        existing_count = _discover_named_actor_count(resolved_prefix, backend_lower)
+        if existing_count > 0:
+            if logger:
+                logger.info(
+                    f"Reusing existing local vLLM pool for model={llm_config.get('model')} "
+                    f"with {existing_count} actor(s)"
+                )
+            actor_name_prefix = resolved_prefix
+            num_actors = existing_count
+            reuse_actors = True
+            llm_config["_reused_existing_pool"] = True
+        else:
+            actor_name_prefix = resolved_prefix
+            llm_config["_reused_existing_pool"] = False
+
+        llm_config["_resolved_actor_name_prefix"] = actor_name_prefix
+        llm_config["_resolved_num_actors"] = num_actors
+
     # Get GPU allocation per actor (for vLLM)
     gpu_per_actor = llm_config.get("gpu_per_actor", 1.0)
 
@@ -540,7 +580,7 @@ def create_llm_actors(
         if backend_lower == "vllm":
             from YSimulator.YClient.LLM_interactions.vllm_service import VLLMService
 
-            actor_name = f"{actor_name_prefix}_{backend_lower}_0" if reuse_actors else None
+            actor_name = f"{actor_name_prefix}_{backend_lower}_0"
             options = {"num_gpus": gpu_per_actor, "lifetime": "detached"}
             if actor_name:
                 options["name"] = actor_name
