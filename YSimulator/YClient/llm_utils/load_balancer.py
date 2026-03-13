@@ -54,6 +54,57 @@ def _discover_named_actor_count(actor_name_prefix: str, backend: str) -> int:
     return count
 
 
+def _discover_existing_vllm_pool(model_name: str, logger: Optional[logging.Logger] = None) -> tuple[str, int]:
+    """
+    Discover an existing local vLLM pool for a model.
+
+    First check the deterministic model-derived prefix. If nothing is found, scan
+    named VLLMService actors and ask them for metadata so we can attach to older pools too.
+    """
+    preferred_prefix = _build_vllm_pool_prefix(model_name)
+    preferred_count = _discover_named_actor_count(preferred_prefix, "vllm")
+    if preferred_count > 0:
+        return preferred_prefix, preferred_count
+
+    try:
+        from ray.util.state import list_actors
+    except Exception:
+        return preferred_prefix, 0
+
+    candidate_groups = {}
+    for actor_state in list_actors():
+        actor_name = actor_state.get("name")
+        if not actor_name or actor_state.get("class_name") != "VLLMService":
+            continue
+        if actor_state.get("state") not in (None, "ALIVE"):
+            continue
+
+        try:
+            actor = ray.get_actor(actor_name)
+            metadata = ray.get(actor.get_service_metadata.remote())
+        except Exception:
+            continue
+
+        if metadata.get("backend") != "vllm" or metadata.get("model") != model_name:
+            continue
+
+        pool_prefix = metadata.get("pool_prefix") or actor_name.rsplit("_vllm_", 1)[0]
+        candidate_groups.setdefault(pool_prefix, []).append(actor_name)
+
+    if not candidate_groups:
+        return preferred_prefix, 0
+
+    selected_prefix, actor_names = max(
+        candidate_groups.items(), key=lambda item: (len(item[1]), item[0])
+    )
+    if logger:
+        logger.info(
+            f"Discovered existing vLLM pool via actor metadata: model={model_name}, "
+            f"prefix={selected_prefix}, actors={len(actor_names)}"
+        )
+    return selected_prefix, len(actor_names)
+
+
 @ray.remote
 class LLMLeaseRegistry:
     """Tracks active clients per LLM pool to support safe shared-actor cleanup."""
@@ -540,8 +591,9 @@ def create_llm_actors(
     backend_lower = backend.lower()
 
     if backend_lower == "vllm":
-        resolved_prefix = _build_vllm_pool_prefix(llm_config.get("model", "unknown-model"))
-        existing_count = _discover_named_actor_count(resolved_prefix, backend_lower)
+        resolved_prefix, existing_count = _discover_existing_vllm_pool(
+            llm_config.get("model", "unknown-model"), logger
+        )
         if existing_count > 0:
             if logger:
                 logger.info(

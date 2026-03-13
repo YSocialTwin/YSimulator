@@ -75,6 +75,8 @@ class VLLMService:
         self.server = server
         self.client_id = client_id
         self.prompts_config = prompts_config or {}
+        self.model_name = (llm_config or {}).get("model", "meta-llama/Llama-3.2-3B")
+        self.pool_prefix = (llm_config or {}).get("_resolved_actor_name_prefix")
 
         # Initialize optional attributes to None (will be set properly in _initialize if successful)
         self.llm = None
@@ -153,6 +155,14 @@ class VLLMService:
             f"Failed to initialize vLLM on any of {len(gpu_attempts)} available GPU(s). "
             f"Last error: {type(last_error).__name__}: {str(last_error)}"
         ) from last_error
+
+    def get_service_metadata(self) -> Dict[str, Any]:
+        """Expose enough metadata to let clients discover reusable local pools."""
+        return {
+            "backend": "vllm",
+            "model": self.model_name,
+            "pool_prefix": self.pool_prefix,
+        }
 
     @staticmethod
     def _get_candidate_gpus_static(

@@ -1,6 +1,18 @@
 from unittest.mock import Mock
 
-from YSimulator.YClient.llm_utils.load_balancer import _build_vllm_pool_prefix, create_llm_actors
+from YSimulator.YClient.llm_utils.load_balancer import (
+    _build_vllm_pool_prefix,
+    _discover_existing_vllm_pool,
+    create_llm_actors,
+)
+
+
+class _RemoteCall:
+    def __init__(self, fn):
+        self._fn = fn
+
+    def remote(self, *args, **kwargs):
+        return self._fn(*args, **kwargs)
 
 
 def test_create_llm_actors_auto_reuses_existing_same_model_pool(monkeypatch):
@@ -48,3 +60,36 @@ def test_create_llm_actors_auto_reuses_existing_same_model_pool(monkeypatch):
     assert llm_config["_resolved_actor_name_prefix"] == resolved_prefix
     assert llm_config["_resolved_num_actors"] == 2
     assert llm_config["_reused_existing_pool"] is True
+
+
+def test_discover_existing_vllm_pool_can_use_actor_metadata(monkeypatch):
+    model_name = "AMead10/Llama-3.2-3B-Instruct-AWQ"
+    states = [
+        {"name": "custom_pool_vllm_0", "class_name": "VLLMService", "state": "ALIVE"},
+        {"name": "custom_pool_vllm_1", "class_name": "VLLMService", "state": "ALIVE"},
+    ]
+
+    actor0 = Mock()
+    actor0.get_service_metadata = _RemoteCall(
+        lambda: {"backend": "vllm", "model": model_name, "pool_prefix": "custom_pool"}
+    )
+    actor1 = Mock()
+    actor1.get_service_metadata = _RemoteCall(
+        lambda: {"backend": "vllm", "model": model_name, "pool_prefix": "custom_pool"}
+    )
+    actors = {"custom_pool_vllm_0": actor0, "custom_pool_vllm_1": actor1}
+
+    monkeypatch.setattr(
+        "YSimulator.YClient.llm_utils.load_balancer._discover_named_actor_count",
+        lambda prefix, backend: 0,
+    )
+    monkeypatch.setattr("ray.util.state.list_actors", lambda: states)
+    monkeypatch.setattr("YSimulator.YClient.llm_utils.load_balancer.ray.get", lambda x: x)
+    monkeypatch.setattr(
+        "YSimulator.YClient.llm_utils.load_balancer.ray.get_actor", lambda name: actors[name]
+    )
+
+    prefix, count = _discover_existing_vllm_pool(model_name)
+
+    assert prefix == "custom_pool"
+    assert count == 2
