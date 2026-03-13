@@ -32,6 +32,7 @@ class LoadBalancingStrategy(Enum):
 
 
 LEASE_REGISTRY_ACTOR_NAME = "ysim_llm_lease_registry"
+DEFAULT_VLLM_SHARED_NAMESPACE = "ysim_vllm_shared"
 
 
 def _build_vllm_pool_prefix(model_name: str) -> str:
@@ -41,20 +42,38 @@ def _build_vllm_pool_prefix(model_name: str) -> str:
     return f"ysim_vllm_{model_hash}"
 
 
-def _discover_named_actor_count(actor_name_prefix: str, backend: str) -> int:
+def _resolve_actor_namespace(backend: str, llm_config: Optional[dict] = None) -> Optional[str]:
+    """Resolve the namespace where named actors should be created/discovered."""
+    llm_config = llm_config or {}
+    shared_pool = llm_config.get("shared_pool") or {}
+    explicit_namespace = shared_pool.get("namespace") or llm_config.get("actor_namespace")
+    if explicit_namespace:
+        return explicit_namespace
+    if backend.lower() == "vllm":
+        return DEFAULT_VLLM_SHARED_NAMESPACE
+    return None
+
+
+def _discover_named_actor_count(
+    actor_name_prefix: str, backend: str, actor_namespace: Optional[str] = None
+) -> int:
     """Return how many consecutively named actors already exist for this pool."""
     count = 0
     while True:
         actor_name = f"{actor_name_prefix}_{backend}_{count}"
         try:
-            ray.get_actor(actor_name)
+            ray.get_actor(actor_name, namespace=actor_namespace)
             count += 1
         except ValueError:
             break
     return count
 
 
-def _discover_existing_vllm_pool(model_name: str, logger: Optional[logging.Logger] = None) -> tuple[str, int]:
+def _discover_existing_vllm_pool(
+    model_name: str,
+    actor_namespace: Optional[str] = None,
+    logger: Optional[logging.Logger] = None,
+) -> tuple[str, int]:
     """
     Discover an existing local vLLM pool for a model.
 
@@ -62,7 +81,7 @@ def _discover_existing_vllm_pool(model_name: str, logger: Optional[logging.Logge
     named VLLMService actors and ask them for metadata so we can attach to older pools too.
     """
     preferred_prefix = _build_vllm_pool_prefix(model_name)
-    preferred_count = _discover_named_actor_count(preferred_prefix, "vllm")
+    preferred_count = _discover_named_actor_count(preferred_prefix, "vllm", actor_namespace)
     if preferred_count > 0:
         return preferred_prefix, preferred_count
 
@@ -88,9 +107,12 @@ def _discover_existing_vllm_pool(model_name: str, logger: Optional[logging.Logge
             continue
         if actor_state.get("state") not in (None, "ALIVE"):
             continue
+        state_namespace = actor_state.get("ray_namespace") or actor_state.get("namespace")
+        if actor_namespace and state_namespace and state_namespace != actor_namespace:
+            continue
 
         try:
-            actor = ray.get_actor(actor_name)
+            actor = ray.get_actor(actor_name, namespace=actor_namespace)
             metadata = ray.get(actor.get_service_metadata.remote())
         except Exception:
             continue
@@ -147,12 +169,15 @@ def _build_pool_key(backend: str, actor_name_prefix: str, num_actors: int) -> st
     return f"{backend.lower()}:{actor_name_prefix}:{num_actors}"
 
 
-def _get_or_create_lease_registry():
+def _get_or_create_lease_registry(actor_namespace: Optional[str] = None):
     """Get or create the detached lease registry actor."""
     try:
-        return ray.get_actor(LEASE_REGISTRY_ACTOR_NAME)
+        return ray.get_actor(LEASE_REGISTRY_ACTOR_NAME, namespace=actor_namespace)
     except ValueError:
-        return LLMLeaseRegistry.options(name=LEASE_REGISTRY_ACTOR_NAME, lifetime="detached").remote()
+        options = {"name": LEASE_REGISTRY_ACTOR_NAME, "lifetime": "detached"}
+        if actor_namespace:
+            options["namespace"] = actor_namespace
+        return LLMLeaseRegistry.options(**options).remote()
 
 
 def acquire_llm_pool_lease(
@@ -161,11 +186,12 @@ def acquire_llm_pool_lease(
     num_actors: int,
     client_id: str,
     actor_names: List[str],
+    actor_namespace: Optional[str] = None,
     logger: Optional[logging.Logger] = None,
 ) -> int:
     """Register client usage of an LLM actor pool."""
     pool_key = _build_pool_key(backend, actor_name_prefix, num_actors)
-    registry = _get_or_create_lease_registry()
+    registry = _get_or_create_lease_registry(actor_namespace)
     active = ray.get(registry.acquire.remote(pool_key, client_id, actor_names))
     if logger:
         logger.info(
@@ -179,6 +205,7 @@ def release_llm_pool_lease(
     actor_name_prefix: str,
     num_actors: int,
     client_id: str,
+    actor_namespace: Optional[str] = None,
     logger: Optional[logging.Logger] = None,
 ) -> int:
     """
@@ -187,7 +214,7 @@ def release_llm_pool_lease(
     If this is the last client, all detached actors in the pool are terminated.
     """
     pool_key = _build_pool_key(backend, actor_name_prefix, num_actors)
-    registry = _get_or_create_lease_registry()
+    registry = _get_or_create_lease_registry(actor_namespace)
     active, actor_names = ray.get(registry.release.remote(pool_key, client_id))
     if logger:
         logger.info(
@@ -197,7 +224,7 @@ def release_llm_pool_lease(
     if active == 0 and actor_names:
         for actor_name in actor_names:
             try:
-                actor = ray.get_actor(actor_name)
+                actor = ray.get_actor(actor_name, namespace=actor_namespace)
                 ray.kill(actor, no_restart=True)
                 if logger:
                     logger.info(f"Terminated idle LLM actor: {actor_name}")
@@ -260,6 +287,7 @@ class LLMLoadBalancer:
         self.backend = backend.lower()
         self.owns_actors = False  # Track if we created the actors
         self.actor_name_prefix = actor_name_prefix
+        self.actor_namespace = _resolve_actor_namespace(self.backend, llm_config)
 
         # Get GPU allocation per actor (for vLLM)
         # Supports fractional GPUs to allocate multiple actors per GPU
@@ -287,7 +315,7 @@ class LLMLoadBalancer:
             for i in range(num_actors):
                 actor_name = f"{actor_name_prefix}_{self.backend}_{i}"
                 try:
-                    actor = ray.get_actor(actor_name)
+                    actor = ray.get_actor(actor_name, namespace=self.actor_namespace)
                     self.actors.append(actor)
                     reused_count += 1
                     self.logger.info(f"Reused existing LLM actor {i+1}/{num_actors}: {actor_name}")
@@ -322,17 +350,23 @@ class LLMLoadBalancer:
 
             # Allocate GPU resources for vLLM actors
             if self.backend == "vllm":
-                actor = ServiceClass.options(
-                    name=actor_name,
-                    num_gpus=gpu_per_actor,
-                    lifetime="detached",  # Persist beyond client lifetime
-                ).remote(
+                options = {
+                    "name": actor_name,
+                    "num_gpus": gpu_per_actor,
+                    "lifetime": "detached",
+                }
+                if self.actor_namespace:
+                    options["namespace"] = self.actor_namespace
+                actor = ServiceClass.options(**options).remote(
                     llm_config=llm_config,
                     prompts_config=prompts_config,
                     llm_v_config=llm_v_config,
                 )
             else:
-                actor = ServiceClass.options(name=actor_name, lifetime="detached").remote(
+                options = {"name": actor_name, "lifetime": "detached"}
+                if self.actor_namespace:
+                    options["namespace"] = self.actor_namespace
+                actor = ServiceClass.options(**options).remote(
                     llm_config=llm_config,
                     prompts_config=prompts_config,
                     llm_v_config=llm_v_config,
@@ -601,8 +635,9 @@ def create_llm_actors(
     backend_lower = backend.lower()
 
     if backend_lower == "vllm":
+        actor_namespace = _resolve_actor_namespace(backend_lower, llm_config)
         resolved_prefix, existing_count = _discover_existing_vllm_pool(
-            llm_config.get("model", "unknown-model"), logger
+            llm_config.get("model", "unknown-model"), actor_namespace, logger
         )
         if existing_count > 0:
             if logger:
@@ -620,6 +655,11 @@ def create_llm_actors(
 
         llm_config["_resolved_actor_name_prefix"] = actor_name_prefix
         llm_config["_resolved_num_actors"] = num_actors
+        llm_config["_resolved_actor_namespace"] = actor_namespace
+    else:
+        actor_namespace = _resolve_actor_namespace(backend_lower, llm_config)
+        if actor_namespace:
+            llm_config["_resolved_actor_namespace"] = actor_namespace
 
     # Get GPU allocation per actor (for vLLM)
     gpu_per_actor = llm_config.get("gpu_per_actor", 1.0)
@@ -629,9 +669,19 @@ def create_llm_actors(
         if reuse_actors:
             actor_name = f"{actor_name_prefix}_{backend_lower}_0"
             try:
-                actor = ray.get_actor(actor_name)
+                actor = ray.get_actor(actor_name, namespace=actor_namespace)
                 if logger:
                     logger.info(f"Reused existing single LLM actor: {actor_name}")
+                if actor_name and llm_config.get("client_name"):
+                    acquire_llm_pool_lease(
+                        backend=backend_lower,
+                        actor_name_prefix=actor_name_prefix,
+                        num_actors=1,
+                        client_id=llm_config["client_name"],
+                        actor_names=[actor_name],
+                        actor_namespace=actor_namespace,
+                        logger=logger,
+                    )
                 return actor
             except ValueError:
                 # Actor doesn't exist, create new one
@@ -646,6 +696,8 @@ def create_llm_actors(
             options = {"num_gpus": gpu_per_actor, "lifetime": "detached"}
             if actor_name:
                 options["name"] = actor_name
+            if actor_namespace:
+                options["namespace"] = actor_namespace
 
             actor = VLLMService.options(**options).remote(
                 llm_config=llm_config,
@@ -660,6 +712,7 @@ def create_llm_actors(
                     num_actors=1,
                     client_id=llm_config["client_name"],
                     actor_names=[actor_name],
+                    actor_namespace=actor_namespace,
                     logger=logger,
                 )
             return actor
@@ -670,6 +723,8 @@ def create_llm_actors(
             options = {"lifetime": "detached"} if reuse_actors else {}
             if actor_name:
                 options["name"] = actor_name
+            if actor_namespace:
+                options["namespace"] = actor_namespace
 
             actor = LLMService.options(**options).remote(
                 llm_config=llm_config,
@@ -684,6 +739,7 @@ def create_llm_actors(
                     num_actors=1,
                     client_id=llm_config["client_name"],
                     actor_names=[actor_name],
+                    actor_namespace=actor_namespace,
                     logger=logger,
                 )
             return actor
@@ -710,6 +766,7 @@ def create_llm_actors(
                 num_actors=num_actors,
                 client_id=llm_config["client_name"],
                 actor_names=actor_names,
+                actor_namespace=actor_namespace,
                 logger=logger,
             )
         return pool
@@ -733,6 +790,7 @@ def create_llm_actors(
                 num_actors=num_actors,
                 client_id=llm_config["client_name"],
                 actor_names=actor_names,
+                actor_namespace=actor_namespace,
                 logger=logger,
             )
         return balancer

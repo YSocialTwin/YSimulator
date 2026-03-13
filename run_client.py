@@ -438,10 +438,12 @@ if __name__ == "__main__":
             resolved_actor_name_prefix = llm_config.get(
                 "_resolved_actor_name_prefix", actor_name_prefix
             )
+            resolved_actor_namespace = llm_config.get("_resolved_actor_namespace")
             if llm_config.get("_reused_existing_pool"):
                 logger.info(
                     f"Attached to existing local vLLM pool: model={llm_config.get('model')}, "
-                    f"actors={resolved_num_llm_actors}, prefix={resolved_actor_name_prefix}"
+                    f"actors={resolved_num_llm_actors}, prefix={resolved_actor_name_prefix}, "
+                    f"namespace={resolved_actor_namespace or namespace}"
                 )
         except ImportError as e:
             logger.error(f"Failed to import vLLM: {e}")
@@ -512,6 +514,7 @@ if __name__ == "__main__":
 
     resolved_num_llm_actors = llm_config.get("_resolved_num_actors", num_llm_actors)
     resolved_actor_name_prefix = llm_config.get("_resolved_actor_name_prefix", actor_name_prefix)
+    resolved_actor_namespace = llm_config.get("_resolved_actor_namespace")
 
     llm_time = (time.time() - llm_start) * 1000
 
@@ -589,6 +592,7 @@ if __name__ == "__main__":
                     actor_name_prefix=resolved_actor_name_prefix,
                     num_actors=resolved_num_llm_actors,
                     client_id=client_name,
+                    actor_namespace=resolved_actor_namespace,
                     logger=logger,
                 )
         except Exception as cleanup_error:

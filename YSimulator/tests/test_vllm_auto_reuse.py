@@ -1,6 +1,7 @@
 from unittest.mock import Mock
 
 from YSimulator.YClient.llm_utils.load_balancer import (
+    DEFAULT_VLLM_SHARED_NAMESPACE,
     _build_vllm_pool_prefix,
     _discover_existing_vllm_pool,
     create_llm_actors,
@@ -28,7 +29,7 @@ def test_create_llm_actors_auto_reuses_existing_same_model_pool(monkeypatch):
         f"{resolved_prefix}_vllm_1": actor1,
     }
 
-    def fake_get_actor(name):
+    def fake_get_actor(name, namespace=None):
         if name in actors:
             return actors[name]
         raise ValueError(name)
@@ -59,6 +60,7 @@ def test_create_llm_actors_auto_reuses_existing_same_model_pool(monkeypatch):
     assert llm_handle.num_actors == 2
     assert llm_config["_resolved_actor_name_prefix"] == resolved_prefix
     assert llm_config["_resolved_num_actors"] == 2
+    assert llm_config["_resolved_actor_namespace"] == DEFAULT_VLLM_SHARED_NAMESPACE
     assert llm_config["_reused_existing_pool"] is True
 
 
@@ -81,15 +83,16 @@ def test_discover_existing_vllm_pool_can_use_actor_metadata(monkeypatch):
 
     monkeypatch.setattr(
         "YSimulator.YClient.llm_utils.load_balancer._discover_named_actor_count",
-        lambda prefix, backend: 0,
+        lambda prefix, backend, actor_namespace=None: 0,
     )
     monkeypatch.setattr("ray.util.state.list_actors", lambda: states)
     monkeypatch.setattr("YSimulator.YClient.llm_utils.load_balancer.ray.get", lambda x: x)
     monkeypatch.setattr(
-        "YSimulator.YClient.llm_utils.load_balancer.ray.get_actor", lambda name: actors[name]
+        "YSimulator.YClient.llm_utils.load_balancer.ray.get_actor",
+        lambda name, namespace=None: actors[name],
     )
 
-    prefix, count = _discover_existing_vllm_pool(model_name)
+    prefix, count = _discover_existing_vllm_pool(model_name, actor_namespace="shared_vllm")
 
     assert prefix == "custom_pool"
     assert count == 2
@@ -101,7 +104,7 @@ def test_discover_existing_vllm_pool_ignores_state_api_failures(monkeypatch):
 
     monkeypatch.setattr(
         "YSimulator.YClient.llm_utils.load_balancer._discover_named_actor_count",
-        lambda prefix, backend: 0,
+        lambda prefix, backend, actor_namespace=None: 0,
     )
     monkeypatch.setattr(
         "ray.util.state.list_actors", Mock(side_effect=RuntimeError("state api unavailable"))
@@ -111,3 +114,51 @@ def test_discover_existing_vllm_pool_ignores_state_api_failures(monkeypatch):
 
     assert prefix == resolved_prefix
     assert count == 0
+
+
+def test_create_llm_actors_creates_vllm_in_shared_namespace(monkeypatch):
+    llm_config = {
+        "model": "AMead10/Llama-3.2-3B-Instruct-AWQ",
+        "client_name": "client-a",
+        "gpu_per_actor": 1.0,
+    }
+    prompts_config = {}
+    created_options = {}
+    actor_handle = Mock(name="new-vllm-actor")
+
+    monkeypatch.setattr(
+        "YSimulator.YClient.llm_utils.load_balancer._discover_existing_vllm_pool",
+        lambda model_name, actor_namespace=None, logger=None: (
+            _build_vllm_pool_prefix(model_name),
+            0,
+        ),
+    )
+    monkeypatch.setattr(
+        "YSimulator.YClient.llm_utils.load_balancer.acquire_llm_pool_lease",
+        lambda **kwargs: 1,
+    )
+
+    class _OptionsProxy:
+        def __init__(self, opts):
+            self._opts = opts
+
+        def remote(self, **kwargs):
+            created_options.update(self._opts)
+            return actor_handle
+
+    monkeypatch.setattr(
+        "YSimulator.YClient.LLM_interactions.vllm_service.VLLMService.options",
+        lambda **kwargs: _OptionsProxy(kwargs),
+    )
+
+    actor = create_llm_actors(
+        llm_config=llm_config,
+        prompts_config=prompts_config,
+        num_actors=1,
+        backend="vllm",
+        logger=Mock(),
+    )
+
+    assert actor is actor_handle
+    assert created_options["namespace"] == DEFAULT_VLLM_SHARED_NAMESPACE
+    assert llm_config["_resolved_actor_namespace"] == DEFAULT_VLLM_SHARED_NAMESPACE

@@ -35,7 +35,7 @@ def test_acquire_lease_calls_registry(monkeypatch):
     fake_registry = _FakeRegistry(release_result=(1, []))
     monkeypatch.setattr(
         "YSimulator.YClient.llm_utils.load_balancer._get_or_create_lease_registry",
-        lambda: fake_registry,
+        lambda actor_namespace=None: fake_registry,
     )
     monkeypatch.setattr("YSimulator.YClient.llm_utils.load_balancer.ray.get", lambda x: x)
 
@@ -57,7 +57,7 @@ def test_release_lease_no_kill_when_clients_still_active(monkeypatch):
     fake_registry = _FakeRegistry(release_result=(1, ["ysim_llm_vllm_0"]))
     monkeypatch.setattr(
         "YSimulator.YClient.llm_utils.load_balancer._get_or_create_lease_registry",
-        lambda: fake_registry,
+        lambda actor_namespace=None: fake_registry,
     )
     monkeypatch.setattr("YSimulator.YClient.llm_utils.load_balancer.ray.get", lambda x: x)
 
@@ -65,7 +65,7 @@ def test_release_lease_no_kill_when_clients_still_active(monkeypatch):
     monkeypatch.setattr("YSimulator.YClient.llm_utils.load_balancer.ray.kill", kill_mock)
     monkeypatch.setattr(
         "YSimulator.YClient.llm_utils.load_balancer.ray.get_actor",
-        lambda name: Mock(name=f"actor-{name}"),
+        lambda name, namespace=None: Mock(name=f"actor-{name}"),
     )
 
     active = release_llm_pool_lease(
@@ -84,14 +84,14 @@ def test_release_lease_kills_actors_when_last_client_leaves(monkeypatch):
     fake_registry = _FakeRegistry(release_result=(0, actor_names))
     monkeypatch.setattr(
         "YSimulator.YClient.llm_utils.load_balancer._get_or_create_lease_registry",
-        lambda: fake_registry,
+        lambda actor_namespace=None: fake_registry,
     )
     monkeypatch.setattr("YSimulator.YClient.llm_utils.load_balancer.ray.get", lambda x: x)
 
     actors = {name: Mock(name=f"actor-{name}") for name in actor_names}
     monkeypatch.setattr(
         "YSimulator.YClient.llm_utils.load_balancer.ray.get_actor",
-        lambda name: actors[name],
+        lambda name, namespace=None: actors[name],
     )
     kill_mock = Mock()
     monkeypatch.setattr("YSimulator.YClient.llm_utils.load_balancer.ray.kill", kill_mock)
