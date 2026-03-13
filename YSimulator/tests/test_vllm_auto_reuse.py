@@ -93,3 +93,21 @@ def test_discover_existing_vllm_pool_can_use_actor_metadata(monkeypatch):
 
     assert prefix == "custom_pool"
     assert count == 2
+
+
+def test_discover_existing_vllm_pool_ignores_state_api_failures(monkeypatch):
+    model_name = "AMead10/Llama-3.2-3B-Instruct-AWQ"
+    resolved_prefix = _build_vllm_pool_prefix(model_name)
+
+    monkeypatch.setattr(
+        "YSimulator.YClient.llm_utils.load_balancer._discover_named_actor_count",
+        lambda prefix, backend: 0,
+    )
+    monkeypatch.setattr(
+        "ray.util.state.list_actors", Mock(side_effect=RuntimeError("state api unavailable"))
+    )
+
+    prefix, count = _discover_existing_vllm_pool(model_name, logger=Mock())
+
+    assert prefix == resolved_prefix
+    assert count == 0

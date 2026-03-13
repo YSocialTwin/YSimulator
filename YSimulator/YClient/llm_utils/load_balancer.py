@@ -72,7 +72,17 @@ def _discover_existing_vllm_pool(model_name: str, logger: Optional[logging.Logge
         return preferred_prefix, 0
 
     candidate_groups = {}
-    for actor_state in list_actors():
+    try:
+        actor_states = list_actors()
+    except Exception as exc:
+        if logger:
+            logger.warning(
+                f"Unable to scan Ray actor state for reusable vLLM pools: {exc}. "
+                "Falling back to deterministic prefix discovery only."
+            )
+        return preferred_prefix, 0
+
+    for actor_state in actor_states:
         actor_name = actor_state.get("name")
         if not actor_name or actor_state.get("class_name") != "VLLMService":
             continue
