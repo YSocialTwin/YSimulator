@@ -14,6 +14,7 @@ import shutil
 import sys
 import time
 import traceback
+import uuid
 from datetime import datetime
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
@@ -396,6 +397,7 @@ if __name__ == "__main__":
     llm_config = sim_config["llm"]
     # Attach client identity for shared actor lease tracking.
     llm_config["client_name"] = client_name
+    llm_config["_lease_client_id"] = f"{client_name}:{os.getpid()}:{uuid.uuid4().hex}"
     llm_v_config = sim_config.get("llm_v")  # Get vision LLM config if available
 
     # Determine which LLM backend to use
@@ -591,7 +593,7 @@ if __name__ == "__main__":
                     backend=llm_backend,
                     actor_name_prefix=resolved_actor_name_prefix,
                     num_actors=resolved_num_llm_actors,
-                    client_id=client_name,
+                    client_id=llm_config.get("_lease_client_id", client_name),
                     actor_namespace=resolved_actor_namespace,
                     logger=logger,
                 )

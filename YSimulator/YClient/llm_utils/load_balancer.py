@@ -54,6 +54,12 @@ def _resolve_actor_namespace(backend: str, llm_config: Optional[dict] = None) ->
     return None
 
 
+def _resolve_lease_client_id(llm_config: Optional[dict]) -> Optional[str]:
+    """Return a stable per-run lease holder id for shared LLM pools."""
+    llm_config = llm_config or {}
+    return llm_config.get("_lease_client_id") or llm_config.get("client_name")
+
+
 def _discover_named_actor_count(
     actor_name_prefix: str, backend: str, actor_namespace: Optional[str] = None
 ) -> int:
@@ -685,12 +691,13 @@ def create_llm_actors(
                 actor = ray.get_actor(actor_name, namespace=actor_namespace)
                 if logger:
                     logger.info(f"Reused existing single LLM actor: {actor_name}")
-                if actor_name and llm_config.get("client_name"):
+                lease_client_id = _resolve_lease_client_id(llm_config)
+                if actor_name and lease_client_id:
                     acquire_llm_pool_lease(
                         backend=backend_lower,
                         actor_name_prefix=actor_name_prefix,
                         num_actors=1,
-                        client_id=llm_config["client_name"],
+                        client_id=lease_client_id,
                         actor_names=[actor_name],
                         actor_namespace=actor_namespace,
                         logger=logger,
@@ -718,12 +725,13 @@ def create_llm_actors(
                 llm_v_config=llm_v_config,
                 logging_config=logging_config,
             )
-            if actor_name and reuse_actors and llm_config.get("client_name"):
+            lease_client_id = _resolve_lease_client_id(llm_config)
+            if actor_name and reuse_actors and lease_client_id:
                 acquire_llm_pool_lease(
                     backend=backend_lower,
                     actor_name_prefix=actor_name_prefix,
                     num_actors=1,
-                    client_id=llm_config["client_name"],
+                    client_id=lease_client_id,
                     actor_names=[actor_name],
                     actor_namespace=actor_namespace,
                     logger=logger,
@@ -745,12 +753,13 @@ def create_llm_actors(
                 llm_v_config=llm_v_config,
                 logging_config=logging_config,
             )
-            if actor_name and reuse_actors and llm_config.get("client_name"):
+            lease_client_id = _resolve_lease_client_id(llm_config)
+            if actor_name and reuse_actors and lease_client_id:
                 acquire_llm_pool_lease(
                     backend=backend_lower,
                     actor_name_prefix=actor_name_prefix,
                     num_actors=1,
-                    client_id=llm_config["client_name"],
+                    client_id=lease_client_id,
                     actor_names=[actor_name],
                     actor_namespace=actor_namespace,
                     logger=logger,
@@ -771,13 +780,14 @@ def create_llm_actors(
             reuse_actors=reuse_actors,
             actor_name_prefix=actor_name_prefix,
         )
-        if llm_config.get("client_name"):
+        lease_client_id = _resolve_lease_client_id(llm_config)
+        if lease_client_id:
             actor_names = [f"{actor_name_prefix}_{backend_lower}_{i}" for i in range(num_actors)]
             acquire_llm_pool_lease(
                 backend=backend_lower,
                 actor_name_prefix=actor_name_prefix,
                 num_actors=num_actors,
-                client_id=llm_config["client_name"],
+                client_id=lease_client_id,
                 actor_names=actor_names,
                 actor_namespace=actor_namespace,
                 logger=logger,
@@ -795,13 +805,14 @@ def create_llm_actors(
             reuse_actors=reuse_actors,
             actor_name_prefix=actor_name_prefix,
         )
-        if llm_config.get("client_name"):
+        lease_client_id = _resolve_lease_client_id(llm_config)
+        if lease_client_id:
             actor_names = [f"{actor_name_prefix}_{backend_lower}_{i}" for i in range(num_actors)]
             acquire_llm_pool_lease(
                 backend=backend_lower,
                 actor_name_prefix=actor_name_prefix,
                 num_actors=num_actors,
-                client_id=llm_config["client_name"],
+                client_id=lease_client_id,
                 actor_names=actor_names,
                 actor_namespace=actor_namespace,
                 logger=logger,

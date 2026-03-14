@@ -120,6 +120,7 @@ def test_create_llm_actors_creates_vllm_in_shared_namespace(monkeypatch):
     llm_config = {
         "model": "AMead10/Llama-3.2-3B-Instruct-AWQ",
         "client_name": "client-a",
+        "_lease_client_id": "client-a:pid:run1",
         "gpu_per_actor": 1.0,
     }
     prompts_config = {}
@@ -162,3 +163,43 @@ def test_create_llm_actors_creates_vllm_in_shared_namespace(monkeypatch):
     assert actor is actor_handle
     assert created_options["namespace"] == DEFAULT_VLLM_SHARED_NAMESPACE
     assert llm_config["_resolved_actor_namespace"] == DEFAULT_VLLM_SHARED_NAMESPACE
+
+
+def test_create_llm_actors_uses_unique_lease_client_id(monkeypatch):
+    llm_config = {
+        "model": "AMead10/Llama-3.2-3B-Instruct-AWQ",
+        "client_name": "client-a",
+        "_lease_client_id": "client-a:pid:run42",
+        "gpu_per_actor": 1.0,
+    }
+    prompts_config = {}
+    acquired = {}
+
+    monkeypatch.setattr(
+        "YSimulator.YClient.llm_utils.load_balancer._discover_existing_vllm_pool",
+        lambda model_name, actor_namespace=None, logger=None: (
+            _build_vllm_pool_prefix(model_name),
+            1,
+        ),
+    )
+
+    actor = Mock(name="reused-vllm-actor")
+    monkeypatch.setattr(
+        "YSimulator.YClient.llm_utils.load_balancer.ray.get_actor",
+        lambda name, namespace=None: actor,
+    )
+    monkeypatch.setattr(
+        "YSimulator.YClient.llm_utils.load_balancer.acquire_llm_pool_lease",
+        lambda **kwargs: acquired.update(kwargs) or 1,
+    )
+
+    reused = create_llm_actors(
+        llm_config=llm_config,
+        prompts_config=prompts_config,
+        num_actors=1,
+        backend="vllm",
+        logger=Mock(),
+    )
+
+    assert reused is actor
+    assert acquired["client_id"] == "client-a:pid:run42"
