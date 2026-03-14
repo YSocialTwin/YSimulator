@@ -225,6 +225,19 @@ def release_llm_pool_lease(
         for actor_name in actor_names:
             try:
                 actor = ray.get_actor(actor_name, namespace=actor_namespace)
+                try:
+                    if hasattr(actor, "shutdown"):
+                        shutdown_result = ray.get(actor.shutdown.remote())
+                        if logger:
+                            logger.info(
+                                f"Shutdown idle LLM actor before termination: {actor_name} "
+                                f"(details={shutdown_result})"
+                            )
+                except Exception as shutdown_exc:
+                    if logger:
+                        logger.warning(
+                            f"Best-effort shutdown failed for LLM actor {actor_name}: {shutdown_exc}"
+                        )
                 ray.kill(actor, no_restart=True)
                 if logger:
                     logger.info(f"Terminated idle LLM actor: {actor_name}")
