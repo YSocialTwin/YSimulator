@@ -170,6 +170,14 @@ def setup_logging(
     return logger
 
 
+def resolve_client_namespace(config_dir: Path, sim_config: dict) -> str:
+    """Return the Ray namespace clients should use for this experiment."""
+    namespace_config_file = config_dir / "ray_namespace.temp"
+    if namespace_config_file.exists():
+        return namespace_config_file.read_text().strip()
+    return sim_config.get("namespace", "social_sim")
+
+
 if __name__ == "__main__":
     # Parse command line arguments
     parser = argparse.ArgumentParser(
@@ -362,8 +370,8 @@ if __name__ == "__main__":
 
     print(f"--- Connecting to Cluster at {ray_address} ---")
 
-    # Initialize with namespace from config
-    namespace = sim_config.get("namespace", "social_sim")
+    # Initialize with namespace from config, unless server provided an override for this experiment.
+    namespace = resolve_client_namespace(config_dir, sim_config)
     connect_start = time.time()
     ray.init(address=ray_address, namespace=namespace, ignore_reinit_error=True)
     connect_time = (time.time() - connect_start) * 1000
