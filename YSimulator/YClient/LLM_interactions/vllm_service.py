@@ -200,6 +200,16 @@ class VLLMService:
 
         return cleanup_errors
 
+    def _list_child_process_ids(self) -> List[int]:
+        """Return current recursive child process ids for the actor process."""
+        try:
+            import psutil
+
+            current_process = psutil.Process(os.getpid())
+            return [child.pid for child in current_process.children(recursive=True)]
+        except Exception:
+            return []
+
     def _terminate_child_processes(self) -> int:
         """Terminate any subprocesses left behind by vLLM engine workers."""
         terminated = 0
@@ -251,6 +261,7 @@ class VLLMService:
         internals and child workers before the detached Ray actor is terminated.
         """
         cleanup_errors = []
+        child_pids_before_cleanup = self._list_child_process_ids()
 
         cleanup_errors.extend(self._cleanup_model_instance(self.llm_v, "vision"))
         cleanup_errors.extend(self._cleanup_model_instance(self.llm, "text"))
@@ -280,6 +291,8 @@ class VLLMService:
         terminated_children = self._terminate_child_processes()
 
         return {
+            "actor_pid": os.getpid(),
+            "child_pids": child_pids_before_cleanup,
             "terminated_children": terminated_children,
             "errors": cleanup_errors,
         }

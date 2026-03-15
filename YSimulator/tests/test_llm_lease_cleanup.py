@@ -1,4 +1,4 @@
-from unittest.mock import Mock
+from unittest.mock import ANY, Mock
 
 from YSimulator.YClient.llm_utils.load_balancer import (
     acquire_llm_pool_lease,
@@ -32,17 +32,23 @@ class _FakeRegistry:
 
 
 class _FakeActor:
-    def __init__(self, name, shutdown_error=None):
+    def __init__(self, name, shutdown_error=None, shutdown_result=None):
         self.name = name
         self.shutdown_calls = 0
         self._shutdown_error = shutdown_error
+        self._shutdown_result = shutdown_result or {
+            "actor_pid": 111,
+            "child_pids": [222],
+            "terminated_children": 0,
+            "errors": [],
+        }
         self.shutdown = _RemoteCall(self._shutdown)
 
     def _shutdown(self):
         self.shutdown_calls += 1
         if self._shutdown_error:
             raise self._shutdown_error
-        return {"terminated_children": 0, "errors": []}
+        return self._shutdown_result
 
 
 def test_acquire_lease_calls_registry(monkeypatch):
@@ -109,6 +115,11 @@ def test_release_lease_kills_actors_when_last_client_leaves(monkeypatch):
     )
     kill_mock = Mock()
     monkeypatch.setattr("YSimulator.YClient.llm_utils.load_balancer.ray.kill", kill_mock)
+    force_kill_mock = Mock(return_value=2)
+    monkeypatch.setattr(
+        "YSimulator.YClient.llm_utils.load_balancer._force_kill_local_processes",
+        force_kill_mock,
+    )
 
     active = release_llm_pool_lease(
         backend="vllm",
@@ -120,6 +131,7 @@ def test_release_lease_kills_actors_when_last_client_leaves(monkeypatch):
     assert active == 0
     assert kill_mock.call_count == 2
     assert [actors[name].shutdown_calls for name in actor_names] == [1, 1]
+    assert force_kill_mock.call_count == 2
 
 
 def test_release_lease_kills_even_if_shutdown_fails(monkeypatch):
@@ -138,6 +150,11 @@ def test_release_lease_kills_even_if_shutdown_fails(monkeypatch):
     )
     kill_mock = Mock()
     monkeypatch.setattr("YSimulator.YClient.llm_utils.load_balancer.ray.kill", kill_mock)
+    force_kill_mock = Mock(return_value=0)
+    monkeypatch.setattr(
+        "YSimulator.YClient.llm_utils.load_balancer._force_kill_local_processes",
+        force_kill_mock,
+    )
 
     active = release_llm_pool_lease(
         backend="vllm",
@@ -150,3 +167,4 @@ def test_release_lease_kills_even_if_shutdown_fails(monkeypatch):
     assert active == 0
     assert failing_actor.shutdown_calls == 1
     kill_mock.assert_called_once()
+    force_kill_mock.assert_called_once_with([], ANY)

@@ -175,6 +175,47 @@ def _build_pool_key(backend: str, actor_name_prefix: str, num_actors: int) -> st
     return f"{backend.lower()}:{actor_name_prefix}:{num_actors}"
 
 
+def _force_kill_local_processes(process_ids: List[int], logger: Optional[logging.Logger] = None) -> int:
+    """Best-effort kill for leaked local processes that survived actor shutdown."""
+    if not process_ids:
+        return 0
+
+    try:
+        import psutil
+    except Exception as exc:
+        if logger:
+            logger.warning(f"psutil unavailable for leaked process cleanup: {exc}")
+        return 0
+
+    killed = 0
+    unique_pids = []
+    seen = set()
+    for pid in process_ids:
+        if pid and pid not in seen:
+            unique_pids.append(pid)
+            seen.add(pid)
+
+    for pid in unique_pids:
+        try:
+            process = psutil.Process(pid)
+        except psutil.NoSuchProcess:
+            continue
+
+        try:
+            process.kill()
+            process.wait(timeout=3)
+            killed += 1
+            if logger:
+                logger.info(f"Force-killed leaked local process pid={pid}")
+        except psutil.NoSuchProcess:
+            continue
+        except Exception as exc:
+            if logger:
+                logger.warning(f"Failed to force-kill leaked process pid={pid}: {exc}")
+
+    return killed
+
+
 def _get_or_create_lease_registry(actor_namespace: Optional[str] = None):
     """Get or create the detached lease registry actor."""
     try:
@@ -229,11 +270,12 @@ def release_llm_pool_lease(
 
     if active == 0 and actor_names:
         for actor_name in actor_names:
+            shutdown_result = {}
             try:
                 actor = ray.get_actor(actor_name, namespace=actor_namespace)
                 try:
                     if hasattr(actor, "shutdown"):
-                        shutdown_result = ray.get(actor.shutdown.remote())
+                        shutdown_result = ray.get(actor.shutdown.remote()) or {}
                         if logger:
                             logger.info(
                                 f"Shutdown idle LLM actor before termination: {actor_name} "
@@ -247,6 +289,16 @@ def release_llm_pool_lease(
                 ray.kill(actor, no_restart=True)
                 if logger:
                     logger.info(f"Terminated idle LLM actor: {actor_name}")
+                leaked_pids = []
+                actor_pid = shutdown_result.get("actor_pid")
+                if actor_pid:
+                    leaked_pids.append(actor_pid)
+                leaked_pids.extend(shutdown_result.get("child_pids", []))
+                force_killed = _force_kill_local_processes(leaked_pids, logger)
+                if force_killed and logger:
+                    logger.info(
+                        f"Force-killed {force_killed} leaked process(es) after terminating {actor_name}"
+                    )
             except ValueError:
                 # Actor already gone, ignore.
                 continue
