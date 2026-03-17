@@ -75,6 +75,9 @@ class VLLMService:
         self.server = server
         self.client_id = client_id
         self.prompts_config = prompts_config or {}
+        self.model_name = (llm_config or {}).get("model", "meta-llama/Llama-3.2-3B")
+        self.pool_prefix = (llm_config or {}).get("_resolved_actor_name_prefix")
+        self.pool_namespace = (llm_config or {}).get("_resolved_actor_namespace")
 
         # Initialize optional attributes to None (will be set properly in _initialize if successful)
         self.llm = None
@@ -153,6 +156,146 @@ class VLLMService:
             f"Failed to initialize vLLM on any of {len(gpu_attempts)} available GPU(s). "
             f"Last error: {type(last_error).__name__}: {str(last_error)}"
         ) from last_error
+
+    def get_service_metadata(self) -> Dict[str, Any]:
+        """Expose enough metadata to let clients discover reusable local pools."""
+        return {
+            "backend": "vllm",
+            "model": self.model_name,
+            "pool_prefix": self.pool_prefix,
+            "pool_namespace": self.pool_namespace,
+        }
+
+    def _cleanup_model_instance(self, model_instance, label: str) -> List[str]:
+        """Best-effort cleanup for a vLLM engine instance and its executor internals."""
+        cleanup_errors = []
+        if model_instance is None:
+            return cleanup_errors
+
+        cleanup_targets = [
+            (model_instance, ("shutdown", "close", "cleanup")),
+            (getattr(model_instance, "llm_engine", None), ("shutdown", "close", "cleanup")),
+            (getattr(model_instance, "engine", None), ("shutdown", "close", "cleanup")),
+            (
+                getattr(getattr(model_instance, "llm_engine", None), "model_executor", None),
+                ("shutdown", "close", "cleanup"),
+            ),
+            (
+                getattr(getattr(model_instance, "llm_engine", None), "executor", None),
+                ("shutdown", "close", "cleanup"),
+            ),
+        ]
+
+        for target, method_names in cleanup_targets:
+            if target is None:
+                continue
+            for method_name in method_names:
+                method = getattr(target, method_name, None)
+                if callable(method):
+                    try:
+                        method()
+                    except Exception as exc:
+                        cleanup_errors.append(f"{label}.{method_name}: {exc}")
+                    break
+
+        return cleanup_errors
+
+    def _list_child_process_ids(self) -> List[int]:
+        """Return current recursive child process ids for the actor process."""
+        try:
+            import psutil
+
+            current_process = psutil.Process(os.getpid())
+            return [child.pid for child in current_process.children(recursive=True)]
+        except Exception:
+            return []
+
+    def _terminate_child_processes(self) -> int:
+        """Terminate any subprocesses left behind by vLLM engine workers."""
+        terminated = 0
+
+        try:
+            import psutil
+
+            current_process = psutil.Process(os.getpid())
+            children = current_process.children(recursive=True)
+            for child in children:
+                try:
+                    child.terminate()
+                except psutil.NoSuchProcess:
+                    continue
+
+            gone, alive = psutil.wait_procs(children, timeout=3)
+            terminated += len(gone)
+
+            for child in alive:
+                try:
+                    child.kill()
+                    terminated += 1
+                except psutil.NoSuchProcess:
+                    continue
+            return terminated
+        except Exception:
+            pass
+
+        try:
+            import multiprocessing as mp
+
+            for child in mp.active_children():
+                try:
+                    child.terminate()
+                    child.join(timeout=2)
+                    terminated += 1
+                except Exception:
+                    continue
+        except Exception:
+            pass
+
+        return terminated
+
+    def shutdown(self) -> Dict[str, Any]:
+        """
+        Best-effort shutdown hook to release vLLM resources before the actor is killed.
+
+        This runs inside the actor process, so it can explicitly tear down vLLM engine
+        internals and child workers before the detached Ray actor is terminated.
+        """
+        cleanup_errors = []
+        child_pids_before_cleanup = self._list_child_process_ids()
+
+        cleanup_errors.extend(self._cleanup_model_instance(self.llm_v, "vision"))
+        cleanup_errors.extend(self._cleanup_model_instance(self.llm, "text"))
+
+        self.llm_v = None
+        self.llm = None
+        self.sampling_params_v = None
+        self.sampling_params = None
+
+        try:
+            import gc
+
+            gc.collect()
+        except Exception as exc:
+            cleanup_errors.append(f"gc.collect: {exc}")
+
+        try:
+            import torch
+
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+                if hasattr(torch.cuda, "ipc_collect"):
+                    torch.cuda.ipc_collect()
+        except Exception as exc:
+            cleanup_errors.append(f"torch.cuda cleanup: {exc}")
+
+        terminated_children = self._terminate_child_processes()
+
+        return {
+            "actor_pid": os.getpid(),
+            "child_pids": child_pids_before_cleanup,
+            "terminated_children": terminated_children,
+            "errors": cleanup_errors,
+        }
 
     @staticmethod
     def _get_candidate_gpus_static(

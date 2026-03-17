@@ -39,6 +39,12 @@ def compress_rotated_log(source, dest):
     os.remove(source)
 
 
+def build_isolated_namespace(base_namespace: str, config_dir: Path) -> str:
+    """Build a stable per-experiment namespace for servers sharing one Ray cluster."""
+    digest = hashlib.sha256(str(config_dir.resolve()).encode()).hexdigest()[:10]
+    return f"{base_namespace}_{digest}"
+
+
 def setup_logging(
     config_path: Path, server_name: str, logging_config: dict = None
 ) -> logging.Logger:
@@ -193,7 +199,8 @@ if __name__ == "__main__":
 
     # Extract configuration
     server_name = config.get("server_name", "orchestrator_server")
-    namespace = config.get("namespace", "social_sim")
+    configured_namespace = config.get("namespace", "social_sim")
+    namespace = configured_namespace
     address = config.get("address", "auto")
     port = config.get("port")
     min_to_start = config.get("min_to_start", 1)  # Minimum clients before simulation starts
@@ -289,64 +296,76 @@ if __name__ == "__main__":
         )
         print(f"--- 💾 Using existing database: {db_name} ---")
 
-    # Build ray.init() arguments
-    init_kwargs = {"include_dashboard": False, "namespace": namespace}
-    #  "num_cpus": 1, "object_store_memory": 1 * 1024 * 1024 * 1024 (OSX M1 limitation)
-
-    # Handle address and port configuration
-    # Ray behavior:
-    # - address="auto" or None: Start a new local Ray cluster (port is randomly assigned)
-    # - address=<ray_url>: Connect to an existing Ray cluster at that address
-    #
-    # To start Ray on a specific port, you must start Ray externally first:
-    #   ray start --head --port=<port> --node-ip-address=<address>
-    # Then set address="auto" or leave it unset in config to connect to it.
-
+    # Handle address and port configuration.
+    # If no explicit address is provided, prefer reusing an already-running local Ray cluster.
     start_new_cluster = (not address) or (address == "auto")
+    explicit_ray_url = None
+    reused_existing_cluster = False
 
     if not start_new_cluster:
-        # User specified an address - assume they want to connect to existing cluster
         if address.startswith("ray://"):
-            # Full Ray URL provided
-            ray_url = address
+            explicit_ray_url = address
         elif port:
-            # Construct ray:// URL from separate address and port
-            ray_url = f"ray://{address}:{port}"
+            explicit_ray_url = f"ray://{address}:{port}"
         else:
-            # Check if port is embedded in address
             if ":" in address:
-                ray_url = f"ray://{address}"
+                explicit_ray_url = f"ray://{address}"
                 print(
                     "⚠️  Warning: Port appears to be in the address field. "
                     "Consider using separate 'address' and 'port' fields."
                 )
             else:
-                # Just hostname/IP without port - will use default Ray port (6379)
-                ray_url = address
+                explicit_ray_url = address
 
-        init_kwargs["address"] = ray_url
-        print(f"--- Attempting to connect to existing Ray cluster at {ray_url} ---")
+        print(f"--- Attempting to connect to existing Ray cluster at {explicit_ray_url} ---")
     else:
-        # Start a new local Ray cluster
-        print("--- Starting new local Ray cluster ---")
-        # Avoid relying on /tmp and keep the effective path short enough for
-        # Ray's Unix socket files on HPC systems.
-        ray_temp_dir = _get_short_ray_temp_dir(config_dir, ray_config)
-        init_kwargs["_temp_dir"] = str(ray_temp_dir)
-
+        print("--- Looking for an existing local Ray cluster to reuse ---")
         if port:
             print(f"⚠️  Warning: Port {port} specified but will be ignored.")
-            print(f"    When starting a new cluster, Ray assigns a random port.")
-            print(f"    To use a specific port, start Ray externally first:")
-            print(
-                f"      ray start --head --port={port} --node-ip-address={address if address != 'auto' else '127.0.0.1'}"
-            )
-            print(f"    Then set 'address': 'auto' in server_config.json")
-        print(f"--- Ray temp directory: {ray_temp_dir} ---")
+            print("    If no existing cluster is found, Ray will still pick a random local port.")
 
-    # Start or connect to Ray cluster
+    init_kwargs = {"include_dashboard": False, "namespace": namespace}
+    if explicit_ray_url:
+        init_kwargs["address"] = explicit_ray_url
+
     init_start = time.time()
-    context = ray.init(**init_kwargs)
+    context = None
+
+    if start_new_cluster:
+        try:
+            context = ray.init(address="auto", **init_kwargs)
+            reused_existing_cluster = True
+            print("--- Reusing existing local Ray cluster ---")
+        except Exception:
+            print("--- No reusable local Ray cluster found; starting a new one ---")
+            context = ray.init(**init_kwargs)
+    else:
+        context = ray.init(**init_kwargs)
+
+    # If the target namespace already contains an Orchestrator actor, isolate this experiment
+    # into a stable config-dir-derived namespace while staying on the same Ray cluster.
+    connected_to_existing_cluster = reused_existing_cluster or (explicit_ray_url is not None)
+
+    if connected_to_existing_cluster:
+        try:
+            ray.get_actor("Orchestrator", namespace=namespace)
+            isolated_namespace = build_isolated_namespace(configured_namespace, config_dir)
+            if isolated_namespace != namespace:
+                logger.info(
+                    f"Namespace collision detected for '{namespace}'. "
+                    f"Switching this experiment to isolated namespace '{isolated_namespace}'."
+                )
+                ray.shutdown()
+                namespace = isolated_namespace
+                reconnect_kwargs = {"include_dashboard": False, "namespace": namespace}
+                if explicit_ray_url:
+                    reconnect_kwargs["address"] = explicit_ray_url
+                else:
+                    reconnect_kwargs["address"] = "auto"
+                context = ray.init(**reconnect_kwargs)
+        except ValueError:
+            pass
+
     ray_address = context.address_info["address"]
     init_time = (time.time() - init_start) * 1000
 
@@ -356,15 +375,20 @@ if __name__ == "__main__":
             "extra_data": {
                 "ray_address": ray_address,
                 "namespace": namespace,
+                "configured_namespace": configured_namespace,
+                "reused_existing_cluster": reused_existing_cluster,
                 "execution_time_ms": init_time,
             }
         },
     )
 
-    # Save address for clients in config directory
+    # Save connection details for clients in config directory
     ray_config_file = config_dir / "ray_config.temp"
     with open(ray_config_file, "w") as f:
         f.write(ray_address)
+    namespace_config_file = config_dir / "ray_namespace.temp"
+    with open(namespace_config_file, "w") as f:
+        f.write(namespace)
 
     print(f"--- 🚀 Server Running on {ray_address} ---")
     print(f"--- 📝 Server Name: {server_name} ---")
@@ -398,5 +422,7 @@ if __name__ == "__main__":
         print("Stopping...")
         if ray_config_file.exists():
             ray_config_file.unlink()
+        if namespace_config_file.exists():
+            namespace_config_file.unlink()
         ray.shutdown()
         logger.info("Server shutdown complete")

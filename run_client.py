@@ -14,6 +14,7 @@ import shutil
 import sys
 import time
 import traceback
+import uuid
 from datetime import datetime
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
@@ -167,6 +168,14 @@ def setup_logging(
         logger.info(f"Prompt logging enabled - writing to {prompt_log_file}")
 
     return logger
+
+
+def resolve_client_namespace(config_dir: Path, sim_config: dict) -> str:
+    """Return the Ray namespace clients should use for this experiment."""
+    namespace_config_file = config_dir / "ray_namespace.temp"
+    if namespace_config_file.exists():
+        return namespace_config_file.read_text().strip()
+    return sim_config.get("namespace", "social_sim")
 
 
 if __name__ == "__main__":
@@ -361,8 +370,8 @@ if __name__ == "__main__":
 
     print(f"--- Connecting to Cluster at {ray_address} ---")
 
-    # Initialize with namespace from config
-    namespace = sim_config.get("namespace", "social_sim")
+    # Initialize with namespace from config, unless server provided an override for this experiment.
+    namespace = resolve_client_namespace(config_dir, sim_config)
     connect_start = time.time()
     ray.init(address=ray_address, namespace=namespace, ignore_reinit_error=True)
     connect_time = (time.time() - connect_start) * 1000
@@ -396,6 +405,7 @@ if __name__ == "__main__":
     llm_config = sim_config["llm"]
     # Attach client identity for shared actor lease tracking.
     llm_config["client_name"] = client_name
+    llm_config["_lease_client_id"] = f"{client_name}:{os.getpid()}:{uuid.uuid4().hex}"
     llm_v_config = sim_config.get("llm_v")  # Get vision LLM config if available
 
     # Determine which LLM backend to use
@@ -434,6 +444,17 @@ if __name__ == "__main__":
                 reuse_actors=reuse_actors,
                 actor_name_prefix=actor_name_prefix,
             )
+            resolved_num_llm_actors = llm_config.get("_resolved_num_actors", num_llm_actors)
+            resolved_actor_name_prefix = llm_config.get(
+                "_resolved_actor_name_prefix", actor_name_prefix
+            )
+            resolved_actor_namespace = llm_config.get("_resolved_actor_namespace")
+            if llm_config.get("_reused_existing_pool"):
+                logger.info(
+                    f"Attached to existing local vLLM pool: model={llm_config.get('model')}, "
+                    f"actors={resolved_num_llm_actors}, prefix={resolved_actor_name_prefix}, "
+                    f"namespace={resolved_actor_namespace or namespace}"
+                )
         except ImportError as e:
             logger.error(f"Failed to import vLLM: {e}")
             print(f"❌ Error: vLLM not available: {e}")
@@ -500,6 +521,10 @@ if __name__ == "__main__":
                 )
             else:
                 llm_service = LLMService.remote(llm_config, prompts_config, llm_v_config, logging_config)
+
+    resolved_num_llm_actors = llm_config.get("_resolved_num_actors", num_llm_actors)
+    resolved_actor_name_prefix = llm_config.get("_resolved_actor_name_prefix", actor_name_prefix)
+    resolved_actor_namespace = llm_config.get("_resolved_actor_namespace")
 
     llm_time = (time.time() - llm_start) * 1000
 
@@ -574,9 +599,10 @@ if __name__ == "__main__":
 
                 release_llm_pool_lease(
                     backend=llm_backend,
-                    actor_name_prefix=actor_name_prefix,
-                    num_actors=num_llm_actors,
-                    client_id=client_name,
+                    actor_name_prefix=resolved_actor_name_prefix,
+                    num_actors=resolved_num_llm_actors,
+                    client_id=llm_config.get("_lease_client_id", client_name),
+                    actor_namespace=resolved_actor_namespace,
                     logger=logger,
                 )
         except Exception as cleanup_error:

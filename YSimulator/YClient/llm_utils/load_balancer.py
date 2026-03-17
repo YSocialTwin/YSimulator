@@ -32,6 +32,115 @@ class LoadBalancingStrategy(Enum):
 
 
 LEASE_REGISTRY_ACTOR_NAME = "ysim_llm_lease_registry"
+DEFAULT_VLLM_SHARED_NAMESPACE = "ysim_vllm_shared"
+
+
+def _build_vllm_pool_prefix(model_name: str) -> str:
+    """Create a stable actor-name prefix for a vLLM model."""
+    normalized = (model_name or "unknown-model").strip().lower()
+    model_hash = hashlib.sha256(normalized.encode()).hexdigest()[:12]
+    return f"ysim_vllm_{model_hash}"
+
+
+def _resolve_actor_namespace(backend: str, llm_config: Optional[dict] = None) -> Optional[str]:
+    """Resolve the namespace where named actors should be created/discovered."""
+    llm_config = llm_config or {}
+    shared_pool = llm_config.get("shared_pool") or {}
+    explicit_namespace = shared_pool.get("namespace") or llm_config.get("actor_namespace")
+    if explicit_namespace:
+        return explicit_namespace
+    if backend.lower() == "vllm":
+        return DEFAULT_VLLM_SHARED_NAMESPACE
+    return None
+
+
+def _resolve_lease_client_id(llm_config: Optional[dict]) -> Optional[str]:
+    """Return a stable per-run lease holder id for shared LLM pools."""
+    llm_config = llm_config or {}
+    return llm_config.get("_lease_client_id") or llm_config.get("client_name")
+
+
+def _discover_named_actor_count(
+    actor_name_prefix: str, backend: str, actor_namespace: Optional[str] = None
+) -> int:
+    """Return how many consecutively named actors already exist for this pool."""
+    count = 0
+    while True:
+        actor_name = f"{actor_name_prefix}_{backend}_{count}"
+        try:
+            ray.get_actor(actor_name, namespace=actor_namespace)
+            count += 1
+        except ValueError:
+            break
+    return count
+
+
+def _discover_existing_vllm_pool(
+    model_name: str,
+    actor_namespace: Optional[str] = None,
+    logger: Optional[logging.Logger] = None,
+) -> tuple[str, int]:
+    """
+    Discover an existing local vLLM pool for a model.
+
+    First check the deterministic model-derived prefix. If nothing is found, scan
+    named VLLMService actors and ask them for metadata so we can attach to older pools too.
+    """
+    preferred_prefix = _build_vllm_pool_prefix(model_name)
+    preferred_count = _discover_named_actor_count(preferred_prefix, "vllm", actor_namespace)
+    if preferred_count > 0:
+        return preferred_prefix, preferred_count
+
+    try:
+        from ray.util.state import list_actors
+    except Exception:
+        return preferred_prefix, 0
+
+    candidate_groups = {}
+    try:
+        actor_states = list_actors()
+    except Exception as exc:
+        if logger:
+            logger.warning(
+                f"Unable to scan Ray actor state for reusable vLLM pools: {exc}. "
+                "Falling back to deterministic prefix discovery only."
+            )
+        return preferred_prefix, 0
+
+    for actor_state in actor_states:
+        actor_name = actor_state.get("name")
+        if not actor_name or actor_state.get("class_name") != "VLLMService":
+            continue
+        if actor_state.get("state") not in (None, "ALIVE"):
+            continue
+        state_namespace = actor_state.get("ray_namespace") or actor_state.get("namespace")
+        if actor_namespace and state_namespace and state_namespace != actor_namespace:
+            continue
+
+        try:
+            actor = ray.get_actor(actor_name, namespace=actor_namespace)
+            metadata = ray.get(actor.get_service_metadata.remote())
+        except Exception:
+            continue
+
+        if metadata.get("backend") != "vllm" or metadata.get("model") != model_name:
+            continue
+
+        pool_prefix = metadata.get("pool_prefix") or actor_name.rsplit("_vllm_", 1)[0]
+        candidate_groups.setdefault(pool_prefix, []).append(actor_name)
+
+    if not candidate_groups:
+        return preferred_prefix, 0
+
+    selected_prefix, actor_names = max(
+        candidate_groups.items(), key=lambda item: (len(item[1]), item[0])
+    )
+    if logger:
+        logger.info(
+            f"Discovered existing vLLM pool via actor metadata: model={model_name}, "
+            f"prefix={selected_prefix}, actors={len(actor_names)}"
+        )
+    return selected_prefix, len(actor_names)
 
 
 @ray.remote
@@ -66,14 +175,56 @@ def _build_pool_key(backend: str, actor_name_prefix: str, num_actors: int) -> st
     return f"{backend.lower()}:{actor_name_prefix}:{num_actors}"
 
 
-def _get_or_create_lease_registry():
+def _force_kill_local_processes(process_ids: List[int], logger: Optional[logging.Logger] = None) -> int:
+    """Best-effort kill for leaked local processes that survived actor shutdown."""
+    if not process_ids:
+        return 0
+
+    try:
+        import psutil
+    except Exception as exc:
+        if logger:
+            logger.warning(f"psutil unavailable for leaked process cleanup: {exc}")
+        return 0
+
+    killed = 0
+    unique_pids = []
+    seen = set()
+    for pid in process_ids:
+        if pid and pid not in seen:
+            unique_pids.append(pid)
+            seen.add(pid)
+
+    for pid in unique_pids:
+        try:
+            process = psutil.Process(pid)
+        except psutil.NoSuchProcess:
+            continue
+
+        try:
+            process.kill()
+            process.wait(timeout=3)
+            killed += 1
+            if logger:
+                logger.info(f"Force-killed leaked local process pid={pid}")
+        except psutil.NoSuchProcess:
+            continue
+        except Exception as exc:
+            if logger:
+                logger.warning(f"Failed to force-kill leaked process pid={pid}: {exc}")
+
+    return killed
+
+
+def _get_or_create_lease_registry(actor_namespace: Optional[str] = None):
     """Get or create the detached lease registry actor."""
     try:
-        return ray.get_actor(LEASE_REGISTRY_ACTOR_NAME)
+        return ray.get_actor(LEASE_REGISTRY_ACTOR_NAME, namespace=actor_namespace)
     except ValueError:
-        return LLMLeaseRegistry.options(
-            name=LEASE_REGISTRY_ACTOR_NAME, lifetime="detached"
-        ).remote()
+        options = {"name": LEASE_REGISTRY_ACTOR_NAME, "lifetime": "detached"}
+        if actor_namespace:
+            options["namespace"] = actor_namespace
+        return LLMLeaseRegistry.options(**options).remote()
 
 
 def acquire_llm_pool_lease(
@@ -82,11 +233,12 @@ def acquire_llm_pool_lease(
     num_actors: int,
     client_id: str,
     actor_names: List[str],
+    actor_namespace: Optional[str] = None,
     logger: Optional[logging.Logger] = None,
 ) -> int:
     """Register client usage of an LLM actor pool."""
     pool_key = _build_pool_key(backend, actor_name_prefix, num_actors)
-    registry = _get_or_create_lease_registry()
+    registry = _get_or_create_lease_registry(actor_namespace)
     active = ray.get(registry.acquire.remote(pool_key, client_id, actor_names))
     if logger:
         logger.info(
@@ -100,6 +252,7 @@ def release_llm_pool_lease(
     actor_name_prefix: str,
     num_actors: int,
     client_id: str,
+    actor_namespace: Optional[str] = None,
     logger: Optional[logging.Logger] = None,
 ) -> int:
     """
@@ -108,7 +261,7 @@ def release_llm_pool_lease(
     If this is the last client, all detached actors in the pool are terminated.
     """
     pool_key = _build_pool_key(backend, actor_name_prefix, num_actors)
-    registry = _get_or_create_lease_registry()
+    registry = _get_or_create_lease_registry(actor_namespace)
     active, actor_names = ray.get(registry.release.remote(pool_key, client_id))
     if logger:
         logger.info(
@@ -117,11 +270,35 @@ def release_llm_pool_lease(
 
     if active == 0 and actor_names:
         for actor_name in actor_names:
+            shutdown_result = {}
             try:
-                actor = ray.get_actor(actor_name)
+                actor = ray.get_actor(actor_name, namespace=actor_namespace)
+                try:
+                    if hasattr(actor, "shutdown"):
+                        shutdown_result = ray.get(actor.shutdown.remote()) or {}
+                        if logger:
+                            logger.info(
+                                f"Shutdown idle LLM actor before termination: {actor_name} "
+                                f"(details={shutdown_result})"
+                            )
+                except Exception as shutdown_exc:
+                    if logger:
+                        logger.warning(
+                            f"Best-effort shutdown failed for LLM actor {actor_name}: {shutdown_exc}"
+                        )
                 ray.kill(actor, no_restart=True)
                 if logger:
                     logger.info(f"Terminated idle LLM actor: {actor_name}")
+                leaked_pids = []
+                actor_pid = shutdown_result.get("actor_pid")
+                if actor_pid:
+                    leaked_pids.append(actor_pid)
+                leaked_pids.extend(shutdown_result.get("child_pids", []))
+                force_killed = _force_kill_local_processes(leaked_pids, logger)
+                if force_killed and logger:
+                    logger.info(
+                        f"Force-killed {force_killed} leaked process(es) after terminating {actor_name}"
+                    )
             except ValueError:
                 # Actor already gone, ignore.
                 continue
@@ -181,6 +358,7 @@ class LLMLoadBalancer:
         self.backend = backend.lower()
         self.owns_actors = False  # Track if we created the actors
         self.actor_name_prefix = actor_name_prefix
+        self.actor_namespace = _resolve_actor_namespace(self.backend, llm_config)
 
         # Get GPU allocation per actor (for vLLM)
         # Supports fractional GPUs to allocate multiple actors per GPU
@@ -208,7 +386,7 @@ class LLMLoadBalancer:
             for i in range(num_actors):
                 actor_name = f"{actor_name_prefix}_{self.backend}_{i}"
                 try:
-                    actor = ray.get_actor(actor_name)
+                    actor = ray.get_actor(actor_name, namespace=self.actor_namespace)
                     self.actors.append(actor)
                     reused_count += 1
                     self.logger.info(f"Reused existing LLM actor {i+1}/{num_actors}: {actor_name}")
@@ -243,17 +421,23 @@ class LLMLoadBalancer:
 
             # Allocate GPU resources for vLLM actors
             if self.backend == "vllm":
-                actor = ServiceClass.options(
-                    name=actor_name,
-                    num_gpus=gpu_per_actor,
-                    lifetime="detached",  # Persist beyond client lifetime
-                ).remote(
+                options = {
+                    "name": actor_name,
+                    "num_gpus": gpu_per_actor,
+                    "lifetime": "detached",
+                }
+                if self.actor_namespace:
+                    options["namespace"] = self.actor_namespace
+                actor = ServiceClass.options(**options).remote(
                     llm_config=llm_config,
                     prompts_config=prompts_config,
                     llm_v_config=llm_v_config,
                 )
             else:
-                actor = ServiceClass.options(name=actor_name, lifetime="detached").remote(
+                options = {"name": actor_name, "lifetime": "detached"}
+                if self.actor_namespace:
+                    options["namespace"] = self.actor_namespace
+                actor = ServiceClass.options(**options).remote(
                     llm_config=llm_config,
                     prompts_config=prompts_config,
                     llm_v_config=llm_v_config,
@@ -521,6 +705,33 @@ def create_llm_actors(
     """
     backend_lower = backend.lower()
 
+    if backend_lower == "vllm":
+        actor_namespace = _resolve_actor_namespace(backend_lower, llm_config)
+        resolved_prefix, existing_count = _discover_existing_vllm_pool(
+            llm_config.get("model", "unknown-model"), actor_namespace, logger
+        )
+        if existing_count > 0:
+            if logger:
+                logger.info(
+                    f"Reusing existing local vLLM pool for model={llm_config.get('model')} "
+                    f"with {existing_count} actor(s)"
+                )
+            actor_name_prefix = resolved_prefix
+            num_actors = existing_count
+            reuse_actors = True
+            llm_config["_reused_existing_pool"] = True
+        else:
+            actor_name_prefix = resolved_prefix
+            llm_config["_reused_existing_pool"] = False
+
+        llm_config["_resolved_actor_name_prefix"] = actor_name_prefix
+        llm_config["_resolved_num_actors"] = num_actors
+        llm_config["_resolved_actor_namespace"] = actor_namespace
+    else:
+        actor_namespace = _resolve_actor_namespace(backend_lower, llm_config)
+        if actor_namespace:
+            llm_config["_resolved_actor_namespace"] = actor_namespace
+
     # Get GPU allocation per actor (for vLLM)
     gpu_per_actor = llm_config.get("gpu_per_actor", 1.0)
 
@@ -529,9 +740,20 @@ def create_llm_actors(
         if reuse_actors:
             actor_name = f"{actor_name_prefix}_{backend_lower}_0"
             try:
-                actor = ray.get_actor(actor_name)
+                actor = ray.get_actor(actor_name, namespace=actor_namespace)
                 if logger:
                     logger.info(f"Reused existing single LLM actor: {actor_name}")
+                lease_client_id = _resolve_lease_client_id(llm_config)
+                if actor_name and lease_client_id:
+                    acquire_llm_pool_lease(
+                        backend=backend_lower,
+                        actor_name_prefix=actor_name_prefix,
+                        num_actors=1,
+                        client_id=lease_client_id,
+                        actor_names=[actor_name],
+                        actor_namespace=actor_namespace,
+                        logger=logger,
+                    )
                 return actor
             except ValueError:
                 # Actor doesn't exist, create new one
@@ -542,10 +764,12 @@ def create_llm_actors(
         if backend_lower == "vllm":
             from YSimulator.YClient.LLM_interactions.vllm_service import VLLMService
 
-            actor_name = f"{actor_name_prefix}_{backend_lower}_0" if reuse_actors else None
+            actor_name = f"{actor_name_prefix}_{backend_lower}_0"
             options = {"num_gpus": gpu_per_actor, "lifetime": "detached"}
             if actor_name:
                 options["name"] = actor_name
+            if actor_namespace:
+                options["namespace"] = actor_namespace
 
             actor = VLLMService.options(**options).remote(
                 llm_config=llm_config,
@@ -553,13 +777,15 @@ def create_llm_actors(
                 llm_v_config=llm_v_config,
                 logging_config=logging_config,
             )
-            if actor_name and reuse_actors and llm_config.get("client_name"):
+            lease_client_id = _resolve_lease_client_id(llm_config)
+            if actor_name and reuse_actors and lease_client_id:
                 acquire_llm_pool_lease(
                     backend=backend_lower,
                     actor_name_prefix=actor_name_prefix,
                     num_actors=1,
-                    client_id=llm_config["client_name"],
+                    client_id=lease_client_id,
                     actor_names=[actor_name],
+                    actor_namespace=actor_namespace,
                     logger=logger,
                 )
             return actor
@@ -570,6 +796,8 @@ def create_llm_actors(
             options = {"lifetime": "detached"} if reuse_actors else {}
             if actor_name:
                 options["name"] = actor_name
+            if actor_namespace:
+                options["namespace"] = actor_namespace
 
             actor = LLMService.options(**options).remote(
                 llm_config=llm_config,
@@ -577,13 +805,15 @@ def create_llm_actors(
                 llm_v_config=llm_v_config,
                 logging_config=logging_config,
             )
-            if actor_name and reuse_actors and llm_config.get("client_name"):
+            lease_client_id = _resolve_lease_client_id(llm_config)
+            if actor_name and reuse_actors and lease_client_id:
                 acquire_llm_pool_lease(
                     backend=backend_lower,
                     actor_name_prefix=actor_name_prefix,
                     num_actors=1,
-                    client_id=llm_config["client_name"],
+                    client_id=lease_client_id,
                     actor_names=[actor_name],
+                    actor_namespace=actor_namespace,
                     logger=logger,
                 )
             return actor
@@ -602,14 +832,16 @@ def create_llm_actors(
             reuse_actors=reuse_actors,
             actor_name_prefix=actor_name_prefix,
         )
-        if llm_config.get("client_name"):
+        lease_client_id = _resolve_lease_client_id(llm_config)
+        if lease_client_id:
             actor_names = [f"{actor_name_prefix}_{backend_lower}_{i}" for i in range(num_actors)]
             acquire_llm_pool_lease(
                 backend=backend_lower,
                 actor_name_prefix=actor_name_prefix,
                 num_actors=num_actors,
-                client_id=llm_config["client_name"],
+                client_id=lease_client_id,
                 actor_names=actor_names,
+                actor_namespace=actor_namespace,
                 logger=logger,
             )
         return pool
@@ -625,14 +857,16 @@ def create_llm_actors(
             reuse_actors=reuse_actors,
             actor_name_prefix=actor_name_prefix,
         )
-        if llm_config.get("client_name"):
+        lease_client_id = _resolve_lease_client_id(llm_config)
+        if lease_client_id:
             actor_names = [f"{actor_name_prefix}_{backend_lower}_{i}" for i in range(num_actors)]
             acquire_llm_pool_lease(
                 backend=backend_lower,
                 actor_name_prefix=actor_name_prefix,
                 num_actors=num_actors,
-                client_id=llm_config["client_name"],
+                client_id=lease_client_id,
                 actor_names=actor_names,
+                actor_namespace=actor_namespace,
                 logger=logger,
             )
         return balancer
