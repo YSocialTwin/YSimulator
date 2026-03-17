@@ -336,9 +336,7 @@ class TestToxicity:
 
             import logging
 
-            with patch(
-                "YSimulator.YClient.text_support.annotations.logger"
-            ) as mock_logger:
+            with patch("YSimulator.YClient.text_support.annotations.logger") as mock_logger:
                 toxicity("Test text", api_key=None)
                 mock_logger.debug.assert_called_once()
                 debug_msg = mock_logger.debug.call_args[0][0]
@@ -349,9 +347,7 @@ class TestToxicity:
         """Test that a Perspective API failure emits a WARNING log message."""
         mock_perspective.side_effect = Exception("network error")
 
-        with patch(
-            "YSimulator.YClient.text_support.annotations.logger"
-        ) as mock_logger:
+        with patch("YSimulator.YClient.text_support.annotations.logger") as mock_logger:
             result = toxicity("Test text", api_key="bad_key")
             assert result == {}
             mock_logger.warning.assert_called_once()
@@ -365,9 +361,7 @@ class TestToxicity:
         ) as mock_get_model:
             mock_get_model.side_effect = RuntimeError("model load error")
 
-            with patch(
-                "YSimulator.YClient.text_support.annotations.logger"
-            ) as mock_logger:
+            with patch("YSimulator.YClient.text_support.annotations.logger") as mock_logger:
                 from YSimulator.YClient.text_support.annotations import detoxify_toxicity
 
                 result = detoxify_toxicity("Test text")
