@@ -175,7 +175,9 @@ def _build_pool_key(backend: str, actor_name_prefix: str, num_actors: int) -> st
     return f"{backend.lower()}:{actor_name_prefix}:{num_actors}"
 
 
-def _force_kill_local_processes(process_ids: List[int], logger: Optional[logging.Logger] = None) -> int:
+def _force_kill_local_processes(
+    process_ids: List[int], logger: Optional[logging.Logger] = None
+) -> int:
     """Best-effort kill for leaked local processes that survived actor shutdown."""
     if not process_ids:
         return 0
