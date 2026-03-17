@@ -237,9 +237,32 @@ class TestToxicity:
     """Test suite for toxicity analysis."""
 
     def test_toxicity_no_api_key(self):
-        """Test toxicity with no API key."""
-        result = toxicity("Test text", api_key=None)
-        assert result == {}
+        """Test toxicity with no API key uses detoxify locally."""
+        with patch(
+            "YSimulator.YClient.text_support.annotations._get_detoxify_model"
+        ) as mock_get_model:
+            mock_model = MagicMock()
+            mock_model.predict.return_value = {
+                "toxicity": 0.1,
+                "severe_toxicity": 0.05,
+                "identity_attack": 0.02,
+                "insult": 0.03,
+                "obscene": 0.01,
+                "threat": 0.01,
+                "sexual_explicit": 0.02,
+            }
+            mock_get_model.return_value = mock_model
+
+            result = toxicity("Test text", api_key=None)
+            assert "TOXICITY" in result
+            assert result["TOXICITY"] == 0.1
+            assert "SEVERE_TOXICITY" in result
+            assert "IDENTITY_ATTACK" in result
+            assert "INSULT" in result
+            assert "PROFANITY" in result
+            assert "THREAT" in result
+            assert "SEXUALLY_EXPLICIT" in result
+            assert "FLIRTATION" in result
 
     @patch("YSimulator.YClient.text_support.annotations.PerspectiveAPI")
     def test_toxicity_with_api_key_success(self, mock_perspective):
@@ -293,6 +316,65 @@ class TestToxicity:
 
         result = toxicity("", api_key="test_key")
         assert isinstance(result, dict)
+
+    def test_toxicity_no_api_key_logs_debug(self):
+        """Test that falling back to detoxify emits a DEBUG log message."""
+        with patch(
+            "YSimulator.YClient.text_support.annotations._get_detoxify_model"
+        ) as mock_get_model:
+            mock_model = MagicMock()
+            mock_model.predict.return_value = {
+                "toxicity": 0.1,
+                "severe_toxicity": 0.0,
+                "identity_attack": 0.0,
+                "insult": 0.0,
+                "obscene": 0.0,
+                "threat": 0.0,
+                "sexual_explicit": 0.0,
+            }
+            mock_get_model.return_value = mock_model
+
+            import logging
+
+            with patch(
+                "YSimulator.YClient.text_support.annotations.logger"
+            ) as mock_logger:
+                toxicity("Test text", api_key=None)
+                mock_logger.debug.assert_called_once()
+                debug_msg = mock_logger.debug.call_args[0][0]
+                assert "detoxify" in debug_msg.lower()
+
+    @patch("YSimulator.YClient.text_support.annotations.PerspectiveAPI")
+    def test_toxicity_perspective_failure_logs_warning(self, mock_perspective):
+        """Test that a Perspective API failure emits a WARNING log message."""
+        mock_perspective.side_effect = Exception("network error")
+
+        with patch(
+            "YSimulator.YClient.text_support.annotations.logger"
+        ) as mock_logger:
+            result = toxicity("Test text", api_key="bad_key")
+            assert result == {}
+            mock_logger.warning.assert_called_once()
+            warning_msg = str(mock_logger.warning.call_args)
+            assert "network error" in warning_msg
+
+    def test_detoxify_toxicity_failure_logs_warning(self):
+        """Test that a detoxify failure emits a WARNING log message."""
+        with patch(
+            "YSimulator.YClient.text_support.annotations._get_detoxify_model"
+        ) as mock_get_model:
+            mock_get_model.side_effect = RuntimeError("model load error")
+
+            with patch(
+                "YSimulator.YClient.text_support.annotations.logger"
+            ) as mock_logger:
+                from YSimulator.YClient.text_support.annotations import detoxify_toxicity
+
+                result = detoxify_toxicity("Test text")
+                assert result == {}
+                mock_logger.warning.assert_called_once()
+                warning_msg = str(mock_logger.warning.call_args)
+                assert "model load error" in warning_msg
 
 
 class TestAnnotateText:
@@ -360,9 +442,25 @@ class TestAnnotateText:
         assert result["toxicity"] is None
 
     def test_annotate_text_toxicity_no_api_key(self):
-        """Test annotation with toxicity enabled but no API key."""
-        result = annotate_text("Test text", enable_toxicity=True, perspective_api_key=None)
-        assert result["toxicity"] is None
+        """Test annotation with toxicity enabled but no API key uses detoxify."""
+        with patch(
+            "YSimulator.YClient.text_support.annotations._get_detoxify_model"
+        ) as mock_get_model:
+            mock_model = MagicMock()
+            mock_model.predict.return_value = {
+                "toxicity": 0.05,
+                "severe_toxicity": 0.01,
+                "identity_attack": 0.01,
+                "insult": 0.02,
+                "obscene": 0.01,
+                "threat": 0.01,
+                "sexual_explicit": 0.01,
+            }
+            mock_get_model.return_value = mock_model
+
+            result = annotate_text("Test text", enable_toxicity=True, perspective_api_key=None)
+            assert result["toxicity"] is not None
+            assert "TOXICITY" in result["toxicity"]
 
     def test_annotate_text_emotions_enabled(self):
         """Test annotation with emotions enabled."""

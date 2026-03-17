@@ -73,7 +73,8 @@ def annotate_text(
         annotations["sentiment"] = None
 
     # Compute toxicity if enabled using existing method from annotations.py
-    if enable_toxicity and perspective_api_key:
+    # Uses Perspective API when api_key is provided, detoxify locally otherwise
+    if enable_toxicity:
         annotations["toxicity"] = toxicity(text, perspective_api_key)
     else:
         annotations["toxicity"] = None
