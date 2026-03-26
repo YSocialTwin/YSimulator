@@ -33,6 +33,7 @@ class LoadBalancingStrategy(Enum):
 
 LEASE_REGISTRY_ACTOR_NAME = "ysim_llm_lease_registry"
 DEFAULT_VLLM_SHARED_NAMESPACE = "ysim_vllm_shared"
+DEFAULT_BATCHING_POLICY = "auto"
 
 
 def _build_vllm_pool_prefix(model_name: str) -> str:
@@ -58,6 +59,64 @@ def _resolve_lease_client_id(llm_config: Optional[dict]) -> Optional[str]:
     """Return a stable per-run lease holder id for shared LLM pools."""
     llm_config = llm_config or {}
     return llm_config.get("_lease_client_id") or llm_config.get("client_name")
+
+
+def _resolve_batching_policy(llm_config: Optional[dict]) -> str:
+    """Return validated batching policy for non-vLLM providers."""
+    llm_config = llm_config or {}
+    policy = str(llm_config.get("batching_policy", DEFAULT_BATCHING_POLICY)).strip().lower()
+    return policy if policy in {"auto", "off", "force"} else DEFAULT_BATCHING_POLICY
+
+
+def _resolve_service_backend(
+    backend: str, llm_config: Optional[dict], logger: Optional[logging.Logger] = None
+) -> str:
+    """
+    Resolve the concrete service backend to instantiate.
+
+    `ollama` may upgrade to `remote_batch` after a startup probe succeeds.
+    """
+    backend_lower = (backend or "ollama").lower()
+    if backend_lower == "vllm":
+        return "vllm"
+
+    policy = _resolve_batching_policy(llm_config)
+    if policy == "off":
+        return backend_lower
+
+    from YSimulator.YClient.LLM_interactions.remote_batch_service import probe_remote_batch_support
+
+    probe_ok = probe_remote_batch_support(llm_config or {}, logger=logger)
+    if probe_ok:
+        return "remote_batch"
+    if policy == "force":
+        raise RuntimeError(
+            "Configured remote LLM endpoint does not support batch requests, "
+            "but llm.batching_policy='force' was requested"
+        )
+    return backend_lower
+
+
+def _resolve_actor_backend_tag(service_backend: str, requested_backend: str) -> str:
+    """Return actor-name/lease backend tag for the resolved service backend."""
+    if service_backend == "remote_batch":
+        return "remote_batch"
+    return (requested_backend or service_backend).lower()
+
+
+def _get_service_class(service_backend: str):
+    """Import and return the concrete actor class for the resolved service backend."""
+    if service_backend == "vllm":
+        from YSimulator.YClient.LLM_interactions.vllm_service import VLLMService
+
+        return VLLMService
+    if service_backend == "remote_batch":
+        from YSimulator.YClient.LLM_interactions.remote_batch_service import RemoteBatchLLMService
+
+        return RemoteBatchLLMService
+    from YSimulator.YClient.LLM_interactions.llm_service import LLMService
+
+    return LLMService
 
 
 def _discover_named_actor_count(
@@ -358,6 +417,11 @@ class LLMLoadBalancer:
         self.strategy = LoadBalancingStrategy(strategy)
         self.current_idx = 0  # For round-robin
         self.backend = backend.lower()
+        self.service_backend = llm_config.get("_resolved_service_backend", self.backend)
+        self.actor_backend = llm_config.get(
+            "_resolved_pool_backend",
+            _resolve_actor_backend_tag(self.service_backend, self.backend),
+        )
         self.owns_actors = False  # Track if we created the actors
         self.actor_name_prefix = actor_name_prefix
         self.actor_namespace = _resolve_actor_namespace(self.backend, llm_config)
@@ -367,26 +431,19 @@ class LLMLoadBalancer:
         # E.g., gpu_per_actor=0.25 allows 4 actors on 1 GPU
         gpu_per_actor = llm_config.get("gpu_per_actor", 1.0)
 
-        # Import appropriate service based on backend
-        if self.backend == "vllm":
-            from YSimulator.YClient.LLM_interactions.vllm_service import VLLMService
-
-            ServiceClass = VLLMService
-        else:
-            from YSimulator.YClient.LLM_interactions.llm_service import LLMService
-
-            ServiceClass = LLMService
+        # Resolved actor class may be VLLMService, RemoteBatchLLMService, or LLMService.
+        ServiceClass = _get_service_class(self.service_backend)
 
         self.actors = []
 
         # Try to reuse existing actors if requested
         if reuse_actors:
             self.logger.info(
-                f"Attempting to reuse existing {num_actors} LLM actors ({self.backend} backend)"
+                f"Attempting to reuse existing {num_actors} LLM actors ({self.actor_backend} backend)"
             )
             reused_count = 0
             for i in range(num_actors):
-                actor_name = f"{actor_name_prefix}_{self.backend}_{i}"
+                actor_name = f"{actor_name_prefix}_{self.actor_backend}_{i}"
                 try:
                     actor = ray.get_actor(actor_name, namespace=self.actor_namespace)
                     self.actors.append(actor)
@@ -399,7 +456,7 @@ class LLMLoadBalancer:
 
             if reused_count == num_actors:
                 self.logger.info(
-                    f"Successfully reused {reused_count} existing LLM actors ({self.backend})"
+                    f"Successfully reused {reused_count} existing LLM actors ({self.actor_backend})"
                 )
                 self.owns_actors = False
                 return
@@ -413,16 +470,16 @@ class LLMLoadBalancer:
 
         # Create new actors (either reuse failed or not requested)
         self.logger.info(
-            f"Creating {num_actors} LLM actors for parallel inference using {self.backend} backend"
+            f"Creating {num_actors} LLM actors for parallel inference using {self.service_backend} backend"
         )
-        if self.backend == "vllm":
+        if self.service_backend == "vllm":
             self.logger.info(f"GPU allocation per actor: {gpu_per_actor}")
 
         for i in range(num_actors):
-            actor_name = f"{actor_name_prefix}_{self.backend}_{i}"
+            actor_name = f"{actor_name_prefix}_{self.actor_backend}_{i}"
 
             # Allocate GPU resources for vLLM actors
-            if self.backend == "vllm":
+            if self.service_backend == "vllm":
                 options = {
                     "name": actor_name,
                     "num_gpus": gpu_per_actor,
@@ -445,11 +502,14 @@ class LLMLoadBalancer:
                     llm_v_config=llm_v_config,
                 )
             self.actors.append(actor)
-            self.logger.info(f"Created LLM actor {i+1}/{num_actors} ({self.backend}): {actor_name}")
+            self.logger.info(
+                f"Created LLM actor {i+1}/{num_actors} ({self.service_backend}): {actor_name}"
+            )
 
         self.owns_actors = True
         self.logger.info(
-            f"LLM load balancer initialized with {num_actors} actors, strategy={strategy}, backend={self.backend}"
+            f"LLM load balancer initialized with {num_actors} actors, strategy={strategy}, "
+            f"backend={self.service_backend}"
         )
 
     def get_actor_for_agent(self, agent_id: str) -> Any:
@@ -706,6 +766,10 @@ def create_llm_actors(
         - If num_actors > 1 and not enable_monitoring: LLMLoadBalancer instance
     """
     backend_lower = backend.lower()
+    service_backend = _resolve_service_backend(backend_lower, llm_config, logger=logger)
+    actor_backend = _resolve_actor_backend_tag(service_backend, backend_lower)
+    llm_config["_resolved_service_backend"] = service_backend
+    llm_config["_resolved_pool_backend"] = actor_backend
 
     if backend_lower == "vllm":
         actor_namespace = _resolve_actor_namespace(backend_lower, llm_config)
@@ -740,7 +804,7 @@ def create_llm_actors(
     if num_actors == 1:
         # Single actor - check if we should reuse
         if reuse_actors:
-            actor_name = f"{actor_name_prefix}_{backend_lower}_0"
+            actor_name = f"{actor_name_prefix}_{actor_backend}_0"
             try:
                 actor = ray.get_actor(actor_name, namespace=actor_namespace)
                 if logger:
@@ -748,7 +812,7 @@ def create_llm_actors(
                 lease_client_id = _resolve_lease_client_id(llm_config)
                 if actor_name and lease_client_id:
                     acquire_llm_pool_lease(
-                        backend=backend_lower,
+                        backend=actor_backend,
                         actor_name_prefix=actor_name_prefix,
                         num_actors=1,
                         client_id=lease_client_id,
@@ -763,26 +827,25 @@ def create_llm_actors(
                     logger.debug(f"Actor {actor_name} not found, creating new one")
 
         # Create new single actor
-        if backend_lower == "vllm":
-            from YSimulator.YClient.LLM_interactions.vllm_service import VLLMService
-
-            actor_name = f"{actor_name_prefix}_{backend_lower}_0"
+        if service_backend == "vllm":
+            ServiceClass = _get_service_class(service_backend)
+            actor_name = f"{actor_name_prefix}_{actor_backend}_0"
             options = {"num_gpus": gpu_per_actor, "lifetime": "detached"}
             if actor_name:
                 options["name"] = actor_name
             if actor_namespace:
                 options["namespace"] = actor_namespace
 
-            actor = VLLMService.options(**options).remote(
+            actor = ServiceClass.options(**options).remote(
                 llm_config=llm_config,
                 prompts_config=prompts_config,
                 llm_v_config=llm_v_config,
                 logging_config=logging_config,
             )
             lease_client_id = _resolve_lease_client_id(llm_config)
-            if actor_name and reuse_actors and lease_client_id:
+            if actor_name and lease_client_id:
                 acquire_llm_pool_lease(
-                    backend=backend_lower,
+                    backend=actor_backend,
                     actor_name_prefix=actor_name_prefix,
                     num_actors=1,
                     client_id=lease_client_id,
@@ -792,16 +855,15 @@ def create_llm_actors(
                 )
             return actor
         else:
-            from YSimulator.YClient.LLM_interactions.llm_service import LLMService
-
-            actor_name = f"{actor_name_prefix}_{backend_lower}_0" if reuse_actors else None
+            ServiceClass = _get_service_class(service_backend)
+            actor_name = f"{actor_name_prefix}_{actor_backend}_0" if reuse_actors else None
             options = {"lifetime": "detached"} if reuse_actors else {}
             if actor_name:
                 options["name"] = actor_name
             if actor_namespace:
                 options["namespace"] = actor_namespace
 
-            actor = LLMService.options(**options).remote(
+            actor = ServiceClass.options(**options).remote(
                 llm_config=llm_config,
                 prompts_config=prompts_config,
                 llm_v_config=llm_v_config,
@@ -810,7 +872,7 @@ def create_llm_actors(
             lease_client_id = _resolve_lease_client_id(llm_config)
             if actor_name and reuse_actors and lease_client_id:
                 acquire_llm_pool_lease(
-                    backend=backend_lower,
+                    backend=actor_backend,
                     actor_name_prefix=actor_name_prefix,
                     num_actors=1,
                     client_id=lease_client_id,
@@ -827,7 +889,7 @@ def create_llm_actors(
             prompts_config=prompts_config,
             num_actors=num_actors,
             strategy=strategy,
-            backend=backend,
+            backend=service_backend,
             enable_monitoring=True,
             llm_v_config=llm_v_config,
             logger=logger,
@@ -836,9 +898,9 @@ def create_llm_actors(
         )
         lease_client_id = _resolve_lease_client_id(llm_config)
         if lease_client_id:
-            actor_names = [f"{actor_name_prefix}_{backend_lower}_{i}" for i in range(num_actors)]
+            actor_names = [f"{actor_name_prefix}_{actor_backend}_{i}" for i in range(num_actors)]
             acquire_llm_pool_lease(
-                backend=backend_lower,
+                backend=actor_backend,
                 actor_name_prefix=actor_name_prefix,
                 num_actors=num_actors,
                 client_id=lease_client_id,
@@ -853,7 +915,7 @@ def create_llm_actors(
             prompts_config=prompts_config,
             num_actors=num_actors,
             strategy=strategy,
-            backend=backend,
+            backend=service_backend,
             llm_v_config=llm_v_config,
             logger=logger,
             reuse_actors=reuse_actors,
@@ -861,9 +923,9 @@ def create_llm_actors(
         )
         lease_client_id = _resolve_lease_client_id(llm_config)
         if lease_client_id:
-            actor_names = [f"{actor_name_prefix}_{backend_lower}_{i}" for i in range(num_actors)]
+            actor_names = [f"{actor_name_prefix}_{actor_backend}_{i}" for i in range(num_actors)]
             acquire_llm_pool_lease(
-                backend=backend_lower,
+                backend=actor_backend,
                 actor_name_prefix=actor_name_prefix,
                 num_actors=num_actors,
                 client_id=lease_client_id,

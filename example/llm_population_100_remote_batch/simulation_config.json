@@ -1,0 +1,147 @@
+{
+  "client_name": "client_1",
+  "namespace": "social_sim",
+  "server": {
+    "address": null,
+    "port": null
+  },
+  "llm": {
+    "backend": "ollama",
+    "address": "localhost",
+    "port": 11434,
+    "model": "llama3.2",
+    "temperature": 0.9,
+    "batching_policy": "auto",
+    "num_actors": 1,
+    "reuse_actors": false,
+    "llm_api_key": "NULL",
+    "llm_max_tokens": -1,
+    "note": "This example uses the non-vllm path. On startup the client probes the configured remote endpoint with a short batch request; if it succeeds, YSimulator upgrades to RemoteBatchLLMService automatically. Set batching_policy to 'off' to force standard LLMService or to 'force' to require remote batch support."
+  },
+  "llm_v": {
+    "address": "localhost",
+    "port": 11434,
+    "model": "minicpm-v",
+    "temperature": 0.5,
+    "llm_api_key": "NULL",
+    "llm_max_tokens": 300
+  },
+  "simulation": {
+    "num_days": 3,
+    "num_slots_per_day": 24,
+    "heartbeat_interval": 5,
+    "note": "num_days=0 means infinite simulation, set to a positive number to limit duration. heartbeat_interval in seconds (default: 5).",
+    "percentage_new_agents_iteration": 0.0,
+    "percentage_removed_agents_iteration": 0.0,
+    "discussion_topics": [
+      "war",
+      "politics",
+      "sport",
+      "books",
+      "movies"
+    ],
+    "activity_profiles": {
+      "Always On": "0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23",
+      "Morning Active": "6,7,8,9,10,11,12",
+      "Evening Active": "17,18,19,20,21,22,23",
+      "Weekend Warrior": "0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23"
+    },
+    "hourly_activity": {
+      "0": 0.023,
+      "1": 0.021,
+      "2": 0.02,
+      "3": 0.02,
+      "4": 0.018,
+      "5": 0.017,
+      "6": 0.017,
+      "7": 0.018,
+      "8": 0.02,
+      "9": 0.02,
+      "10": 0.021,
+      "11": 0.022,
+      "12": 0.024,
+      "13": 0.027,
+      "14": 0.03,
+      "15": 0.032,
+      "16": 0.032,
+      "17": 0.032,
+      "18": 0.032,
+      "19": 0.031,
+      "20": 0.03,
+      "21": 0.029,
+      "22": 0.027,
+      "23": 0.025
+    },
+    "actions_likelihood": {
+      "post": 3.0,
+      "image": 0.0,
+      "news": 0.0,
+      "comment": 5.0,
+      "read": 2.0,
+      "share": 1.0,
+      "search": 5.0,
+      "cast": 0.0,
+      "share_link": 0.0,
+      "follow": 0.1
+    },
+    "agent_archetypes": {
+      "enabled": true,
+      "agent_downcast": true,
+      "distribution": {
+        "validator": 0.33,
+        "broadcaster": 0.33,
+        "explorer": 0.34
+      }
+    },
+    "emotion_annotation": false
+  },
+  "agents": {
+    "reading_from_follower_ratio": 0.6,
+    "max_length_thread_reading": 5,
+    "attention_window": 336,
+    "probability_of_daily_follow": 0.1,
+    "probability_of_secondary_follow": 0.1,
+    "follow_action_decay": {
+      "enabled": false,
+      "decay_function": "exponential",
+      "half_life_rounds": 168,
+      "decay_rate": 0.01,
+      "min_probability_ratio": 0.1
+    },
+    "churn": {
+      "enabled": true,
+      "churn_probability": 0.01,
+      "inactivity_threshold": 5,
+      "churn_percentage": 0.1
+    },
+    "new_agents": {
+      "enabled": true,
+      "probability_new_agents": 0.01,
+      "percentage_new_agents": 0.01
+    }
+  },
+  "logging": {
+    "enable_execution_log": true,
+    "enable_actor_log": true,
+    "enable_client_log": true,
+    "enable_console_log": true,
+    "enable_llm_usage_log": true
+  },
+  "opinion_dynamics": {
+    "enabled": true,
+    "model_name": "bounded_confidence",
+    "parameters": {
+      "epsilon": 0.25,
+      "mu": 0.5,
+      "theta": 0.0,
+      "cold_start": "neutral"
+    },
+    "opinion_groups": {
+      "Strongly against": [0.0, 0.2],
+      "Against": [0.2, 0.4],
+      "Neutral": [0.4, 0.6],
+      "In favor": [0.6, 0.8],
+      "Strongly in favor": [0.8, 1.0]
+    }
+  }
+}
