@@ -455,6 +455,7 @@ Controls simulation parameters, agent behavior, and LLM settings.
     "port": 11434,
     "model": "llama3.2",
     "backend": "ollama",
+    "api_format": "auto",
     "temperature": 0.7,
     "batching_policy": "auto",
     "llm_api_key": "NULL",
@@ -467,6 +468,10 @@ Controls simulation parameters, agent behavior, and LLM settings.
 - `backend`:
   - `ollama` uses the standard remote LLM path and can auto-upgrade to the remote batched adapter
   - `vllm` starts the embedded local `VLLMService`
+- `api_format` applies when `backend` is not `vllm`:
+  - `auto` (default): probe OpenAI-compatible first, then Ollama-compatible
+  - `openai`: use OpenAI-compatible `/v1/completions` semantics, suitable for remote vLLM servers
+  - `ollama`: use Ollama `/api` semantics
 - `batching_policy` applies when `backend` is not `vllm`:
   - `auto` (default): probe the remote endpoint at startup and use the remote batched adapter if batch requests work
   - `off`: disable the probe and always use the standard `LLMService`

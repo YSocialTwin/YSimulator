@@ -39,6 +39,18 @@ From [simulation_config.json](/Users/rossetti/PycharmProjects/YSimulator/example
 }
 ```
 
+For a remote vLLM server behind an OpenAI-compatible endpoint, set:
+
+```json
+{
+  "llm": {
+    "address": "http://your-vllm-host:8000/v1",
+    "api_format": "openai",
+    "batching_policy": "auto"
+  }
+}
+```
+
 ### Batching policy options
 
 - `auto`: probe and upgrade to the remote batched adapter if supported

@@ -84,10 +84,14 @@ def _resolve_service_backend(
     if policy == "off":
         return backend_lower
 
-    from YSimulator.YClient.LLM_interactions.remote_batch_service import probe_remote_batch_support
+    from YSimulator.YClient.LLM_interactions.remote_batch_service import (
+        resolve_remote_batch_provider,
+    )
 
-    probe_ok = probe_remote_batch_support(llm_config or {}, logger=logger)
-    if probe_ok:
+    remote_provider = resolve_remote_batch_provider(llm_config or {}, logger=logger)
+    if remote_provider:
+        if llm_config is not None:
+            llm_config["_resolved_remote_api"] = remote_provider
         return "remote_batch"
     if policy == "force":
         raise RuntimeError(
