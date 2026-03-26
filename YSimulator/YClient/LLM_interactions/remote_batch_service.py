@@ -163,7 +163,9 @@ class _OpenAICompatibleModelAdapter:
         return [SimpleNamespace(outputs=[SimpleNamespace(text=text)]) for text in texts]
 
 
-def _probe_openai_batch_support(llm_config: Dict[str, Any], logger: Optional[logging.Logger] = None) -> bool:
+def _probe_openai_batch_support(
+    llm_config: Dict[str, Any], logger: Optional[logging.Logger] = None
+) -> bool:
     """Probe whether the endpoint supports OpenAI-compatible batched completions."""
     logger = logger or logging.getLogger(__name__)
     try:
@@ -191,13 +193,17 @@ def _probe_openai_batch_support(llm_config: Dict[str, Any], logger: Optional[log
             return False
         data = response.json()
         choices = data.get("choices", [])
-        return len(choices) == 2 and all(bool((choice.get("text") or "").strip()) for choice in choices)
+        return len(choices) == 2 and all(
+            bool((choice.get("text") or "").strip()) for choice in choices
+        )
     except Exception as exc:
         logger.info(f"OpenAI-compatible batch probe failed: {exc}")
         return False
 
 
-def _probe_ollama_batch_support(llm_config: Dict[str, Any], logger: Optional[logging.Logger] = None) -> bool:
+def _probe_ollama_batch_support(
+    llm_config: Dict[str, Any], logger: Optional[logging.Logger] = None
+) -> bool:
     """Probe whether the endpoint supports Ollama-compatible batch requests."""
     logger = logger or logging.getLogger(__name__)
     try:
@@ -244,7 +250,9 @@ def resolve_remote_batch_provider(
     return None
 
 
-def probe_remote_batch_support(llm_config: Dict[str, Any], logger: Optional[logging.Logger] = None) -> bool:
+def probe_remote_batch_support(
+    llm_config: Dict[str, Any], logger: Optional[logging.Logger] = None
+) -> bool:
     """Return True if any supported remote API family accepts batched generation."""
     return resolve_remote_batch_provider(llm_config, logger=logger) is not None
 
@@ -329,7 +337,9 @@ class RemoteBatchLLMService(_VLLMServiceBase):
         return _normalize_ollama_base_url(config)
 
     def _build_model_adapter(self, config: Dict[str, Any]):
-        remote_api = config.get("_resolved_remote_api") or config.get("api_format") or self.remote_api
+        remote_api = (
+            config.get("_resolved_remote_api") or config.get("api_format") or self.remote_api
+        )
         remote_api = remote_api.lower()
         if remote_api == "openai":
             return _OpenAICompatibleModelAdapter(
