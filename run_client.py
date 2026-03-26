@@ -23,8 +23,6 @@ import ray
 
 from YSimulator.common_utils import validate_config_directory
 from YSimulator.YClient.client import SimulationClient
-from YSimulator.YClient.LLM_interactions.llm_service import LLMService
-from YSimulator.YClient.LLM_interactions.vllm_service import VLLMService
 from YSimulator.YClient.news_feeds.news_service import NewsFeedService
 
 
@@ -503,28 +501,30 @@ if __name__ == "__main__":
         else:
             logger.info("Using Ollama backend for LLM inference")
             print("--- Using Ollama backend ---")
+            from YSimulator.YClient.llm_utils import create_llm_actors
 
-            # Support actor reuse even for single actor
-            if reuse_actors:
-                from YSimulator.YClient.llm_utils import create_llm_actors
-
-                llm_service = create_llm_actors(
-                    llm_config=llm_config,
-                    prompts_config=prompts_config,
-                    num_actors=1,
-                    backend="ollama",
-                    llm_v_config=llm_v_config,
-                    logger=logger,
-                    reuse_actors=reuse_actors,
-                    actor_name_prefix=actor_name_prefix,
-                    logging_config=logging_config,
-                )
-            else:
-                llm_service = LLMService.remote(llm_config, prompts_config, llm_v_config, logging_config)
+            llm_service = create_llm_actors(
+                llm_config=llm_config,
+                prompts_config=prompts_config,
+                num_actors=1,
+                backend="ollama",
+                llm_v_config=llm_v_config,
+                logger=logger,
+                reuse_actors=reuse_actors,
+                actor_name_prefix=actor_name_prefix,
+                logging_config=logging_config,
+            )
 
     resolved_num_llm_actors = llm_config.get("_resolved_num_actors", num_llm_actors)
     resolved_actor_name_prefix = llm_config.get("_resolved_actor_name_prefix", actor_name_prefix)
     resolved_actor_namespace = llm_config.get("_resolved_actor_namespace")
+    resolved_service_backend = llm_config.get("_resolved_service_backend", llm_backend)
+    resolved_pool_backend = llm_config.get("_resolved_pool_backend", llm_backend)
+
+    if resolved_service_backend != llm_backend:
+        logger.info(
+            f"Upgraded non-vLLM backend to batch-capable service backend: {resolved_service_backend}"
+        )
 
     llm_time = (time.time() - llm_start) * 1000
 
@@ -594,11 +594,11 @@ if __name__ == "__main__":
         raise
     finally:
         try:
-            if llm_backend == "vllm":
+            if resolved_pool_backend:
                 from YSimulator.YClient.llm_utils import release_llm_pool_lease
 
                 release_llm_pool_lease(
-                    backend=llm_backend,
+                    backend=resolved_pool_backend,
                     actor_name_prefix=resolved_actor_name_prefix,
                     num_actors=resolved_num_llm_actors,
                     client_id=llm_config.get("_lease_client_id", client_name),
