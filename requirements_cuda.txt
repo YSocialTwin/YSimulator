@@ -1,0 +1,15 @@
+# --- Core GPU Acceleration ---
+# Install these using --extra-index-url if needed for specific CUDA versions
+torch>=2.4.0
+vllm>=0.6.0
+bitsandbytes>=0.42.0  # Flexible version to avoid the 0.46.1 error
+
+# --- Specialized Kernels & Hardware Optimization ---
+flash-attn --no-build-isolation  # Significant speedup on A100
+nvidia-ml-py
+torch-c-dlpack-ext
+
+# --- LLM Quantization Support ---
+auto-gptq
+optimum
+flaml[automl]
