@@ -38,6 +38,7 @@ class ImageGenerator(BaseActionGenerator):
 
         # Extract agent attributes for context
         agent_attrs = self._extract_agent_attrs(agent)
+        agent_attrs = self._apply_post_memory(agent, agent_attrs)
 
         if agent_type == "llm":
             # LLM: Fetch a random image from the server

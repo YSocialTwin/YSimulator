@@ -63,6 +63,7 @@ class ActionContext:
     actions_likelihood: Dict[str, Any] = field(default_factory=dict)
     recsys_settings: Dict[str, Any] = field(default_factory=dict)
     opinion_dynamics_config: Optional[Dict[str, Any]] = None
+    memory_manager: Optional[Any] = None
 
     # Helper functions
     extract_agent_attrs_fn: Optional[Any] = None
@@ -214,3 +215,54 @@ class BaseActionGenerator(ABC):
                 agent_id, parent_post_id, parent_post_data
             )
         return None
+
+    def _apply_post_memory(self, agent: AgentProfile, agent_attrs: Dict[str, Any]) -> Dict[str, Any]:
+        if not self.context.memory_manager:
+            return agent_attrs
+        return self.context.memory_manager.apply_post_memory(
+            agent.id, agent_attrs, self.context.day, self.context.slot
+        )
+
+    def _apply_reply_memory(
+        self,
+        agent: AgentProfile,
+        agent_attrs: Dict[str, Any],
+        *,
+        target_post_id: str,
+        target_post_data: dict,
+        author_name: str,
+        thread_context: Optional[List[dict]],
+        mode: str = "comment",
+    ) -> Dict[str, Any]:
+        if not self.context.memory_manager:
+            return agent_attrs
+        return self.context.memory_manager.apply_reply_memory(
+            agent.id,
+            agent_attrs,
+            target_post_id=target_post_id,
+            target_post_data=target_post_data,
+            author_name=author_name,
+            thread_context=thread_context,
+            day=self.context.day,
+            slot=self.context.slot,
+            mode=mode,
+        )
+
+    def _apply_browse_memory(
+        self,
+        agent: AgentProfile,
+        agent_attrs: Dict[str, Any],
+        *,
+        target_post_id: str,
+        target_post_data: dict,
+    ) -> Dict[str, Any]:
+        if not self.context.memory_manager:
+            return agent_attrs
+        return self.context.memory_manager.apply_browse_memory(
+            agent.id,
+            agent_attrs,
+            target_post_id=target_post_id,
+            target_post_data=target_post_data,
+            day=self.context.day,
+            slot=self.context.slot,
+        )

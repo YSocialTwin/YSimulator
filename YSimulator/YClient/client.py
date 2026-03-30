@@ -20,6 +20,7 @@ import ray
 # Phase 5: Removed ActionExecutorMixin - dead code replaced by action generators in Phase 1
 from YSimulator.YClient.action_generators import ActionContext, ActionGeneratorFactory
 from YSimulator.YClient.classes.ray_models import ActionDTO, AgentProfile
+from YSimulator.YClient.memory_runtime import YSimulatorMemoryManager
 from YSimulator.YClient.recsys import (
     CommonInterests,
     CommonUserInterests,
@@ -230,6 +231,10 @@ class SimulationClient:
         # Connect to the Named Server Actor
         self.server = ray.get_actor("Orchestrator")
 
+        # Memory stays entirely client-side and queries the server actor only
+        # through remote methods for read access.
+        self.memory_manager = YSimulatorMemoryManager(self, simulation_config)
+
         # Initialize agent manager (Phase 6 refactoring - NEW)
         # Centralized agent lifecycle management
         from YSimulator.YClient.agent_management import AgentManager
@@ -320,6 +325,8 @@ class SimulationClient:
         """
         # Get current round_id for opinion dynamics tracking
         round_id = ray.get(self.server.get_current_round_id.remote())
+        if self.memory_manager and self.memory_manager.is_enabled():
+            self.memory_manager.set_recent_post_ids(recent_posts)
 
         # Build action context with all dependencies
         # Phase 4: Use OpinionManager for opinion dynamics operations
@@ -351,6 +358,7 @@ class SimulationClient:
             infer_page_agent_opinion_fn=self.opinion_manager.infer_page_agent_opinion,
             get_opinions_for_post_fn=self.opinion_manager.get_opinions_for_post,
             calculate_opinion_updates_fn=self.opinion_manager.calculate_opinion_updates,
+            memory_manager=self.memory_manager,
         )
 
         return ActionGeneratorFactory(context)
@@ -465,6 +473,7 @@ class SimulationClient:
             log_hourly_summary_fn=self._log_hourly_summary,
             log_daily_summary_fn=self._log_daily_summary,
             update_round_info_fn=self._update_round_info,
+            memory_after_submit_fn=self._record_memory_after_submit,
         )
 
         self.logger.info("Simulation orchestrator initialized (Phase 2)")
@@ -745,6 +754,18 @@ class SimulationClient:
             self._is_opinion_dynamics_enabled,
             self._map_opinion_to_group,
         )
+
+    def round_number(self, day: int, slot: int) -> int:
+        return int(day) * int(self.num_slots_per_day) + int(slot)
+
+    def get_recent_post_ids(self):
+        if self.memory_manager:
+            return self.memory_manager.get_recent_post_ids()
+        return []
+
+    def _record_memory_after_submit(self, actions, day: int, slot: int) -> None:
+        if self.memory_manager and self.memory_manager.is_enabled():
+            self.memory_manager.record_submitted_actions(actions, day, slot)
 
     def _save_updated_agent_population(self, updated_interests: dict):
         """

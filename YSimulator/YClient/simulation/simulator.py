@@ -59,6 +59,7 @@ class Simulator:
         log_hourly_summary_fn,
         log_daily_summary_fn,
         update_round_info_fn=None,
+        memory_after_submit_fn=None,
     ):
         """
         Initialize the Simulator.
@@ -105,6 +106,7 @@ class Simulator:
         self.log_hourly_summary_fn = log_hourly_summary_fn
         self.log_daily_summary_fn = log_daily_summary_fn
         self.update_round_info_fn = update_round_info_fn
+        self.memory_after_submit_fn = memory_after_submit_fn
 
     def run(self, calculate_opinion_updates_fn) -> None:
         """
@@ -258,6 +260,8 @@ class Simulator:
                 submit_start = time.time()
                 ray.get(self.server.submit_actions.remote(self.client_id, actions))
                 submit_time = (time.time() - submit_start) * 1000
+                if self.memory_after_submit_fn:
+                    self.memory_after_submit_fn(actions, instruction.day, instruction.slot)
 
                 slot_count += 1
 

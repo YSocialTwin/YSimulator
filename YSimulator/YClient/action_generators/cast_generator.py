@@ -36,6 +36,7 @@ class CastGenerator(BaseActionGenerator):
 
         # Extract agent attributes for context
         agent_attrs = self._extract_agent_attrs(agent)
+        agent_attrs = self._apply_post_memory(agent, agent_attrs)
         selected_topic = agent_attrs.get("topic")
 
         if agent_type == "llm":

@@ -122,6 +122,12 @@ class SearchGenerator(BaseActionGenerator):
                 agent_attrs["post_topics"] = opinion_info["topics"]
                 agent_attrs["post_opinions"] = opinion_info["opinions"]
                 agent_attrs["post_opinion_values"] = opinion_info["opinion_values"]
+            agent_attrs = self._apply_browse_memory(
+                agent,
+                agent_attrs,
+                target_post_id=target_post,
+                target_post_data=post_data,
+            )
 
             # Check if vLLM batching should be used
             if _should_use_vllm_batching(self.context.llm):

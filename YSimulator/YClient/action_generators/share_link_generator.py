@@ -118,6 +118,7 @@ class ShareLinkGenerator(BaseActionGenerator):
                     agent.cluster,
                     article,
                     agent.username,
+                    include_article_content=True,
                 )
                 self.context.logger.info(f"LLM Page {agent.username} got article_id: {article_id}")
 
@@ -137,6 +138,7 @@ class ShareLinkGenerator(BaseActionGenerator):
 
                 # Extract agent attributes for vLLM batch processing
                 agent_attrs = self._extract_agent_attrs(agent)
+                agent_attrs = self._apply_post_memory(agent, agent_attrs)
 
                 # OPTIMIZATION: Add article content to agent_attrs to avoid DB re-fetch
                 # This passes the article content directly to batch processor

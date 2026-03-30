@@ -806,6 +806,15 @@ class VLLMService:
         # Fallback to cluster-based persona
         return self.prompts_config["personas"].get(str(cluster_id), "You are a social media user.")
 
+    def _memory_blocks(self, agent_attrs: Optional[dict]) -> Dict[str, str]:
+        attrs = agent_attrs or {}
+        return {
+            "post_style": str(attrs.get("memory_post_style_text") or "").strip(),
+            "reply_context": str(attrs.get("memory_reply_context_text") or "").strip(),
+            "reply_cues": str(attrs.get("memory_reply_cues_text") or "").strip(),
+            "browse_context": str(attrs.get("memory_browse_context_text") or "").strip(),
+        }
+
     def _format_prompt(self, system_msg: str, user_msg: str) -> str:
         """
         Format system and user messages into a single prompt.
@@ -830,6 +839,7 @@ class VLLMService:
 
             # Get topic if available
             topic = agent_attrs.get("topic") if agent_attrs else None
+            memory_blocks = self._memory_blocks(agent_attrs)
 
             # DEBUG: Log if topic is unexpectedly missing
             # Note: null topic is EXPECTED when agent has no interests (per INTERESTS.md)
@@ -861,6 +871,11 @@ class VLLMService:
                 topic_instruction = f" You MUST write about the topic: {topic}."
             else:
                 topic_instruction = ""
+            if memory_blocks["post_style"]:
+                topic_instruction += (
+                    f" Use this only as a style/tone memory, not as a topic list:\n"
+                    f"{memory_blocks['post_style']}\n"
+                )
 
             # Format user message with all placeholders
             user_msg = user_template.format(
@@ -1354,6 +1369,7 @@ class VLLMService:
         """
         # Build persona using attributes or fallback
         persona = self._build_persona(cluster_id, agent_attrs)
+        memory_blocks = self._memory_blocks(agent_attrs)
 
         # Get toxicity level (default to "no" if not provided)
         toxicity = agent_attrs.get("toxicity", "no") if agent_attrs else "no"
@@ -1408,6 +1424,13 @@ class VLLMService:
         # Add opinion instruction if available
         if opinion_instruction:
             user_msg += opinion_instruction
+        if memory_blocks["reply_context"]:
+            user_msg += f"\n\nMemory context:\n{memory_blocks['reply_context']}"
+        if memory_blocks["reply_cues"]:
+            user_msg += (
+                f"\n\nUse these continuity cues only if they fit naturally:\n"
+                f"{memory_blocks['reply_cues']}"
+            )
 
         # Log the prompt for debugging
         self._log_prompt("generate_comment", system_msg, user_msg, agent_attrs)
@@ -1633,6 +1656,7 @@ class VLLMService:
         """Generate commentary for sharing/resharing a post."""
         persona = self._build_persona(cluster_id, agent_attrs)
         toxicity = agent_attrs.get("toxicity", "no") if agent_attrs else "no"
+        memory_blocks = self._memory_blocks(agent_attrs)
 
         opinion_instruction = ""
         if agent_attrs and "post_topics" in agent_attrs and agent_attrs["post_topics"]:
@@ -1665,6 +1689,13 @@ class VLLMService:
 
         if opinion_instruction:
             user_msg += opinion_instruction
+        if memory_blocks["reply_context"]:
+            user_msg += f"\n\nMemory context:\n{memory_blocks['reply_context']}"
+        if memory_blocks["reply_cues"]:
+            user_msg += (
+                f"\n\nUse these continuity cues only if they fit naturally:\n"
+                f"{memory_blocks['reply_cues']}"
+            )
 
         prompt = self._format_prompt(system_msg, user_msg)
 
@@ -1684,6 +1715,7 @@ class VLLMService:
     ) -> str:
         """Decide how to react to a post discovered via read/recommendation."""
         persona = self._build_persona(cluster_id, agent_attrs)
+        memory_blocks = self._memory_blocks(agent_attrs)
 
         opinion_instruction = ""
         if agent_attrs and "post_topics" in agent_attrs and agent_attrs["post_topics"]:
@@ -1710,6 +1742,8 @@ class VLLMService:
 
         if opinion_instruction:
             user_msg += opinion_instruction
+        if memory_blocks["browse_context"]:
+            user_msg += f"\n\nBrowsing memory:\n{memory_blocks['browse_context']}"
 
         prompt = self._format_prompt(system_msg, user_msg)
 

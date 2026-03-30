@@ -329,6 +329,15 @@ class LLMService:
         # Fallback to cluster-based persona
         return self.prompts_config["personas"].get(str(cluster_id), "You are a social media user.")
 
+    def _memory_blocks(self, agent_attrs: Optional[dict]) -> Dict[str, str]:
+        attrs = agent_attrs or {}
+        return {
+            "post_style": str(attrs.get("memory_post_style_text") or "").strip(),
+            "reply_context": str(attrs.get("memory_reply_context_text") or "").strip(),
+            "reply_cues": str(attrs.get("memory_reply_cues_text") or "").strip(),
+            "browse_context": str(attrs.get("memory_browse_context_text") or "").strip(),
+        }
+
     def generate_post(self, cluster_id: int, day: int, slot: int, agent_attrs: dict = None) -> str:
         """Generate content based on Persona."""
         # Build persona using attributes or fallback
@@ -339,6 +348,7 @@ class LLMService:
 
         # Get topic if available
         topic = agent_attrs.get("topic") if agent_attrs else None
+        memory_blocks = self._memory_blocks(agent_attrs)
 
         # DEBUG: Log if topic is unexpectedly missing
         # Note: null topic is EXPECTED when agent has no interests (per INTERESTS.md)
@@ -368,6 +378,11 @@ class LLMService:
             topic_instruction = f" You MUST write about the topic: {topic}."
         else:
             topic_instruction = ""
+        if memory_blocks["post_style"]:
+            topic_instruction += (
+                f" Use this only as a style/tone memory, not as a topic list:\n"
+                f"{memory_blocks['post_style']}\n"
+            )
 
         # Format user message with all placeholders
         user_msg = user_template.format(
@@ -517,6 +532,7 @@ class LLMService:
 
         # Get toxicity level (default to "no" if not provided)
         toxicity = agent_attrs.get("toxicity", "no") if agent_attrs else "no"
+        memory_blocks = self._memory_blocks(agent_attrs)
 
         # Get opinions on the post's topics if available
         opinion_instruction = ""
@@ -568,6 +584,13 @@ class LLMService:
         # Add opinion instruction if available
         if opinion_instruction:
             user_msg += opinion_instruction
+        if memory_blocks["reply_context"]:
+            user_msg += f"\n\nMemory context:\n{memory_blocks['reply_context']}"
+        if memory_blocks["reply_cues"]:
+            user_msg += (
+                f"\n\nUse these continuity cues only if they fit naturally:\n"
+                f"{memory_blocks['reply_cues']}"
+            )
 
         # Log the prompt for debugging
         self._log_prompt("generate_comment", system_msg, user_msg, agent_attrs)
@@ -615,6 +638,7 @@ class LLMService:
 
         # Get toxicity level (default to "no" if not provided)
         toxicity = agent_attrs.get("toxicity", "no") if agent_attrs else "no"
+        memory_blocks = self._memory_blocks(agent_attrs)
 
         # Get opinions on the post's topics if available
         opinion_instruction = ""
@@ -655,6 +679,13 @@ class LLMService:
         # Add opinion instruction if available
         if opinion_instruction:
             user_msg += opinion_instruction
+        if memory_blocks["reply_context"]:
+            user_msg += f"\n\nMemory context:\n{memory_blocks['reply_context']}"
+        if memory_blocks["reply_cues"]:
+            user_msg += (
+                f"\n\nUse these continuity cues only if they fit naturally:\n"
+                f"{memory_blocks['reply_cues']}"
+            )
 
         prompt = ChatPromptTemplate.from_messages([("system", system_msg), ("user", user_msg)])
 
@@ -689,6 +720,7 @@ class LLMService:
         """
         # Build persona using attributes or fallback
         persona = self._build_persona(cluster_id, agent_attrs)
+        memory_blocks = self._memory_blocks(agent_attrs)
 
         # Get opinions on the post's topics if available
         opinion_instruction = ""
@@ -719,6 +751,8 @@ class LLMService:
         # Add opinion instruction if available
         if opinion_instruction:
             user_msg += opinion_instruction
+        if memory_blocks["browse_context"]:
+            user_msg += f"\n\nBrowsing memory:\n{memory_blocks['browse_context']}"
 
         prompt = ChatPromptTemplate.from_messages([("system", system_msg), ("user", user_msg)])
 
@@ -792,6 +826,7 @@ class LLMService:
         """
         # Build persona using attributes or fallback
         persona = self._build_persona(cluster_id, agent_attrs)
+        memory_blocks = self._memory_blocks(agent_attrs)
 
         # Get opinions on the post's topics if available
         opinion_instruction = ""
@@ -829,6 +864,8 @@ class LLMService:
         # Add opinion instruction if available
         if opinion_instruction:
             user_msg += opinion_instruction
+        if memory_blocks["browse_context"]:
+            user_msg += f"\n\nBrowsing memory:\n{memory_blocks['browse_context']}"
 
         prompt = ChatPromptTemplate.from_messages([("system", system_msg), ("user", user_msg)])
 
