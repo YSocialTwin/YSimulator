@@ -1285,9 +1285,15 @@ class VLLMService:
                                 opinion_str = ", ".join(opinion_parts)
                                 opinion_instruction = f" Your opinions on the discussed topics: {opinion_str}. React accordingly."
 
-                    # Get prompt templates (use decide_reaction templates as base)
-                    system_template = self.prompts_config["decide_reaction"]["system_template"]
-                    user_template = self.prompts_config["decide_reaction"]["user_template"]
+                    # Use the dedicated read-reaction prompt family here.
+                    # The older decide_reaction prompt still allows COMMENT, which
+                    # makes read actions collapse into comments in the batch path.
+                    system_template = self.prompts_config["generate_read_reaction"][
+                        "system_template"
+                    ]
+                    user_template = self.prompts_config["generate_read_reaction"][
+                        "user_template"
+                    ]
 
                     # Format templates with persona and opinion instruction
                     system_msg = (
