@@ -70,7 +70,7 @@ def toxicity(text, api_key: str) -> dict:
     :return: a dictionary with toxicity scores
     """
 
-    if api_key is not None:
+    if api_key:
         try:
             p = PerspectiveAPI(api_key)
             toxicity_score = p.score(
