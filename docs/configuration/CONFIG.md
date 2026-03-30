@@ -559,6 +559,61 @@ The `agents` section controls detailed behavior parameters:
 - `probability_of_daily_follow` (0.0-1.0): Chance of evaluating new follows at end of each day
 - `probability_of_secondary_follow` (0.0-1.0): Chance of follow/unfollow after content interactions
 
+#### Memory Configuration
+
+YSimulator supports the same memory JSON contract used by the other YSocial
+clients, but the implementation stays fully client-side inside the Ray client
+actor.
+
+```json
+{
+  "agents": {
+    "memory_enabled": true,
+    "memory_backend": "hybrid_semantic",
+    "memory_prompt_mode": "subtle_timeline",
+    "memory_pair_limit": 8,
+    "memory_reply_context_max_chars": 220,
+    "memory_semantic_enabled": true,
+    "memory_search_k": 8,
+    "memory_search_max_chars": 900,
+    "memory_search_time_window_rounds": 18,
+    "memory_tier_a_max_chars": 350,
+    "memory_tier_b_max_chars": 900,
+    "memory_tier_c_max_chars": 900,
+    "memory_total_max_chars": 2200,
+    "memory_tier_c_uncertainty_threshold": 0.45,
+    "memory_digest_update_cadence_rounds": 3,
+    "memory_digest_events_limit": 24,
+    "memory_reflection_cadence_rounds": 3,
+    "memory_reflection_min_events": 12,
+    "memory_reflection_trigger_importance_sum": 3.5,
+    "memory_reflection_max_items_per_run": 60,
+    "memory_embedding_model": "embeddinggemma",
+    "memory_embedding_async": false,
+    "memory_importance_mode": "auto"
+  }
+}
+```
+
+**Core parameters:**
+- `memory_enabled` (boolean): Enables memory for LLM agents
+- `memory_backend` (string): Memory engine backend, typically `hybrid_semantic`
+- `memory_prompt_mode` (string): Prompt shaping mode, typically `subtle_timeline`
+- `memory_pair_limit` (number): Pairwise interaction history limit
+- `memory_reply_context_max_chars` (number): Max characters injected into reply prompts
+- `memory_semantic_enabled` (boolean): Enables semantic retrieval
+- `memory_search_k` (number): Retrieval fan-out for semantic search
+- `memory_search_max_chars` (number): Max semantic retrieval text budget
+- `memory_embedding_model` (string): Embedding model served by the client-side LLM stack
+
+**Important constraints:**
+- Only the client actor calls the embedding backend.
+- The server actor never invokes memory or embeddings directly.
+- Memory is only activated for agents whose `llm` flag is enabled.
+
+See [Agent Memory](../features/MEMORY.md) for architecture details and the
+complete supported key list.
+
 #### Follow Action Decay Configuration
 
 Control time-based decay of follow action probability. This models the realistic behavior where users are most likely to follow others during their initial period of activity, with decreasing likelihood over time.
