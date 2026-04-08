@@ -142,7 +142,8 @@ CREATE TABLE post (
     shared_from    VARCHAR(36),
     image_id       VARCHAR(36) REFERENCES images(id) ON DELETE CASCADE,
     reaction_count INTEGER DEFAULT 0,
-    moderated      INTEGER DEFAULT 0
+    moderated      INTEGER DEFAULT 0,
+    is_moderation_comment INTEGER DEFAULT 0
 );
 
 CREATE TABLE sys_messages (
@@ -151,7 +152,7 @@ CREATE TABLE sys_messages (
     to_uid     VARCHAR(36) REFERENCES user_mgmt(id) ON DELETE CASCADE,
     message    TEXT NOT NULL,
     from_round VARCHAR(36) REFERENCES rounds(id) ON DELETE CASCADE,
-    to_round   VARCHAR(36) REFERENCES rounds(id) ON DELETE CASCADE
+    duration   INTEGER
 );
 
 CREATE TABLE reported (

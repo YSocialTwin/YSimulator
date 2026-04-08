@@ -99,12 +99,6 @@ class Round(Base):
         back_populates="from_round_obj",
         cascade="all, delete-orphan",
     )
-    outgoing_system_messages = relationship(
-        "SysMessage",
-        foreign_keys="SysMessage.to_round",
-        back_populates="to_round_obj",
-        cascade="all, delete-orphan",
-    )
     reported_items = relationship(
         "Reported", back_populates="round_obj", cascade="all, delete-orphan"
     )
@@ -396,6 +390,7 @@ class Post(Base):
     image_id = Column(String(36), ForeignKey("images.id", ondelete="CASCADE"))
     reaction_count = Column(Integer, default=0)
     moderated = Column(Integer, nullable=False, default=0)
+    is_moderation_comment = Column(Integer, nullable=False, default=0)
 
     # Relationships
     user = relationship("User_mgmt", back_populates="posts")
@@ -434,16 +429,14 @@ class SysMessage(Base):
     to_uid = Column(String(36), ForeignKey("user_mgmt.id", ondelete="CASCADE"), nullable=True)
     message = Column(Text, nullable=False)
     from_round = Column(String(36), ForeignKey("rounds.id", ondelete="CASCADE"), nullable=True)
-    to_round = Column(String(36), ForeignKey("rounds.id", ondelete="CASCADE"), nullable=True)
+    duration = Column(Integer, nullable=True)
 
     target_user = relationship("User_mgmt", foreign_keys=[to_uid], back_populates="system_messages")
     from_round_obj = relationship("Round", foreign_keys=[from_round], back_populates="incoming_system_messages")
-    to_round_obj = relationship("Round", foreign_keys=[to_round], back_populates="outgoing_system_messages")
 
 
 Index("idx_sys_messages_to_uid", SysMessage.to_uid)
 Index("idx_sys_messages_from_round", SysMessage.from_round)
-Index("idx_sys_messages_to_round", SysMessage.to_round)
 
 
 class Reported(Base):

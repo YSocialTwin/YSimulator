@@ -400,6 +400,7 @@ class SQLPostRepository(PostRepository):
                 # Include image-related fields
                 "image_id": post_data.get("image_id"),
                 "post_img": post_data.get("post_img"),
+                "is_moderation_comment": post_data.get("is_moderation_comment", 0),
             }
             # Filter out None values
             mapped_data = {k: v for k, v in mapped_data.items() if v is not None}
@@ -435,6 +436,7 @@ class SQLPostRepository(PostRepository):
                     "user_id": post.user_id,  # Alias for backward compatibility
                     "text": post.tweet,  # API: text <-> Model: tweet
                     "round": post.round,
+                    "is_moderation_comment": int(getattr(post, "is_moderation_comment", 0) or 0),
                     # API: num_reactions <-> Model: reaction_count
                     "num_reactions": post.reaction_count,
                 }
@@ -645,12 +647,12 @@ class SQLPostRepository(PostRepository):
                     return []
 
                 current_position = (int(current_round.day or 0), int(current_round.hour or 0))
+                current_flat_round = current_position[0] * 24 + current_position[1]
                 messages = session.query(SysMessage).filter_by(to_uid=user_id).all()
                 active_messages = []
 
                 for message in messages:
                     lower_bound = None
-                    upper_bound = None
 
                     if message.from_round:
                         from_round = session.query(Round).filter_by(id=message.from_round).first()
@@ -658,16 +660,12 @@ class SQLPostRepository(PostRepository):
                             continue
                         lower_bound = (int(from_round.day or 0), int(from_round.hour or 0))
 
-                    if message.to_round:
-                        to_round = session.query(Round).filter_by(id=message.to_round).first()
-                        if to_round is None:
-                            continue
-                        upper_bound = (int(to_round.day or 0), int(to_round.hour or 0))
-
                     if lower_bound is not None and current_position < lower_bound:
                         continue
-                    if upper_bound is not None and current_position > upper_bound:
-                        continue
+                    if message.duration is not None and lower_bound is not None:
+                        lower_flat_round = lower_bound[0] * 24 + lower_bound[1]
+                        if current_flat_round > (lower_flat_round + int(message.duration)):
+                            continue
 
                     active_messages.append(
                         {
@@ -676,7 +674,7 @@ class SQLPostRepository(PostRepository):
                             "message": message.message,
                             "to_uid": message.to_uid,
                             "from_round": message.from_round,
-                            "to_round": message.to_round,
+                            "duration": message.duration,
                         }
                     )
 
