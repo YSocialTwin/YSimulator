@@ -31,6 +31,7 @@ from YSimulator.YClient.text_support.text_annotator import annotate_text
 
 # Constants
 REACTION_TYPES = ["LIKE", "LOVE", "LAUGH", "ANGRY", "SAD", "IGNORE"]
+REPORT_TYPES = ["REPORT_TOXIC", "REPORT_OFFENSIVE"]
 
 # Token estimation constants (Phase 3: LLM usage tracking)
 # Rough estimates for tracking purposes - actual tokens may vary
@@ -628,7 +629,11 @@ class BatchProcessor:
             # Phase 3: Track LLM usage
             if self.cost_tracker and res_act:
                 # Estimate tokens based on response type
-                if res_act.upper() in REACTION_TYPES or res_act.upper() == "SHARE":
+                if (
+                    res_act.upper() in REACTION_TYPES
+                    or res_act.upper() in REPORT_TYPES
+                    or res_act.upper() == "SHARE"
+                ):
                     # Simple reaction - minimal tokens
                     output_tokens = REACTION_OUTPUT_TOKENS
                 else:
@@ -664,7 +669,18 @@ class BatchProcessor:
                     mention_id = fifth_element
 
             # Check if result is a comment/share commentary (text) or a reaction type
-            if res_act and res_act.upper() not in REACTION_TYPES:
+            if res_act.upper() in REPORT_TYPES:
+                report_type = "toxic" if res_act.upper() == "REPORT_TOXIC" else "offensive"
+                self.logger.debug(f"[REPLY] LLM generated report for agent {a_id}: {report_type}")
+                action = ActionDTO(
+                    a_id,
+                    cid,
+                    "REPORT",
+                    target_post_id=target,
+                    report_type=report_type,
+                )
+                actions.append(action)
+            elif res_act and res_act.upper() not in REACTION_TYPES:
                 # Validate content is not empty or whitespace-only
                 if not res_act.strip():
                     self.logger.warning(
@@ -1301,7 +1317,11 @@ class BatchProcessor:
 
             # Track LLM usage
             if self.cost_tracker:
-                if reaction_type.upper() in REACTION_TYPES or reaction_type.upper() == "SHARE":
+                if (
+                    reaction_type.upper() in REACTION_TYPES
+                    or reaction_type.upper() in REPORT_TYPES
+                    or reaction_type.upper() == "SHARE"
+                ):
                     output_tokens = REACTION_OUTPUT_TOKENS
                 else:
                     # Comment text
@@ -1316,7 +1336,22 @@ class BatchProcessor:
             )
 
             # Handle different reaction types
-            if reaction_type and reaction_type.upper() not in REACTION_TYPES:
+            if reaction_type.upper() in REPORT_TYPES:
+                report_type = (
+                    "toxic" if reaction_type.upper() == "REPORT_TOXIC" else "offensive"
+                )
+                self.logger.debug(
+                    f"[READ] LLM generated report for agent {agent_id}: {report_type}"
+                )
+                action = ActionDTO(
+                    agent_id,
+                    cluster_id,
+                    "REPORT",
+                    target_post_id=target_post,
+                    report_type=report_type,
+                )
+                actions.append(action)
+            elif reaction_type and reaction_type.upper() not in REACTION_TYPES:
                 # This is comment text from LLM - treat as COMMENT action
                 self.logger.debug(
                     f"[READ] LLM generated comment for agent {agent_id}: '{reaction_type[:50]}...'"

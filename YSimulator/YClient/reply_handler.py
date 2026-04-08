@@ -123,6 +123,17 @@ def handle_reply_to_mention(
 
             # Fire off async LLM call to generate reply
             agent_attrs = extract_agent_attrs_func(agent)
+            try:
+                messages = ray.get(
+                    server.get_active_system_messages.remote(
+                        agent.id,
+                        client_id=client_id,
+                    )
+                )
+                if isinstance(messages, list) and messages:
+                    agent_attrs["system_messages"] = messages
+            except Exception:
+                pass
             future = generate_llm_reply_to_mention_async(
                 llm_handle,
                 agent.cluster,

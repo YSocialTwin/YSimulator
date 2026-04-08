@@ -141,7 +141,26 @@ CREATE TABLE post (
     news_id        VARCHAR(36) REFERENCES articles(id) ON DELETE CASCADE,
     shared_from    VARCHAR(36),
     image_id       VARCHAR(36) REFERENCES images(id) ON DELETE CASCADE,
-    reaction_count INTEGER DEFAULT 0
+    reaction_count INTEGER DEFAULT 0,
+    moderated      INTEGER DEFAULT 0
+);
+
+CREATE TABLE sys_messages (
+    id         VARCHAR(36) PRIMARY KEY,
+    type       TEXT NOT NULL,
+    to_uid     VARCHAR(36) REFERENCES user_mgmt(id) ON DELETE CASCADE,
+    message    TEXT NOT NULL,
+    from_round VARCHAR(36) REFERENCES rounds(id) ON DELETE CASCADE,
+    to_round   VARCHAR(36) REFERENCES rounds(id) ON DELETE CASCADE
+);
+
+CREATE TABLE reported (
+    id       VARCHAR(36) PRIMARY KEY,
+    type     TEXT NOT NULL,
+    to_uid   VARCHAR(36) REFERENCES user_mgmt(id) ON DELETE CASCADE,
+    to_post  VARCHAR(36) REFERENCES post(id) ON DELETE CASCADE,
+    from_uid VARCHAR(36) NOT NULL REFERENCES user_mgmt(id) ON DELETE CASCADE,
+    tid      VARCHAR(36) NOT NULL REFERENCES rounds(id) ON DELETE CASCADE
 );
 
 CREATE TABLE mentions (
@@ -248,6 +267,13 @@ CREATE INDEX idx_post_round ON post(round);
 CREATE INDEX idx_post_thread_id ON post(thread_id);
 CREATE INDEX idx_post_news_id ON post(news_id);
 CREATE INDEX idx_post_image_id ON post(image_id);
+CREATE INDEX idx_sys_messages_to_uid ON sys_messages(to_uid);
+CREATE INDEX idx_sys_messages_from_round ON sys_messages(from_round);
+CREATE INDEX idx_sys_messages_to_round ON sys_messages(to_round);
+CREATE INDEX idx_reported_to_uid ON reported(to_uid);
+CREATE INDEX idx_reported_to_post ON reported(to_post);
+CREATE INDEX idx_reported_from_uid ON reported(from_uid);
+CREATE INDEX idx_reported_tid ON reported(tid);
 
 -- Indexes for mentions
 CREATE INDEX idx_mentions_user_id ON mentions(user_id);

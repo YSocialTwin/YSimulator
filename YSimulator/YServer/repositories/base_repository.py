@@ -100,6 +100,10 @@ class PostRepository(BaseRepository):
     def search_posts_by_topic(self, topic_id: str, agent_id: str, limit: int = 10) -> List[str]:
         """Search posts by topic."""
 
+    @abstractmethod
+    def get_active_system_messages(self, user_id: str, round_id: str) -> List[Dict[str, Any]]:
+        """Get active system messages for a user at the given round."""
+
     # Metadata methods
     @abstractmethod
     def add_post_emotion(self, post_id: str, emotion_id: str) -> bool:

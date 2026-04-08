@@ -64,12 +64,13 @@ class ActionDTO:
 
     agent_id: str
     cluster_id: int
-    action_type: Literal["POST", "LIKE", "COMMENT", "SHARE", "FOLLOW", "UNFOLLOW"]
+    action_type: Literal["POST", "LIKE", "COMMENT", "SHARE", "FOLLOW", "UNFOLLOW", "REPORT"]
     content: Optional[str] = None
     target_post_id: Optional[str] = None  # UUID string - for comments, reactions, and shares
     article_id: Optional[str] = None  # UUID string for news posts
     target_user_id: Optional[str] = None  # UUID string for follow/unfollow actions
     topic: Optional[str] = None  # Topic name for posts
+    report_type: Optional[str] = None  # "toxic" or "offensive" for REPORT actions
     # Text annotations (populated by client before submission)
     annotations: Optional[dict] = None  # Dict with 'hashtags', 'mentions', 'sentiment', 'toxicity'
     # Updated opinions for comment actions: {topic_id: opinion_value}

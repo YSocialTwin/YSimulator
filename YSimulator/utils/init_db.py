@@ -16,6 +16,7 @@ from sqlalchemy import create_engine
 
 # Import models
 from YSimulator.YServer.classes.models import Base
+from YSimulator.YServer.schema_migrations import ensure_moderation_schema
 
 
 def create_database_engine(db_config: dict, config_path: Path = None):
@@ -108,6 +109,7 @@ def initialize_database(db_config: dict, config_path: Path = None, logger=None):
 
         # Create all tables
         Base.metadata.create_all(engine)
+        ensure_moderation_schema(engine)
 
         if logger:
             logger.info(

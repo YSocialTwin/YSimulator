@@ -1940,6 +1940,24 @@ class OrchestratorServer:
         return self.post_service.get_post_topics(post_id)
 
     @log_server_request
+    def get_active_system_messages(
+        self, user_id: str, round_id: Optional[str] = None, client_id: str = None
+    ) -> List[Dict[str, Any]]:
+        """
+        Get active system messages for a user at the specified round.
+
+        Args:
+            user_id: User UUID
+            round_id: Round UUID; defaults to current round when omitted
+            client_id: Optional client identifier for logging
+
+        Returns:
+            List of active system message dictionaries
+        """
+        resolved_round_id = round_id or self.current_round_id
+        return self.post_service.get_active_system_messages(user_id, resolved_round_id)
+
+    @log_server_request
     def get_topic_name_from_id(self, topic_id: str, client_id: str = None) -> Optional[str]:
         """
         Get topic name from topic UUID.

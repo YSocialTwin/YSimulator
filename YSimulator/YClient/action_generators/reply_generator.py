@@ -156,6 +156,7 @@ class ReplyGenerator(BaseActionGenerator):
                     thread_context=thread_context,
                     mode="reply",
                 )
+                agent_attrs = self._apply_system_messages(agent, agent_attrs)
 
                 future = generate_llm_reply_to_mention_async(
                     self.context.llm,

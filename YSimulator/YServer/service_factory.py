@@ -110,8 +110,10 @@ def create_database_engine(
     # Create all tables if they don't exist
     try:
         from YSimulator.YServer.classes.models import Base
+        from YSimulator.YServer.schema_migrations import ensure_moderation_schema
 
         Base.metadata.create_all(engine)
+        ensure_moderation_schema(engine)
         logger.info(f"Database tables created/verified for {db_type}")
     except Exception as e:
         logger.error(f"Error creating database tables: {e}")

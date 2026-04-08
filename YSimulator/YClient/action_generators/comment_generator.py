@@ -181,6 +181,7 @@ class CommentGenerator(BaseActionGenerator):
                     thread_context=thread_context,
                     mode="comment",
                 )
+                agent_attrs = self._apply_system_messages(agent, agent_attrs)
 
                 # Fire off async LLM call to generate comment
                 from YSimulator.YClient.actions.llm_actions import (

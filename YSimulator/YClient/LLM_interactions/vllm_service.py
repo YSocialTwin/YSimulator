@@ -815,6 +815,25 @@ class VLLMService:
             "browse_context": str(attrs.get("memory_browse_context_text") or "").strip(),
         }
 
+    def _system_messages_block(self, agent_attrs: Optional[dict]) -> str:
+        messages = (agent_attrs or {}).get("system_messages") or []
+        if not isinstance(messages, list) or not messages:
+            return ""
+
+        lines = ["Active system messages addressed to you for this round."]
+        lines.append(
+            "These are mandatory platform or moderator instructions for the content you are about to write. Follow them exactly."
+        )
+        for item in messages:
+            if not isinstance(item, dict):
+                continue
+            message_text = str(item.get("message") or "").strip()
+            if not message_text:
+                continue
+            message_type = str(item.get("type") or "system").strip() or "system"
+            lines.append(f"- [{message_type}] {message_text}")
+        return "\n".join(lines) if len(lines) > 2 else ""
+
     def _format_prompt(self, system_msg: str, user_msg: str) -> str:
         """
         Format system and user messages into a single prompt.
@@ -840,6 +859,7 @@ class VLLMService:
             # Get topic if available
             topic = agent_attrs.get("topic") if agent_attrs else None
             memory_blocks = self._memory_blocks(agent_attrs)
+            system_messages_block = self._system_messages_block(agent_attrs)
 
             # DEBUG: Log if topic is unexpectedly missing
             # Note: null topic is EXPECTED when agent has no interests (per INTERESTS.md)
@@ -885,6 +905,8 @@ class VLLMService:
                 slot=slot,
                 topic_instruction=topic_instruction,
             )
+            if system_messages_block:
+                user_msg += f"\n\n{system_messages_block}"
 
             # Log the prompt for debugging
             self._log_prompt("generate_post", system_msg, user_msg, agent_attrs)
@@ -1069,6 +1091,7 @@ class VLLMService:
                         toxicity = agent_attrs.get("toxicity", "no") if agent_attrs else "no"
                         topic = agent_attrs.get("topic") if agent_attrs else None
                         topic_opinion = agent_attrs.get("topic_opinion") if agent_attrs else None
+                        system_messages_block = self._system_messages_block(agent_attrs)
 
                         logger.debug(
                             f"[vLLM Batch {idx}] Regular post - persona: {persona[:50]}..., topic: {topic}"
@@ -1100,6 +1123,8 @@ class VLLMService:
                             slot=slot,
                             topic_instruction=topic_instruction,
                         )
+                        if system_messages_block:
+                            user_msg += f"\n\n{system_messages_block}"
 
                         # Create formatted prompt
                         prompt = self._format_prompt(system_msg, user_msg)
@@ -1376,6 +1401,7 @@ class VLLMService:
         # Build persona using attributes or fallback
         persona = self._build_persona(cluster_id, agent_attrs)
         memory_blocks = self._memory_blocks(agent_attrs)
+        system_messages_block = self._system_messages_block(agent_attrs)
 
         # Get toxicity level (default to "no" if not provided)
         toxicity = agent_attrs.get("toxicity", "no") if agent_attrs else "no"
@@ -1430,6 +1456,8 @@ class VLLMService:
         # Add opinion instruction if available
         if opinion_instruction:
             user_msg += opinion_instruction
+        if system_messages_block:
+            user_msg += f"\n\n{system_messages_block}"
         if memory_blocks["reply_context"]:
             user_msg += f"\n\nMemory context:\n{memory_blocks['reply_context']}"
         if memory_blocks["reply_cues"]:
@@ -1499,6 +1527,7 @@ class VLLMService:
                     # Build persona
                     persona = self._build_persona(cluster_id, agent_attrs)
                     toxicity = agent_attrs.get("toxicity", "no") if agent_attrs else "no"
+                    system_messages_block = self._system_messages_block(agent_attrs)
 
                     # Get opinions on the post's topics if available
                     opinion_instruction = ""
@@ -1552,6 +1581,8 @@ class VLLMService:
                     # Add opinion instruction if available
                     if opinion_instruction:
                         user_msg += opinion_instruction
+                    if system_messages_block:
+                        user_msg += f"\n\n{system_messages_block}"
 
                     # Create formatted prompt
                     prompt = self._format_prompt(system_msg, user_msg)
@@ -1757,6 +1788,12 @@ class VLLMService:
             outputs = self.llm.generate([prompt], self.sampling_params)
             result = outputs[0].outputs[0].text.strip().upper()
 
+            if "REPORT_TOXIC" in result or ("REPORT" in result and "TOXIC" in result):
+                return "REPORT_TOXIC"
+            if "REPORT_OFFENSIVE" in result or (
+                "REPORT" in result and "OFFENSIVE" in result
+            ):
+                return "REPORT_OFFENSIVE"
             if "LOVE" in result:
                 return "LOVE"
             if "LIKE" in result:

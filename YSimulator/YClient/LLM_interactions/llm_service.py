@@ -66,7 +66,7 @@ class LLMService:
                 },
                 "generate_read_reaction": {
                     "system_template": "{persona} You're deciding how to react to content you discovered.",
-                    "user_template": 'You found this post:\n\n"{post_content}"\n\nHow do you react? Reply with ONLY ONE WORD: LIKE, LOVE, LAUGH, ANGRY, SAD, or IGNORE.',
+                    "user_template": 'You found this post:\n\n"{post_content}"\n\nHow do you react? Reply with ONLY ONE LABEL: LIKE, LOVE, LAUGH, ANGRY, SAD, REPORT_TOXIC, REPORT_OFFENSIVE, or IGNORE.',
                 },
                 "decide_search_action": {
                     "system_template": "{persona} You searched for posts on a topic you're interested in and found relevant content. Decide how to engage with it.",
@@ -338,6 +338,25 @@ class LLMService:
             "browse_context": str(attrs.get("memory_browse_context_text") or "").strip(),
         }
 
+    def _system_messages_block(self, agent_attrs: Optional[dict]) -> str:
+        messages = (agent_attrs or {}).get("system_messages") or []
+        if not isinstance(messages, list) or not messages:
+            return ""
+
+        lines = ["Active system messages addressed to you for this round."]
+        lines.append(
+            "These are mandatory platform or moderator instructions for the content you are about to write. Follow them exactly."
+        )
+        for item in messages:
+            if not isinstance(item, dict):
+                continue
+            message_text = str(item.get("message") or "").strip()
+            if not message_text:
+                continue
+            message_type = str(item.get("type") or "system").strip() or "system"
+            lines.append(f"- [{message_type}] {message_text}")
+        return "\n".join(lines) if len(lines) > 2 else ""
+
     def generate_post(self, cluster_id: int, day: int, slot: int, agent_attrs: dict = None) -> str:
         """Generate content based on Persona."""
         # Build persona using attributes or fallback
@@ -349,6 +368,7 @@ class LLMService:
         # Get topic if available
         topic = agent_attrs.get("topic") if agent_attrs else None
         memory_blocks = self._memory_blocks(agent_attrs)
+        system_messages_block = self._system_messages_block(agent_attrs)
 
         # DEBUG: Log if topic is unexpectedly missing
         # Note: null topic is EXPECTED when agent has no interests (per INTERESTS.md)
@@ -392,6 +412,8 @@ class LLMService:
             slot=slot,
             topic_instruction=topic_instruction,
         )
+        if system_messages_block:
+            user_msg += f"\n\n{system_messages_block}"
 
         # Log the prompt for debugging
         self._log_prompt("generate_post", system_msg, user_msg, agent_attrs)
@@ -533,6 +555,7 @@ class LLMService:
         # Get toxicity level (default to "no" if not provided)
         toxicity = agent_attrs.get("toxicity", "no") if agent_attrs else "no"
         memory_blocks = self._memory_blocks(agent_attrs)
+        system_messages_block = self._system_messages_block(agent_attrs)
 
         # Get opinions on the post's topics if available
         opinion_instruction = ""
@@ -584,6 +607,8 @@ class LLMService:
         # Add opinion instruction if available
         if opinion_instruction:
             user_msg += opinion_instruction
+        if system_messages_block:
+            user_msg += f"\n\n{system_messages_block}"
         if memory_blocks["reply_context"]:
             user_msg += f"\n\nMemory context:\n{memory_blocks['reply_context']}"
         if memory_blocks["reply_cues"]:
@@ -716,7 +741,8 @@ class LLMService:
             agent_attrs: Dict with agent attributes for dynamic persona building
 
         Returns:
-            str: Reaction type - one of: LIKE, LOVE, LAUGH, ANGRY, SAD, IGNORE
+            str: Reaction type - one of: LIKE, LOVE, LAUGH, ANGRY, SAD,
+                REPORT_TOXIC, REPORT_OFFENSIVE, IGNORE
         """
         # Build persona using attributes or fallback
         persona = self._build_persona(cluster_id, agent_attrs)
@@ -760,6 +786,12 @@ class LLMService:
             chain = prompt | self.llm | StrOutputParser()
             result = chain.invoke({}).strip().upper()
 
+            if "REPORT_TOXIC" in result or ("REPORT" in result and "TOXIC" in result):
+                return "REPORT_TOXIC"
+            if "REPORT_OFFENSIVE" in result or (
+                "REPORT" in result and "OFFENSIVE" in result
+            ):
+                return "REPORT_OFFENSIVE"
             # Parse LLM response - look for valid reactions
             if "LOVE" in result:
                 return "LOVE"

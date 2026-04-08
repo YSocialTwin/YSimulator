@@ -16,6 +16,7 @@ from YSimulator.YServer.action_processors.comment_processor import CommentProces
 from YSimulator.YServer.action_processors.follow_processor import FollowProcessor
 from YSimulator.YServer.action_processors.post_processor import PostProcessor
 from YSimulator.YServer.action_processors.reaction_processor import ReactionProcessor
+from YSimulator.YServer.action_processors.report_processor import ReportProcessor
 from YSimulator.YServer.action_processors.share_processor import ShareProcessor
 from YSimulator.YServer.action_processors.unfollow_processor import UnfollowProcessor
 
@@ -45,6 +46,7 @@ class ActionRouter:
             "SHARE": ShareProcessor(services, logger),
             "FOLLOW": FollowProcessor(services, logger),
             "UNFOLLOW": UnfollowProcessor(services, logger),
+            "REPORT": ReportProcessor(services, logger),
         }
 
         # Reaction processor handles all other action types (LIKE, LOVE, ANGRY, etc.)

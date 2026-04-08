@@ -146,6 +146,10 @@ class DatabaseServiceAdapter:
         """Add interaction."""
         return self.post_service.add_interaction(interaction_data)
 
+    def add_report(self, report_data: Dict[str, Any]) -> bool:
+        """Add moderation report."""
+        return self.post_service.add_report(report_data)
+
     def increment_post_reaction_count(self, post_id: str) -> bool:
         """Increment reaction count."""
         return self.post_service.increment_post_reaction_count(post_id)
@@ -161,6 +165,10 @@ class DatabaseServiceAdapter:
     def search_posts_by_topic(self, topic_id: str, agent_id: str, limit: int = 10) -> List[str]:
         """Search posts by topic."""
         return self.post_service.search_posts_by_topic(topic_id, agent_id, limit)
+
+    def get_active_system_messages(self, user_id: str, round_id: str) -> List[Dict[str, Any]]:
+        """Get active system messages for a user at a given round."""
+        return self.post_service.get_active_system_messages(user_id, round_id)
 
     # ========================================================================
     # POST METADATA OPERATIONS - MetadataService (COMPLETE)

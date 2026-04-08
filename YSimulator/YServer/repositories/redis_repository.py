@@ -483,6 +483,10 @@ class RedisPostRepository(PostRepository):
             )
             return []
 
+    def get_active_system_messages(self, user_id: str, round_id: str) -> List[Dict[str, Any]]:
+        """System messages are stored in SQL-backed experiment DB, not Redis."""
+        return []
+
     # Metadata methods
     def add_post_emotion(self, post_id: str, emotion_id: str) -> bool:
         """Add emotion to a post."""

@@ -14,6 +14,7 @@ from YSimulator.YServer.action_processors.comment_processor import CommentProces
 from YSimulator.YServer.action_processors.follow_processor import FollowProcessor
 from YSimulator.YServer.action_processors.post_processor import PostProcessor
 from YSimulator.YServer.action_processors.reaction_processor import ReactionProcessor
+from YSimulator.YServer.action_processors.report_processor import ReportProcessor
 from YSimulator.YServer.action_processors.share_processor import ShareProcessor
 from YSimulator.YServer.action_processors.unfollow_processor import UnfollowProcessor
 
@@ -35,6 +36,7 @@ def mock_services():
     services.post_service.add_post_sentiment = Mock(return_value=True)
     services.post_service.increment_post_reaction_count = Mock(return_value=True)
     services.post_service.add_interaction = Mock(return_value=True)
+    services.post_service.add_report = Mock(return_value=True)
 
     services.article_service = Mock()
     services.article_service.get_article = Mock(
@@ -260,6 +262,32 @@ class TestReactionProcessor:
         mock_services.metadata_service.add_post_sentiment.assert_called()
 
 
+class TestReportProcessor:
+    """Test ReportProcessor."""
+
+    def test_process_report(self, mock_services, action_context, mock_action):
+        """Test processing a REPORT action."""
+        processor = ReportProcessor(mock_services)
+        mock_action.action_type = "REPORT"
+        mock_action.target_post_id = "post_1"
+        mock_action.report_type = "offensive"
+
+        result = processor.process(mock_action, action_context)
+
+        assert result.success is True
+        assert result.action_type == "REPORT"
+        mock_services.post_service.get_post.assert_called_once_with("post_1")
+        mock_services.post_service.add_report.assert_called_once()
+
+    def test_reject_invalid_report_type(self, mock_services, mock_action):
+        """Test REPORT validation rejects invalid types."""
+        processor = ReportProcessor(mock_services)
+        mock_action.target_post_id = "post_1"
+        mock_action.report_type = "spam"
+
+        assert processor.validate(mock_action) is False
+
+
 class TestActionRouter:
     """Test ActionRouter."""
 
@@ -296,6 +324,19 @@ class TestActionRouter:
 
         assert result.success is True
         assert result.action_type == "LIKE"
+
+    def test_route_report_action(self, mock_services, action_context, mock_action):
+        """Test routing REPORT action."""
+        router = ActionRouter(mock_services)
+        mock_action.action_type = "REPORT"
+        mock_action.target_post_id = "post_1"
+        mock_action.report_type = "toxic"
+
+        result = router.route(mock_action, action_context)
+
+        assert result.success is True
+        assert result.action_type == "REPORT"
+        mock_services.post_service.add_report.assert_called_once()
 
     def test_register_custom_processor(self, mock_services, action_context):
         """Test registering a custom processor."""

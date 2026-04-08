@@ -10,6 +10,8 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
+import ray
+
 from YSimulator.YClient.classes.ray_models import ActionDTO, AgentProfile
 
 
@@ -266,3 +268,23 @@ class BaseActionGenerator(ABC):
             day=self.context.day,
             slot=self.context.slot,
         )
+
+    def _apply_system_messages(
+        self, agent: AgentProfile, agent_attrs: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        if not self.context.server:
+            return agent_attrs
+        try:
+            messages = ray.get(
+                self.context.server.get_active_system_messages.remote(
+                    agent.id,
+                    self.context.round_id,
+                    client_id=self.context.client_id,
+                )
+            )
+        except Exception:
+            return agent_attrs
+
+        if isinstance(messages, list) and messages:
+            agent_attrs["system_messages"] = messages
+        return agent_attrs

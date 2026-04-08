@@ -48,7 +48,9 @@ from YSimulator.YServer.classes.models import (
     PostTopic,
     PostToxicity,
     Reaction,
+    Reported,
     Round,
+    SysMessage,
     User_mgmt,
     UserInterest,
     Website,
@@ -523,6 +525,31 @@ class SQLPostRepository(PostRepository):
             )
             return False
 
+    def add_report(self, report_data: Dict[str, Any]) -> bool:
+        """Add a moderation report for a post."""
+        try:
+            import uuid
+
+            session = Session(self.engine)
+            try:
+                if "id" not in report_data:
+                    report_data["id"] = str(uuid.uuid4())
+
+                report = Reported(**report_data)
+                session.add(report)
+                session.commit()
+                return True
+            except Exception:
+                session.rollback()
+                raise
+            finally:
+                session.close()
+        except Exception as e:
+            self.logger.error(
+                f"Error adding report: {e}", extra={"extra_data": {"error": str(e)}}
+            )
+            return False
+
     def increment_post_reaction_count(self, post_id: str) -> bool:
         """Increment the reaction count for a post."""
         try:
@@ -605,6 +632,61 @@ class SQLPostRepository(PostRepository):
         except Exception as e:
             self.logger.error(
                 f"Error searching posts by topic: {e}", extra={"extra_data": {"error": str(e)}}
+            )
+            return []
+
+    def get_active_system_messages(self, user_id: str, round_id: str) -> List[Dict[str, Any]]:
+        """Get active system messages for a user, comparing rounds by day/hour."""
+        try:
+            session = Session(self.engine)
+            try:
+                current_round = session.query(Round).filter_by(id=round_id).first()
+                if not current_round:
+                    return []
+
+                current_position = (int(current_round.day or 0), int(current_round.hour or 0))
+                messages = session.query(SysMessage).filter_by(to_uid=user_id).all()
+                active_messages = []
+
+                for message in messages:
+                    lower_bound = None
+                    upper_bound = None
+
+                    if message.from_round:
+                        from_round = session.query(Round).filter_by(id=message.from_round).first()
+                        if from_round is None:
+                            continue
+                        lower_bound = (int(from_round.day or 0), int(from_round.hour or 0))
+
+                    if message.to_round:
+                        to_round = session.query(Round).filter_by(id=message.to_round).first()
+                        if to_round is None:
+                            continue
+                        upper_bound = (int(to_round.day or 0), int(to_round.hour or 0))
+
+                    if lower_bound is not None and current_position < lower_bound:
+                        continue
+                    if upper_bound is not None and current_position > upper_bound:
+                        continue
+
+                    active_messages.append(
+                        {
+                            "id": message.id,
+                            "type": message.type,
+                            "message": message.message,
+                            "to_uid": message.to_uid,
+                            "from_round": message.from_round,
+                            "to_round": message.to_round,
+                        }
+                    )
+
+                return active_messages
+            finally:
+                session.close()
+        except Exception as e:
+            self.logger.error(
+                f"Error getting active system messages: {e}",
+                extra={"extra_data": {"user_id": user_id, "round_id": round_id, "error": str(e)}},
             )
             return []
 

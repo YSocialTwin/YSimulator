@@ -27,9 +27,11 @@ from YSimulator.YServer.classes.models import (
     Follow,
     Post,
     Reaction,
+    Reported,
     Round,
     User_mgmt,
 )
+from YSimulator.YServer.schema_migrations import ensure_moderation_schema
 
 # Constants
 DEFAULT_USERNAME = "Someone"  # Default username when user data is not found
@@ -128,6 +130,7 @@ class DatabaseMiddleware:
         # Initialize SQL database backend
         self.engine = create_engine(connection_string)
         Base.metadata.create_all(self.engine)
+        ensure_moderation_schema(self.engine)
 
         # Initialize round cache for performance
         self.round_cache = {}  # Cache: (day, hour) -> round_id
@@ -506,6 +509,40 @@ class DatabaseMiddleware:
         except Exception as e:
             self.logger.error(
                 f"Error adding interaction: {e}", extra={"extra_data": {"error": str(e)}}
+            )
+            return False
+
+    def add_report(self, report_data: Dict[str, Any]) -> bool:
+        """
+        Add a moderation report to the database.
+
+        Args:
+            report_data: Dictionary containing report data
+
+        Returns:
+            bool: True if successful, False otherwise
+        """
+        try:
+            report_id = str(uuid.uuid4())
+            report_data["id"] = report_id
+
+            if self.use_redis:
+                key = self._redis_key("reported", report_id)
+                redis_data = {k: v for k, v in report_data.items() if v is not None}
+                self.redis_client.hset(key, mapping=redis_data)
+                return True
+            else:
+                session = Session(self.engine)
+                try:
+                    report = Reported(**report_data)
+                    session.add(report)
+                    session.commit()
+                    return True
+                finally:
+                    session.close()
+        except Exception as e:
+            self.logger.error(
+                f"Error adding report: {e}", extra={"extra_data": {"error": str(e)}}
             )
             return False
 

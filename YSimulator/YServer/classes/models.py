@@ -93,6 +93,21 @@ class Round(Base):
     post_sentiments = relationship(
         "PostSentiment", back_populates="round_obj", cascade="all, delete-orphan"
     )
+    incoming_system_messages = relationship(
+        "SysMessage",
+        foreign_keys="SysMessage.from_round",
+        back_populates="from_round_obj",
+        cascade="all, delete-orphan",
+    )
+    outgoing_system_messages = relationship(
+        "SysMessage",
+        foreign_keys="SysMessage.to_round",
+        back_populates="to_round_obj",
+        cascade="all, delete-orphan",
+    )
+    reported_items = relationship(
+        "Reported", back_populates="round_obj", cascade="all, delete-orphan"
+    )
 
 
 # ================================================
@@ -165,6 +180,24 @@ class User_mgmt(Base):
     )
     reactions = relationship("Reaction", back_populates="user", cascade="all, delete-orphan")
     round_joined = relationship("Round")
+    system_messages = relationship(
+        "SysMessage",
+        foreign_keys="SysMessage.to_uid",
+        back_populates="target_user",
+        cascade="all, delete-orphan",
+    )
+    reports_received = relationship(
+        "Reported",
+        foreign_keys="Reported.to_uid",
+        back_populates="reported_user",
+        cascade="all, delete-orphan",
+    )
+    reports_sent = relationship(
+        "Reported",
+        foreign_keys="Reported.from_uid",
+        back_populates="reporter_user",
+        cascade="all, delete-orphan",
+    )
 
 
 # ================================================
@@ -362,6 +395,7 @@ class Post(Base):
     shared_from = Column(String(36), default=-1)
     image_id = Column(String(36), ForeignKey("images.id", ondelete="CASCADE"))
     reaction_count = Column(Integer, default=0)
+    moderated = Column(Integer, nullable=False, default=0)
 
     # Relationships
     user = relationship("User_mgmt", back_populates="posts")
@@ -382,6 +416,7 @@ class Post(Base):
     agent_opinions = relationship(
         "Agent_Opinion", back_populates="post", cascade="all, delete-orphan"
     )
+    reports = relationship("Reported", back_populates="reported_post", cascade="all, delete-orphan")
 
 
 Index("idx_post_user_id", Post.user_id)
@@ -389,6 +424,48 @@ Index("idx_post_round", Post.round)
 Index("idx_post_thread_id", Post.thread_id)
 Index("idx_post_news_id", Post.news_id)
 Index("idx_post_image_id", Post.image_id)
+
+
+class SysMessage(Base):
+    __tablename__ = "sys_messages"
+
+    id = Column(String(36), primary_key=True)
+    type = Column(Text, nullable=False)
+    to_uid = Column(String(36), ForeignKey("user_mgmt.id", ondelete="CASCADE"), nullable=True)
+    message = Column(Text, nullable=False)
+    from_round = Column(String(36), ForeignKey("rounds.id", ondelete="CASCADE"), nullable=True)
+    to_round = Column(String(36), ForeignKey("rounds.id", ondelete="CASCADE"), nullable=True)
+
+    target_user = relationship("User_mgmt", foreign_keys=[to_uid], back_populates="system_messages")
+    from_round_obj = relationship("Round", foreign_keys=[from_round], back_populates="incoming_system_messages")
+    to_round_obj = relationship("Round", foreign_keys=[to_round], back_populates="outgoing_system_messages")
+
+
+Index("idx_sys_messages_to_uid", SysMessage.to_uid)
+Index("idx_sys_messages_from_round", SysMessage.from_round)
+Index("idx_sys_messages_to_round", SysMessage.to_round)
+
+
+class Reported(Base):
+    __tablename__ = "reported"
+
+    id = Column(String(36), primary_key=True)
+    type = Column(Text, nullable=False)
+    to_uid = Column(String(36), ForeignKey("user_mgmt.id", ondelete="CASCADE"), nullable=True)
+    to_post = Column(String(36), ForeignKey("post.id", ondelete="CASCADE"), nullable=True)
+    from_uid = Column(String(36), ForeignKey("user_mgmt.id", ondelete="CASCADE"), nullable=False)
+    tid = Column(String(36), ForeignKey("rounds.id", ondelete="CASCADE"), nullable=False)
+
+    reported_user = relationship("User_mgmt", foreign_keys=[to_uid], back_populates="reports_received")
+    reported_post = relationship("Post", foreign_keys=[to_post], back_populates="reports")
+    reporter_user = relationship("User_mgmt", foreign_keys=[from_uid], back_populates="reports_sent")
+    round_obj = relationship("Round", foreign_keys=[tid], back_populates="reported_items")
+
+
+Index("idx_reported_to_uid", Reported.to_uid)
+Index("idx_reported_to_post", Reported.to_post)
+Index("idx_reported_from_uid", Reported.from_uid)
+Index("idx_reported_tid", Reported.tid)
 
 
 class Mention(Base):
