@@ -26,6 +26,23 @@ from YSimulator.YClient.client import SimulationClient
 from YSimulator.YClient.news_feeds.news_service import NewsFeedService
 
 
+def _configure_model_cache_env():
+    root = Path(os.environ.get("YSOCIAL_MODEL_CACHE_DIR", "~/.cache/ysocial_models")).expanduser()
+    hf_home = root / "huggingface"
+    transformers_cache = hf_home / "transformers"
+    hub_cache = hf_home / "hub"
+    torch_home = root / "torch"
+
+    for path in (root, hf_home, transformers_cache, hub_cache, torch_home):
+        path.mkdir(parents=True, exist_ok=True)
+
+    os.environ.setdefault("YSOCIAL_MODEL_CACHE_DIR", str(root))
+    os.environ.setdefault("HF_HOME", str(hf_home))
+    os.environ.setdefault("TRANSFORMERS_CACHE", str(transformers_cache))
+    os.environ.setdefault("HUGGINGFACE_HUB_CACHE", str(hub_cache))
+    os.environ.setdefault("TORCH_HOME", str(torch_home))
+
+
 def compress_rotated_log(source, dest):
     """
     Compress a rotated log file using gzip.
@@ -177,6 +194,7 @@ def resolve_client_namespace(config_dir: Path, sim_config: dict) -> str:
 
 
 if __name__ == "__main__":
+    _configure_model_cache_env()
     # Parse command line arguments
     parser = argparse.ArgumentParser(
         description="YSimulator Client - Simulation client for social media agents"

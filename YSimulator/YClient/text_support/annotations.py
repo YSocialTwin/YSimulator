@@ -1,4 +1,6 @@
+import os
 import logging
+from pathlib import Path
 
 from detoxify import Detoxify
 from nltk.sentiment import SentimentIntensityAnalyzer
@@ -9,10 +11,28 @@ logger = logging.getLogger(__name__)
 _detoxify_model = None
 
 
+def _configure_model_cache_env():
+    root = Path(os.environ.get("YSOCIAL_MODEL_CACHE_DIR", "~/.cache/ysocial_models")).expanduser()
+    hf_home = root / "huggingface"
+    transformers_cache = hf_home / "transformers"
+    hub_cache = hf_home / "hub"
+    torch_home = root / "torch"
+
+    for path in (root, hf_home, transformers_cache, hub_cache, torch_home):
+        path.mkdir(parents=True, exist_ok=True)
+
+    os.environ.setdefault("YSOCIAL_MODEL_CACHE_DIR", str(root))
+    os.environ.setdefault("HF_HOME", str(hf_home))
+    os.environ.setdefault("TRANSFORMERS_CACHE", str(transformers_cache))
+    os.environ.setdefault("HUGGINGFACE_HUB_CACHE", str(hub_cache))
+    os.environ.setdefault("TORCH_HOME", str(torch_home))
+
+
 def _get_detoxify_model() -> Detoxify:
     """Return a cached Detoxify model instance, creating it on first use."""
     global _detoxify_model
     if _detoxify_model is None:
+        _configure_model_cache_env()
         logger.info("Initializing Detoxify model (first use)")
         _detoxify_model = Detoxify("original")
         logger.info("Detoxify model initialized successfully")
