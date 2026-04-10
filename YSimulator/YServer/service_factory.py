@@ -218,6 +218,7 @@ def create_all_services(
 
     mention_service = MentionService(
         post_repository=post_repo,
+        engine=engine,
         logger=logger,
     )
 
