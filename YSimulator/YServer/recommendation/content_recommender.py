@@ -7,6 +7,9 @@ Handles content (post) recommendations with pluggable strategies for different r
 import logging
 from typing import List, Optional
 
+from sqlalchemy import MetaData, Table, inspect, select
+from sqlalchemy.orm import Session
+
 from YSimulator.YServer.recsys import content_recsys_db, content_recsys_redis
 
 
@@ -108,6 +111,7 @@ class ContentRecommender:
                     post_ids = result
 
             # Update mode name if fallback was used
+            post_ids = self._filter_shadow_banned_posts(post_ids, day=day, slot=slot)
             log_mode = f"{mode}-Random" if used_fallback else mode
 
             self.logger.info(
@@ -280,8 +284,6 @@ class ContentRecommender:
         visibility_hour: int,
     ) -> List[str]:
         """Get recommendations using SQL backend."""
-        from sqlalchemy.orm import Session
-
         session = Session(self.db.engine)
         try:
             if mode == "ReverseChrono":
@@ -347,6 +349,66 @@ class ContentRecommender:
                 )
         finally:
             session.close()
+
+    def _filter_shadow_banned_posts(
+        self,
+        post_ids: List[str],
+        *,
+        day: Optional[int],
+        slot: Optional[int],
+    ) -> List[str]:
+        if not post_ids or day is None or slot is None:
+            return post_ids
+        try:
+            if "shadow_ban" not in inspect(self.db.engine).get_table_names():
+                return post_ids
+            session = Session(self.db.engine)
+            try:
+                metadata = MetaData()
+                post = Table("post", metadata, autoload_with=self.db.engine)
+                rounds = Table("rounds", metadata, autoload_with=self.db.engine)
+                shadow_ban = Table("shadow_ban", MetaData(), autoload_with=self.db.engine)
+                current_total_rounds = int(day) * self.num_slots_per_day + int(slot)
+                active_banned_user_ids = [
+                    str(row[0])
+                    for row in session.execute(
+                        select(shadow_ban.c.uid)
+                        .select_from(
+                            shadow_ban.join(
+                                rounds,
+                                rounds.c.id == shadow_ban.c.start_tid,
+                            )
+                        )
+                        .where(
+                            ((rounds.c.day * self.num_slots_per_day) + rounds.c.hour)
+                            <= current_total_rounds
+                        )
+                        .where(
+                            (shadow_ban.c.duration.is_(None))
+                            | (
+                                ((rounds.c.day * self.num_slots_per_day) + rounds.c.hour + shadow_ban.c.duration)
+                                >= current_total_rounds
+                            )
+                        )
+                    ).all()
+                ]
+                if not active_banned_user_ids:
+                    return post_ids
+                banned_post_ids = {
+                    str(post_id)
+                    for (post_id,) in session.execute(
+                        select(post.c.id)
+                        .where(post.c.id.in_(post_ids))
+                        .where(post.c.user_id.in_(active_banned_user_ids))
+                    ).all()
+                }
+                if not banned_post_ids:
+                    return post_ids
+                return [post_id for post_id in post_ids if str(post_id) not in banned_post_ids]
+            finally:
+                session.close()
+        except Exception:
+            return post_ids
 
     def _calculate_visibility_params(self, day: int, slot: int, visibility_rounds: int) -> tuple:
         """
