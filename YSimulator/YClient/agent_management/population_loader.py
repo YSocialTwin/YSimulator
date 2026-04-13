@@ -108,6 +108,8 @@ class PopulationLoader:
                 feed_url=agent_data.get("feed_url"),
                 interests=agent_data.get("interests"),
                 opinions=agent_data.get("opinions"),
+                stubborn_topics=agent_data.get("stubborn_topics"),
+                custom_features=agent_data.get("custom_features"),
             )
             agents.append(profile)
         return agents

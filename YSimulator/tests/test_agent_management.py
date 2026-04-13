@@ -204,6 +204,36 @@ class TestAgentManager:
             mock_create.assert_called_once_with(agent_config)
             assert isinstance(result, list)
 
+
+class TestPopulationLoaderCustomFeatures:
+    """Targeted tests for structured agent metadata loading."""
+
+    def test_load_predefined_agents_preserves_stubborn_topics_and_custom_features(
+        self, temp_config_dir, mock_logger
+    ):
+        loader = PopulationLoader(
+            config_path=temp_config_dir,
+            client_id="test_client",
+            logger=mock_logger,
+        )
+
+        agents = loader._load_predefined_agents(
+            [
+                {
+                    "id": "agent-1",
+                    "username": "agent_001",
+                    "opinions": {"topic a": 0.8},
+                    "stubborn_topics": {"topic a": True},
+                    "custom_features": {"Class": "Mage"},
+                }
+            ]
+        )
+
+        assert len(agents) == 1
+        assert agents[0].opinions == {"topic a": 0.8}
+        assert agents[0].stubborn_topics == {"topic a": True}
+        assert agents[0].custom_features == {"Class": "Mage"}
+
     def test_load_and_create_social_network_delegates(
         self,
         temp_config_dir,
@@ -658,6 +688,32 @@ class TestAgentSelector:
         assert "age" in attrs
         assert "profession" in attrs
         assert attrs["name"] == "agent_001"
+        assert attrs["custom_features"] == {}
+
+    def test_extract_agent_attrs_includes_custom_features(
+        self, archetype_distribution, actions_likelihood, mock_logger
+    ):
+        selector = AgentSelector(
+            archetype_distribution=archetype_distribution,
+            agent_downcast=False,
+            actions_likelihood=actions_likelihood,
+            logger=mock_logger,
+        )
+
+        agent = AgentProfile(
+            id=1,
+            username="agent_001",
+            custom_features={"Class": "Mage", "Guild": "North"},
+        )
+
+        attrs = selector.extract_agent_attrs(
+            agent,
+            lambda interests: (None, None),
+            lambda: False,
+            lambda opinion: "neutral",
+        )
+
+        assert attrs["custom_features"] == {"Class": "Mage", "Guild": "North"}
 
 
 # ============================================================================

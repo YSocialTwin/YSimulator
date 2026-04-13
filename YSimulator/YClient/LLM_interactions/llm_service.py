@@ -25,6 +25,26 @@ DEFAULT_IMAGE_DESCRIPTION_PROMPTS = {
 }
 
 
+def _append_custom_features_to_persona(persona: str, agent_attrs: Optional[Dict[str, Any]]) -> str:
+    custom_features = dict((agent_attrs or {}).get("custom_features") or {})
+    if not custom_features:
+        return persona
+
+    parts = []
+    for key in sorted(custom_features.keys(), key=lambda value: str(value).lower()):
+        label = str(key).strip()
+        if not label:
+            continue
+        raw_value = custom_features.get(key)
+        value = str(raw_value).strip() if raw_value is not None else ""
+        parts.append(f"{label}: {value}" if value else label)
+
+    if not parts:
+        return persona
+
+    return f"{persona.rstrip()} Additional personal details: {'; '.join(parts)}."
+
+
 # Use standard Ray actor (CPU) - the GPU is managed by Ollama internally
 @ray.remote
 class LLMService:
@@ -321,13 +341,14 @@ class LLMService:
                     ag=agent_attrs.get("ag", "average in agreeableness"),
                     ne=agent_attrs.get("ne", "average in neuroticism"),
                 )
-                return persona
+                return _append_custom_features_to_persona(persona, agent_attrs)
             except KeyError:
                 # If template formatting fails, fall back to cluster-based persona
                 pass
 
         # Fallback to cluster-based persona
-        return self.prompts_config["personas"].get(str(cluster_id), "You are a social media user.")
+        persona = self.prompts_config["personas"].get(str(cluster_id), "You are a social media user.")
+        return _append_custom_features_to_persona(persona, agent_attrs)
 
     def _memory_blocks(self, agent_attrs: Optional[dict]) -> Dict[str, str]:
         attrs = agent_attrs or {}

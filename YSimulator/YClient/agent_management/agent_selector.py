@@ -190,6 +190,7 @@ class AgentSelector:
             "ne": agent.ne if agent.ne else "average in neuroticism",
             "toxicity": agent.toxicity if agent.toxicity and agent.toxicity != "" else "no",
             "topic": selected_topic,
+            "custom_features": dict(agent.custom_features or {}),
         }
 
         # Add opinion information if available

@@ -2205,6 +2205,7 @@ class DatabaseMiddleware:
         opinion: float,
         id_interacted_with: Optional[str] = None,
         id_post: Optional[str] = None,
+        stubborn: bool = False,
     ) -> bool:
         """
         Add an agent opinion record to the database.
@@ -2243,6 +2244,20 @@ class DatabaseMiddleware:
 
         session = Session(self.engine)
         try:
+            latest_opinion = (
+                session.query(Agent_Opinion)
+                .filter_by(agent_id=agent_id, topic_id=topic_id)
+                .order_by(Agent_Opinion.tid.desc(), Agent_Opinion.id.desc())
+                .first()
+            )
+            effective_stubborn = bool(stubborn) or bool(
+                latest_opinion.stubborn if latest_opinion is not None else False
+            )
+            effective_opinion = (
+                float(latest_opinion.opinion)
+                if latest_opinion is not None and bool(latest_opinion.stubborn)
+                else opinion
+            )
             # Create agent opinion record
             opinion_id = str(uuid.uuid4())
             agent_opinion = Agent_Opinion(
@@ -2250,9 +2265,10 @@ class DatabaseMiddleware:
                 agent_id=agent_id,
                 tid=round_id,
                 topic_id=topic_id,
-                opinion=opinion,
+                opinion=effective_opinion,
                 id_interacted_with=id_interacted_with,
                 id_post=id_post,
+                stubborn=effective_stubborn,
             )
             session.add(agent_opinion)
             session.commit()

@@ -1505,6 +1505,7 @@ class SQLInterestRepository(InterestRepository):
         opinion: float,
         id_interacted_with: Optional[str] = None,
         id_post: Optional[str] = None,
+        stubborn: bool = False,
     ) -> bool:
         """Add an agent opinion on a topic."""
         try:
@@ -1512,15 +1513,30 @@ class SQLInterestRepository(InterestRepository):
 
             session = Session(self.engine)
             try:
+                latest_opinion = (
+                    session.query(Agent_Opinion)
+                    .filter_by(agent_id=agent_id, topic_id=topic_id)
+                    .order_by(Agent_Opinion.tid.desc(), Agent_Opinion.id.desc())
+                    .first()
+                )
+                effective_stubborn = bool(stubborn) or bool(
+                    latest_opinion.stubborn if latest_opinion is not None else False
+                )
+                effective_opinion = (
+                    float(latest_opinion.opinion)
+                    if latest_opinion is not None and bool(latest_opinion.stubborn)
+                    else opinion
+                )
                 # Agent_Opinion model uses 'tid' for round_id
                 agent_opinion = Agent_Opinion(
                     id=str(uuid.uuid4()),
                     agent_id=agent_id,
                     tid=round_id,  # Note: model uses 'tid' not 'round_id'
                     topic_id=topic_id,
-                    opinion=opinion,
+                    opinion=effective_opinion,
                     id_interacted_with=id_interacted_with,
                     id_post=id_post,
+                    stubborn=effective_stubborn,
                 )
                 session.add(agent_opinion)
                 session.commit()
@@ -1641,6 +1657,17 @@ class SQLInterestRepository(InterestRepository):
                     for entry in batch:
                         if "id" not in entry or not entry["id"]:
                             entry["id"] = str(uuid.uuid4())
+                        latest_opinion = (
+                            session.query(Agent_Opinion)
+                            .filter_by(agent_id=entry["agent_id"], topic_id=entry["topic_id"])
+                            .order_by(Agent_Opinion.tid.desc(), Agent_Opinion.id.desc())
+                            .first()
+                        )
+                        entry["stubborn"] = bool(entry.get("stubborn", False)) or bool(
+                            latest_opinion.stubborn if latest_opinion is not None else False
+                        )
+                        if latest_opinion is not None and bool(latest_opinion.stubborn):
+                            entry["opinion"] = float(latest_opinion.opinion)
 
                     session.bulk_insert_mappings(Agent_Opinion, batch)
                     session.commit()

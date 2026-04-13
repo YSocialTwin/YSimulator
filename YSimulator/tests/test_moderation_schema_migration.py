@@ -53,3 +53,53 @@ def test_ensure_moderation_schema_adds_tables_and_post_column(tmp_path):
     sys_message_columns = {column["name"] for column in inspector.get_columns("sys_messages")}
     assert "duration" in sys_message_columns
     assert "to_round" not in sys_message_columns
+
+
+def test_ensure_moderation_schema_adds_stubborn_and_custom_features(tmp_path):
+    db_path = tmp_path / "agent_features_schema.db"
+    engine = create_engine(f"sqlite:///{db_path}")
+
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                """
+                CREATE TABLE user_mgmt (
+                    id VARCHAR(36) PRIMARY KEY,
+                    username TEXT NOT NULL
+                )
+                """
+            )
+        )
+        conn.execute(
+            text(
+                """
+                CREATE TABLE rounds (
+                    id VARCHAR(36) PRIMARY KEY,
+                    day INTEGER,
+                    hour INTEGER
+                )
+                """
+            )
+        )
+        conn.execute(
+            text(
+                """
+                CREATE TABLE agent_opinion (
+                    id VARCHAR(36) PRIMARY KEY,
+                    agent_id VARCHAR(36) NOT NULL,
+                    tid VARCHAR(36) NOT NULL,
+                    topic_id VARCHAR(36) NOT NULL,
+                    opinion FLOAT NOT NULL,
+                    id_interacted_with VARCHAR(36),
+                    id_post VARCHAR(36)
+                )
+                """
+            )
+        )
+
+    ensure_moderation_schema(engine)
+
+    inspector = inspect(engine)
+    assert "agent_custom_features" in inspector.get_table_names()
+    opinion_columns = {column["name"] for column in inspector.get_columns("agent_opinion")}
+    assert "stubborn" in opinion_columns

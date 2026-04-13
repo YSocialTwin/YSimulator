@@ -5,7 +5,7 @@ This module defines all database models with proper relationships, foreign keys,
 and UUID-based primary keys where appropriate for distributed system compatibility.
 """
 
-from sqlalchemy import Column, Float, ForeignKey, Index, Integer, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, Column, Float, ForeignKey, Index, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import declarative_base, relationship
 
 Base = declarative_base()
@@ -639,7 +639,18 @@ class Agent_Opinion(Base):
     id_interacted_with = Column(String(36))
     id_post = Column(String(36), ForeignKey("post.id"))
     opinion = Column(Float, nullable=False)
+    stubborn = Column(Boolean, nullable=False, default=False)
 
     # Relationships
     topic = relationship("Interest", back_populates="agent_opinions")
     post = relationship("Post")
+
+
+class Agent_Custom_Feature(Base):
+    __tablename__ = "agent_custom_features"
+
+    id = Column(String(36), primary_key=True)
+    agent_id = Column(String(36), ForeignKey("user_mgmt.id"), nullable=False, index=True)
+    feature_type = Column(String(20), nullable=False, default="custom")
+    key = Column(String(120), nullable=False)
+    value = Column(Text, nullable=True, default="")

@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import List, Literal, Optional, Tuple
+from typing import Dict, List, Literal, Optional, Tuple
 
 
 @dataclass
@@ -56,6 +56,8 @@ class AgentProfile:
     # Opinions field: {"Topic1": 0.5, "Topic2": 0.8}
     # Maps topic names to opinion values in [0, 1]
     opinions: Optional[dict] = None
+    stubborn_topics: Optional[Dict[str, bool]] = None
+    custom_features: Optional[Dict[str, str]] = None
 
 
 @dataclass

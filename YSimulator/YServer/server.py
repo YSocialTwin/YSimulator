@@ -1005,11 +1005,12 @@ class OrchestratorServer:
                             }
                         )
 
-                    if agent_profile.opinions:
+                if agent_profile.opinions:
                         agents_with_opinions.append(
                             {
                                 "agent_id": agent_id,
                                 "opinions": agent_profile.opinions,
+                                "stubborn_topics": agent_profile.stubborn_topics or {},
                             }
                         )
                         # Collect all unique topic names for batch lookup
@@ -1038,6 +1039,7 @@ class OrchestratorServer:
                 for agent_data in agents_with_opinions:
                     agent_id = agent_data["agent_id"]
                     opinions = agent_data["opinions"]
+                    stubborn_topics = agent_data.get("stubborn_topics") or {}
 
                     for topic_name, opinion_value in opinions.items():
                         topic_id = topic_name_to_id.get(topic_name)
@@ -1050,6 +1052,7 @@ class OrchestratorServer:
                                     "opinion": opinion_value,
                                     "id_interacted_with": None,
                                     "id_post": None,
+                                    "stubborn": bool(stubborn_topics.get(topic_name, False)),
                                 }
                             )
 
@@ -1062,6 +1065,48 @@ class OrchestratorServer:
                         f"Batch initialized {opinions_added} opinions for "
                         f"{len(agents_with_opinions)} agents"
                     )
+
+            custom_feature_rows = []
+            for agent_id in newly_registered_ids:
+                agent_profile = agent_id_to_profile.get(agent_id)
+                if not agent_profile or not getattr(agent_profile, "custom_features", None):
+                    continue
+                for feature_key, feature_value in (agent_profile.custom_features or {}).items():
+                    feature_key = str(feature_key or "").strip()
+                    if not feature_key:
+                        continue
+                    custom_feature_rows.append(
+                        {
+                            "agent_id": str(agent_id),
+                            "feature_type": "custom",
+                            "key": feature_key,
+                            "value": "" if feature_value is None else str(feature_value),
+                        }
+                    )
+
+            if custom_feature_rows:
+                from sqlalchemy.orm import Session
+                from YSimulator.YServer.classes.models import Agent_Custom_Feature
+                import uuid
+
+                session = Session(self.db.engine)
+                try:
+                    for row in custom_feature_rows:
+                        session.add(
+                            Agent_Custom_Feature(
+                                id=str(uuid.uuid4()),
+                                agent_id=row["agent_id"],
+                                feature_type=row["feature_type"],
+                                key=row["key"],
+                                value=row["value"],
+                            )
+                        )
+                    session.commit()
+                except Exception:
+                    session.rollback()
+                    raise
+                finally:
+                    session.close()
 
             # Batch register websites for page agents
             pages_registered = 0
