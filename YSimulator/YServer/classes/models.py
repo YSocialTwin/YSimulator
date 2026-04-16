@@ -5,7 +5,18 @@ This module defines all database models with proper relationships, foreign keys,
 and UUID-based primary keys where appropriate for distributed system compatibility.
 """
 
-from sqlalchemy import Boolean, Column, Float, ForeignKey, Index, Integer, String, Text, UniqueConstraint
+from sqlalchemy import (
+    Boolean,
+    CheckConstraint,
+    Column,
+    Float,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import declarative_base, relationship
 
 Base = declarative_base()
@@ -654,3 +665,28 @@ class Agent_Custom_Feature(Base):
     feature_type = Column(String(20), nullable=False, default="custom")
     key = Column(String(120), nullable=False)
     value = Column(Text, nullable=True, default="")
+
+
+class StressReward(Base):
+    __tablename__ = "stress_reward"
+    __table_args__ = (
+        CheckConstraint("variable IN ('stress', 'reward')", name="ck_stress_reward_variable"),
+        CheckConstraint("type IN ('aggregate', 'variation')", name="ck_stress_reward_type"),
+        CheckConstraint(
+            "(type = 'aggregate' AND value >= 0 AND value <= 1) "
+            "OR (type = 'variation' AND value >= -1 AND value <= 1)",
+            name="ck_stress_reward_value",
+        ),
+    )
+
+    id = Column(String(36), primary_key=True)
+    uid = Column(String(36), ForeignKey("user_mgmt.id", ondelete="CASCADE"), nullable=False)
+    variable = Column(String(16), nullable=False)
+    value = Column(Float, nullable=False)
+    type = Column(String(16), nullable=False)
+    action = Column(String(64), nullable=True)
+    tid = Column(String(36), ForeignKey("rounds.id", ondelete="CASCADE"), nullable=False)
+
+
+Index("idx_stress_reward_uid", StressReward.uid)
+Index("idx_stress_reward_tid", StressReward.tid)

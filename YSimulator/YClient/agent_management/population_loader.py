@@ -118,7 +118,11 @@ class PopulationLoader:
         """Generate additional agents based on generation configuration."""
         agents = []
         num_additional = gen_config.get("num_additional_agents", 0)
-        cluster_weights = gen_config["cluster_distribution"]["weights"]
+        if num_additional <= 0:
+            return agents
+
+        cluster_distribution = gen_config.get("cluster_distribution") or {}
+        cluster_weights = cluster_distribution.get("weights", [1, 1, 1])
         llm_prob = gen_config.get("llm_enabled_probability", 0.1)
         defaults = gen_config.get("default_settings", {})
         age_range = gen_config.get("age_range", [18, 65])

@@ -77,6 +77,9 @@ class ActionDTO:
     annotations: Optional[dict] = None  # Dict with 'hashtags', 'mentions', 'sentiment', 'toxicity'
     # Updated opinions for comment actions: {topic_id: opinion_value}
     updated_opinions: Optional[dict] = None
+    stress_reward_target_user_id: Optional[str] = None
+    stress_reward_variations: Optional[List[dict]] = None
+    stress_reward_action: Optional[str] = None
 
 
 @dataclass

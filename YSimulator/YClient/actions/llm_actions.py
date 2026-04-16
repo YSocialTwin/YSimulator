@@ -9,7 +9,7 @@ All functions return Ray ObjectRefs (futures) to enable parallel execution
 of multiple LLM calls using the scatter/gather pattern.
 """
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import ray
 
@@ -504,7 +504,7 @@ def generate_image_post_async(
     agent_cluster: Optional[int] = None,
     image_data: Optional[Dict[str, Any]] = None,
     topics: Optional[List[str]] = None,
-) -> ray.ObjectRef | tuple[ray.ObjectRef, Optional[str]]:
+) -> Union[ray.ObjectRef, Tuple[ray.ObjectRef, Optional[str]]]:
     """
     Initiate async LLM-based image post generation.
 

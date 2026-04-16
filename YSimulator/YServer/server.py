@@ -18,9 +18,11 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import ray
+from sqlalchemy import and_, func, or_
+from sqlalchemy.orm import Session
 
 from YSimulator.YClient.classes.ray_models import SimulationInstruction
-from YSimulator.YServer.classes.models import Recommendation
+from YSimulator.YServer.classes.models import Recommendation, Round, StressReward
 from YSimulator.YServer.interests_modeling import InterestManager
 
 # Constants
@@ -1518,6 +1520,18 @@ class OrchestratorServer:
                 if result.success and result.new_ids:
                     new_ids.extend(result.new_ids)
 
+                if (
+                    result.success
+                    and getattr(act, "stress_reward_target_user_id", None)
+                    and getattr(act, "stress_reward_variations", None)
+                ):
+                    self.set_stress_reward_variations(
+                        str(act.stress_reward_target_user_id),
+                        str(self.current_round_id),
+                        list(act.stress_reward_variations or []),
+                        action_name=getattr(act, "stress_reward_action", None),
+                    )
+
             # Update recent posts cache
             if new_ids:
                 self.recent_posts_cache.extend(new_ids)
@@ -1557,6 +1571,161 @@ class OrchestratorServer:
 
         # Check if EVERYONE is done
         self._check_barrier_and_advance()
+
+    def get_stress_reward(self, agent_id: str, round_id: str, backward_rounds: int = 24) -> dict:
+        """
+        Get latest aggregate stress/reward state for an agent and persist current aggregate rows.
+        """
+        stress_reward_cfg = (self.simulation_config or {}).get("stress_reward") or {}
+        if not bool(stress_reward_cfg.get("enabled", False)):
+            return {"stress": 0.0, "reward": 0.0, "status": 200}
+
+        try:
+            payload = {"stress": 0.0, "reward": 0.0, "status": 200}
+            with Session(self.db.engine) as session:
+                target_round = session.query(Round).filter_by(id=str(round_id)).first()
+                if target_round is None:
+                    return {"stress": 0.0, "reward": 0.0, "status": 404}
+
+                target_day = int(target_round.day or 0)
+                target_hour = int(target_round.hour or 0)
+                window_size = max(1, int(backward_rounds or 24) + 1)
+
+                def _before(day: int, hour: int):
+                    return or_(Round.day < day, and_(Round.day == day, Round.hour < hour))
+
+                def _at_or_before(day: int, hour: int):
+                    return or_(Round.day < day, and_(Round.day == day, Round.hour <= hour))
+
+                def _after(day: int, hour: int):
+                    return or_(Round.day > day, and_(Round.day == day, Round.hour > hour))
+
+                def _at_or_after(day: int, hour: int):
+                    return or_(Round.day > day, and_(Round.day == day, Round.hour >= hour))
+
+                window_rounds = (
+                    session.query(Round)
+                    .filter(_at_or_before(target_day, target_hour))
+                    .order_by(Round.day.desc(), Round.hour.desc())
+                    .limit(window_size)
+                    .all()
+                )
+                earliest_window_round = window_rounds[-1] if window_rounds else target_round
+                earliest_day = int(earliest_window_round.day or 0)
+                earliest_hour = int(earliest_window_round.hour or 0)
+
+                for variable in ("stress", "reward"):
+                    latest_aggregate_row = (
+                        session.query(StressReward, Round)
+                        .join(Round, Round.id == StressReward.tid)
+                        .filter(
+                            StressReward.uid == str(agent_id),
+                            StressReward.variable == variable,
+                            StressReward.type == "aggregate",
+                            _before(target_day, target_hour),
+                        )
+                        .order_by(
+                            Round.day.desc(),
+                            Round.hour.desc(),
+                        )
+                        .first()
+                    )
+
+                    anchor_value = 0.0
+                    variation_lower_bound = _at_or_after(earliest_day, earliest_hour)
+                    if latest_aggregate_row is not None:
+                        latest_aggregate, aggregate_round = latest_aggregate_row
+                        anchor_value = float(latest_aggregate.value)
+                        variation_lower_bound = _at_or_after(
+                            int(aggregate_round.day or 0), int(aggregate_round.hour or 0)
+                        )
+
+                    variation_sum = (
+                        session.query(func.coalesce(func.sum(StressReward.value), 0.0))
+                        .join(Round, Round.id == StressReward.tid)
+                        .filter(
+                            StressReward.uid == str(agent_id),
+                            StressReward.variable == variable,
+                            StressReward.type == "variation",
+                            variation_lower_bound,
+                            _at_or_before(target_day, target_hour),
+                        )
+                        .scalar()
+                    )
+                    current_value = max(0.0, min(1.0, anchor_value + float(variation_sum or 0.0)))
+                    payload[variable] = current_value
+
+                    existing = (
+                        session.query(StressReward)
+                        .filter_by(
+                            uid=str(agent_id),
+                            variable=variable,
+                            type="aggregate",
+                            tid=str(round_id),
+                        )
+                        .first()
+                    )
+                    if existing is None:
+                        session.add(
+                            StressReward(
+                                id=str(uuid.uuid4()),
+                                uid=str(agent_id),
+                                variable=variable,
+                                value=current_value,
+                                type="aggregate",
+                                action=None,
+                                tid=str(round_id),
+                            )
+                        )
+                    else:
+                        existing.value = current_value
+                session.commit()
+            return payload
+        except Exception as e:
+            self.logger.error(f"Error getting stress/reward for agent {agent_id}: {e}")
+            return {"stress": 0.0, "reward": 0.0, "status": 500}
+
+    def set_stress_reward_variations(
+        self, user_id: str, round_id: str, variations: list, action_name: Optional[str] = None
+    ) -> int:
+        """
+        Persist stress/reward variation rows for a user.
+        """
+        stress_reward_cfg = (self.simulation_config or {}).get("stress_reward") or {}
+        if not bool(stress_reward_cfg.get("enabled", False)):
+            return 0
+
+        written = 0
+        try:
+            with Session(self.db.engine) as session:
+                for variation in variations or []:
+                    variable = str((variation or {}).get("variable") or "").strip().lower()
+                    if variable not in {"stress", "reward"}:
+                        continue
+                    try:
+                        value = float((variation or {}).get("value"))
+                    except (TypeError, ValueError):
+                        continue
+                    if value < -1.0 or value > 1.0:
+                        continue
+                    session.add(
+                        StressReward(
+                            id=str(uuid.uuid4()),
+                            uid=str(user_id),
+                            variable=variable,
+                            value=value,
+                            type="variation",
+                            action=str(action_name).strip() if action_name else None,
+                            tid=str(round_id),
+                        )
+                    )
+                    written += 1
+                session.commit()
+        except Exception as e:
+            self.logger.error(f"Error writing stress/reward variations for {user_id}: {e}")
+            return 0
+
+        return written
 
     def get_current_day(self) -> int:
         """

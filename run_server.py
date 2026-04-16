@@ -14,6 +14,7 @@ import os
 import shutil
 import sys
 import time
+from copy import deepcopy
 from datetime import datetime
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
@@ -60,6 +61,33 @@ def build_isolated_namespace(base_namespace: str, config_dir: Path) -> str:
     """Build a stable per-experiment namespace for servers sharing one Ray cluster."""
     digest = hashlib.sha256(str(config_dir.resolve()).encode()).hexdigest()[:10]
     return f"{base_namespace}_{digest}"
+
+
+def build_server_simulation_config(config: dict) -> dict:
+    """Build the simulation_config payload passed into the server actor."""
+    if not isinstance(config, dict):
+        return {}
+
+    simulation_config = deepcopy(config.get("simulation", {}) or {})
+
+    posts_config = config.get("posts", {})
+    if posts_config:
+        simulation_config["posts"] = deepcopy(posts_config)
+
+    stress_reward_config = config.get("stress_reward")
+    if isinstance(stress_reward_config, dict):
+        simulation_config["stress_reward"] = deepcopy(stress_reward_config)
+    else:
+        enabled = config.get(
+            "stress_reward_enabled", config.get("stress_reward_annotation", False)
+        )
+        if enabled:
+            simulation_config["stress_reward"] = {
+                "enabled": bool(enabled),
+                "backward_rounds": 24,
+            }
+
+    return simulation_config
 
 
 def setup_logging(
@@ -245,13 +273,8 @@ if __name__ == "__main__":
         db_config[db_type]["database"] = unique_db_name
 
     redis_config = config.get("redis")  # Redis configuration (optional)
-    simulation_config = config.get("simulation", {})  # Simulation configuration (optional)
+    simulation_config = build_server_simulation_config(config)
     ray_config = config.get("ray", {})  # Ray configuration (optional)
-
-    # Add posts configuration to simulation_config for consistency
-    posts_config = config.get("posts", {})
-    if posts_config:
-        simulation_config["posts"] = posts_config
 
     # Set up logging in config directory
     logging_config = config.get("logging", {})

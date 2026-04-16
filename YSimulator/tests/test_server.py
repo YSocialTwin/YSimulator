@@ -5,10 +5,12 @@ Tests the Orchestrator Server functionality with comprehensive mocking.
 """
 
 import tempfile
+import uuid
 from pathlib import Path
 from unittest.mock import Mock, patch
 
 import pytest
+from sqlalchemy.orm import Session
 
 # Mark all tests in this module to run in isolated execution group
 pytestmark = pytest.mark.xdist_group(name="server_tests")
@@ -685,3 +687,171 @@ class TestEdgeCases:
             # Should handle zero visibility
             assert visibility_day == server.day
             assert visibility_slot == server.slot
+
+
+class TestStressRewardWindowing:
+    """Regression tests for stress/reward aggregate reconstruction."""
+
+    @patch("YSimulator.YServer.server.InterestManager")
+    def test_get_stress_reward_uses_round_day_hour_not_uuid_order(self, mock_interest_mgr_class):
+        """Stress/reward windowing should be based on Round(day, hour) even when tids are UUIDs."""
+        from YSimulator.YServer.classes.models import Round, StressReward
+        from YSimulator.YServer.server import OrchestratorServer
+
+        mock_interest_mgr = Mock()
+        mock_interest_mgr_class.return_value = mock_interest_mgr
+
+        simulation_config = {"stress_reward": {"enabled": True}}
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_config = {"type": "sqlite", "sqlite": {"filename": ":memory:"}}
+            server = OrchestratorServer(
+                db_config=db_config, config_path=tmpdir, simulation_config=simulation_config
+            )
+
+            target_round_id = str(uuid.uuid4())
+            sparse_mid_round_id = str(uuid.uuid4())
+            old_round_id = str(uuid.uuid4())
+            agent_id = str(uuid.uuid4())
+
+            with Session(server.db.engine) as session:
+                session.add_all(
+                    [
+                        Round(id=old_round_id, day=1, hour=3),
+                        Round(id=sparse_mid_round_id, day=4, hour=18),
+                        Round(id=target_round_id, day=9, hour=7),
+                    ]
+                )
+                session.add_all(
+                    [
+                        StressReward(
+                            id=str(uuid.uuid4()),
+                            uid=agent_id,
+                            variable="stress",
+                            value=0.45,
+                            type="aggregate",
+                            action=None,
+                            tid=old_round_id,
+                        ),
+                        StressReward(
+                            id=str(uuid.uuid4()),
+                            uid=agent_id,
+                            variable="stress",
+                            value=0.15,
+                            type="variation",
+                            action="comment:hostile",
+                            tid=sparse_mid_round_id,
+                        ),
+                        StressReward(
+                            id=str(uuid.uuid4()),
+                            uid=agent_id,
+                            variable="reward",
+                            value=0.25,
+                            type="aggregate",
+                            action=None,
+                            tid=old_round_id,
+                        ),
+                        StressReward(
+                            id=str(uuid.uuid4()),
+                            uid=agent_id,
+                            variable="reward",
+                            value=0.10,
+                            type="variation",
+                            action="reaction:like",
+                            tid=sparse_mid_round_id,
+                        ),
+                    ]
+                )
+                session.commit()
+
+            payload = server.get_stress_reward(agent_id, target_round_id, backward_rounds=1)
+
+            assert payload["status"] == 200
+            assert payload["stress"] == pytest.approx(0.60)
+            assert payload["reward"] == pytest.approx(0.35)
+
+            with Session(server.db.engine) as session:
+                persisted = (
+                    session.query(StressReward)
+                    .filter_by(uid=agent_id, type="aggregate", tid=target_round_id)
+                    .all()
+                )
+                persisted_by_var = {row.variable: row.value for row in persisted}
+
+    @patch("YSimulator.YServer.server.InterestManager")
+    def test_get_stress_reward_includes_same_round_variations_after_anchor(
+        self, mock_interest_mgr_class
+    ):
+        """A prior aggregate checkpoint must not discard variations written in the same round."""
+        from YSimulator.YServer.classes.models import Round, StressReward
+        from YSimulator.YServer.server import OrchestratorServer
+
+        mock_interest_mgr = Mock()
+        mock_interest_mgr_class.return_value = mock_interest_mgr
+
+        simulation_config = {"stress_reward": {"enabled": True}}
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_config = {"type": "sqlite", "sqlite": {"filename": ":memory:"}}
+            server = OrchestratorServer(
+                db_config=db_config, config_path=tmpdir, simulation_config=simulation_config
+            )
+
+            anchor_round_id = str(uuid.uuid4())
+            target_round_id = str(uuid.uuid4())
+            agent_id = str(uuid.uuid4())
+
+            with Session(server.db.engine) as session:
+                session.add_all(
+                    [
+                        Round(id=anchor_round_id, day=1, hour=5),
+                        Round(id=target_round_id, day=1, hour=6),
+                    ]
+                )
+                session.add_all(
+                    [
+                        StressReward(
+                            id=str(uuid.uuid4()),
+                            uid=agent_id,
+                            variable="stress",
+                            value=0.0,
+                            type="aggregate",
+                            action=None,
+                            tid=anchor_round_id,
+                        ),
+                        StressReward(
+                            id=str(uuid.uuid4()),
+                            uid=agent_id,
+                            variable="stress",
+                            value=0.03,
+                            type="variation",
+                            action="reaction:angry",
+                            tid=anchor_round_id,
+                        ),
+                        StressReward(
+                            id=str(uuid.uuid4()),
+                            uid=agent_id,
+                            variable="reward",
+                            value=0.0,
+                            type="aggregate",
+                            action=None,
+                            tid=anchor_round_id,
+                        ),
+                        StressReward(
+                            id=str(uuid.uuid4()),
+                            uid=agent_id,
+                            variable="reward",
+                            value=-0.02,
+                            type="variation",
+                            action="reaction:angry",
+                            tid=anchor_round_id,
+                        ),
+                    ]
+                )
+                session.commit()
+
+            payload = server.get_stress_reward(agent_id, target_round_id, backward_rounds=1)
+
+            assert payload["status"] == 200
+            assert payload["stress"] == pytest.approx(0.03)
+            assert payload["reward"] == pytest.approx(0.0)

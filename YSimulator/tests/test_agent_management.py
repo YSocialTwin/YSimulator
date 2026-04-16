@@ -402,6 +402,28 @@ class TestPopulationLoader:
         # Should have 3 generated agents
         assert len(all_agents) == 3
 
+    def test_create_agents_from_config_predefined_only_ignores_missing_cluster_distribution(
+        self, temp_config_dir, mock_logger
+    ):
+        """Regression test for predefined-only populations with generation_config present."""
+        loader = PopulationLoader(temp_config_dir, "test_client", mock_logger)
+
+        agent_config = {
+            "agents": [
+                {"id": "agent-1", "username": "agent_001", "cluster": 1, "llm": False},
+                {"id": "agent-2", "username": "agent_002", "cluster": 0, "llm": True},
+            ],
+            "generation_config": {
+                "num_additional_agents": 0,
+                "llm_enabled_probability": 0.1,
+            },
+        }
+
+        all_agents = loader.create_agents_from_config(agent_config)
+
+        assert len(all_agents) == 2
+        assert [agent.username for agent in all_agents] == ["agent_001", "agent_002"]
+
     def test_validate_and_extract_interests(self, temp_config_dir, mock_logger):
         """Test interest validation and extraction."""
         loader = PopulationLoader(temp_config_dir, "test_client", mock_logger)
