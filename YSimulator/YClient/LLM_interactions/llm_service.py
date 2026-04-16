@@ -748,6 +748,42 @@ class LLMService:
             # Fallback if LLM fails
             return "Sharing this!"
 
+    def annotate_stress_reward_text(
+        self,
+        text: str,
+        prompt_key: str,
+        actor_user_id: str = "",
+        recipient_user_id: str = "",
+    ) -> str:
+        """Return a JSON annotation for stress/reward scoring."""
+        system_prompt = self.prompts_config.get(prompt_key)
+        if not isinstance(system_prompt, str) or not system_prompt.strip():
+            logger.warning(f"{prompt_key} prompt not found in config")
+            return "{}"
+
+        prompt = ChatPromptTemplate.from_messages(
+            [
+                ("system", system_prompt),
+                (
+                    "user",
+                    (
+                        "Annotate the interaction for stress/reward scoring.\n"
+                        f"Actor user id: {actor_user_id}\n"
+                        f"Recipient user id: {recipient_user_id}\n"
+                        f"Text:\n{text}\n"
+                        "Return JSON only."
+                    ),
+                ),
+            ]
+        )
+
+        try:
+            chain = prompt | self.llm | StrOutputParser()
+            return chain.invoke({}).strip()
+        except Exception as exc:
+            logger.warning(f"stress/reward annotation failed: {exc}")
+            return "{}"
+
     def generate_read_reaction(
         self, cluster_id: int, post_content: str, agent_attrs: dict = None
     ) -> str:
@@ -982,6 +1018,72 @@ class LLMService:
                 return "unfollow"
 
         return "no_change"
+
+    def generate_reciprocal_follow_decision(
+        self, cluster_id: int, source_agent_profile, action: str, agent_attrs: dict = None
+    ) -> str:
+        """
+        Decide whether to reciprocate a direct follow/unfollow event based on the other agent profile.
+        """
+        persona = self._build_persona(cluster_id, agent_attrs)
+        normalized_action = str(action or "").strip().lower()
+        source_summary = self._format_other_agent_profile(source_agent_profile)
+        if not source_summary or normalized_action not in {"follow", "unfollow"}:
+            return "no_change"
+
+        desired_reply = "FOLLOW" if normalized_action == "follow" else "UNFOLLOW"
+        action_text = "followed" if normalized_action == "follow" else "unfollowed"
+        prompt = (
+            f"System: {persona}\n"
+            "You are deciding whether to reciprocate a direct social-link change.\n"
+            f"Another user has just {action_text} you.\n"
+            f"Their profile:\n{source_summary}\n\n"
+            f"Reply with ONLY '{desired_reply}' or 'NOCHANGE'."
+        )
+        try:
+            result = self._generate_text(prompt).strip().upper()
+        except Exception:
+            return "no_change"
+
+        if desired_reply in result:
+            return normalized_action
+        return "no_change"
+
+    @staticmethod
+    def _format_other_agent_profile(source_agent_profile) -> str:
+        if isinstance(source_agent_profile, dict):
+            data = source_agent_profile
+        else:
+            data = getattr(source_agent_profile, "__dict__", {}) or {}
+        fields = [
+            ("username", data.get("username")),
+            ("age", data.get("age")),
+            ("leaning", data.get("leaning")),
+            ("language", data.get("language")),
+            ("education_level", data.get("education_level")),
+            ("profession", data.get("profession")),
+            ("toxicity", data.get("toxicity")),
+            ("archetype", data.get("archetype")),
+        ]
+        interests = data.get("interests")
+        if isinstance(interests, (list, tuple)) and interests:
+            if len(interests) == 2 and isinstance(interests[0], list):
+                fields.append(("interests", ", ".join(str(item) for item in interests[0][:5])))
+            else:
+                fields.append(("interests", ", ".join(str(item) for item in list(interests)[:5])))
+        custom_features = data.get("custom_features")
+        if isinstance(custom_features, dict) and custom_features:
+            fields.append(
+                (
+                    "custom_features",
+                    ", ".join(
+                        f"{key}:{value}"
+                        for key, value in list(custom_features.items())[:5]
+                        if str(key).strip()
+                    ),
+                )
+            )
+        return "\n".join(f"{key}={value}" for key, value in fields if value not in (None, ""))
 
     def extract_topics_from_article(self, article_title: str, article_summary: str) -> list:
         """
