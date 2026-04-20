@@ -16,6 +16,8 @@ YSimulator is a powerful simulation framework designed to model social media dyn
 - **Opinion Dynamics**: Configurable models including bounded confidence and LLM-based evaluation for realistic opinion evolution and polarization
 - **Multi-Client Synchronization**: Robust barrier-based coordination with heartbeat liveness detection
 - **Client-Side Step Management**: Clients independently manage their simulation timelines
+- **Stress/Reward Feedback**: Optional stress/reward aggregation with dynamic churn driven by directed interactions
+- **Reciprocal Network Dynamics**: Follow-back and unfollow-back decisions, including secondary follow actions
 - **Flexible Simulation**: Configurable duration, agent population, and LLM parameters
 - **Structured Logging**: Rotating JSON logs with timestamps and execution times
 - **UUID-Based IDs**: Universal identifiers for distributed compatibility
@@ -104,6 +106,7 @@ Information about the test suite and coverage reports.
 - [Getting Started Guide](getting-started/INDEX.md)
 - [Configuration Guide](configuration/CONFIG.md)
 - [Opinion Dynamics](features/OPINION_DYNAMICS.md)
+- [Social Feedback & Reciprocal Follows](features/SOCIAL_FEEDBACK_AND_RECIPROCAL_FOLLOWS.md)
 - [Agent Types](agents/AGENT_TYPES.md)
 
 ### For Developers

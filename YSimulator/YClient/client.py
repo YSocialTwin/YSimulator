@@ -288,6 +288,7 @@ class SimulationClient:
         )
         self.current_stress_reward = {}
         self.current_churn_probability = {}
+        self._current_prompt_round_id = None
 
         # Cache for churned agents (refreshed after churn evaluation)
         self._churned_agents_cache = set()
@@ -390,6 +391,7 @@ class SimulationClient:
         """
         # Get current round_id for opinion dynamics tracking
         round_id = ray.get(self.server.get_current_round_id.remote())
+        self._current_prompt_round_id = str(round_id)
         if self.memory_manager and self.memory_manager.is_enabled():
             self.memory_manager.set_recent_post_ids(recent_posts)
 
@@ -1082,12 +1084,39 @@ class SimulationClient:
         Extract agent attributes for dynamic persona building.
         Delegates to agent_manager (Phase 6).
         """
-        return self.agent_manager.extract_agent_attrs(
+        attrs = self.agent_manager.extract_agent_attrs(
             agent,
             self._validate_and_extract_interests,
             self._is_opinion_dynamics_enabled,
             self._map_opinion_to_group,
         )
+        if not self.stress_reward_enabled:
+            return attrs
+        current_tid = str(getattr(self, "_current_prompt_round_id", "") or "").strip()
+        if not current_tid:
+            return attrs
+        try:
+            state = self.refresh_stress_reward_state(str(agent.id), current_tid, force=False)
+        except Exception as exc:
+            self.logger.warning(f"stress/reward prompt context failed for {agent.id}: {exc}")
+            return attrs
+        try:
+            stress_value = max(0.0, min(1.0, float((state or {}).get("stress", 0.0))))
+        except Exception:
+            stress_value = 0.0
+        if stress_value <= 0.0:
+            scale, label = 1, "none"
+        elif stress_value <= 0.25:
+            scale, label = 2, "slightly stressed"
+        elif stress_value <= 0.5:
+            scale, label = 3, "moderately stressed"
+        elif stress_value <= 0.75:
+            scale, label = 4, "very stressed"
+        else:
+            scale, label = 5, "extremely stressed"
+        attrs["stress_level_scale"] = scale
+        attrs["stress_level_label"] = label
+        return attrs
 
     def round_number(self, day: int, slot: int) -> int:
         return int(day) * int(self.num_slots_per_day) + int(slot)

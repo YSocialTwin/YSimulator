@@ -9,7 +9,7 @@ This guide explains how to configure YSimulator through JSON configuration files
 - How to structure your configuration directory
 - What each configuration file controls
 - How to customize simulation behavior
-- Advanced features like multi-client synchronization, agent churn, and dynamic network formation
+- Advanced features like multi-client synchronization, agent churn, stress/reward feedback, and dynamic network formation
 
 ### Quick Navigation
 

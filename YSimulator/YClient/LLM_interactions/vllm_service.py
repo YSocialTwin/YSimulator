@@ -36,6 +36,19 @@ def _append_custom_features_to_persona(persona: str, agent_attrs: Optional[Dict[
     return f"{persona.rstrip()} Additional personal details: {'; '.join(parts)}."
 
 
+def _stress_prompt_block(agent_attrs: Optional[Dict[str, Any]]) -> str:
+    attrs = agent_attrs or {}
+    label = str(attrs.get("stress_level_label") or "").strip()
+    scale = attrs.get("stress_level_scale")
+    if not label or scale is None:
+        return ""
+    return (
+        "Current stress level: "
+        f"{label} ({scale}/5 on a five-point scale where 1 means none and 5 means extremely stressed). "
+        "Use this only as internal emotional context while writing."
+    )
+
+
 @ray.remote
 class VLLMService:
     """
@@ -881,6 +894,7 @@ class VLLMService:
             topic = agent_attrs.get("topic") if agent_attrs else None
             memory_blocks = self._memory_blocks(agent_attrs)
             system_messages_block = self._system_messages_block(agent_attrs)
+            stress_block = _stress_prompt_block(agent_attrs)
 
             # DEBUG: Log if topic is unexpectedly missing
             # Note: null topic is EXPECTED when agent has no interests (per INTERESTS.md)
@@ -928,6 +942,8 @@ class VLLMService:
             )
             if system_messages_block:
                 user_msg += f"\n\n{system_messages_block}"
+            if stress_block:
+                user_msg += f"\n\n{stress_block}"
 
             # Log the prompt for debugging
             self._log_prompt("generate_post", system_msg, user_msg, agent_attrs)
@@ -1423,6 +1439,7 @@ class VLLMService:
         persona = self._build_persona(cluster_id, agent_attrs)
         memory_blocks = self._memory_blocks(agent_attrs)
         system_messages_block = self._system_messages_block(agent_attrs)
+        stress_block = _stress_prompt_block(agent_attrs)
 
         # Get toxicity level (default to "no" if not provided)
         toxicity = agent_attrs.get("toxicity", "no") if agent_attrs else "no"
@@ -1479,6 +1496,8 @@ class VLLMService:
             user_msg += opinion_instruction
         if system_messages_block:
             user_msg += f"\n\n{system_messages_block}"
+        if stress_block:
+            user_msg += f"\n\n{stress_block}"
         if memory_blocks["reply_context"]:
             user_msg += f"\n\nMemory context:\n{memory_blocks['reply_context']}"
         if memory_blocks["reply_cues"]:
