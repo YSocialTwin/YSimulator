@@ -230,12 +230,20 @@ def resolve_remote_batch_provider(
     """Resolve which remote API family supports batching for this endpoint."""
     logger = logger or logging.getLogger(__name__)
     api_format = str(llm_config.get("api_format", "auto")).strip().lower()
+    backend = str(llm_config.get("backend", "")).strip().lower()
 
     if api_format not in {"auto", "ollama", "openai"}:
         logger.warning(f"Unknown llm.api_format={api_format}; defaulting to auto")
         api_format = "auto"
 
-    probe_order = [api_format] if api_format != "auto" else ["openai", "ollama"]
+    if api_format != "auto":
+        probe_order = [api_format]
+    elif backend == "ollama":
+        # Avoid probing OpenAI-compatible /v1/completions first on Ollama
+        # endpoints, which produces a misleading 400 during normal startup.
+        probe_order = ["ollama", "openai"]
+    else:
+        probe_order = ["openai", "ollama"]
     for provider in probe_order:
         if provider == "openai" and _probe_openai_batch_support(llm_config, logger=logger):
             return "openai"
