@@ -452,9 +452,9 @@ class TestCheckFollowRelationship:
 
         mock_follow = Mock()
         mock_follow.action = "follow"
-        mock_session.query.return_value.filter_by.return_value.order_by.return_value.first.return_value = (
-            mock_follow
-        )
+        (
+            mock_session.query.return_value.outerjoin.return_value.filter_by.return_value.order_by.return_value.first.return_value
+        ) = mock_follow
 
         with tempfile.TemporaryDirectory() as tmpdir:
             db_config = {"type": "sqlite", "sqlite": {"filename": ":memory:"}}
@@ -478,9 +478,9 @@ class TestCheckFollowRelationship:
         # Mock the SQLAlchemy session and query to return None
         mock_session = Mock()
         mock_session_class.return_value.__enter__.return_value = mock_session
-        mock_session.query.return_value.filter_by.return_value.order_by.return_value.first.return_value = (
-            None
-        )
+        (
+            mock_session.query.return_value.outerjoin.return_value.filter_by.return_value.order_by.return_value.first.return_value
+        ) = None
 
         with tempfile.TemporaryDirectory() as tmpdir:
             db_config = {"type": "sqlite", "sqlite": {"filename": ":memory:"}}

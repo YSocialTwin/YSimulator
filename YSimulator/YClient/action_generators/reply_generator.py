@@ -190,6 +190,9 @@ class ReplyGenerator(BaseActionGenerator):
                 )
                 # Annotate rule-based comment
                 self.context.annotate_action_fn(action)
+                updated_opinions = self._calculate_opinion_updates(agent.id, post_id, post_data)
+                if updated_opinions:
+                    action.updated_opinions = updated_opinions
                 result.actions.append(action)
                 self.context.logger.info(
                     f"[REPLY] Rule-based reply created: '{action.content}' for agent {agent.username}"

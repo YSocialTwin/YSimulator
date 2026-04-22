@@ -125,6 +125,23 @@ class SecondaryFollowProcessor:
                         ActionDTO(agent_id, cluster_id, "UNFOLLOW", target_user_id=author_id)
                     )
 
+        if pending_secondary_follow_llm:
+            futures = [item[4] for item in pending_secondary_follow_llm]
+            results = ray.get(futures)
+            for idx, decision in enumerate(results):
+                agent_id, cluster_id, author_id, is_following, _ = pending_secondary_follow_llm[
+                    idx
+                ]
+                normalized_decision = str(decision or "").strip().lower()
+                if normalized_decision == "follow" and not is_following:
+                    actions.append(
+                        ActionDTO(agent_id, cluster_id, "FOLLOW", target_user_id=author_id)
+                    )
+                elif normalized_decision == "unfollow" and is_following:
+                    actions.append(
+                        ActionDTO(agent_id, cluster_id, "UNFOLLOW", target_user_id=author_id)
+                    )
+
     def process_reciprocal_follows(self, actions: List[ActionDTO], agent_profiles: list) -> None:
         """
         Process reciprocal follow/unfollow events triggered by explicit FOLLOW/UNFOLLOW actions.

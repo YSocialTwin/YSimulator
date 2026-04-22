@@ -30,6 +30,7 @@ def handle_reply_to_mention(
     logger: logging.Logger,
     extract_agent_attrs_func,
     annotate_action_content_func,
+    calculate_opinion_updates_func=None,
 ) -> Optional[str]:
     """
     Handle reply to mention for an agent.
@@ -50,6 +51,7 @@ def handle_reply_to_mention(
         logger: Logger instance
         extract_agent_attrs_func: Function to extract agent attributes
         annotate_action_content_func: Function to annotate action content
+        calculate_opinion_updates_func: Optional function to calculate opinion updates
 
     Returns:
         str or None: mention_id if a reply was generated, None otherwise
@@ -154,6 +156,10 @@ def handle_reply_to_mention(
             )
             # Annotate rule-based comment
             annotate_action_content_func(action)
+            if calculate_opinion_updates_func is not None:
+                updated_opinions = calculate_opinion_updates_func(agent.id, post_id, post_data)
+                if updated_opinions:
+                    action.updated_opinions = updated_opinions
             actions.append(action)
             logger.info(
                 f"[REPLY] Rule-based reply created: '{action.content}' for agent {agent.username}"

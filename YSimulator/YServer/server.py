@@ -1296,17 +1296,23 @@ class OrchestratorServer:
             bool: True if follower follows user with action="follow", False otherwise
         """
         try:
+            from sqlalchemy import func
             from sqlalchemy.orm import Session
 
-            from YSimulator.YServer.classes.models import Follow
+            from YSimulator.YServer.classes.models import Follow, Round
 
             with Session(self.db.engine) as session:
                 # Check for active follow relationship
                 # Get the most recent follow action between these users
                 latest_follow = (
                     session.query(Follow)
+                    .outerjoin(Round, Follow.round == Round.id)
                     .filter_by(follower_id=follower_id, user_id=user_id)
-                    .order_by(Follow.round.desc())
+                    .order_by(
+                        func.coalesce(Round.day, -1).desc(),
+                        func.coalesce(Round.hour, -1).desc(),
+                        Follow.id.desc(),
+                    )
                     .first()
                 )
 

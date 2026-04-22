@@ -88,6 +88,43 @@ def test_process_reciprocal_follows_uses_llm_decision(monkeypatch):
     llm_manager.generate_reciprocal_follow_decision.assert_called_once()
 
 
+def test_process_secondary_follows_resolves_llm_follow_decision(monkeypatch):
+    monkeypatch.setattr(processor_module.random, "random", lambda: 0.0)
+
+    def _fake_ray_get(value):
+        if value == "follow-check":
+            return False
+        if value == ["llm-follow"]:
+            return ["follow"]
+        return value
+
+    monkeypatch.setattr(processor_module.ray, "get", _fake_ray_get)
+
+    llm_manager = MagicMock()
+    llm_manager.generate_secondary_follow_decision.return_value = "llm-follow"
+    server = _ServerStub(["follow-check"])
+    processor = SecondaryFollowProcessor(
+        server=server,
+        client_id="client-1",
+        logger=MagicMock(),
+        llm_manager=llm_manager,
+        probability_of_secondary_follow=1.0,
+        probability_of_follow_back=0.0,
+    )
+    actions = []
+
+    processor.process_secondary_follows(
+        secondary_follow_candidates=[("actor", 1, "target", "post text", True)],
+        rule_based_interactions=[],
+        actions=actions,
+    )
+
+    assert [(a.agent_id, a.action_type, a.target_user_id) for a in actions] == [
+        ("actor", "FOLLOW", "target")
+    ]
+    llm_manager.generate_secondary_follow_decision.assert_called_once()
+
+
 def test_secondary_follow_actions_are_also_eligible_for_reciprocal_follow(monkeypatch):
     monkeypatch.setattr(processor_module.random, "random", lambda: 0.0)
     monkeypatch.setattr(processor_module.random, "choice", lambda options: "follow")
