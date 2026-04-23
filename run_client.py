@@ -193,6 +193,12 @@ def resolve_client_namespace(config_dir: Path, sim_config: dict) -> str:
     return sim_config.get("namespace", "social_sim")
 
 
+def _llm_models_configured(sim_config: dict) -> bool:
+    llm_cfg = sim_config.get("llm") or {}
+    llm_v_cfg = sim_config.get("llm_v") or {}
+    return bool(llm_cfg.get("model") or llm_v_cfg.get("model"))
+
+
 if __name__ == "__main__":
     _configure_model_cache_env()
     # Parse command line arguments
@@ -437,7 +443,12 @@ if __name__ == "__main__":
     # Get actor name prefix (default: ysim_llm)
     actor_name_prefix = llm_config.get("actor_name_prefix", "ysim_llm")
 
-    if llm_backend == "vllm":
+    llm_service = None
+
+    if not _llm_models_configured(sim_config):
+        logger.info("No LLM models configured; running client without LLM actors")
+        print("--- No LLM model configured; skipping LLM actor startup ---")
+    elif llm_backend == "vllm":
         logger.info(f"Using vLLM backend with {num_llm_actors} actor(s) for LLM inference")
         reuse_msg = " (reusing existing if available)" if reuse_actors else ""
         print(
@@ -539,7 +550,7 @@ if __name__ == "__main__":
     resolved_service_backend = llm_config.get("_resolved_service_backend", llm_backend)
     resolved_pool_backend = llm_config.get("_resolved_pool_backend", llm_backend)
 
-    if resolved_service_backend != llm_backend:
+    if llm_service is not None and resolved_service_backend != llm_backend:
         logger.info(
             f"Upgraded non-vLLM backend to batch-capable service backend: {resolved_service_backend}"
         )
