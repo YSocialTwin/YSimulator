@@ -1347,6 +1347,17 @@ class OrchestratorServer:
         )
         return result
 
+    @log_server_request
+    def get_users_with_unreplied_mentions(
+        self, user_ids: List[str], client_id: str = None
+    ) -> List[str]:
+        """Return the subset of user_ids that have at least one unreplied mention."""
+        result = self.mention_service.get_users_with_unreplied_mentions(user_ids or [])
+        self.logger.debug(
+            f"[REPLY_SERVER] get_users_with_unreplied_mentions for {len(user_ids or [])} users: found {len(result)} matches"
+        )
+        return result
+
     def mark_mention_replied(self, mention_id: str) -> bool:
         """
         Mark a mention as replied by setting answered=1.

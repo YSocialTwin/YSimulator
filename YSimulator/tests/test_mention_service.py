@@ -137,3 +137,38 @@ def test_mention_service_falls_back_when_shadow_ban_table_missing(tmp_path: Path
     result = service.get_unreplied_mentions("target")
 
     assert result == mentions
+
+
+def test_mention_service_returns_users_with_unreplied_mentions(tmp_path: Path):
+    db_path = tmp_path / "mentions-users.db"
+    db_path.parent.mkdir(parents=True, exist_ok=True)
+    if db_path.exists():
+        db_path.unlink()
+    engine = create_engine(f"sqlite:///{db_path}")
+    with engine.begin() as conn:
+        conn.execute(text("CREATE TABLE rounds (id TEXT PRIMARY KEY, day INTEGER, hour INTEGER)"))
+        conn.execute(text("CREATE TABLE post (id TEXT PRIMARY KEY, user_id TEXT NOT NULL)"))
+        conn.execute(
+            text(
+                "CREATE TABLE mentions (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, post_id TEXT NOT NULL, round TEXT, answered INTEGER)"
+            )
+        )
+        conn.execute(text("INSERT INTO rounds (id, day, hour) VALUES ('r1', 1, 0)"))
+        conn.execute(text("INSERT INTO post (id, user_id) VALUES ('p1', 'author')"))
+        conn.execute(
+            text(
+                "INSERT INTO mentions (id, user_id, post_id, round, answered) VALUES "
+                "('m1', 'u1', 'p1', 'r1', 0),"
+                "('m2', 'u2', 'p1', 'r1', 1),"
+                "('m3', 'u3', 'p1', 'r1', 0)"
+            )
+        )
+
+    from YSimulator.YServer.repositories.sql_repository import SQLPostRepository
+
+    repo = SQLPostRepository(engine)
+    service = MentionService(post_repository=repo, engine=engine)
+
+    result = service.get_users_with_unreplied_mentions(["u1", "u2", "u3", "u4"])
+
+    assert set(result) == {"u1", "u3"}

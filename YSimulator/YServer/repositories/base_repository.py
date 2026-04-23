@@ -147,6 +147,10 @@ class PostRepository(BaseRepository):
         """Get unreplied mentions for a user."""
 
     @abstractmethod
+    def get_users_with_unreplied_mentions(self, user_ids: List[str]) -> List[str]:
+        """Return user IDs that currently have at least one unreplied mention."""
+
+    @abstractmethod
     def get_mention_by_id(self, mention_id: str) -> Optional[Dict[str, Any]]:
         """Get mention by ID."""
 

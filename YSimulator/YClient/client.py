@@ -704,12 +704,35 @@ class SimulationClient:
         for agent in active_agents:
             if getattr(agent, "left_on", None) is not None:
                 continue
-            self.refresh_stress_reward_state(str(agent.id), str(current_tid), force=True)
+            state = self.refresh_stress_reward_state(str(agent.id), str(current_tid), force=True)
             if self.stress_reward_system.churn_enabled() and self.evaluate_stress_reward_churn(
                 agent, str(current_tid)
             ):
                 self.logger.info(
                     f"Stress/reward churned agent {agent.username} ({agent.id}) at round {current_tid}"
+                )
+                continue
+            activity_effect = self.stress_reward_system.compute_activity_effect(
+                current_stress=state.get("stress", 0.0),
+                current_reward=state.get("reward", 0.0),
+            )
+            setattr(
+                agent,
+                "stress_reward_activity_multiplier",
+                float(activity_effect.get("action_multiplier", 1.0)),
+            )
+            skip_probability = self._stress_reward_clamp01(
+                activity_effect.get("skip_probability", 0.0)
+            )
+            if (
+                getattr(agent, "is_page", 0) != 1
+                and skip_probability > 0.0
+                and random.random() < skip_probability
+            ):
+                self.logger.info(
+                    f"Stress/reward suppressed activity for {agent.username} ({agent.id}) at round {current_tid}: "
+                    f"stress={state.get('stress', 0.0):.3f}, reward={state.get('reward', 0.0):.3f}, "
+                    f"skip_probability={skip_probability:.3f}"
                 )
                 continue
             filtered_agents.append(agent)

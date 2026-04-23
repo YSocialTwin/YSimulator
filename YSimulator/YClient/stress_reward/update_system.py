@@ -46,6 +46,14 @@ class StressRewardSystem:
             "min_probability": 0.0,
             "max_probability": 0.95,
         },
+        "activity_impact": {
+            "enabled": True,
+            "stress_weight": 1.1,
+            "reward_weight": 0.35,
+            "baseline_buffer": 0.10,
+            "min_action_multiplier": 0.15,
+            "max_skip_probability": 0.65,
+        },
         "events": {
             "reaction": {
                 "like": {"stress": -0.005, "reward": 0.03},
@@ -167,3 +175,25 @@ class StressRewardSystem:
         probability = max(float(churn_cfg.get("min_probability", 0.0)), probability)
         probability = min(float(churn_cfg.get("max_probability", 0.95)), probability)
         return self._clamp01(probability)
+
+    def compute_activity_effect(self, *, current_stress: float, current_reward: float) -> Dict[str, float]:
+        activity_cfg = self.config.get("activity_impact") or {}
+        if not bool(activity_cfg.get("enabled", True)):
+            return {"action_multiplier": 1.0, "skip_probability": 0.0}
+
+        stress = self._clamp01(current_stress)
+        reward = self._clamp01(current_reward)
+        burden = (
+            float(activity_cfg.get("stress_weight", 1.1)) * stress
+            - float(activity_cfg.get("reward_weight", 0.35)) * reward
+            - float(activity_cfg.get("baseline_buffer", 0.10))
+        )
+        burden = self._clamp01(burden)
+        min_action_multiplier = self._clamp01(activity_cfg.get("min_action_multiplier", 0.15))
+        max_skip_probability = self._clamp01(activity_cfg.get("max_skip_probability", 0.65))
+        action_multiplier = max(min_action_multiplier, 1.0 - burden)
+        skip_probability = min(max_skip_probability, max(0.0, burden * 0.85))
+        return {
+            "action_multiplier": float(action_multiplier),
+            "skip_probability": float(skip_probability),
+        }

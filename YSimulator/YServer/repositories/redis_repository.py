@@ -810,6 +810,23 @@ class RedisPostRepository(PostRepository):
             )
             return []
 
+    def get_users_with_unreplied_mentions(self, user_ids: List[str]) -> List[str]:
+        """Return user IDs that currently have at least one unreplied mention."""
+        if not user_ids:
+            return []
+        try:
+            matched_users = []
+            for user_id in user_ids:
+                if self.get_unreplied_mentions(user_id):
+                    matched_users.append(str(user_id))
+            return matched_users
+        except Exception as e:
+            self.logger.error(
+                f"Error getting users with unreplied mentions from Redis: {e}",
+                extra={"extra_data": {"error": str(e)}},
+            )
+            return []
+
     def get_mention_by_id(self, mention_id: str) -> Optional[Dict[str, Any]]:
         """Get mention by ID."""
         try:

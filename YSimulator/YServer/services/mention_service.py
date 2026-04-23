@@ -7,7 +7,8 @@ This service encapsulates all mention-related business operations.
 import logging
 from typing import Any, Dict, List
 
-from sqlalchemy import MetaData, Table, inspect, select
+from sqlalchemy import MetaData, Table, cast, inspect, select
+from sqlalchemy.types import Integer
 from sqlalchemy.orm import Session
 
 from YSimulator.YServer.repositories.base_repository import PostRepository
@@ -67,6 +68,25 @@ class MentionService:
             self.logger.error(f"Error getting unreplied mentions: {e}")
             return []
 
+    def get_users_with_unreplied_mentions(self, user_ids: List[str]) -> List[str]:
+        """Return the subset of user_ids that currently have unreplied mentions."""
+        if not user_ids:
+            return []
+        try:
+            if hasattr(self.post_repo, "get_users_with_unreplied_mentions"):
+                users = self.post_repo.get_users_with_unreplied_mentions(user_ids)
+                return [str(user_id) for user_id in users if user_id]
+
+            matched_users = []
+            for user_id in user_ids:
+                mentions = self.get_unreplied_mentions(user_id)
+                if mentions:
+                    matched_users.append(str(user_id))
+            return matched_users
+        except Exception as e:
+            self.logger.error(f"Error getting users with unreplied mentions: {e}")
+            return []
+
     def mark_mention_replied(self, post_id: str, mentioned_user_id: str) -> bool:
         """
         Mark a mention as replied.
@@ -102,23 +122,67 @@ class MentionService:
             rounds = Table("rounds", metadata, autoload_with=self.engine)
 
             with Session(self.engine) as session:
-                current_round_id = session.execute(
-                    select(rounds.c.id).order_by(rounds.c.id.desc()).limit(1)
-                ).scalar()
-                if current_round_id is None:
+                current_round = session.execute(
+                    select(rounds.c.id, rounds.c.day, rounds.c.hour)
+                    .order_by(rounds.c.day.desc(), rounds.c.hour.desc())
+                    .limit(1)
+                ).first()
+                if current_round is None:
                     return mentions
+                current_round_id = current_round[0]
 
-                active_banned_user_ids = {
-                    row[0]
-                    for row in session.execute(
-                        select(shadow_ban.c.uid)
-                        .where(shadow_ban.c.start_tid <= int(current_round_id))
-                        .where(
-                            (shadow_ban.c.duration.is_(None))
-                            | ((shadow_ban.c.start_tid + shadow_ban.c.duration) >= int(current_round_id))
-                        )
-                    ).all()
-                }
+                shadow_ban_columns = {column.name for column in shadow_ban.c}
+                active_banned_user_ids = set()
+                if "start_tid" in shadow_ban_columns:
+                    start_tid_type = getattr(shadow_ban.c.start_tid.type, "python_type", None)
+                    if start_tid_type is int:
+                        active_banned_user_ids = {
+                            row[0]
+                            for row in session.execute(
+                                select(shadow_ban.c.uid)
+                                .where(cast(shadow_ban.c.start_tid, Integer) <= int(current_round_id))
+                                .where(
+                                    (shadow_ban.c.duration.is_(None))
+                                    | (
+                                        cast(shadow_ban.c.start_tid, Integer) + shadow_ban.c.duration
+                                        >= int(current_round_id)
+                                    )
+                                )
+                            ).all()
+                        }
+                    else:
+                        start_rounds = rounds.alias("start_rounds")
+                        active_banned_user_ids = {
+                            row[0]
+                            for row in session.execute(
+                                select(shadow_ban.c.uid)
+                                .select_from(
+                                    shadow_ban.outerjoin(
+                                        start_rounds, start_rounds.c.id == shadow_ban.c.start_tid
+                                    )
+                                )
+                                .where(
+                                    (
+                                        (start_rounds.c.day < current_round.day)
+                                        | (
+                                            (start_rounds.c.day == current_round.day)
+                                            & (start_rounds.c.hour <= current_round.hour)
+                                        )
+                                    )
+                                    | (shadow_ban.c.start_tid == current_round_id)
+                                )
+                                .where(
+                                    (shadow_ban.c.duration.is_(None))
+                                    | (
+                                        (
+                                            ((start_rounds.c.day * 24) + start_rounds.c.hour)
+                                            + shadow_ban.c.duration
+                                        )
+                                        >= ((current_round.day * 24) + current_round.hour)
+                                    )
+                                )
+                            ).all()
+                        }
                 if not active_banned_user_ids:
                     return mentions
 

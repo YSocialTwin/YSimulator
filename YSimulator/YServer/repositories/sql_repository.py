@@ -1116,6 +1116,35 @@ class SQLPostRepository(PostRepository):
             )
             return []
 
+    def get_users_with_unreplied_mentions(self, user_ids: List[str]) -> List[str]:
+        """Return user IDs that have at least one unreplied mention."""
+        try:
+            from YSimulator.YServer.classes.models import Mention
+
+            if not user_ids:
+                return []
+
+            session = Session(self.engine)
+            try:
+                rows = (
+                    session.query(Mention.user_id)
+                    .filter(
+                        Mention.user_id.in_(list(user_ids)),
+                        Mention.answered == 0,
+                    )
+                    .distinct()
+                    .all()
+                )
+                return [str(row[0]) for row in rows if row and row[0] is not None]
+            finally:
+                session.close()
+        except Exception as e:
+            self.logger.error(
+                f"Error getting users with unreplied mentions: {e}",
+                extra={"extra_data": {"error": str(e)}},
+            )
+            return []
+
     def get_mention_by_id(self, mention_id: str) -> Optional[Dict[str, Any]]:
         """Get mention by ID."""
         try:

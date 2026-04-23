@@ -13,6 +13,7 @@ import logging
 from unittest.mock import MagicMock
 
 import pytest
+from unittest.mock import patch
 
 from YSimulator.YClient.classes.ray_models import AgentProfile
 from YSimulator.YClient.simulation import (
@@ -107,6 +108,40 @@ class TestAgentScheduler:
         scheduler._churned_agents_cache_valid = True
         scheduler.invalidate_churn_cache()
         assert scheduler._churned_agents_cache_valid is False
+
+    def test_select_active_agents_promotes_agents_with_pending_mentions(
+        self, sample_agents, mock_logger
+    ):
+        """Agents with pending mentions should be added even if not sampled by hourly activity."""
+        mock_server = MagicMock()
+        mock_server.get_users_with_unreplied_mentions.remote = MagicMock(
+            return_value=["agent_4"]
+        )
+
+        scheduler = AgentScheduler(
+            agent_profiles=sample_agents,
+            hourly_activity={12: 0.2},
+            activity_profiles={"Always On": list(range(24))},
+            archetypes_enabled=False,
+            archetype_distribution={},
+            churn_enabled=False,
+            server=mock_server,
+            logger=mock_logger,
+        )
+
+        with patch(
+            "YSimulator.YClient.simulation.agent_scheduler.ray.get",
+            side_effect=lambda value: value,
+        ), patch(
+            "YSimulator.YClient.simulation.agent_scheduler.random.sample",
+            return_value=[sample_agents[0]],
+        ):
+            regular_agents, page_agents = scheduler.select_active_agents(slot=12)
+
+        assert len(page_agents) == 0
+        active_ids = {agent.id for agent in regular_agents}
+        assert "agent_0" in active_ids
+        assert "agent_4" in active_ids
 
 
 class TestLifecycleManager:
@@ -218,6 +253,39 @@ class TestRoundExecutor:
         )
 
         assert executor.client_id == "test_client"
+
+    def test_execute_round_respects_stress_reward_activity_multiplier(self, sample_agents, mock_logger):
+        sample_agents[0].daily_activity_level = 4
+        setattr(sample_agents[0], "stress_reward_activity_multiplier", 0.25)
+
+        select_action = MagicMock(return_value=("post", "rule_based", None))
+        determine_agent_type = MagicMock(return_value="rule_based")
+        dispatch = MagicMock(return_value=([], [], {}))
+
+        executor = RoundExecutor(
+            agent_profiles=sample_agents,
+            server=MagicMock(),
+            client_id="test_client",
+            logger=mock_logger,
+            agent_downcast=False,
+            actions_likelihood={},
+            select_action_fn=select_action,
+            determine_agent_type_fn=determine_agent_type,
+            dispatch_action_with_generator_fn=dispatch,
+        )
+
+        actions, pending_posts, pending_reactions, pending_follows, rb = executor.execute_round(
+            active_agents=[sample_agents[0]],
+            recent_posts=[],
+            action_generator_factory=MagicMock(),
+        )
+
+        assert actions == []
+        assert pending_posts == []
+        assert pending_reactions == []
+        assert pending_follows == []
+        assert rb == []
+        assert select_action.call_count == 1
         assert len(executor.agent_profiles) == 5
 
 
