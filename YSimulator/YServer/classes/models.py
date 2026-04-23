@@ -159,6 +159,7 @@ class User_mgmt(Base):
     profession = Column(Text)
     activity_profile = Column(Text)
     archetype = Column(Text, default=None)
+    cover_image = Column(String(400), nullable=False, default="")
     last_active_day = Column(Integer)
 
     # Relationships

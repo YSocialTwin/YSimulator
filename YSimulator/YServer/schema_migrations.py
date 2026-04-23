@@ -122,6 +122,13 @@ def ensure_moderation_schema(engine) -> None:
     Agent_Custom_Feature.__table__.create(bind=engine, checkfirst=True)
     inspector = inspect(engine)
     table_names = set(inspector.get_table_names())
+    if "user_mgmt" in table_names:
+        user_columns = {column["name"] for column in inspector.get_columns("user_mgmt")}
+        if "cover_image" not in user_columns:
+            with engine.begin() as conn:
+                conn.execute(
+                    text("ALTER TABLE user_mgmt ADD COLUMN cover_image VARCHAR(400) DEFAULT ''")
+                )
     if "stress_reward" in table_names:
         stress_reward_columns = {
             column["name"] for column in inspector.get_columns("stress_reward")

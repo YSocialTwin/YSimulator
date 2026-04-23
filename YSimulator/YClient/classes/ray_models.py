@@ -45,6 +45,7 @@ class AgentProfile:
     profession: str = ""
     activity_profile: str = "Always On"
     archetype: Optional[str] = None
+    cover_image: str = ""
     # Page-specific field
     feed_url: Optional[str] = None  # RSS feed URL for page agents
     # Simulation-specific fields

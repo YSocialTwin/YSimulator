@@ -953,6 +953,7 @@ class OrchestratorServer:
                 "profession": agent_profile.profession,
                 "activity_profile": agent_profile.activity_profile,
                 "archetype": agent_profile.archetype,
+                "cover_image": getattr(agent_profile, "cover_image", "") or "",
                 "last_active_day": self.day,  # Initialize last_active_day to current day
             }
             users_data.append(user_data)

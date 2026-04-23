@@ -53,6 +53,7 @@ CREATE TABLE user_mgmt (
     profession           TEXT,
     activity_profile     TEXT,
     archetype            TEXT DEFAULT NULL,
+    cover_image          VARCHAR(400) NOT NULL DEFAULT '',
     last_active_day      INTEGER
 );
 
