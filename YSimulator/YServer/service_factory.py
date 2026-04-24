@@ -100,12 +100,15 @@ def create_database_engine(
     else:
         raise ValueError(f"Unsupported database type: {db_type}")
 
+    engine_kwargs = {
+        "pool_pre_ping": True,
+        "pool_recycle": 3600,
+    }
+    if db_type == "sqlite":
+        engine_kwargs["connect_args"] = {"timeout": 30}
+
     # Create engine with connection pooling
-    engine = create_engine(
-        connection_string,
-        pool_pre_ping=True,  # Verify connections before using
-        pool_recycle=3600,  # Recycle connections after 1 hour
-    )
+    engine = create_engine(connection_string, **engine_kwargs)
 
     # Create all tables if they don't exist
     try:

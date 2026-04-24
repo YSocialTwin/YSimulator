@@ -1085,6 +1085,34 @@ class RedisInterestRepository(InterestRepository):
             )
             return None
 
+    def list_interests(self) -> List[Dict[str, Any]]:
+        """Return all known interests/topics."""
+        try:
+            pattern = self._redis_key("interests", "*")
+            records = []
+            for key in self.redis_client.scan_iter(match=pattern):
+                key_str = key.decode() if isinstance(key, bytes) else key
+                if ":by_name:" in key_str:
+                    continue
+                data = self.redis_client.hgetall(key)
+                if not data:
+                    continue
+                normalized = {
+                    k.decode() if isinstance(k, bytes) else k: (
+                        v.decode() if isinstance(v, bytes) else v
+                    )
+                    for k, v in data.items()
+                }
+                if normalized.get("iid") and normalized.get("interest"):
+                    records.append(normalized)
+            return records
+        except Exception as e:
+            self.logger.error(
+                f"Error listing interests from Redis: {e}",
+                extra={"extra_data": {"error": str(e)}},
+            )
+            return []
+
     def add_user_interest(self, user_id: str, interest_id: str, round_id: str) -> bool:
         """Add a user interest."""
         try:

@@ -19,6 +19,7 @@ from typing import Any, Dict, List, Optional
 
 import ray
 from sqlalchemy import and_, func, or_
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
 from YSimulator.YClient.classes.ray_models import SimulationInstruction
@@ -869,6 +870,26 @@ class OrchestratorServer:
         """
         return self.article_service.get_article(article_id)
 
+    def select_page_article_for_sharing(
+        self,
+        website_id: str,
+        current_round_id: str,
+        feed_articles: List[Dict[str, Any]],
+        cooldown_slots: int = 24,
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Select an eligible article for a page agent to share.
+
+        The server owns the DB-backed cooldown policy so clients do not need to
+        inspect prior posts directly.
+        """
+        return self.article_service.select_page_article_for_sharing(
+            website_id=website_id,
+            current_round_id=current_round_id,
+            feed_articles=feed_articles,
+            cooldown_slots=cooldown_slots,
+        )
+
     def get_topic_id_by_name(self, topic_name: str) -> Optional[str]:
         """
         Get topic ID by topic name.
@@ -1308,7 +1329,7 @@ class OrchestratorServer:
                 latest_follow = (
                     session.query(Follow)
                     .outerjoin(Round, Follow.round == Round.id)
-                    .filter_by(follower_id=follower_id, user_id=user_id)
+                    .filter(Follow.follower_id == follower_id, Follow.user_id == user_id)
                     .order_by(
                         func.coalesce(Round.day, -1).desc(),
                         func.coalesce(Round.hour, -1).desc(),
@@ -2000,25 +2021,34 @@ class OrchestratorServer:
             return
 
         try:
-            from sqlalchemy.orm import Session
-
             # Format post IDs as pipe-separated string (original implementation format)
             post_ids_str = "|".join(post_ids)
             recommendation_id = str(uuid.uuid4())
 
             # Save to SQL database using SQLAlchemy ORM
-            session = Session(self.db.engine)
-            try:
-                recommendation = Recommendation(
-                    id=recommendation_id,
-                    user_id=agent_id,
-                    post_ids=post_ids_str,
-                    round=self.current_round_id,
-                )
-                session.add(recommendation)
-                session.commit()
-            finally:
-                session.close()
+            max_attempts = 4
+            for attempt in range(max_attempts):
+                session = Session(self.db.engine)
+                try:
+                    recommendation = Recommendation(
+                        id=recommendation_id,
+                        user_id=agent_id,
+                        post_ids=post_ids_str,
+                        round=self.current_round_id,
+                    )
+                    session.add(recommendation)
+                    session.commit()
+                    break
+                except OperationalError as e:
+                    session.rollback()
+                    if "database is locked" not in str(e).lower() or attempt == max_attempts - 1:
+                        raise
+                    time.sleep(0.15 * (attempt + 1))
+                except Exception:
+                    session.rollback()
+                    raise
+                finally:
+                    session.close()
 
             # Also save to Redis if enabled
             if self.use_redis:

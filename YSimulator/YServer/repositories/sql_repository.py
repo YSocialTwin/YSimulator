@@ -26,10 +26,12 @@ fixed as examples. Other write methods still need this fix applied.
 """
 
 import logging
+import time
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 from sqlalchemy import func
 from sqlalchemy.engine import Engine
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
 from YSimulator.YServer.classes.models import (
@@ -1178,29 +1180,36 @@ class SQLPostRepository(PostRepository):
         try:
             from YSimulator.YServer.classes.models import Mention
 
-            session = Session(self.engine)
-            try:
-                mention = (
-                    session.query(Mention)
-                    .filter(
-                        Mention.post_id == post_id,
-                        Mention.user_id
-                        == mentioned_user_id,  # Model uses user_id, not mentioned_user_id
+            max_attempts = 4
+            for attempt in range(max_attempts):
+                session = Session(self.engine)
+                try:
+                    mention = (
+                        session.query(Mention)
+                        .filter(
+                            Mention.post_id == post_id,
+                            Mention.user_id
+                            == mentioned_user_id,  # Model uses user_id, not mentioned_user_id
+                        )
+                        .first()
                     )
-                    .first()
-                )
 
-                if not mention:
-                    return False
+                    if not mention:
+                        return False
 
-                mention.answered = 1  # Model uses answered (0=unreplied, 1=replied)
-                session.commit()
-                return True
-            except Exception:
-                session.rollback()
-                raise
-            finally:
-                session.close()
+                    mention.answered = 1  # Model uses answered (0=unreplied, 1=replied)
+                    session.commit()
+                    return True
+                except OperationalError as e:
+                    session.rollback()
+                    if "database is locked" not in str(e).lower() or attempt == max_attempts - 1:
+                        raise
+                    time.sleep(0.15 * (attempt + 1))
+                except Exception:
+                    session.rollback()
+                    raise
+                finally:
+                    session.close()
         except Exception as e:
             self.logger.error(
                 f"Error marking mention replied: {e}", extra={"extra_data": {"error": str(e)}}
@@ -1435,6 +1444,21 @@ class SQLInterestRepository(InterestRepository):
                 f"Error getting topic name: {e}", extra={"extra_data": {"error": str(e)}}
             )
             return None
+
+    def list_interests(self) -> List[Dict[str, Any]]:
+        """Return all known interests/topics."""
+        try:
+            session = Session(self.engine)
+            try:
+                interests = session.query(Interest).all()
+                return [{"iid": interest.iid, "interest": interest.interest} for interest in interests]
+            finally:
+                session.close()
+        except Exception as e:
+            self.logger.error(
+                f"Error listing interests: {e}", extra={"extra_data": {"error": str(e)}}
+            )
+            return []
 
     def add_or_get_interests_batch(self, interest_names: List[str]) -> Dict[str, str]:
         """
@@ -2168,6 +2192,113 @@ class SQLArticleRepository(ArticleRepository):
                 f"Error getting article topics: {e}", extra={"extra_data": {"error": str(e)}}
             )
             return []
+
+    @staticmethod
+    def _round_slot_index(day: Any, hour: Any) -> Optional[int]:
+        try:
+            return int(day) * 24 + int(hour)
+        except Exception:
+            return None
+
+    def select_page_article_for_sharing(
+        self,
+        website_id: str,
+        current_round_id: str,
+        feed_articles: List[Dict[str, Any]],
+        cooldown_slots: int = 24,
+    ) -> Optional[Dict[str, Any]]:
+        """Select a feed or reusable article for a page according to cooldown rules."""
+        try:
+            session = Session(self.engine)
+            try:
+                current_round = session.query(Round).filter(Round.id == current_round_id).first()
+                if not current_round:
+                    return None
+
+                current_slot_index = self._round_slot_index(current_round.day, current_round.hour)
+                if current_slot_index is None:
+                    return None
+
+                posted_rows = (
+                    session.query(
+                        Article.id,
+                        Article.title,
+                        Article.summary,
+                        Article.website_id,
+                        Article.link,
+                        Round.day,
+                        Round.hour,
+                    )
+                    .join(Post, Post.news_id == Article.id)
+                    .join(Round, Round.id == Post.round)
+                    .filter(Article.website_id == website_id)
+                    .all()
+                )
+
+                last_share_by_link: Dict[str, Dict[str, Any]] = {}
+                for row in posted_rows:
+                    link = (row.link or "").strip()
+                    if not link:
+                        continue
+                    slot_index = self._round_slot_index(row.day, row.hour)
+                    if slot_index is None:
+                        continue
+                    existing = last_share_by_link.get(link)
+                    if existing is None or slot_index > existing["slot_index"]:
+                        last_share_by_link[link] = {
+                            "id": row.id,
+                            "title": row.title,
+                            "summary": row.summary,
+                            "website_id": row.website_id,
+                            "link": row.link,
+                            "slot_index": slot_index,
+                        }
+
+                fresh_feed_articles: List[Dict[str, Any]] = []
+                cooled_feed_articles: List[Dict[str, Any]] = []
+                for article in feed_articles or []:
+                    link = str(article.get("link") or "").strip()
+                    if not link:
+                        fresh_feed_articles.append(article)
+                        continue
+                    last_shared = last_share_by_link.get(link)
+                    if last_shared is None:
+                        fresh_feed_articles.append(article)
+                        continue
+                    if current_slot_index - last_shared["slot_index"] >= int(cooldown_slots):
+                        cooled_feed_articles.append(article)
+
+                if fresh_feed_articles:
+                    return fresh_feed_articles[0]
+
+                if cooled_feed_articles:
+                    return cooled_feed_articles[0]
+
+                reusable_articles = [
+                    row
+                    for row in last_share_by_link.values()
+                    if current_slot_index - row["slot_index"] >= int(cooldown_slots)
+                ]
+                if not reusable_articles:
+                    return None
+
+                reusable_articles.sort(key=lambda row: row["slot_index"])
+                selected = reusable_articles[0]
+                return {
+                    "title": selected.get("title"),
+                    "summary": selected.get("summary"),
+                    "website_id": selected.get("website_id"),
+                    "link": selected.get("link"),
+                    "image_urls": [],
+                }
+            finally:
+                session.close()
+        except Exception as e:
+            self.logger.error(
+                f"Error selecting page article for sharing: {e}",
+                extra={"extra_data": {"error": str(e), "website_id": website_id}},
+            )
+            return None
 
     def add_article_topic(self, article_id: str, topic_id: str) -> bool:
         """Add article topic association."""

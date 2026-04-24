@@ -11,7 +11,8 @@ from sqlalchemy.orm import Session
 
 from YSimulator.YClient.classes.ray_models import AgentProfile
 from YSimulator.YServer.classes.db_middleware import DatabaseMiddleware
-from YSimulator.YServer.classes.models import Round, User_mgmt, Website
+from YSimulator.YServer.classes.models import Article, Post, Round, User_mgmt, Website
+from YSimulator.YServer.repositories.sql_repository import SQLArticleRepository
 
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent))
@@ -206,6 +207,104 @@ class TestPageAgentIntegration(unittest.TestCase):
                 website = session.execute(stmt).scalar_one()
                 self.assertEqual(website.rss, page["feed"])
                 print(f"  {website.name}: {website.rss}")
+
+    def test_05_page_article_reuse_respects_24_slot_cooldown(self):
+        """Page article selection should prefer new feed items and only reuse old ones after cooldown."""
+        page_id = str(uuid.uuid4())
+        website_id = page_id
+
+        with Session(self.db.engine) as session:
+            session.add(
+                User_mgmt(
+                    id=page_id,
+                    username="cooldown_page",
+                    password="test123",
+                    is_page=1,
+                )
+            )
+            session.add(
+                Website(
+                    id=website_id,
+                    name="cooldown_page",
+                    rss="https://example.com/cooldown.xml",
+                    category="page",
+                )
+            )
+
+            old_round = Round(id=str(uuid.uuid4()), day=0, hour=0)
+            recent_round = Round(id=str(uuid.uuid4()), day=1, hour=18)
+            current_round = Round(id=str(uuid.uuid4()), day=2, hour=0)
+            old_round_id = old_round.id
+            recent_round_id = recent_round.id
+            current_round_id = current_round.id
+            session.add_all([old_round, recent_round, current_round])
+
+            old_article = Article(
+                id=str(uuid.uuid4()),
+                title="Old Article",
+                summary="Old summary",
+                website_id=website_id,
+                fetched_on=str(uuid.uuid4()),
+                link="https://example.com/old",
+            )
+            recent_article = Article(
+                id=str(uuid.uuid4()),
+                title="Recent Article",
+                summary="Recent summary",
+                website_id=website_id,
+                fetched_on=str(uuid.uuid4()),
+                link="https://example.com/recent",
+            )
+            session.add_all([old_article, recent_article])
+
+            session.add_all(
+                [
+                    Post(
+                        id=str(uuid.uuid4()),
+                        tweet="old share",
+                        user_id=page_id,
+                        comment_to="-1",
+                        thread_id=str(uuid.uuid4()),
+                        round=old_round_id,
+                        news_id=old_article.id,
+                        shared_from="-1",
+                    ),
+                    Post(
+                        id=str(uuid.uuid4()),
+                        tweet="recent share",
+                        user_id=page_id,
+                        comment_to="-1",
+                        thread_id=str(uuid.uuid4()),
+                        round=recent_round_id,
+                        news_id=recent_article.id,
+                        shared_from="-1",
+                    ),
+                ]
+            )
+            session.commit()
+
+        repo = SQLArticleRepository(self.db.engine)
+
+        selected = repo.select_page_article_for_sharing(
+            website_id=website_id,
+            current_round_id=current_round_id,
+            feed_articles=[
+                {"title": "Recent feed copy", "link": "https://example.com/recent"},
+            ],
+            cooldown_slots=24,
+        )
+        self.assertEqual(selected["link"], "https://example.com/old")
+
+        selected_new = repo.select_page_article_for_sharing(
+            website_id=website_id,
+            current_round_id=current_round_id,
+            feed_articles=[
+                {"title": "Brand New", "link": "https://example.com/new"},
+                {"title": "Recent feed copy", "link": "https://example.com/recent"},
+            ],
+            cooldown_slots=24,
+        )
+        self.assertEqual(selected_new["link"], "https://example.com/new")
 
 
 def run_tests():

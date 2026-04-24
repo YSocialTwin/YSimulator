@@ -187,6 +187,7 @@ class Simulator:
 
         slot_count = 0
         last_heartbeat_time = time.time()
+        completed_successfully = False
 
         # Track active agents per day for daily follow evaluation
         current_day = start_day
@@ -222,6 +223,7 @@ class Simulator:
                         f"[{self.client_id}] Completed {self.num_days} days "
                         f"(day {start_day} to {instruction.day - 1}). Total slots: {slot_count}"
                     )
+                    completed_successfully = True
                     break
 
                 # Process simulation round
@@ -292,15 +294,20 @@ class Simulator:
                 )
 
         finally:
-            # Notify server that this client has completed all activities
-            try:
-                ray.get(self.server.complete_client.remote(self.client_id))
-                self.logger.info("Notified server of completion")
-                self.logger.info(" Simulation complete. Server notified.")
-            except Exception as e:
-                self.logger.warning(
-                    f"Failed to notify server of completion: {e}",
-                    extra={"extra_data": {"error": str(e)}},
+            if completed_successfully:
+                # Notify server that this client has completed all planned activities
+                try:
+                    ray.get(self.server.complete_client.remote(self.client_id))
+                    self.logger.info("Notified server of completion")
+                    self.logger.info(" Simulation complete. Server notified.")
+                except Exception as e:
+                    self.logger.warning(
+                        f"Failed to notify server of completion: {e}",
+                        extra={"extra_data": {"error": str(e)}},
+                    )
+            else:
+                self.logger.error(
+                    "Client run exited before normal completion; server completion notification skipped"
                 )
 
     def _load_network_if_available(self):

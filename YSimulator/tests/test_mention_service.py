@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from sqlalchemy.exc import OperationalError
 from sqlalchemy import create_engine, text
 
 from YSimulator.YServer.services.mention_service import MentionService
@@ -172,3 +173,42 @@ def test_mention_service_returns_users_with_unreplied_mentions(tmp_path: Path):
     result = service.get_users_with_unreplied_mentions(["u1", "u2", "u3", "u4"])
 
     assert set(result) == {"u1", "u3"}
+
+
+def test_sql_post_repository_retries_mark_mention_replied_when_sqlite_is_locked(monkeypatch):
+    from YSimulator.YServer.repositories import sql_repository as sql_module
+
+    state = {"commits": 0}
+
+    class _MentionRecord:
+        answered = 0
+
+    class _FakeQuery:
+        def filter(self, *_args, **_kwargs):
+            return self
+
+        def first(self):
+            return _MentionRecord()
+
+    class _FakeSession:
+        def query(self, _model):
+            return _FakeQuery()
+
+        def commit(self):
+            state["commits"] += 1
+            if state["commits"] == 1:
+                raise OperationalError("UPDATE mentions", {}, Exception("database is locked"))
+
+        def rollback(self):
+            return None
+
+        def close(self):
+            return None
+
+    monkeypatch.setattr(sql_module, "Session", lambda _engine: _FakeSession())
+    monkeypatch.setattr(sql_module.time, "sleep", lambda _seconds: None)
+
+    repo = sql_module.SQLPostRepository(engine=object())
+
+    assert repo.mark_mention_replied("post-1", "user-1") is True
+    assert state["commits"] == 2

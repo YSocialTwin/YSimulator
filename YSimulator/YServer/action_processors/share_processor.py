@@ -94,7 +94,9 @@ class ShareProcessor(BaseActionProcessor):
                 )
 
             # Link original post topics to share (shares inherit topics from original)
-            original_topic_ids = self.services.post_service.get_post_topics(action.target_post_id)
+            original_topic_ids = self._resolve_inherited_topic_ids(
+                action.target_post_id, original_post
+            )
             if original_topic_ids:
                 topics_linked = 0
                 for topic_id in original_topic_ids:
@@ -144,6 +146,28 @@ class ShareProcessor(BaseActionProcessor):
             return ActionResult(
                 success=False, action_type="SHARE", agent_id=action.agent_id, error=str(e)
             )
+
+    def _resolve_inherited_topic_ids(self, post_id: str, post_data: Optional[dict]) -> list[str]:
+        """Resolve topics from the target post, then its upstream ancestors if needed."""
+        topic_ids = self.services.post_service.get_post_topics(post_id)
+        if topic_ids:
+            return topic_ids
+
+        candidate_ids = []
+        if post_data:
+            for field in ("shared_from", "comment_to", "thread_id"):
+                candidate = post_data.get(field)
+                if candidate and candidate not in candidate_ids and candidate != post_id:
+                    candidate_ids.append(candidate)
+
+        for candidate_id in candidate_ids:
+            upstream_topics = self.services.post_service.get_post_topics(candidate_id)
+            if upstream_topics:
+                self.logger.info(
+                    f"Using {len(upstream_topics)} upstream topics from {candidate_id} for share target {post_id}"
+                )
+                return upstream_topics
+        return []
 
     def _is_empty_or_default(self, value: Any) -> bool:
         """

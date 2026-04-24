@@ -10,6 +10,7 @@ from pathlib import Path
 from unittest.mock import Mock, patch
 
 import pytest
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
 # Mark all tests in this module to run in isolated execution group
@@ -174,6 +175,42 @@ class TestOrchestratorServerInit:
 
             # Note: With service layer, DatabaseMiddleware mock is bypassed
             # The server uses real repository implementations that generate UUIDs
+
+
+class TestRecommendationPersistence:
+    def test_save_recommendation_retries_when_sqlite_is_locked(self, monkeypatch):
+        from YSimulator.YServer import server as server_module
+
+        state = {"commits": 0}
+
+        class _FakeSession:
+            def add(self, _recommendation):
+                return None
+
+            def commit(self):
+                state["commits"] += 1
+                if state["commits"] == 1:
+                    raise OperationalError("INSERT INTO recommendations", {}, Exception("database is locked"))
+
+            def rollback(self):
+                return None
+
+            def close(self):
+                return None
+
+        monkeypatch.setattr(server_module, "Session", lambda _engine: _FakeSession())
+        monkeypatch.setattr(server_module.time, "sleep", lambda _seconds: None)
+
+        server = Mock()
+        server.db = Mock(engine=object())
+        server.current_round_id = "round-1"
+        server.use_redis = False
+        server.logger = Mock()
+
+        server_module.OrchestratorServer._save_recommendation(server, "agent-1", ["post-1", "post-2"])
+
+        assert state["commits"] == 2
+        server.logger.error.assert_not_called()
 
     @patch("YSimulator.YServer.server.InterestManager")
     @patch("redis.Redis")
@@ -453,7 +490,7 @@ class TestCheckFollowRelationship:
         mock_follow = Mock()
         mock_follow.action = "follow"
         (
-            mock_session.query.return_value.outerjoin.return_value.filter_by.return_value.order_by.return_value.first.return_value
+            mock_session.query.return_value.outerjoin.return_value.filter.return_value.order_by.return_value.first.return_value
         ) = mock_follow
 
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -479,7 +516,7 @@ class TestCheckFollowRelationship:
         mock_session = Mock()
         mock_session_class.return_value.__enter__.return_value = mock_session
         (
-            mock_session.query.return_value.outerjoin.return_value.filter_by.return_value.order_by.return_value.first.return_value
+            mock_session.query.return_value.outerjoin.return_value.filter.return_value.order_by.return_value.first.return_value
         ) = None
 
         with tempfile.TemporaryDirectory() as tmpdir:

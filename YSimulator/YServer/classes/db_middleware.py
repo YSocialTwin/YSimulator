@@ -128,7 +128,10 @@ class DatabaseMiddleware:
         connection_string = self._build_connection_string(db_config)
 
         # Initialize SQL database backend
-        self.engine = create_engine(connection_string)
+        engine_kwargs = {}
+        if self.db_type == "sqlite":
+            engine_kwargs["connect_args"] = {"timeout": 30}
+        self.engine = create_engine(connection_string, **engine_kwargs)
         Base.metadata.create_all(self.engine)
         ensure_moderation_schema(self.engine)
 

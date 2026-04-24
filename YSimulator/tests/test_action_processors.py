@@ -49,6 +49,12 @@ def mock_services():
     services.interest_service = Mock()
     services.interest_service.get_topic_name_from_id = Mock(return_value="Politics")
     services.interest_service.add_or_get_interest = Mock(return_value="topic_1")
+    services.interest_service.list_interests = Mock(
+        return_value=[
+            {"iid": "topic_1", "interest": "space travel"},
+            {"iid": "topic_2", "interest": "war"},
+        ]
+    )
     services.interest_service.add_user_interest = Mock(return_value=True)
     services.interest_service.add_agent_opinion = Mock(return_value=True)
 
@@ -127,6 +133,23 @@ class TestPostProcessor:
         # Verify add_or_get_interest was called with the topic
         mock_services.interest_service.add_or_get_interest.assert_called_with("Technology")
 
+    def test_process_image_post_infers_topics_from_text(self, mock_services, action_context, mock_action):
+        processor = PostProcessor(mock_services)
+        mock_action.image_id = "img_1"
+        mock_action.article_id = None
+        mock_action.topic = None
+        mock_action.content = "A hopeful note about space travel and the future."
+        if hasattr(mock_action, "topic_ids"):
+            delattr(mock_action, "topic_ids")
+
+        result = processor.process(mock_action, action_context)
+
+        assert result.success is True
+        mock_services.post_service.add_post_topic.assert_called_with("post_123", "topic_1")
+        mock_services._ensure_agent_opinion_exists.assert_called_with(
+            "agent_1", "topic_1", "space travel", article_content=None
+        )
+
 
 class TestCommentProcessor:
     """Test CommentProcessor."""
@@ -189,6 +212,24 @@ class TestShareProcessor:
 
         assert result.success is False
         assert "Original post not found" in result.error
+
+    def test_share_uses_upstream_topics_when_target_has_none(self, mock_services, action_context, mock_action):
+        processor = ShareProcessor(mock_services)
+        mock_action.action_type = "SHARE"
+        mock_action.target_post_id = "post_1"
+        mock_action.content = "Sharing this post"
+        mock_action.updated_opinions = None
+        mock_services.post_service.get_post.return_value = {
+            "user_id": "user_1",
+            "thread_id": "thread_1",
+            "shared_from": "root_1",
+        }
+        mock_services.post_service.get_post_topics.side_effect = [[], ["topic_root"]]
+
+        result = processor.process(mock_action, action_context)
+
+        assert result.success is True
+        mock_services.post_service.add_post_topic.assert_called_with("post_123", "topic_root")
 
 
 class TestFollowProcessor:

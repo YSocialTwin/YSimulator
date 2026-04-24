@@ -83,7 +83,10 @@ class ShareLinkGenerator(BaseActionGenerator):
             self.context.logger.info(
                 f"Page {agent.username} fetching article from {agent.feed_url[:50]}"
             )
-            article_future = self.context.news_service.get_article_from_feed.remote(agent.feed_url)
+            article_future = self.context.news_service.get_article_from_feed.remote(
+                agent.feed_url,
+                self.context.round_id,
+            )
             article = ray.get(article_future)
 
             if not article:

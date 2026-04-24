@@ -376,10 +376,28 @@ class BatchProcessor:
             batchable_posts: List of tuples with format (agent_id, cluster_id, future, topic, day, slot, agent_attrs)
             actions: List to append resolved post actions to
         """
+        def unpack_post_item(item: Tuple):
+            if len(item) < 7:
+                raise ValueError(
+                    f"Expected at least 7 fields in vLLM post item, got {len(item)}: {item!r}"
+                )
+            agent_id, cluster_id, future, topic, item_day, item_slot, agent_attrs, *extra = item
+            image_id = extra[0] if extra else None
+            return agent_id, cluster_id, future, topic, item_day, item_slot, agent_attrs, image_id
+
         # Build batch requests
         batch_requests = []
         for item in batchable_posts:
-            agent_id, cluster_id, future, topic, item_day, item_slot, agent_attrs = item
+            (
+                agent_id,
+                cluster_id,
+                future,
+                topic,
+                item_day,
+                item_slot,
+                agent_attrs,
+                _image_id,
+            ) = unpack_post_item(item)
 
             # Check if article content is already in agent_attrs (optimization to avoid DB fetch)
             article_content = None
@@ -468,9 +486,16 @@ class BatchProcessor:
 
         for i, res_txt in enumerate(results):
             pending_item = batchable_posts[i]
-            agent_id = pending_item[0]
-            cluster_id = pending_item[1]
-            topic = pending_item[3]  # topic_or_article_id
+            (
+                agent_id,
+                cluster_id,
+                _future,
+                topic,
+                _item_day,
+                _item_slot,
+                _agent_attrs,
+                image_id,
+            ) = unpack_post_item(pending_item)
 
             # Validate response
             res_txt = self.response_parser.parse_text_response(res_txt, default="")
@@ -487,6 +512,8 @@ class BatchProcessor:
 
             # Create action (same logic as standard gather)
             action = ActionDTO(agent_id, cluster_id, "POST", content=res_txt)
+            if image_id:
+                action.image_id = image_id
 
             # Handle topic/article assignment
             if topic:

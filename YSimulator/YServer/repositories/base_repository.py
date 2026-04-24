@@ -191,6 +191,10 @@ class InterestRepository(BaseRepository):
         """Get topic name from ID."""
 
     @abstractmethod
+    def list_interests(self) -> List[Dict[str, Any]]:
+        """Return all known interests/topics."""
+
+    @abstractmethod
     def add_user_interest(self, user_id: str, interest_id: str, round_id: str) -> bool:
         """Add a user interest."""
 
@@ -253,6 +257,16 @@ class ArticleRepository(BaseRepository):
     @abstractmethod
     def get_article_topics(self, article_id: str) -> List[str]:
         """Get topics associated with an article."""
+
+    @abstractmethod
+    def select_page_article_for_sharing(
+        self,
+        website_id: str,
+        current_round_id: str,
+        feed_articles: List[Dict[str, Any]],
+        cooldown_slots: int = 24,
+    ) -> Optional[Dict[str, Any]]:
+        """Select a feed or reusable article for a page according to cooldown rules."""
 
 
 class ImageRepository(BaseRepository):
