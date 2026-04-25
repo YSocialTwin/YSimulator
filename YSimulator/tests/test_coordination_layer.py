@@ -215,6 +215,25 @@ class TestRoundManager:
         assert round_manager.slot == 1
         mock_db.get_or_create_round.assert_called_once()
 
+    def test_initialize_from_persisted_state_restores_latest_round(
+        self, round_manager, mock_db, mock_interest_manager
+    ):
+        """Server restart should resume from the latest persisted round."""
+        mock_db.get_latest_round.return_value = {
+            "id": "round_15_7",
+            "day": 15,
+            "hour": 7,
+        }
+
+        round_id = round_manager.initialize_from_persisted_state()
+
+        assert round_id == "round_15_7"
+        assert round_manager.current_round_id == "round_15_7"
+        assert round_manager.day == 15
+        assert round_manager.slot == 7
+        mock_interest_manager.set_current_round.assert_called_once_with("round_15_7")
+        mock_db.get_or_create_round.assert_not_called()
+
     def test_advance_simulation_to_next_slot(self, round_manager, mock_db):
         """Test advancing to the next slot within the same day."""
         round_manager.day = 1

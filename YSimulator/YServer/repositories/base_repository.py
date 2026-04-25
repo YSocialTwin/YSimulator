@@ -223,6 +223,10 @@ class RecommendationRepository(BaseRepository):
         """Get or create a round ID."""
 
     @abstractmethod
+    def get_latest_round(self) -> Optional[Dict[str, Any]]:
+        """Return the most advanced persisted round, if any."""
+
+    @abstractmethod
     def cleanup_old_posts_from_redis(self, current_day: int, current_slot: int) -> Dict[str, int]:
         """Cleanup old posts (Redis only)."""
 

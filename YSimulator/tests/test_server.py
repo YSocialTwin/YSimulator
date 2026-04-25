@@ -30,6 +30,16 @@ def mock_ray_remote_for_server_tests():
     # Replace with identity function
     ray.remote = lambda x: x
 
+    # Normalize the already-imported server module if another test imported it first.
+    try:
+        import YSimulator.YServer.server as server_module
+
+        orchestrator = getattr(server_module, "OrchestratorServer", None)
+        if hasattr(orchestrator, "__ray_actor_class__"):
+            server_module.OrchestratorServer = orchestrator.__ray_actor_class__
+    except Exception:
+        pass
+
     yield
 
     # Restore original

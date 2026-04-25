@@ -1912,6 +1912,28 @@ class SQLRecommendationRepository(RecommendationRepository):
             )
             raise RuntimeError(f"Failed to get or create round for day={day}, hour={hour}: {e}")
 
+    def get_latest_round(self) -> Optional[Dict[str, Any]]:
+        """Return the most advanced persisted round, if any."""
+        try:
+            session = Session(self.engine)
+            try:
+                latest = (
+                    session.query(Round)
+                    .order_by(Round.day.desc(), Round.hour.desc())
+                    .first()
+                )
+                if latest is None:
+                    return None
+                return {"id": latest.id, "day": latest.day, "hour": latest.hour}
+            finally:
+                session.close()
+        except Exception as e:
+            self.logger.error(
+                f"Error retrieving latest round: {e}",
+                extra={"extra_data": {"error": str(e)}},
+            )
+            return None
+
     def get_round_info(self, round_id: str) -> Optional[Dict[str, int]]:
         """
         Get round information (day and hour) for a given round ID.

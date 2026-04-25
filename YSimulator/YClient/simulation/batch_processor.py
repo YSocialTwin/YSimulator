@@ -40,6 +40,7 @@ PROMPT_TOKENS_POST = 100  # Estimated prompt tokens for post generation
 PROMPT_TOKENS_COMMENT = 120  # Estimated prompt tokens for comment/reaction generation
 PROMPT_TOKENS_FOLLOW = 60  # Estimated prompt tokens for follow decision
 REACTION_OUTPUT_TOKENS = 5  # Simple reaction outputs (LIKE, LOVE, etc.)
+LLM_BATCH_TIMEOUT_SECONDS = 45.0
 
 
 class BatchProcessor:
@@ -119,6 +120,22 @@ class BatchProcessor:
             return self.llm.get_actor_for_agent(agent_id)
         # Direct actor handle (including Ray actors)
         return self.llm
+
+    def _resolve_batch_future(self, batch_future, error_message: str):
+        """Resolve a batched Ray future with a bounded wait."""
+        batch_results = self.retry_handler.retry_with_backoff(
+            lambda f: self.batch_handler.gather_with_timeout(
+                [f], timeout=LLM_BATCH_TIMEOUT_SECONDS
+            ),
+            batch_future,
+            error_message=error_message,
+        )
+        result = batch_results[0] if batch_results else None
+        if result is None:
+            raise TimeoutError(
+                f"{error_message} timed out after {LLM_BATCH_TIMEOUT_SECONDS:.0f}s"
+            )
+        return result
 
     def _is_vllm_backend(self) -> bool:
         """
@@ -471,9 +488,7 @@ class BatchProcessor:
         self.logger.info(f"Calling generate_post_batch for {len(batch_requests)} requests")
         try:
             batch_future = llm_actor.generate_post_batch.remote(batch_requests)
-            results = self.retry_handler.retry_with_backoff(
-                lambda f: ray.get(f), batch_future, error_message="vLLM batch post generation"
-            )
+            results = self._resolve_batch_future(batch_future, "vLLM batch post generation")
         except Exception as e:
             self.logger.error(f"vLLM batch generation failed: {e}, falling back to standard gather")
             self._gather_posts_standard(batchable_posts, actions)
@@ -1005,9 +1020,7 @@ class BatchProcessor:
         self.logger.info(f"Calling generate_comment_batch for {len(batch_requests)} requests")
         try:
             batch_future = llm_actor.generate_comment_batch.remote(batch_requests)
-            results = self.retry_handler.retry_with_backoff(
-                lambda f: ray.get(f), batch_future, error_message="vLLM batch comment generation"
-            )
+            results = self._resolve_batch_future(batch_future, "vLLM batch comment generation")
         except Exception as e:
             self.logger.error(
                 f"vLLM batch comment generation failed: {e}, falling back to standard gather"
@@ -1164,10 +1177,8 @@ class BatchProcessor:
         self.logger.info(f"Calling generate_comment_batch for {len(batch_requests)} share requests")
         try:
             batch_future = llm_actor.generate_comment_batch.remote(batch_requests)
-            results = self.retry_handler.retry_with_backoff(
-                lambda f: ray.get(f),
-                batch_future,
-                error_message="vLLM batch share commentary generation",
+            results = self._resolve_batch_future(
+                batch_future, "vLLM batch share commentary generation"
             )
         except Exception as e:
             self.logger.error(
@@ -1315,10 +1326,8 @@ class BatchProcessor:
         )
         try:
             batch_future = llm_actor.generate_read_reaction_batch.remote(batch_requests)
-            results = self.retry_handler.retry_with_backoff(
-                lambda f: ray.get(f),
-                batch_future,
-                error_message="vLLM batch read reaction generation",
+            results = self._resolve_batch_future(
+                batch_future, "vLLM batch read reaction generation"
             )
         except Exception as e:
             self.logger.error(
@@ -1502,10 +1511,9 @@ class BatchProcessor:
                         f"Batch extracting emotions for {len(texts_for_emotions)} read comment texts"
                     )
                     batch_future = llm_actor.extract_emotions_batch.remote(texts_for_emotions)
-                    results = self.retry_handler.retry_with_backoff(
-                        lambda f: ray.get(f),
+                    results = self._resolve_batch_future(
                         batch_future,
-                        error_message="vLLM batch emotion extraction for read comments",
+                        "vLLM batch emotion extraction for read comments",
                     )
                     # Update actions with extracted emotions
                     for i, emotions in enumerate(results):
@@ -1584,10 +1592,8 @@ class BatchProcessor:
         )
         try:
             batch_future = llm_actor.generate_search_action_batch.remote(batch_requests)
-            results = self.retry_handler.retry_with_backoff(
-                lambda f: ray.get(f),
-                batch_future,
-                error_message="vLLM batch search action decision",
+            results = self._resolve_batch_future(
+                batch_future, "vLLM batch search action decision"
             )
         except Exception as e:
             self.logger.error(
@@ -1841,10 +1847,8 @@ class BatchProcessor:
 
                 # Call batch emotion extraction
                 batch_future = llm_actor.extract_emotions_batch.remote(texts)
-                results = self.retry_handler.retry_with_backoff(
-                    lambda f: ray.get(f),
-                    batch_future,
-                    error_message="vLLM batch emotion extraction",
+                results = self._resolve_batch_future(
+                    batch_future, "vLLM batch emotion extraction"
                 )
 
                 self.logger.info(f"Successfully batch extracted emotions for {len(results)} texts")
@@ -2040,10 +2044,8 @@ class BatchProcessor:
                 f"Batch evaluating {len(batch_requests)} LLM opinion interactions with vLLM"
             )
             batch_future = llm_actor.evaluate_opinion_batch.remote(batch_requests)
-            responses = self.retry_handler.retry_with_backoff(
-                lambda f: ray.get(f),
-                batch_future,
-                error_message="vLLM batch opinion evaluation",
+            responses = self._resolve_batch_future(
+                batch_future, "vLLM batch opinion evaluation"
             )
 
             for i, response in enumerate(responses):

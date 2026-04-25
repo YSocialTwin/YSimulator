@@ -95,6 +95,7 @@ def test_batch_opinion_updates_uses_vllm_batch(monkeypatch):
         perspective_api_key=None,
         logger=Mock(),
     )
+    processor.batch_handler.gather_with_timeout = Mock(return_value=[["AGREE"]])
 
     actions = [SimpleNamespace(updated_opinions=None)]
     opinion_requests = [
@@ -171,6 +172,7 @@ def test_process_vllm_batch_accepts_image_post_tuple(monkeypatch):
         perspective_api_key=None,
         logger=Mock(),
     )
+    processor.batch_handler.gather_with_timeout = Mock(return_value=[["caption text"]])
 
     actions = []
     processor._process_vllm_batch(
@@ -193,3 +195,43 @@ def test_process_vllm_batch_accepts_image_post_tuple(monkeypatch):
     assert actions[0].action_type == "POST"
     assert actions[0].image_id == "image-77"
     assert actions[0].content == "caption text"
+
+
+def test_process_vllm_batch_falls_back_when_batch_call_times_out(monkeypatch):
+    monkeypatch.setattr("YSimulator.YClient.simulation.batch_processor.ray.get", lambda x: x)
+
+    processor = BatchProcessor(
+        server=Mock(),
+        client_id="client-1",
+        llm=_FakeVLLMActor(["unused"]),
+        enable_sentiment=False,
+        enable_toxicity=False,
+        enable_emotions=False,
+        perspective_api_key=None,
+        logger=Mock(),
+    )
+
+    fallback_called = {"value": False}
+
+    def _fake_standard_gather(pending_posts, actions):
+        fallback_called["value"] = True
+
+    processor._gather_posts_standard = _fake_standard_gather
+    processor.batch_handler.gather_with_timeout = Mock(return_value=[None])
+
+    processor._process_vllm_batch(
+        [
+            (
+                "agent-1",
+                3,
+                "future-1",
+                None,
+                1,
+                2,
+                {"name": "Agent One"},
+            )
+        ],
+        [],
+    )
+
+    assert fallback_called["value"] is True

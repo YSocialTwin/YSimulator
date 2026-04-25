@@ -372,8 +372,8 @@ class OrchestratorServer:
             "Coordination layer initialized (ClientManager, BarrierHandler, RoundManager, ArchetypeManager)"
         )
 
-        # Initialize first round using RoundManager (no need to store, accessed via property)
-        self.round_manager.initialize_first_round()
+        # Restore the latest persisted round when restarting an existing simulation.
+        self.round_manager.initialize_from_persisted_state()
 
         # Expose properties for backward compatibility
         self.registered_clients = self.client_manager.registered_clients
