@@ -9,6 +9,7 @@ from sqlalchemy import (
     Boolean,
     CheckConstraint,
     Column,
+    DateTime,
     Float,
     ForeignKey,
     Index,
@@ -16,6 +17,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    func,
 )
 from sqlalchemy.orm import declarative_base, relationship
 
@@ -204,6 +206,129 @@ class User_mgmt(Base):
         back_populates="reporter_user",
         cascade="all, delete-orphan",
     )
+
+
+# ================================================
+# RUN-SCOPED AGENT MEMORY
+# ================================================
+
+
+class MemoryInteractionEvent(Base):
+    """Run-scoped memory event recorded by clients and persisted by the server."""
+
+    __tablename__ = "memory_interaction_events"
+
+    id = Column(Integer, primary_key=True)
+    run_id = Column(String(128), nullable=False, index=True)
+    round_id = Column(Integer, nullable=False, index=True)
+    actor_user_id = Column(String(36), nullable=False, index=True)
+    target_user_id = Column(String(36), nullable=True, index=True)
+    thread_root_id = Column(String(36), nullable=True, index=True)
+    target_post_id = Column(String(36), nullable=True, index=True)
+    actor_post_id = Column(String(36), nullable=True, index=True)
+    event_type = Column(String(32), nullable=False, index=True)
+    relation_label = Column(String(32), nullable=True)
+    tone_label = Column(String(32), nullable=True)
+    topics_json = Column(Text, nullable=True)
+    salient_claim = Column(String(300), nullable=True)
+    event_text = Column(Text, nullable=True)
+    weight = Column(Float, default=1.0)
+    importance = Column(Float, default=0.0, index=True)
+    last_accessed_round = Column(Integer, nullable=True, index=True)
+    access_count = Column(Integer, default=0)
+    created_at = Column(DateTime, server_default=func.now())
+
+
+class MemorySocialCard(Base):
+    """Per-agent relationship summary for another user."""
+
+    __tablename__ = "memory_social_cards"
+    __table_args__ = (
+        UniqueConstraint(
+            "run_id", "agent_user_id", "other_user_id", name="uq_memory_social_card"
+        ),
+    )
+
+    id = Column(Integer, primary_key=True)
+    run_id = Column(String(128), nullable=False, index=True)
+    agent_user_id = Column(String(36), nullable=False, index=True)
+    other_user_id = Column(String(36), nullable=False, index=True)
+    affinity = Column(Float, default=0.0)
+    conflict = Column(Float, default=0.0)
+    humor = Column(Float, default=0.0)
+    trust = Column(Float, default=0.0)
+    last_relation_label = Column(String(32), nullable=True)
+    last_round_id = Column(Integer, nullable=True, index=True)
+    last_thread_root_id = Column(String(36), nullable=True, index=True)
+    last_updated_round = Column(Integer, nullable=True, index=True)
+    event_count = Column(Integer, default=0)
+    summary_text = Column(Text, nullable=True)
+    evidence_tail_json = Column(Text, nullable=True)
+
+
+class MemoryThreadCard(Base):
+    """Per-agent thread summary."""
+
+    __tablename__ = "memory_thread_cards"
+    __table_args__ = (
+        UniqueConstraint(
+            "run_id", "agent_user_id", "thread_root_id", name="uq_memory_thread_card"
+        ),
+    )
+
+    id = Column(Integer, primary_key=True)
+    run_id = Column(String(128), nullable=False, index=True)
+    agent_user_id = Column(String(36), nullable=False, index=True)
+    thread_root_id = Column(String(36), nullable=False, index=True)
+    gist_text = Column(Text, nullable=True)
+    my_role = Column(String(32), nullable=True)
+    participants_top_json = Column(Text, nullable=True)
+    entry_points_json = Column(Text, nullable=True)
+    last_seen_round_id = Column(Integer, nullable=True, index=True)
+
+
+class MemoryCommunityDigest(Base):
+    """Run-level community digest."""
+
+    __tablename__ = "memory_community_digests"
+    __table_args__ = (UniqueConstraint("run_id", name="uq_memory_community_digest"),)
+
+    id = Column(Integer, primary_key=True)
+    run_id = Column(String(128), nullable=False, index=True)
+    round_id = Column(Integer, nullable=True, index=True)
+    digest_text = Column(Text, nullable=True)
+    top_topics_json = Column(Text, nullable=True)
+    norms_json = Column(Text, nullable=True)
+    memes_json = Column(Text, nullable=True)
+    polarizing_issues_json = Column(Text, nullable=True)
+
+
+class MemoryItem(Base):
+    """Searchable memory item persisted by the server."""
+
+    __tablename__ = "memory_items"
+
+    id = Column(Integer, primary_key=True)
+    run_id = Column(String(128), nullable=False, index=True)
+    agent_user_id = Column(String(36), nullable=False, index=True)
+    item_type = Column(String(32), nullable=False, index=True)
+    text = Column(Text, nullable=False)
+    metadata_json = Column(Text, nullable=True)
+    source_event_id = Column(Integer, nullable=True, index=True)
+    thread_root_id = Column(String(36), nullable=True, index=True)
+    other_user_id = Column(String(36), nullable=True, index=True)
+    topic_tags_json = Column(Text, nullable=True)
+    round_id = Column(Integer, nullable=True, index=True)
+    importance = Column(Float, default=0.0, index=True)
+    recency_anchor_round = Column(Integer, nullable=True, index=True)
+    last_accessed_round = Column(Integer, nullable=True, index=True)
+    access_count = Column(Integer, default=0)
+    embedding_json = Column(Text, nullable=True)
+    embedding_model = Column(String(128), nullable=True)
+    embedding_dim = Column(Integer, nullable=True)
+    embedding_status = Column(String(32), default="unavailable", index=True)
+    created_at = Column(DateTime, server_default=func.now())
+    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
 
 
 # ================================================

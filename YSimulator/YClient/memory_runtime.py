@@ -209,12 +209,38 @@ class YSimulatorMemoryManager:
         self.simulation_config = simulation_config or {}
         self.agent_memory_config = dict((self.simulation_config or {}).get("agents", {}))
         self._enabled = bool(self.agent_memory_config.get("memory_enabled", False))
+        self.run_id = self._resolve_run_id()
         self._pkg = _load_memory_package() if self._enabled else None
         self.runtime = YSimulatorMemoryRuntime(client, logger=self.logger)
         self._engines: Dict[str, Any] = {}
         self._agent_is_llm: Dict[str, bool] = {}
         self._active_recent_post_ids: List[str] = []
         self._refresh_agent_flags()
+        if self._enabled:
+            self.logger.info(
+                "Memory runtime enabled",
+                extra={
+                    "extra_data": {
+                        "run_id": self.run_id,
+                        "backend": self.agent_memory_config.get("memory_backend", "hybrid_semantic"),
+                    }
+                },
+            )
+
+    def _resolve_run_id(self) -> str:
+        raw = (
+            self.agent_memory_config.get("memory_run_id")
+            or self.agent_memory_config.get("run_id")
+            or self.simulation_config.get("memory_run_id")
+            or self.simulation_config.get("run_id")
+            or getattr(self.client, "client_id", "")
+            or "ysimulator_memory"
+        )
+        text = str(raw or "").strip()
+        if len(text) > 128:
+            digest = hashlib.sha1(text.encode("utf-8")).hexdigest()[:24]
+            text = f"run_{digest}"
+        return text or "ysimulator_memory"
 
     def is_enabled(self) -> bool:
         return self._enabled
@@ -236,6 +262,51 @@ class YSimulatorMemoryManager:
         if str(agent_id) not in self._agent_is_llm:
             self._refresh_agent_flags()
         return self._enabled and bool(self._agent_is_llm.get(str(agent_id), False))
+
+    def _server_memory_call(self, method_name: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+        try:
+            method = getattr(self.client.server, method_name)
+            result = ray.get(method.remote(payload, client_id=self.client.client_id))
+            return result if isinstance(result, dict) else {}
+        except Exception as exc:
+            self.logger.warning(f"Server memory call {method_name} failed: {exc}")
+            return {}
+
+    def _server_memory_search(
+        self,
+        agent_id: str,
+        query_text: str,
+        *,
+        day: int,
+        slot: int,
+        other_user_id: Optional[str] = None,
+        thread_root_id: Optional[str] = None,
+    ) -> str:
+        if not query_text:
+            return ""
+        result = self._server_memory_call(
+            "memory_search",
+            {
+                "run_id": self.run_id,
+                "agent_user_id": str(agent_id),
+                "query_text": query_text,
+                "round_id": self.round_number(day, slot),
+                "other_user_id": other_user_id,
+                "thread_root_id": thread_root_id,
+                "time_window_rounds": int(
+                    self.agent_memory_config.get("memory_search_time_window_rounds", 40)
+                ),
+                "k": int(self.agent_memory_config.get("memory_search_k", 8)),
+                "max_chars": int(self.agent_memory_config.get("memory_search_max_chars", 900)),
+            },
+        )
+        items = result.get("items") if isinstance(result, dict) else []
+        lines = []
+        for item in items or []:
+            text = str(item.get("text") or "").strip()
+            if text:
+                lines.append(f"- {text}")
+        return "\n".join(lines)
 
     def _get_engine(self, agent_id: str):
         agent_id = str(agent_id)
@@ -415,6 +486,19 @@ class YSimulatorMemoryManager:
         cues = getattr(context, "cues", None)
         if getattr(cues, "rendered_text", ""):
             attrs["memory_reply_cues_text"] = cues.rendered_text
+        persisted = self._server_memory_search(
+            agent_id,
+            query_text,
+            day=day,
+            slot=slot,
+            other_user_id=str(target_post_data.get("user_id") or "") or None,
+            thread_root_id=str(target_post_data.get("thread_id") or target_post_id),
+        )
+        if persisted:
+            existing = str(attrs.get("memory_reply_context_text") or "").strip()
+            attrs["memory_reply_context_text"] = (
+                f"{existing}\n\nPersisted memory:\n{persisted}".strip()
+            )
         return attrs
 
     def apply_browse_memory(
@@ -443,7 +527,69 @@ class YSimulatorMemoryManager:
         context = engine.build_browse_context(request)
         if getattr(context, "rendered_text", ""):
             attrs["memory_browse_context_text"] = context.rendered_text
+        query_text = target_post_data.get("tweet") or target_post_data.get("text") or ""
+        persisted = self._server_memory_search(
+            agent_id,
+            query_text,
+            day=day,
+            slot=slot,
+            thread_root_id=str(target_post_data.get("thread_id") or target_post_id),
+        )
+        if persisted:
+            existing = str(attrs.get("memory_browse_context_text") or "").strip()
+            attrs["memory_browse_context_text"] = (
+                f"{existing}\n\nPersisted memory:\n{persisted}".strip()
+            )
         return attrs
+
+    def _persist_memory_event(
+        self,
+        *,
+        agent_id: str,
+        round_id: int,
+        event_type: str,
+        text: str,
+        target_user_id: Optional[str] = None,
+        thread_root_id: Optional[str] = None,
+        target_post_id: Optional[str] = None,
+        origin_kind: Optional[str] = None,
+        importance: float = 0.35,
+    ) -> None:
+        text = " ".join(str(text or "").split()).strip()
+        if not text:
+            return
+        event_result = self._server_memory_call(
+            "memory_event",
+            {
+                "run_id": self.run_id,
+                "round_id": int(round_id),
+                "actor_user_id": str(agent_id),
+                "target_user_id": target_user_id,
+                "thread_root_id": thread_root_id,
+                "target_post_id": target_post_id,
+                "event_type": event_type,
+                "relation_label": origin_kind or event_type,
+                "salient_claim": text[:280],
+                "event_text": text[:4000],
+                "importance": importance,
+            },
+        )
+        self._server_memory_call(
+            "memory_item_upsert",
+            {
+                "run_id": self.run_id,
+                "agent_user_id": str(agent_id),
+                "item_type": "event",
+                "text": text[:4000],
+                "source_event_id": event_result.get("id") if isinstance(event_result, dict) else None,
+                "thread_root_id": thread_root_id,
+                "other_user_id": target_user_id,
+                "round_id": int(round_id),
+                "recency_anchor_round": int(round_id),
+                "importance": importance,
+                "metadata": {"event_type": event_type, "origin_kind": origin_kind},
+            },
+        )
 
     def record_submitted_actions(self, actions: List[Any], day: int, slot: int) -> None:
         if not self._enabled or not actions:
@@ -468,6 +614,14 @@ class YSimulatorMemoryManager:
                             user_id=self.runtime.intern_user_id(str(action.agent_id)),
                             origin_kind=origin_kind,
                         )
+                    )
+                    self._persist_memory_event(
+                        agent_id=str(action.agent_id),
+                        round_id=round_id,
+                        event_type="post",
+                        text=action.content,
+                        origin_kind=origin_kind,
+                        importance=0.45,
                     )
                 elif action.action_type == "COMMENT" and getattr(action, "target_post_id", None):
                     post = self.runtime._fetch_post(str(action.target_post_id))
@@ -495,6 +649,16 @@ class YSimulatorMemoryManager:
                             my_text=action.content or "",
                             conv_text=self._thread_context_for_post(str(action.target_post_id)),
                         )
+                    )
+                    self._persist_memory_event(
+                        agent_id=str(action.agent_id),
+                        round_id=round_id,
+                        event_type="comment",
+                        text=f"Replied to {(other_user or {}).get('username') or 'someone'}: {action.content or ''}",
+                        target_user_id=str(post.get("user_id") or "") or None,
+                        thread_root_id=str(post.get("thread_id") or action.target_post_id),
+                        target_post_id=str(action.target_post_id),
+                        importance=0.55,
                     )
                 elif action.action_type in {"LIKE", "LOVE", "LAUGH", "ANGRY", "SAD"} and getattr(
                     action, "target_post_id", None
@@ -525,18 +689,47 @@ class YSimulatorMemoryManager:
                             post_text=post.get("tweet") or post.get("text") or "",
                         )
                     )
+                    self._persist_memory_event(
+                        agent_id=str(action.agent_id),
+                        round_id=round_id,
+                        event_type="reaction",
+                        text=f"{vote_type} reaction to {(other_user or {}).get('username') or 'someone'}: {post.get('tweet') or post.get('text') or ''}",
+                        target_user_id=str(post.get("user_id") or "") or None,
+                        thread_root_id=str(post.get("thread_id") or action.target_post_id),
+                        target_post_id=str(action.target_post_id),
+                        origin_kind=vote_type,
+                        importance=0.25,
+                    )
                 elif action.action_type == "SHARE":
                     post = None
                     if getattr(action, "target_post_id", None):
                         post = self.runtime._fetch_post(str(action.target_post_id))
+                    share_text = action.content or (
+                        post.get("tweet") or post.get("text") or "" if post else ""
+                    )
                     engine.record_post(
                         self._pkg["PostMemoryEvent"](
                             round_id=round_id,
-                            text=action.content or (post.get("tweet") or post.get("text") or "" if post else ""),
+                            text=share_text,
                             post_id=None,
                             user_id=self.runtime.intern_user_id(str(action.agent_id)),
                             origin_kind="share_link" if post and post.get("news_id") else "text_post",
                         )
+                    )
+                    self._persist_memory_event(
+                        agent_id=str(action.agent_id),
+                        round_id=round_id,
+                        event_type="share",
+                        text=share_text,
+                        target_user_id=str(post.get("user_id") or "") if post else None,
+                        thread_root_id=str(post.get("thread_id") or action.target_post_id)
+                        if post
+                        else None,
+                        target_post_id=str(action.target_post_id)
+                        if getattr(action, "target_post_id", None)
+                        else None,
+                        origin_kind="share_link" if post and post.get("news_id") else "text_post",
+                        importance=0.4,
                     )
             except Exception as exc:
                 self.logger.warning(
