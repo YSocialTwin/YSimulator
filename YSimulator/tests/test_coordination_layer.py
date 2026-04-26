@@ -13,6 +13,8 @@ from YSimulator.YServer.coordination.archetype_manager import ArchetypeManager
 from YSimulator.YServer.coordination.barrier_handler import BarrierHandler
 from YSimulator.YServer.coordination.client_manager import ClientManager
 from YSimulator.YServer.coordination.round_manager import RoundManager
+from YSimulator.YServer.database_adapter import DatabaseServiceAdapter
+from YSimulator.YServer.services.simulation_service import SimulationService
 
 
 class TestClientManager:
@@ -291,6 +293,44 @@ class TestRoundManager:
 
         assert result["day_completed"] is True
         mock_db.consolidate_redis_to_sqlite.assert_called_once()
+
+
+class TestResumeRoundDelegation:
+    """Tests for the service path used when restarting a stopped server."""
+
+    def test_simulation_service_exposes_latest_round_for_resume(self):
+        repo = Mock()
+        repo.get_latest_round.return_value = {
+            "id": "round_26_16",
+            "day": 26,
+            "hour": 16,
+        }
+
+        service = SimulationService(repo)
+
+        assert service.get_latest_round() == {
+            "id": "round_26_16",
+            "day": 26,
+            "hour": 16,
+        }
+        repo.get_latest_round.assert_called_once_with()
+
+    def test_database_adapter_delegates_latest_round_for_resume(self):
+        service = Mock()
+        service.get_latest_round.return_value = {
+            "id": "round_26_16",
+            "day": 26,
+            "hour": 16,
+        }
+        adapter = object.__new__(DatabaseServiceAdapter)
+        adapter.simulation_service = service
+
+        assert adapter.get_latest_round() == {
+            "id": "round_26_16",
+            "day": 26,
+            "hour": 16,
+        }
+        service.get_latest_round.assert_called_once_with()
 
 
 class TestArchetypeManager:

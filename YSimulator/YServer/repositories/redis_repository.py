@@ -1257,6 +1257,35 @@ class RedisRecommendationRepository(RecommendationRepository):
             )
             raise RuntimeError(f"Failed to get or create round for day={day}, hour={hour}: {e}")
 
+    def get_latest_round(self) -> Optional[Dict[str, Any]]:
+        """Return the highest day/hour round stored in Redis."""
+        try:
+            latest = None
+            pattern = self._redis_key("round_data", "*")
+            for key in self.redis_client.scan_iter(match=pattern):
+                data = self.redis_client.hgetall(key)
+                if not data:
+                    continue
+
+                def _decode(value):
+                    return value.decode() if isinstance(value, bytes) else value
+
+                round_id = _decode(data.get(b"id") or data.get("id"))
+                day = int(_decode(data.get(b"day") or data.get("day") or 0) or 0)
+                hour = int(_decode(data.get(b"hour") or data.get("hour") or 0) or 0)
+                if not round_id or day <= 0 or hour <= 0:
+                    continue
+                row = {"id": round_id, "day": day, "hour": hour}
+                if latest is None or (day, hour) > (latest["day"], latest["hour"]):
+                    latest = row
+            return latest
+        except Exception as e:
+            self.logger.error(
+                f"Error retrieving latest round from Redis: {e}",
+                extra={"extra_data": {"error": str(e)}},
+            )
+            return None
+
     def cleanup_old_posts_from_redis(self, current_day: int, current_slot: int) -> Dict[str, int]:
         """
         Cleanup old posts from Redis based on visibility window.

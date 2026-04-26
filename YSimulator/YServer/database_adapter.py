@@ -537,6 +537,10 @@ class DatabaseServiceAdapter:
         """Get or create simulation round."""
         return self.simulation_service.get_or_create_round(day, slot)
 
+    def get_latest_round(self) -> Optional[Dict[str, Any]]:
+        """Return the most advanced persisted simulation round."""
+        return self.simulation_service.get_latest_round()
+
     def consolidate_redis_to_sqlite(self, current_day: int):
         """Consolidate Redis to SQL."""
         return self.simulation_service.consolidate_redis_to_sqlite(current_day)
