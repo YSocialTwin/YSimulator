@@ -146,12 +146,12 @@ def _make_client(*, track_memory_calls=False):
     def _memory_event(payload, client_id=None):
         if track_memory_calls:
             memory_calls.append(("memory_event", payload))
-        return {"status": 200, "id": len(memory_calls)}
+        return {"status": 200, "id": len(memory_calls) - 1}
 
     def _memory_item_upsert(payload, client_id=None):
         if track_memory_calls:
             memory_calls.append(("memory_item_upsert", payload))
-        return {"status": 200, "id": len(memory_calls), "embedding_status": "unavailable"}
+        return {"status": 200, "id": len(memory_calls) - 1, "embedding_status": "unavailable"}
 
     def _memory_search(payload, client_id=None):
         if track_memory_calls:

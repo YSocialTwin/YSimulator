@@ -223,7 +223,7 @@ class YSimulatorMemoryRuntime:
                 if isinstance(result, str):
                     return result
                 if isinstance(result, dict):
-                    return str(result.get("text") or "")
+                    return result.get("text") or ""
             except Exception as exc:
                 self.logger.debug(f"llm_text provider call failed for '{prompt_key}': {exc}")
         return ""
