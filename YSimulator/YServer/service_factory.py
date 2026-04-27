@@ -229,6 +229,7 @@ def create_all_services(
     memory_service = MemoryService(
         engine=engine,
         logger=logger,
+        config_path=config_path,
     )
 
     return (
