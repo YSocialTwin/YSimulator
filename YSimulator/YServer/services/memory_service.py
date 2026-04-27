@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import re
 from typing import Any, Dict, List, Optional
 
@@ -21,6 +22,11 @@ from YSimulator.YServer.classes.models import (
     MemoryItem,
     MemorySocialCard,
     MemoryThreadCard,
+)
+from YSimulator.YServer.services.memory_embedding_provider import (
+    MemoryEmbeddingProvider,
+    cosine_similarity,
+    lexical_relevance,
 )
 
 
@@ -70,9 +76,65 @@ def _tokenize(value: str) -> set:
 class MemoryService:
     """Persistence facade for run-scoped agent memory."""
 
-    def __init__(self, engine: Engine, logger: Optional[logging.Logger] = None):
+    def __init__(
+        self,
+        engine: Engine,
+        logger: Optional[logging.Logger] = None,
+        config_path: Optional[str] = None,
+    ):
         self.engine = engine
         self.logger = logger or logging.getLogger(__name__)
+        self._embedding_provider: Optional[MemoryEmbeddingProvider] = None
+        self._embedding_async = False
+        self._configure_embedding_backend(config_path)
+
+    def _configure_embedding_backend(self, config_path: Optional[str]) -> None:
+        cfg: Dict[str, Any] = {}
+        if config_path:
+            config_file = os.path.join(str(config_path), "server_config.json")
+            try:
+                with open(config_file, "r", encoding="utf-8") as handle:
+                    loaded = json.load(handle)
+                if isinstance(loaded, dict):
+                    cfg = loaded
+            except Exception:
+                cfg = {}
+
+        settings = cfg.get("memory_embeddings") if isinstance(cfg, dict) else {}
+        if not isinstance(settings, dict):
+            settings = {}
+        service = str(settings.get("service") or "").strip().lower()
+        host = str(settings.get("host") or "").strip()
+        model = str(settings.get("model") or "").strip()
+        self._embedding_async = bool(settings.get("async", False))
+
+        if service == "ollama" and host and model:
+            self._embedding_provider = MemoryEmbeddingProvider(model_name=model, host=host)
+        else:
+            self._embedding_provider = None
+
+        try:
+            self.logger.info(
+                "memory_embedding_configured",
+                extra={
+                    "extra_data": {
+                        "service": service or "disabled",
+                        "host": host,
+                        "model": model,
+                        "async": self._embedding_async,
+                        "available": bool(
+                            self._embedding_provider and self._embedding_provider.available
+                        ),
+                        "error": (
+                            None
+                            if self._embedding_provider is None
+                            else self._embedding_provider.last_error
+                        ),
+                    }
+                },
+            )
+        except Exception:
+            pass
 
     def reset(self, run_id: str) -> Dict[str, Any]:
         run_id = _safe_text(run_id, max_len=128)
@@ -184,7 +246,44 @@ class MemoryService:
             item.recency_anchor_round = _opt_int(payload.get("recency_anchor_round")) or round_id
             item.last_accessed_round = _opt_int(payload.get("last_accessed_round")) or round_id
             item.access_count = _opt_int(payload.get("access_count")) or 0
-            item.embedding_status = "unavailable"
+            explicit_embedding = payload.get("embedding")
+            embedding_json = None
+            embedding_dim = None
+            embedding_model = None
+            embedding_status = "unavailable"
+
+            if isinstance(explicit_embedding, list) and explicit_embedding:
+                try:
+                    vec = [float(v) for v in explicit_embedding]
+                    embedding_json = json.dumps(vec)
+                    embedding_dim = len(vec)
+                    embedding_model = str(payload.get("embedding_model") or "external")[:128]
+                    embedding_status = "ready"
+                except Exception:
+                    embedding_json = None
+                    embedding_dim = None
+                    embedding_model = None
+                    embedding_status = "failed"
+            else:
+                provider = self._embedding_provider
+                if provider and provider.available:
+                    should_sync = bool(payload.get("force_sync_embedding")) or not self._embedding_async
+                    if should_sync:
+                        vec = provider.encode(text)
+                        if isinstance(vec, list) and vec:
+                            embedding_json = json.dumps(vec)
+                            embedding_dim = len(vec)
+                            embedding_model = provider.model_name
+                            embedding_status = "ready"
+                        else:
+                            embedding_status = "failed"
+                    else:
+                        embedding_status = "pending"
+
+            item.embedding_json = embedding_json
+            item.embedding_dim = embedding_dim
+            item.embedding_model = embedding_model
+            item.embedding_status = embedding_status
             session.flush()
             out_id = int(item.id)
             session.commit()
@@ -239,11 +338,39 @@ class MemoryService:
 
             candidates = q.order_by(MemoryItem.importance.desc(), MemoryItem.id.desc()).limit(250).all()
             query_tokens = _tokenize(query_text)
+            provider = self._embedding_provider
+            query_embedding = (
+                provider.encode(query_text)
+                if provider is not None and provider.available
+                else None
+            )
+            query_has_embedding = isinstance(query_embedding, list) and bool(query_embedding)
+
             scored = []
+            ready_count = 0
+            pending_count = 0
+            failed_count = 0
+            unavailable_count = 0
             for item in candidates:
-                item_tokens = _tokenize(item.text)
-                overlap = len(query_tokens & item_tokens)
-                relevance = overlap / max(1, len(query_tokens))
+                status = str(getattr(item, "embedding_status", "") or "").strip().lower()
+                if status == "ready":
+                    ready_count += 1
+                elif status == "pending":
+                    pending_count += 1
+                elif status == "failed":
+                    failed_count += 1
+                else:
+                    unavailable_count += 1
+
+                lexical = lexical_relevance(query_text, item.text or "")
+                relevance = lexical
+                if query_has_embedding:
+                    try:
+                        item_embedding = json.loads(item.embedding_json) if item.embedding_json else None
+                    except Exception:
+                        item_embedding = None
+                    if isinstance(item_embedding, list) and item_embedding:
+                        relevance = cosine_similarity(query_embedding, item_embedding)
                 recency = 0.0
                 anchor = item.recency_anchor_round or item.round_id
                 if current_round is not None and anchor is not None:
@@ -273,10 +400,41 @@ class MemoryService:
                         "round_id": item.round_id,
                         "importance": float(item.importance or 0.0),
                         "score": float(score),
+                        "text_humanized": item.text,
                     }
                 )
             session.commit()
-            return {"status": 200, "items": rows, "count": len(rows)}
+            candidate_count = len(candidates)
+            returned_k = len(rows)
+            no_ready_candidates = ready_count <= 0
+            degraded = not bool(query_has_embedding)
+            retrieval_meta = {
+                "candidate_count": candidate_count,
+                "returned_k": returned_k,
+                "degraded_mode": bool(degraded),
+                "embedding_degraded": bool(degraded),
+                "no_ready_candidates": bool(no_ready_candidates),
+                "embedding_status_summary": {
+                    "ready": int(ready_count),
+                    "pending": int(pending_count),
+                    "failed": int(failed_count),
+                    "unavailable": int(unavailable_count),
+                    "total": int(candidate_count),
+                    "query_embedding_available": bool(query_has_embedding),
+                },
+            }
+            brief_lines = [f"Retrieved {returned_k} memory item(s) out of {candidate_count} candidates."]
+            if degraded:
+                brief_lines.append("Embedding retrieval unavailable; using lexical fallback.")
+            if no_ready_candidates:
+                brief_lines.append("No embedding-ready memory items are currently indexed.")
+            return {
+                "status": 200,
+                "items": rows,
+                "count": returned_k,
+                "memory_brief": " ".join(brief_lines),
+                "retrieval_meta": retrieval_meta,
+            }
         except Exception as exc:
             session.rollback()
             self.logger.error(f"Error searching memory: {exc}")
