@@ -297,8 +297,8 @@ class SimulationClient:
         # Connect to the Named Server Actor
         self.server = ray.get_actor("Orchestrator")
 
-        # Memory stays entirely client-side and queries the server actor only
-        # through remote methods for read access.
+        # Memory prompt construction stays client-side; persisted memory state is
+        # owned by the server and accessed through remote methods only.
         self.memory_manager = YSimulatorMemoryManager(self, simulation_config)
 
         # Initialize agent manager (Phase 6 refactoring - NEW)

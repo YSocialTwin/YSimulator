@@ -34,6 +34,7 @@ try:
     from YSimulator.YServer.services.image_service import ImageService
     from YSimulator.YServer.services.interest_service import InterestService
     from YSimulator.YServer.services.mention_service import MentionService
+    from YSimulator.YServer.services.memory_service import MemoryService
     from YSimulator.YServer.services.metadata_service import MetadataService
     from YSimulator.YServer.services.post_service import PostService
     from YSimulator.YServer.services.simulation_service import SimulationService
@@ -225,6 +226,12 @@ def create_all_services(
         logger=logger,
     )
 
+    memory_service = MemoryService(
+        engine=engine,
+        logger=logger,
+        config_path=config_path,
+    )
+
     return (
         user_service,
         post_service,
@@ -236,6 +243,7 @@ def create_all_services(
         simulation_service,
         metadata_service,
         mention_service,
+        memory_service,
     )
 
 

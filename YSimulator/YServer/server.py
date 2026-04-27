@@ -250,6 +250,7 @@ class OrchestratorServer:
                 simulation_service,
                 metadata_service,
                 mention_service,
+                memory_service,
             ) = create_all_services(db_config, str(self.config_path), self.logger)
 
             # Phase 5: Expose services directly for explicit usage
@@ -263,6 +264,7 @@ class OrchestratorServer:
             self.simulation_service = simulation_service
             self.metadata_service = metadata_service
             self.mention_service = mention_service
+            self.memory_service = memory_service
             self.redis_client = redis_client
             self.use_redis = redis_client is not None
 
@@ -278,6 +280,7 @@ class OrchestratorServer:
                 simulation_service=simulation_service,
                 metadata_service=metadata_service,
                 mention_service=mention_service,
+                memory_service=memory_service,
                 redis_client=redis_client,
                 logger=self.logger,
             )
@@ -285,7 +288,7 @@ class OrchestratorServer:
                 "Orchestrator server initialized - Repository/Service pattern 100% with direct service access!",
                 extra={
                     "migration_status": "PHASE_5_COMPLETE",
-                    "services": "User, Post, Follow, Interest, Article, Image, Content, Simulation, Metadata, Mention",
+                    "services": "User, Post, Follow, Interest, Article, Image, Content, Simulation, Metadata, Mention, Memory",
                     "service_access": "Direct - no adapter facade",
                     "legacy_middleware": "None - fully eliminated",
                 },
@@ -2169,6 +2172,62 @@ class OrchestratorServer:
             Dictionary with user data or None if not found
         """
         return self.user_service.get_user(user_id)
+
+    @log_server_request
+    def memory_reset(self, run_id: str, client_id: str = None) -> Dict[str, Any]:
+        """Clear server-owned memory state for a run_id."""
+        return self.memory_service.reset(run_id)
+
+    @log_server_request
+    def memory_event(self, payload: Dict[str, Any], client_id: str = None) -> Dict[str, Any]:
+        """Persist a client-generated memory event."""
+        payload = payload or {}
+        result = self.memory_service.record_event(payload)
+        try:
+            if int(result.get("status") or 0) == 200 and self.server_request_logger:
+                self.server_request_logger.info(
+                    json.dumps(
+                        {
+                            "message": "agent_decision",
+                            "run_id": str(payload.get("run_id") or ""),
+                            "agent_user_id": str(payload.get("actor_user_id") or ""),
+                            "memory_event_id": result.get("id"),
+                            "memory_event_type": payload.get("event_type"),
+                            "day": self.day,
+                            "hour": self.slot,
+                            "time": datetime.now(timezone.utc).isoformat(),
+                        }
+                    )
+                )
+        except Exception:
+            pass
+        return result
+
+    @log_server_request
+    def memory_item_upsert(
+        self, payload: Dict[str, Any], client_id: str = None
+    ) -> Dict[str, Any]:
+        """Persist or update a searchable memory item."""
+        return self.memory_service.upsert_item(payload or {})
+
+    @log_server_request
+    def memory_search(self, payload: Dict[str, Any], client_id: str = None) -> Dict[str, Any]:
+        """Search persisted memory. Search is lexical server-side and uses no LLM."""
+        return self.memory_service.search(payload or {})
+
+    @log_server_request
+    def memory_get_context(
+        self, payload: Dict[str, Any], client_id: str = None
+    ) -> Dict[str, Any]:
+        """Return persisted memory context for a client-side prompt."""
+        return self.memory_service.get_context(payload or {})
+
+    @log_server_request
+    def memory_events_recent(
+        self, payload: Dict[str, Any], client_id: str = None
+    ) -> Dict[str, Any]:
+        """Return recent persisted memory events."""
+        return self.memory_service.events_recent(payload or {})
 
     @log_server_request
     def search_posts_by_topic(
