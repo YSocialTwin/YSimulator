@@ -4,13 +4,14 @@ Unit tests for action generator framework.
 Tests the new action generator framework introduced in Phase 1 refactoring.
 """
 
-from unittest.mock import MagicMock, Mock
+from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 
 from YSimulator.YClient.action_generators import ActionContext, ActionGeneratorFactory
 from YSimulator.YClient.action_generators.follow_generator import FollowGenerator
 from YSimulator.YClient.action_generators.post_generator import PostGenerator
+from YSimulator.YClient.action_generators.reply_generator import ReplyGenerator
 from YSimulator.YClient.classes.ray_models import ActionDTO, AgentProfile
 
 
@@ -187,6 +188,38 @@ def test_factory_list_action_types(mock_context):
     assert len(action_types) == 10  # We have 10 action types (including reply)
     assert "post" in action_types
     assert "follow" in action_types
+
+
+def test_reply_generator_rule_based_attaches_opinion_updates(mock_context, mock_agent):
+    """Rule-based mention replies should carry updated opinions like other comments."""
+    mention = {"id": "mention-1", "post_id": "post-1"}
+    post_data = {"user_id": "author-1", "tweet": "@test_agent Please respond"}
+    author_data = {"username": "author_name"}
+
+    mock_context.server.get_unreplied_mentions.remote = MagicMock(return_value=[mention])
+    mock_context.server.get_post.remote = MagicMock(return_value=post_data)
+    mock_context.server.get_user.remote = MagicMock(return_value=author_data)
+    mock_context.server.mark_mention_replied.remote = MagicMock(return_value=True)
+    mock_context.annotate_action_fn = MagicMock()
+    mock_context.calculate_opinion_updates_fn = MagicMock(
+        return_value={"topic-1": 0.72}
+    )
+
+    generator = ReplyGenerator(mock_context)
+
+    with patch(
+        "YSimulator.YClient.action_generators.reply_generator.ray.get",
+        side_effect=lambda value: value,
+    ):
+        result = generator.generate(mock_agent, "rule_based")
+
+    assert len(result.actions) == 1
+    action = result.actions[0]
+    assert action.action_type == "COMMENT"
+    assert action.updated_opinions == {"topic-1": 0.72}
+    mock_context.calculate_opinion_updates_fn.assert_called_once_with(
+        mock_agent.id, "post-1", post_data
+    )
 
 
 if __name__ == "__main__":

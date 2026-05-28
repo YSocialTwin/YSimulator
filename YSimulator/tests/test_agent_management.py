@@ -204,6 +204,36 @@ class TestAgentManager:
             mock_create.assert_called_once_with(agent_config)
             assert isinstance(result, list)
 
+
+class TestPopulationLoaderCustomFeatures:
+    """Targeted tests for structured agent metadata loading."""
+
+    def test_load_predefined_agents_preserves_stubborn_topics_and_custom_features(
+        self, temp_config_dir, mock_logger
+    ):
+        loader = PopulationLoader(
+            config_path=temp_config_dir,
+            client_id="test_client",
+            logger=mock_logger,
+        )
+
+        agents = loader._load_predefined_agents(
+            [
+                {
+                    "id": "agent-1",
+                    "username": "agent_001",
+                    "opinions": {"topic a": 0.8},
+                    "stubborn_topics": {"topic a": True},
+                    "custom_features": {"Class": "Mage"},
+                }
+            ]
+        )
+
+        assert len(agents) == 1
+        assert agents[0].opinions == {"topic a": 0.8}
+        assert agents[0].stubborn_topics == {"topic a": True}
+        assert agents[0].custom_features == {"Class": "Mage"}
+
     def test_load_and_create_social_network_delegates(
         self,
         temp_config_dir,
@@ -371,6 +401,28 @@ class TestPopulationLoader:
 
         # Should have 3 generated agents
         assert len(all_agents) == 3
+
+    def test_create_agents_from_config_predefined_only_ignores_missing_cluster_distribution(
+        self, temp_config_dir, mock_logger
+    ):
+        """Regression test for predefined-only populations with generation_config present."""
+        loader = PopulationLoader(temp_config_dir, "test_client", mock_logger)
+
+        agent_config = {
+            "agents": [
+                {"id": "agent-1", "username": "agent_001", "cluster": 1, "llm": False},
+                {"id": "agent-2", "username": "agent_002", "cluster": 0, "llm": True},
+            ],
+            "generation_config": {
+                "num_additional_agents": 0,
+                "llm_enabled_probability": 0.1,
+            },
+        }
+
+        all_agents = loader.create_agents_from_config(agent_config)
+
+        assert len(all_agents) == 2
+        assert [agent.username for agent in all_agents] == ["agent_001", "agent_002"]
 
     def test_validate_and_extract_interests(self, temp_config_dir, mock_logger):
         """Test interest validation and extraction."""
@@ -658,6 +710,32 @@ class TestAgentSelector:
         assert "age" in attrs
         assert "profession" in attrs
         assert attrs["name"] == "agent_001"
+        assert attrs["custom_features"] == {}
+
+    def test_extract_agent_attrs_includes_custom_features(
+        self, archetype_distribution, actions_likelihood, mock_logger
+    ):
+        selector = AgentSelector(
+            archetype_distribution=archetype_distribution,
+            agent_downcast=False,
+            actions_likelihood=actions_likelihood,
+            logger=mock_logger,
+        )
+
+        agent = AgentProfile(
+            id=1,
+            username="agent_001",
+            custom_features={"Class": "Mage", "Guild": "North"},
+        )
+
+        attrs = selector.extract_agent_attrs(
+            agent,
+            lambda interests: (None, None),
+            lambda: False,
+            lambda opinion: "neutral",
+        )
+
+        assert attrs["custom_features"] == {"Class": "Mage", "Guild": "North"}
 
 
 # ============================================================================

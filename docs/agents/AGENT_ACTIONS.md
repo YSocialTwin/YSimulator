@@ -21,7 +21,7 @@ YSimulator agents can perform various social media actions during each simulatio
 1. **Content Creation**: Creating original posts, sharing news, sharing images
 2. **Content Interaction**: Reading, reacting (like, love, laugh, angry, sad), commenting
 3. **Content Distribution**: Sharing/reposting content
-4. **Network Actions**: Following/unfollowing users
+4. **Network Actions**: Following/unfollowing users, including reciprocal follow-back and unfollow-back
 5. **Discovery Actions**: Searching for content by topic
 
 ### Dual Implementation Approach
@@ -66,6 +66,8 @@ Agent Decision → Action Generation → Text Annotation → Server Submission �
 3. **Annotation Phase**: Text content is analyzed for hashtags, mentions, sentiment, toxicity
 4. **Submission Phase**: Action is sent to server via Ray remote call
 5. **Storage Phase**: Server stores action in database (SQL and optionally Redis)
+
+Reciprocal follow decisions are applied immediately after successful follow or unfollow actions. The client evaluates whether the reverse edge should be created or removed, and the server validates current graph state before persisting the reciprocal action.
 
 ---
 

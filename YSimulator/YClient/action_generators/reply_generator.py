@@ -147,6 +147,16 @@ class ReplyGenerator(BaseActionGenerator):
                     agent_attrs["post_topics"] = opinion_info["topics"]
                     agent_attrs["post_opinions"] = opinion_info["opinions"]
                     agent_attrs["post_opinion_values"] = opinion_info["opinion_values"]
+                agent_attrs = self._apply_reply_memory(
+                    agent,
+                    agent_attrs,
+                    target_post_id=post_id,
+                    target_post_data=post_data,
+                    author_name=author_username,
+                    thread_context=thread_context,
+                    mode="reply",
+                )
+                agent_attrs = self._apply_system_messages(agent, agent_attrs)
 
                 future = generate_llm_reply_to_mention_async(
                     self.context.llm,
@@ -180,6 +190,9 @@ class ReplyGenerator(BaseActionGenerator):
                 )
                 # Annotate rule-based comment
                 self.context.annotate_action_fn(action)
+                updated_opinions = self._calculate_opinion_updates(agent.id, post_id, post_data)
+                if updated_opinions:
+                    action.updated_opinions = updated_opinions
                 result.actions.append(action)
                 self.context.logger.info(
                     f"[REPLY] Rule-based reply created: '{action.content}' for agent {agent.username}"

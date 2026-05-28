@@ -56,6 +56,33 @@ class RoundManager:
         self.interest_manager.set_current_round(self.current_round_id)
         return self.current_round_id
 
+    def initialize_from_persisted_state(self) -> str:
+        """
+        Initialize simulation time from the latest persisted round when available.
+
+        Falls back to the first round for brand-new simulations.
+
+        Returns:
+            str: Round ID for the restored or newly created round
+        """
+        latest_round = None
+        try:
+            latest_round = self.db.get_latest_round()
+        except Exception:
+            latest_round = None
+
+        if latest_round and latest_round.get("day") is not None and latest_round.get("hour") is not None:
+            self.day = int(latest_round["day"])
+            self.slot = int(latest_round["hour"])
+            self.current_round_id = str(latest_round["id"])
+            self.interest_manager.set_current_round(self.current_round_id)
+            self.logger.info(
+                f"[Server] Restored simulation state from persisted round: day {self.day}, slot {self.slot}"
+            )
+            return self.current_round_id
+
+        return self.initialize_first_round()
+
     def advance_simulation(self, recompute_interests_callback: Optional[Callable] = None) -> dict:
         """
         Advance simulation to the next slot/day.

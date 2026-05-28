@@ -26,10 +26,12 @@ fixed as examples. Other write methods still need this fix applied.
 """
 
 import logging
+import time
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 from sqlalchemy import func
 from sqlalchemy.engine import Engine
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
 from YSimulator.YServer.classes.models import (
@@ -48,7 +50,9 @@ from YSimulator.YServer.classes.models import (
     PostTopic,
     PostToxicity,
     Reaction,
+    Reported,
     Round,
+    SysMessage,
     User_mgmt,
     UserInterest,
     Website,
@@ -398,6 +402,7 @@ class SQLPostRepository(PostRepository):
                 # Include image-related fields
                 "image_id": post_data.get("image_id"),
                 "post_img": post_data.get("post_img"),
+                "is_moderation_comment": post_data.get("is_moderation_comment", 0),
             }
             # Filter out None values
             mapped_data = {k: v for k, v in mapped_data.items() if v is not None}
@@ -433,6 +438,7 @@ class SQLPostRepository(PostRepository):
                     "user_id": post.user_id,  # Alias for backward compatibility
                     "text": post.tweet,  # API: text <-> Model: tweet
                     "round": post.round,
+                    "is_moderation_comment": int(getattr(post, "is_moderation_comment", 0) or 0),
                     # API: num_reactions <-> Model: reaction_count
                     "num_reactions": post.reaction_count,
                 }
@@ -523,6 +529,31 @@ class SQLPostRepository(PostRepository):
             )
             return False
 
+    def add_report(self, report_data: Dict[str, Any]) -> bool:
+        """Add a moderation report for a post."""
+        try:
+            import uuid
+
+            session = Session(self.engine)
+            try:
+                if "id" not in report_data:
+                    report_data["id"] = str(uuid.uuid4())
+
+                report = Reported(**report_data)
+                session.add(report)
+                session.commit()
+                return True
+            except Exception:
+                session.rollback()
+                raise
+            finally:
+                session.close()
+        except Exception as e:
+            self.logger.error(
+                f"Error adding report: {e}", extra={"extra_data": {"error": str(e)}}
+            )
+            return False
+
     def increment_post_reaction_count(self, post_id: str) -> bool:
         """Increment the reaction count for a post."""
         try:
@@ -605,6 +636,57 @@ class SQLPostRepository(PostRepository):
         except Exception as e:
             self.logger.error(
                 f"Error searching posts by topic: {e}", extra={"extra_data": {"error": str(e)}}
+            )
+            return []
+
+    def get_active_system_messages(self, user_id: str, round_id: str) -> List[Dict[str, Any]]:
+        """Get active system messages for a user, comparing rounds by day/hour."""
+        try:
+            session = Session(self.engine)
+            try:
+                current_round = session.query(Round).filter_by(id=round_id).first()
+                if not current_round:
+                    return []
+
+                current_position = (int(current_round.day or 0), int(current_round.hour or 0))
+                current_flat_round = current_position[0] * 24 + current_position[1]
+                messages = session.query(SysMessage).filter_by(to_uid=user_id).all()
+                active_messages = []
+
+                for message in messages:
+                    lower_bound = None
+
+                    if message.from_round:
+                        from_round = session.query(Round).filter_by(id=message.from_round).first()
+                        if from_round is None:
+                            continue
+                        lower_bound = (int(from_round.day or 0), int(from_round.hour or 0))
+
+                    if lower_bound is not None and current_position < lower_bound:
+                        continue
+                    if message.duration is not None and lower_bound is not None:
+                        lower_flat_round = lower_bound[0] * 24 + lower_bound[1]
+                        if current_flat_round > (lower_flat_round + int(message.duration)):
+                            continue
+
+                    active_messages.append(
+                        {
+                            "id": message.id,
+                            "type": message.type,
+                            "message": message.message,
+                            "to_uid": message.to_uid,
+                            "from_round": message.from_round,
+                            "duration": message.duration,
+                        }
+                    )
+
+                return active_messages
+            finally:
+                session.close()
+        except Exception as e:
+            self.logger.error(
+                f"Error getting active system messages: {e}",
+                extra={"extra_data": {"user_id": user_id, "round_id": round_id, "error": str(e)}},
             )
             return []
 
@@ -1036,6 +1118,35 @@ class SQLPostRepository(PostRepository):
             )
             return []
 
+    def get_users_with_unreplied_mentions(self, user_ids: List[str]) -> List[str]:
+        """Return user IDs that have at least one unreplied mention."""
+        try:
+            from YSimulator.YServer.classes.models import Mention
+
+            if not user_ids:
+                return []
+
+            session = Session(self.engine)
+            try:
+                rows = (
+                    session.query(Mention.user_id)
+                    .filter(
+                        Mention.user_id.in_(list(user_ids)),
+                        Mention.answered == 0,
+                    )
+                    .distinct()
+                    .all()
+                )
+                return [str(row[0]) for row in rows if row and row[0] is not None]
+            finally:
+                session.close()
+        except Exception as e:
+            self.logger.error(
+                f"Error getting users with unreplied mentions: {e}",
+                extra={"extra_data": {"error": str(e)}},
+            )
+            return []
+
     def get_mention_by_id(self, mention_id: str) -> Optional[Dict[str, Any]]:
         """Get mention by ID."""
         try:
@@ -1069,29 +1180,36 @@ class SQLPostRepository(PostRepository):
         try:
             from YSimulator.YServer.classes.models import Mention
 
-            session = Session(self.engine)
-            try:
-                mention = (
-                    session.query(Mention)
-                    .filter(
-                        Mention.post_id == post_id,
-                        Mention.user_id
-                        == mentioned_user_id,  # Model uses user_id, not mentioned_user_id
+            max_attempts = 4
+            for attempt in range(max_attempts):
+                session = Session(self.engine)
+                try:
+                    mention = (
+                        session.query(Mention)
+                        .filter(
+                            Mention.post_id == post_id,
+                            Mention.user_id
+                            == mentioned_user_id,  # Model uses user_id, not mentioned_user_id
+                        )
+                        .first()
                     )
-                    .first()
-                )
 
-                if not mention:
-                    return False
+                    if not mention:
+                        return False
 
-                mention.answered = 1  # Model uses answered (0=unreplied, 1=replied)
-                session.commit()
-                return True
-            except Exception:
-                session.rollback()
-                raise
-            finally:
-                session.close()
+                    mention.answered = 1  # Model uses answered (0=unreplied, 1=replied)
+                    session.commit()
+                    return True
+                except OperationalError as e:
+                    session.rollback()
+                    if "database is locked" not in str(e).lower() or attempt == max_attempts - 1:
+                        raise
+                    time.sleep(0.15 * (attempt + 1))
+                except Exception:
+                    session.rollback()
+                    raise
+                finally:
+                    session.close()
         except Exception as e:
             self.logger.error(
                 f"Error marking mention replied: {e}", extra={"extra_data": {"error": str(e)}}
@@ -1327,6 +1445,21 @@ class SQLInterestRepository(InterestRepository):
             )
             return None
 
+    def list_interests(self) -> List[Dict[str, Any]]:
+        """Return all known interests/topics."""
+        try:
+            session = Session(self.engine)
+            try:
+                interests = session.query(Interest).all()
+                return [{"iid": interest.iid, "interest": interest.interest} for interest in interests]
+            finally:
+                session.close()
+        except Exception as e:
+            self.logger.error(
+                f"Error listing interests: {e}", extra={"extra_data": {"error": str(e)}}
+            )
+            return []
+
     def add_or_get_interests_batch(self, interest_names: List[str]) -> Dict[str, str]:
         """
         Add multiple interests or get existing ones' IDs in batch.
@@ -1425,6 +1558,7 @@ class SQLInterestRepository(InterestRepository):
         opinion: float,
         id_interacted_with: Optional[str] = None,
         id_post: Optional[str] = None,
+        stubborn: bool = False,
     ) -> bool:
         """Add an agent opinion on a topic."""
         try:
@@ -1432,15 +1566,30 @@ class SQLInterestRepository(InterestRepository):
 
             session = Session(self.engine)
             try:
+                latest_opinion = (
+                    session.query(Agent_Opinion)
+                    .filter_by(agent_id=agent_id, topic_id=topic_id)
+                    .order_by(Agent_Opinion.tid.desc(), Agent_Opinion.id.desc())
+                    .first()
+                )
+                effective_stubborn = bool(stubborn) or bool(
+                    latest_opinion.stubborn if latest_opinion is not None else False
+                )
+                effective_opinion = (
+                    float(latest_opinion.opinion)
+                    if latest_opinion is not None and bool(latest_opinion.stubborn)
+                    else opinion
+                )
                 # Agent_Opinion model uses 'tid' for round_id
                 agent_opinion = Agent_Opinion(
                     id=str(uuid.uuid4()),
                     agent_id=agent_id,
                     tid=round_id,  # Note: model uses 'tid' not 'round_id'
                     topic_id=topic_id,
-                    opinion=opinion,
+                    opinion=effective_opinion,
                     id_interacted_with=id_interacted_with,
                     id_post=id_post,
+                    stubborn=effective_stubborn,
                 )
                 session.add(agent_opinion)
                 session.commit()
@@ -1561,6 +1710,17 @@ class SQLInterestRepository(InterestRepository):
                     for entry in batch:
                         if "id" not in entry or not entry["id"]:
                             entry["id"] = str(uuid.uuid4())
+                        latest_opinion = (
+                            session.query(Agent_Opinion)
+                            .filter_by(agent_id=entry["agent_id"], topic_id=entry["topic_id"])
+                            .order_by(Agent_Opinion.tid.desc(), Agent_Opinion.id.desc())
+                            .first()
+                        )
+                        entry["stubborn"] = bool(entry.get("stubborn", False)) or bool(
+                            latest_opinion.stubborn if latest_opinion is not None else False
+                        )
+                        if latest_opinion is not None and bool(latest_opinion.stubborn):
+                            entry["opinion"] = float(latest_opinion.opinion)
 
                     session.bulk_insert_mappings(Agent_Opinion, batch)
                     session.commit()
@@ -1751,6 +1911,28 @@ class SQLRecommendationRepository(RecommendationRepository):
                 f"Error getting or creating round: {e}", extra={"extra_data": {"error": str(e)}}
             )
             raise RuntimeError(f"Failed to get or create round for day={day}, hour={hour}: {e}")
+
+    def get_latest_round(self) -> Optional[Dict[str, Any]]:
+        """Return the most advanced persisted round, if any."""
+        try:
+            session = Session(self.engine)
+            try:
+                latest = (
+                    session.query(Round)
+                    .order_by(Round.day.desc(), Round.hour.desc())
+                    .first()
+                )
+                if latest is None:
+                    return None
+                return {"id": latest.id, "day": latest.day, "hour": latest.hour}
+            finally:
+                session.close()
+        except Exception as e:
+            self.logger.error(
+                f"Error retrieving latest round: {e}",
+                extra={"extra_data": {"error": str(e)}},
+            )
+            return None
 
     def get_round_info(self, round_id: str) -> Optional[Dict[str, int]]:
         """
@@ -2032,6 +2214,113 @@ class SQLArticleRepository(ArticleRepository):
                 f"Error getting article topics: {e}", extra={"extra_data": {"error": str(e)}}
             )
             return []
+
+    @staticmethod
+    def _round_slot_index(day: Any, hour: Any) -> Optional[int]:
+        try:
+            return int(day) * 24 + int(hour)
+        except Exception:
+            return None
+
+    def select_page_article_for_sharing(
+        self,
+        website_id: str,
+        current_round_id: str,
+        feed_articles: List[Dict[str, Any]],
+        cooldown_slots: int = 24,
+    ) -> Optional[Dict[str, Any]]:
+        """Select a feed or reusable article for a page according to cooldown rules."""
+        try:
+            session = Session(self.engine)
+            try:
+                current_round = session.query(Round).filter(Round.id == current_round_id).first()
+                if not current_round:
+                    return None
+
+                current_slot_index = self._round_slot_index(current_round.day, current_round.hour)
+                if current_slot_index is None:
+                    return None
+
+                posted_rows = (
+                    session.query(
+                        Article.id,
+                        Article.title,
+                        Article.summary,
+                        Article.website_id,
+                        Article.link,
+                        Round.day,
+                        Round.hour,
+                    )
+                    .join(Post, Post.news_id == Article.id)
+                    .join(Round, Round.id == Post.round)
+                    .filter(Article.website_id == website_id)
+                    .all()
+                )
+
+                last_share_by_link: Dict[str, Dict[str, Any]] = {}
+                for row in posted_rows:
+                    link = (row.link or "").strip()
+                    if not link:
+                        continue
+                    slot_index = self._round_slot_index(row.day, row.hour)
+                    if slot_index is None:
+                        continue
+                    existing = last_share_by_link.get(link)
+                    if existing is None or slot_index > existing["slot_index"]:
+                        last_share_by_link[link] = {
+                            "id": row.id,
+                            "title": row.title,
+                            "summary": row.summary,
+                            "website_id": row.website_id,
+                            "link": row.link,
+                            "slot_index": slot_index,
+                        }
+
+                fresh_feed_articles: List[Dict[str, Any]] = []
+                cooled_feed_articles: List[Dict[str, Any]] = []
+                for article in feed_articles or []:
+                    link = str(article.get("link") or "").strip()
+                    if not link:
+                        fresh_feed_articles.append(article)
+                        continue
+                    last_shared = last_share_by_link.get(link)
+                    if last_shared is None:
+                        fresh_feed_articles.append(article)
+                        continue
+                    if current_slot_index - last_shared["slot_index"] >= int(cooldown_slots):
+                        cooled_feed_articles.append(article)
+
+                if fresh_feed_articles:
+                    return fresh_feed_articles[0]
+
+                if cooled_feed_articles:
+                    return cooled_feed_articles[0]
+
+                reusable_articles = [
+                    row
+                    for row in last_share_by_link.values()
+                    if current_slot_index - row["slot_index"] >= int(cooldown_slots)
+                ]
+                if not reusable_articles:
+                    return None
+
+                reusable_articles.sort(key=lambda row: row["slot_index"])
+                selected = reusable_articles[0]
+                return {
+                    "title": selected.get("title"),
+                    "summary": selected.get("summary"),
+                    "website_id": selected.get("website_id"),
+                    "link": selected.get("link"),
+                    "image_urls": [],
+                }
+            finally:
+                session.close()
+        except Exception as e:
+            self.logger.error(
+                f"Error selecting page article for sharing: {e}",
+                extra={"extra_data": {"error": str(e), "website_id": website_id}},
+            )
+            return None
 
     def add_article_topic(self, article_id: str, topic_id: str) -> bool:
         """Add article topic association."""

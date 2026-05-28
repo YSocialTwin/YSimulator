@@ -5,6 +5,7 @@ Handles POST actions including article posts, image posts, and regular posts wit
 """
 
 import logging
+import re
 from typing import Any, Optional
 
 from YSimulator.YServer.action_processors.base_processor import (
@@ -200,6 +201,40 @@ class PostProcessor(BaseActionProcessor):
 
                 # Ensure author has an opinion on the topic they're posting about
                 self._ensure_agent_opinion_exists(action.agent_id, topic_id, action.topic)
+        elif hasattr(action, "image_id") and action.image_id:
+            inferred_topics = self._infer_topics_from_text(getattr(action, "content", ""))
+            if inferred_topics:
+                for topic_id, topic_name in inferred_topics:
+                    self.services.post_service.add_post_topic(post_id, topic_id)
+                    self._ensure_agent_opinion_exists(action.agent_id, topic_id, topic_name)
+                self.logger.info(
+                    f"Inferred {len(inferred_topics)} topics from image post text for post {post_id}"
+                )
+
+    def _infer_topics_from_text(self, text: str) -> list[tuple[str, str]]:
+        """
+        Infer post topics by matching known interest names in the post text.
+
+        This is a deterministic server-side fallback used when the client did not
+        attach explicit topic IDs. It keeps the client/server contract intact.
+        """
+        normalized_text = (text or "").strip().lower()
+        if not normalized_text:
+            return []
+
+        interests = self.services.interest_service.list_interests()
+        matches = []
+        for interest in interests:
+            topic_id = interest.get("iid")
+            topic_name = (interest.get("interest") or "").strip()
+            if not topic_id or not topic_name:
+                continue
+            pattern = r"\b" + re.escape(topic_name.lower()) + r"\b"
+            if re.search(pattern, normalized_text):
+                matches.append((topic_id, topic_name))
+
+        matches.sort(key=lambda item: len(item[1]), reverse=True)
+        return matches[:3]
 
     def _ensure_agent_opinion_exists(
         self, agent_id: str, topic_id: str, topic_name: str, article_content: Optional[str] = None

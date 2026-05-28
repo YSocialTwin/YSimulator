@@ -26,6 +26,23 @@ from YSimulator.YClient.client import SimulationClient
 from YSimulator.YClient.news_feeds.news_service import NewsFeedService
 
 
+def _configure_model_cache_env():
+    root = Path(os.environ.get("YSOCIAL_MODEL_CACHE_DIR", "~/.cache/ysocial_models")).expanduser()
+    hf_home = root / "huggingface"
+    transformers_cache = hf_home / "transformers"
+    hub_cache = hf_home / "hub"
+    torch_home = root / "torch"
+
+    for path in (root, hf_home, transformers_cache, hub_cache, torch_home):
+        path.mkdir(parents=True, exist_ok=True)
+
+    os.environ.setdefault("YSOCIAL_MODEL_CACHE_DIR", str(root))
+    os.environ.setdefault("HF_HOME", str(hf_home))
+    os.environ.setdefault("TRANSFORMERS_CACHE", str(transformers_cache))
+    os.environ.setdefault("HUGGINGFACE_HUB_CACHE", str(hub_cache))
+    os.environ.setdefault("TORCH_HOME", str(torch_home))
+
+
 def compress_rotated_log(source, dest):
     """
     Compress a rotated log file using gzip.
@@ -176,7 +193,14 @@ def resolve_client_namespace(config_dir: Path, sim_config: dict) -> str:
     return sim_config.get("namespace", "social_sim")
 
 
+def _llm_models_configured(sim_config: dict) -> bool:
+    llm_cfg = sim_config.get("llm") or {}
+    llm_v_cfg = sim_config.get("llm_v") or {}
+    return bool(llm_cfg.get("model") or llm_v_cfg.get("model"))
+
+
 if __name__ == "__main__":
+    _configure_model_cache_env()
     # Parse command line arguments
     parser = argparse.ArgumentParser(
         description="YSimulator Client - Simulation client for social media agents"
@@ -419,7 +443,12 @@ if __name__ == "__main__":
     # Get actor name prefix (default: ysim_llm)
     actor_name_prefix = llm_config.get("actor_name_prefix", "ysim_llm")
 
-    if llm_backend == "vllm":
+    llm_service = None
+
+    if not _llm_models_configured(sim_config):
+        logger.info("No LLM models configured; running client without LLM actors")
+        print("--- No LLM model configured; skipping LLM actor startup ---")
+    elif llm_backend == "vllm":
         logger.info(f"Using vLLM backend with {num_llm_actors} actor(s) for LLM inference")
         reuse_msg = " (reusing existing if available)" if reuse_actors else ""
         print(
@@ -521,7 +550,7 @@ if __name__ == "__main__":
     resolved_service_backend = llm_config.get("_resolved_service_backend", llm_backend)
     resolved_pool_backend = llm_config.get("_resolved_pool_backend", llm_backend)
 
-    if resolved_service_backend != llm_backend:
+    if llm_service is not None and resolved_service_backend != llm_backend:
         logger.info(
             f"Upgraded non-vLLM backend to batch-capable service backend: {resolved_service_backend}"
         )

@@ -15,8 +15,12 @@ This module tests the two opinion dynamics models implemented in YSimulator:
    - Tests the shift_class function and boundary clamping behavior
 """
 
+from unittest.mock import Mock
+
 import pytest
 
+from YSimulator.YClient.classes.ray_models import AgentProfile
+from YSimulator.YClient.opinion.opinion_calculator import OpinionCalculator
 from YSimulator.YClient.opinion_dynamics.confidence_bound import bounded_confidence
 from YSimulator.YClient.opinion_dynamics.llm_evaluation import Direction, shift_class
 
@@ -117,6 +121,45 @@ class TestLLMEvaluation:
             "Strongly against", "In favor", Direction.DISAGREE, opinion_groups
         )
         assert label == "Strongly against"
+
+
+class TestStubbornTopics:
+    """Opinion updates must skip topics marked as stubborn."""
+
+    def test_calculate_updates_skips_stubborn_topic(self, monkeypatch):
+        monkeypatch.setattr("YSimulator.YClient.opinion.opinion_calculator.ray.get", lambda value: value)
+
+        server = Mock()
+        server.get_post_topics.remote.return_value = ["topic-1"]
+        server.get_topic_name_from_id.remote.return_value = "war"
+        server.get_latest_agent_opinion.remote.side_effect = [0.2, 0.8]
+
+        calculator = OpinionCalculator(
+            opinion_config={
+                "model_name": "bounded_confidence",
+                "parameters": {"epsilon": 0.5, "mu": 0.5, "theta": 0.0, "cold_start": "neutral"},
+            },
+            server=server,
+            llm_manager=None,
+            client_id="client-1",
+            logger=Mock(),
+            get_opinion_group_fn=lambda value: "Neutral",
+        )
+
+        profile = AgentProfile(
+            id="agent-1",
+            username="agent",
+            stubborn_topics={"war": True},
+        )
+
+        result = calculator.calculate_updates(
+            agent_id="agent-1",
+            parent_post_id="post-1",
+            parent_post_data={"user_id": "author-1", "tweet": "content"},
+            agent_profiles=[profile],
+        )
+
+        assert result is None
 
 
 if __name__ == "__main__":

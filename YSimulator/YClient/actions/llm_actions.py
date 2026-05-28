@@ -9,7 +9,7 @@ All functions return Ray ObjectRefs (futures) to enable parallel execution
 of multiple LLM calls using the scatter/gather pattern.
 """
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import ray
 
@@ -173,7 +173,12 @@ def generate_llm_reaction_async(
 
 
 def generate_news_post_async(
-    news_service, llm_service, agent_cluster: int, article: dict, website_name: str = None
+    news_service,
+    llm_service,
+    agent_cluster: int,
+    article: dict,
+    website_name: str = None,
+    include_article_content: bool = False,
 ):
     """
     Generate a news post with LLM commentary asynchronously.
@@ -190,7 +195,10 @@ def generate_news_post_async(
         website_name: Name of the website/page sharing the article (for LLM context)
 
     Returns:
-        tuple: (Ray ObjectRef for commentary, article_id)
+        tuple:
+            default compatibility shape: (Ray ObjectRef for commentary, article_id)
+            extended shape when include_article_content=True:
+                (Ray ObjectRef for commentary, article_id, article)
     """
     # Save article to database first
     article_id_future = news_service.save_article_to_db.remote(article)
@@ -201,8 +209,10 @@ def generate_news_post_async(
         llm_service, agent_cluster, article, website_name
     )
 
-    # Return article content along with article_id to avoid re-fetching from DB
-    return commentary_future, article_id, article
+    if include_article_content:
+        # The action generator uses the article payload later to avoid a DB re-fetch.
+        return commentary_future, article_id, article
+    return commentary_future, article_id
 
 
 def generate_llm_read_async(
@@ -485,33 +495,43 @@ def generate_llm_news_commentary(
 
 def generate_image_post_async(
     llm_handle: Any,
-    cluster_id: int,
-    day: int,
-    slot: int,
+    cluster_id: Optional[int] = None,
+    day: Optional[int] = None,
+    slot: Optional[int] = None,
     agent_attrs: Optional[Dict[str, Any]] = None,
     agent_id: Optional[str] = None,
-) -> ray.ObjectRef:
+    *,
+    agent_cluster: Optional[int] = None,
+    image_data: Optional[Dict[str, Any]] = None,
+    topics: Optional[List[str]] = None,
+) -> Union[ray.ObjectRef, Tuple[ray.ObjectRef, Optional[str]]]:
     """
     Initiate async LLM-based image post generation.
 
     This function doesn't wait for the LLM response - it immediately returns
     a Ray ObjectRef (future) that can be resolved later for batching.
 
-    The LLM service will generate post content for an image. The actual image
-    selection happens later in the action processing pipeline, not during this
-    async call. This matches the pattern of other async generators where
-    content generation is separated from resource attachment.
+    Supports two contracts:
+    - current generator contract: produce generic image-post content, where the
+      image is selected elsewhere in the pipeline
+    - legacy helper contract used by tests and older call sites: produce
+      commentary for a specific image payload and return ``(future, image_id)``
 
     Args:
         llm_handle: Ray actor handle for the LLM service or LLMLoadBalancer
         cluster_id: Cluster/group the agent belongs to (determines persona)
-        day: Current simulation day (used by caller for context/tracking)
-        slot: Current time slot within the day (used by caller for context/tracking)
+        day: Current simulation day (used by the modern generator contract)
+        slot: Current time slot within the day (used by the modern generator contract)
         agent_attrs: Optional dict with agent attributes (name, age, gender, etc.)
         agent_id: Optional agent ID for load balancing (required when using LLMLoadBalancer)
+        agent_cluster: Legacy alias for cluster_id
+        image_data: Legacy image payload for image-specific commentary generation
+        topics: Optional image topics for the legacy contract
 
     Returns:
-        Ray ObjectRef: Future that will resolve to generated post content (str)
+        Either:
+        - Ray ObjectRef for the modern generator contract
+        - (Ray ObjectRef, image_id) for the legacy image-specific contract
 
     Note:
         Image selection/attachment happens in the action processor when the future
@@ -519,7 +539,26 @@ def generate_image_post_async(
         are included for signature consistency with other async generators and are
         used by the caller for context tracking.
     """
+    # Legacy contract used to pass (server, llm_service, agent_cluster=..., image_data=...)
+    # Keep supporting that shape so existing helpers/tests remain valid.
+    if cluster_id is not None and not isinstance(cluster_id, int):
+        llm_handle = cluster_id
+        cluster_id = None
+
+    resolved_cluster_id = cluster_id if cluster_id is not None else agent_cluster
+    if resolved_cluster_id is None:
+        raise TypeError("cluster_id is required")
+
     llm_actor = _get_llm_actor(llm_handle, agent_id)
+
+    # Backwards-compatible path used by existing helpers/tests: generate
+    # commentary for a specific image that has already been selected.
+    if image_data is not None:
+        description = image_data.get("description") or "An image"
+        future = llm_actor.generate_image_commentary.remote(
+            description, topics, agent_attrs, resolved_cluster_id
+        )
+        return future, image_data.get("id")
 
     # For vLLM batching: Don't create individual futures, return None as placeholder
     # The batch processor will create a single batch call instead
@@ -528,6 +567,6 @@ def generate_image_post_async(
 
     # For Ollama/standard: Create individual future (standard scatter/gather)
     # Generate post content (image will be attached later during action processing)
-    future = llm_actor.generate_post.remote(cluster_id, day, slot, agent_attrs)
+    future = llm_actor.generate_post.remote(resolved_cluster_id, day, slot, agent_attrs)
 
     return future

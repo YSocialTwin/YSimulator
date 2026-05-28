@@ -14,6 +14,7 @@ import os
 import shutil
 import sys
 import time
+from copy import deepcopy
 from datetime import datetime
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
@@ -23,6 +24,23 @@ import ray
 from YSimulator.common_utils import validate_config_directory
 from YSimulator.utils.init_db import database_exists, initialize_database
 from YSimulator.YServer.server import OrchestratorServer
+
+
+def _configure_model_cache_env():
+    root = Path(os.environ.get("YSOCIAL_MODEL_CACHE_DIR", "~/.cache/ysocial_models")).expanduser()
+    hf_home = root / "huggingface"
+    transformers_cache = hf_home / "transformers"
+    hub_cache = hf_home / "hub"
+    torch_home = root / "torch"
+
+    for path in (root, hf_home, transformers_cache, hub_cache, torch_home):
+        path.mkdir(parents=True, exist_ok=True)
+
+    os.environ.setdefault("YSOCIAL_MODEL_CACHE_DIR", str(root))
+    os.environ.setdefault("HF_HOME", str(hf_home))
+    os.environ.setdefault("TRANSFORMERS_CACHE", str(transformers_cache))
+    os.environ.setdefault("HUGGINGFACE_HUB_CACHE", str(hub_cache))
+    os.environ.setdefault("TORCH_HOME", str(torch_home))
 
 
 def compress_rotated_log(source, dest):
@@ -43,6 +61,33 @@ def build_isolated_namespace(base_namespace: str, config_dir: Path) -> str:
     """Build a stable per-experiment namespace for servers sharing one Ray cluster."""
     digest = hashlib.sha256(str(config_dir.resolve()).encode()).hexdigest()[:10]
     return f"{base_namespace}_{digest}"
+
+
+def build_server_simulation_config(config: dict) -> dict:
+    """Build the simulation_config payload passed into the server actor."""
+    if not isinstance(config, dict):
+        return {}
+
+    simulation_config = deepcopy(config.get("simulation", {}) or {})
+
+    posts_config = config.get("posts", {})
+    if posts_config:
+        simulation_config["posts"] = deepcopy(posts_config)
+
+    stress_reward_config = config.get("stress_reward")
+    if isinstance(stress_reward_config, dict):
+        simulation_config["stress_reward"] = deepcopy(stress_reward_config)
+    else:
+        enabled = config.get(
+            "stress_reward_enabled", config.get("stress_reward_annotation", False)
+        )
+        if enabled:
+            simulation_config["stress_reward"] = {
+                "enabled": bool(enabled),
+                "backward_rounds": 24,
+            }
+
+    return simulation_config
 
 
 def setup_logging(
@@ -170,6 +215,7 @@ def _get_short_ray_temp_dir(config_dir: Path, ray_config: dict) -> Path:
 
 
 if __name__ == "__main__":
+    _configure_model_cache_env()
     # Parse command line arguments
     parser = argparse.ArgumentParser(
         description="YSimulator Server - Ray-based social media simulation orchestrator"
@@ -227,13 +273,8 @@ if __name__ == "__main__":
         db_config[db_type]["database"] = unique_db_name
 
     redis_config = config.get("redis")  # Redis configuration (optional)
-    simulation_config = config.get("simulation", {})  # Simulation configuration (optional)
+    simulation_config = build_server_simulation_config(config)
     ray_config = config.get("ray", {})  # Ray configuration (optional)
-
-    # Add posts configuration to simulation_config for consistency
-    posts_config = config.get("posts", {})
-    if posts_config:
-        simulation_config["posts"] = posts_config
 
     # Set up logging in config directory
     logging_config = config.get("logging", {})

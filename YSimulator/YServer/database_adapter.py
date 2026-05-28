@@ -15,6 +15,7 @@ from YSimulator.YServer.services.follow_service import FollowService
 from YSimulator.YServer.services.image_service import ImageService
 from YSimulator.YServer.services.interest_service import InterestService
 from YSimulator.YServer.services.mention_service import MentionService
+from YSimulator.YServer.services.memory_service import MemoryService
 from YSimulator.YServer.services.metadata_service import MetadataService
 from YSimulator.YServer.services.post_service import PostService
 from YSimulator.YServer.services.simulation_service import SimulationService
@@ -42,6 +43,7 @@ class DatabaseServiceAdapter:
         simulation_service: SimulationService,
         metadata_service: MetadataService,
         mention_service: MentionService,
+        memory_service: MemoryService = None,
         redis_client=None,
         logger: Optional[logging.Logger] = None,
     ):
@@ -72,6 +74,7 @@ class DatabaseServiceAdapter:
         self.simulation_service = simulation_service
         self.metadata_service = metadata_service
         self.mention_service = mention_service
+        self.memory_service = memory_service
         self.redis_client = redis_client
         self.logger = logger or logging.getLogger(__name__)
 
@@ -146,6 +149,10 @@ class DatabaseServiceAdapter:
         """Add interaction."""
         return self.post_service.add_interaction(interaction_data)
 
+    def add_report(self, report_data: Dict[str, Any]) -> bool:
+        """Add moderation report."""
+        return self.post_service.add_report(report_data)
+
     def increment_post_reaction_count(self, post_id: str) -> bool:
         """Increment reaction count."""
         return self.post_service.increment_post_reaction_count(post_id)
@@ -161,6 +168,10 @@ class DatabaseServiceAdapter:
     def search_posts_by_topic(self, topic_id: str, agent_id: str, limit: int = 10) -> List[str]:
         """Search posts by topic."""
         return self.post_service.search_posts_by_topic(topic_id, agent_id, limit)
+
+    def get_active_system_messages(self, user_id: str, round_id: str) -> List[Dict[str, Any]]:
+        """Get active system messages for a user at a given round."""
+        return self.post_service.get_active_system_messages(user_id, round_id)
 
     # ========================================================================
     # POST METADATA OPERATIONS - MetadataService (COMPLETE)
@@ -528,6 +539,46 @@ class DatabaseServiceAdapter:
     def get_or_create_round(self, day: int, slot: int) -> str:
         """Get or create simulation round."""
         return self.simulation_service.get_or_create_round(day, slot)
+
+    def get_latest_round(self) -> Optional[Dict[str, Any]]:
+        """Return the most advanced persisted simulation round."""
+        return self.simulation_service.get_latest_round()
+
+    # ========================================================================
+    # MEMORY OPERATIONS - MemoryService
+    # ========================================================================
+
+    def memory_reset(self, run_id: str) -> Dict[str, Any]:
+        """Clear server-owned memory for a run."""
+        return self.memory_service.reset(run_id) if self.memory_service else {"status": 503}
+
+    def memory_event(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        """Record a memory event."""
+        return self.memory_service.record_event(payload) if self.memory_service else {"status": 503}
+
+    def memory_item_upsert(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        """Upsert a searchable memory item."""
+        return self.memory_service.upsert_item(payload) if self.memory_service else {"status": 503}
+
+    def memory_search(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        """Search server-owned memory."""
+        return (
+            self.memory_service.search(payload)
+            if self.memory_service
+            else {"status": 503, "items": []}
+        )
+
+    def memory_get_context(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        """Fetch memory context."""
+        return self.memory_service.get_context(payload) if self.memory_service else {"status": 503}
+
+    def memory_events_recent(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        """Fetch recent memory events."""
+        return (
+            self.memory_service.events_recent(payload)
+            if self.memory_service
+            else {"status": 503, "events": []}
+        )
 
     def consolidate_redis_to_sqlite(self, current_day: int):
         """Consolidate Redis to SQL."""

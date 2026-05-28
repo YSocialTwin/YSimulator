@@ -132,6 +132,22 @@ class PostService:
         """
         return self.add_reaction(interaction_data)
 
+    def add_report(self, report_data: Dict[str, Any]) -> bool:
+        """
+        Add a moderation report for a post.
+
+        Args:
+            report_data: Report information dictionary
+
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            return self.post_repo.add_report(report_data)
+        except Exception as e:
+            self.logger.error(f"Error in post service add_report: {e}")
+            return False
+
     def increment_post_reaction_count(self, post_id: str) -> bool:
         """
         Increment the reaction count for a post.
@@ -197,6 +213,23 @@ class PostService:
             return self.post_repo.search_posts_by_topic(topic_id, agent_id, limit)
         except Exception as e:
             self.logger.error(f"Error in post service search_posts_by_topic: {e}")
+            return []
+
+    def get_active_system_messages(self, user_id: str, round_id: str) -> List[Dict[str, Any]]:
+        """
+        Get active system messages for a user at a given round.
+
+        Args:
+            user_id: User UUID
+            round_id: Current round UUID
+
+        Returns:
+            List of active system message dictionaries
+        """
+        try:
+            return self.post_repo.get_active_system_messages(user_id, round_id)
+        except Exception as e:
+            self.logger.error(f"Error in post service get_active_system_messages: {e}")
             return []
 
     def get_topic_by_name(self, topic_name: str) -> Optional[str]:

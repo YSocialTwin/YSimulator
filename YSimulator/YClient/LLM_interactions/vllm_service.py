@@ -16,6 +16,39 @@ import ray
 logger = logging.getLogger(__name__)
 
 
+def _append_custom_features_to_persona(persona: str, agent_attrs: Optional[Dict[str, Any]]) -> str:
+    custom_features = dict((agent_attrs or {}).get("custom_features") or {})
+    if not custom_features:
+        return persona
+
+    parts = []
+    for key in sorted(custom_features.keys(), key=lambda value: str(value).lower()):
+        label = str(key).strip()
+        if not label:
+            continue
+        raw_value = custom_features.get(key)
+        value = str(raw_value).strip() if raw_value is not None else ""
+        parts.append(f"{label}: {value}" if value else label)
+
+    if not parts:
+        return persona
+
+    return f"{persona.rstrip()} Additional personal details: {'; '.join(parts)}."
+
+
+def _stress_prompt_block(agent_attrs: Optional[Dict[str, Any]]) -> str:
+    attrs = agent_attrs or {}
+    label = str(attrs.get("stress_level_label") or "").strip()
+    scale = attrs.get("stress_level_scale")
+    if not label or scale is None:
+        return ""
+    return (
+        "Current stress level: "
+        f"{label} ({scale}/5 on a five-point scale where 1 means none and 5 means extremely stressed). "
+        "Use this only as internal emotional context while writing."
+    )
+
+
 @ray.remote
 class VLLMService:
     """
@@ -798,13 +831,42 @@ class VLLMService:
                     ag=agent_attrs.get("ag", "average in agreeableness"),
                     ne=agent_attrs.get("ne", "average in neuroticism"),
                 )
-                return persona
+                return _append_custom_features_to_persona(persona, agent_attrs)
             except KeyError:
                 # If template formatting fails, fall back to cluster-based persona
                 pass
 
         # Fallback to cluster-based persona
-        return self.prompts_config["personas"].get(str(cluster_id), "You are a social media user.")
+        persona = self.prompts_config["personas"].get(str(cluster_id), "You are a social media user.")
+        return _append_custom_features_to_persona(persona, agent_attrs)
+
+    def _memory_blocks(self, agent_attrs: Optional[dict]) -> Dict[str, str]:
+        attrs = agent_attrs or {}
+        return {
+            "post_style": str(attrs.get("memory_post_style_text") or "").strip(),
+            "reply_context": str(attrs.get("memory_reply_context_text") or "").strip(),
+            "reply_cues": str(attrs.get("memory_reply_cues_text") or "").strip(),
+            "browse_context": str(attrs.get("memory_browse_context_text") or "").strip(),
+        }
+
+    def _system_messages_block(self, agent_attrs: Optional[dict]) -> str:
+        messages = (agent_attrs or {}).get("system_messages") or []
+        if not isinstance(messages, list) or not messages:
+            return ""
+
+        lines = ["Active system messages addressed to you for this round."]
+        lines.append(
+            "These are mandatory platform or moderator instructions for the content you are about to write. Follow them exactly."
+        )
+        for item in messages:
+            if not isinstance(item, dict):
+                continue
+            message_text = str(item.get("message") or "").strip()
+            if not message_text:
+                continue
+            message_type = str(item.get("type") or "system").strip() or "system"
+            lines.append(f"- [{message_type}] {message_text}")
+        return "\n".join(lines) if len(lines) > 2 else ""
 
     def _format_prompt(self, system_msg: str, user_msg: str) -> str:
         """
@@ -830,6 +892,9 @@ class VLLMService:
 
             # Get topic if available
             topic = agent_attrs.get("topic") if agent_attrs else None
+            memory_blocks = self._memory_blocks(agent_attrs)
+            system_messages_block = self._system_messages_block(agent_attrs)
+            stress_block = _stress_prompt_block(agent_attrs)
 
             # DEBUG: Log if topic is unexpectedly missing
             # Note: null topic is EXPECTED when agent has no interests (per INTERESTS.md)
@@ -861,6 +926,11 @@ class VLLMService:
                 topic_instruction = f" You MUST write about the topic: {topic}."
             else:
                 topic_instruction = ""
+            if memory_blocks["post_style"]:
+                topic_instruction += (
+                    f" Use this only as a style/tone memory, not as a topic list:\n"
+                    f"{memory_blocks['post_style']}\n"
+                )
 
             # Format user message with all placeholders
             user_msg = user_template.format(
@@ -870,6 +940,10 @@ class VLLMService:
                 slot=slot,
                 topic_instruction=topic_instruction,
             )
+            if system_messages_block:
+                user_msg += f"\n\n{system_messages_block}"
+            if stress_block:
+                user_msg += f"\n\n{stress_block}"
 
             # Log the prompt for debugging
             self._log_prompt("generate_post", system_msg, user_msg, agent_attrs)
@@ -1054,6 +1128,7 @@ class VLLMService:
                         toxicity = agent_attrs.get("toxicity", "no") if agent_attrs else "no"
                         topic = agent_attrs.get("topic") if agent_attrs else None
                         topic_opinion = agent_attrs.get("topic_opinion") if agent_attrs else None
+                        system_messages_block = self._system_messages_block(agent_attrs)
 
                         logger.debug(
                             f"[vLLM Batch {idx}] Regular post - persona: {persona[:50]}..., topic: {topic}"
@@ -1085,6 +1160,8 @@ class VLLMService:
                             slot=slot,
                             topic_instruction=topic_instruction,
                         )
+                        if system_messages_block:
+                            user_msg += f"\n\n{system_messages_block}"
 
                         # Create formatted prompt
                         prompt = self._format_prompt(system_msg, user_msg)
@@ -1270,9 +1347,15 @@ class VLLMService:
                                 opinion_str = ", ".join(opinion_parts)
                                 opinion_instruction = f" Your opinions on the discussed topics: {opinion_str}. React accordingly."
 
-                    # Get prompt templates (use decide_reaction templates as base)
-                    system_template = self.prompts_config["decide_reaction"]["system_template"]
-                    user_template = self.prompts_config["decide_reaction"]["user_template"]
+                    # Use the dedicated read-reaction prompt family here.
+                    # The older decide_reaction prompt still allows COMMENT, which
+                    # makes read actions collapse into comments in the batch path.
+                    system_template = self.prompts_config["generate_read_reaction"][
+                        "system_template"
+                    ]
+                    user_template = self.prompts_config["generate_read_reaction"][
+                        "user_template"
+                    ]
 
                     # Format templates with persona and opinion instruction
                     system_msg = (
@@ -1354,6 +1437,9 @@ class VLLMService:
         """
         # Build persona using attributes or fallback
         persona = self._build_persona(cluster_id, agent_attrs)
+        memory_blocks = self._memory_blocks(agent_attrs)
+        system_messages_block = self._system_messages_block(agent_attrs)
+        stress_block = _stress_prompt_block(agent_attrs)
 
         # Get toxicity level (default to "no" if not provided)
         toxicity = agent_attrs.get("toxicity", "no") if agent_attrs else "no"
@@ -1408,6 +1494,17 @@ class VLLMService:
         # Add opinion instruction if available
         if opinion_instruction:
             user_msg += opinion_instruction
+        if system_messages_block:
+            user_msg += f"\n\n{system_messages_block}"
+        if stress_block:
+            user_msg += f"\n\n{stress_block}"
+        if memory_blocks["reply_context"]:
+            user_msg += f"\n\nMemory context:\n{memory_blocks['reply_context']}"
+        if memory_blocks["reply_cues"]:
+            user_msg += (
+                f"\n\nUse these continuity cues only if they fit naturally:\n"
+                f"{memory_blocks['reply_cues']}"
+            )
 
         # Log the prompt for debugging
         self._log_prompt("generate_comment", system_msg, user_msg, agent_attrs)
@@ -1470,6 +1567,7 @@ class VLLMService:
                     # Build persona
                     persona = self._build_persona(cluster_id, agent_attrs)
                     toxicity = agent_attrs.get("toxicity", "no") if agent_attrs else "no"
+                    system_messages_block = self._system_messages_block(agent_attrs)
 
                     # Get opinions on the post's topics if available
                     opinion_instruction = ""
@@ -1523,6 +1621,8 @@ class VLLMService:
                     # Add opinion instruction if available
                     if opinion_instruction:
                         user_msg += opinion_instruction
+                    if system_messages_block:
+                        user_msg += f"\n\n{system_messages_block}"
 
                     # Create formatted prompt
                     prompt = self._format_prompt(system_msg, user_msg)
@@ -1633,6 +1733,7 @@ class VLLMService:
         """Generate commentary for sharing/resharing a post."""
         persona = self._build_persona(cluster_id, agent_attrs)
         toxicity = agent_attrs.get("toxicity", "no") if agent_attrs else "no"
+        memory_blocks = self._memory_blocks(agent_attrs)
 
         opinion_instruction = ""
         if agent_attrs and "post_topics" in agent_attrs and agent_attrs["post_topics"]:
@@ -1665,6 +1766,13 @@ class VLLMService:
 
         if opinion_instruction:
             user_msg += opinion_instruction
+        if memory_blocks["reply_context"]:
+            user_msg += f"\n\nMemory context:\n{memory_blocks['reply_context']}"
+        if memory_blocks["reply_cues"]:
+            user_msg += (
+                f"\n\nUse these continuity cues only if they fit naturally:\n"
+                f"{memory_blocks['reply_cues']}"
+            )
 
         prompt = self._format_prompt(system_msg, user_msg)
 
@@ -1679,11 +1787,41 @@ class VLLMService:
         except Exception:
             return "Sharing this!"
 
+    def annotate_stress_reward_text(
+        self,
+        text: str,
+        prompt_key: str,
+        actor_user_id: str = "",
+        recipient_user_id: str = "",
+    ) -> str:
+        """Return a JSON annotation for stress/reward scoring."""
+        system_prompt = self.prompts_config.get(prompt_key)
+        if not isinstance(system_prompt, str) or not system_prompt.strip():
+            logger.warning(f"{prompt_key} prompt not found in config")
+            return "{}"
+
+        user_msg = (
+            "Annotate the interaction for stress/reward scoring.\n"
+            f"Actor user id: {actor_user_id}\n"
+            f"Recipient user id: {recipient_user_id}\n"
+            f"Text:\n{text}\n"
+            "Return JSON only."
+        )
+        prompt = self._format_prompt(system_prompt, user_msg)
+
+        try:
+            outputs = self.llm.generate([prompt], self.sampling_params)
+            return outputs[0].outputs[0].text.strip()
+        except Exception as exc:
+            logger.warning(f"stress/reward annotation failed: {exc}")
+            return "{}"
+
     def generate_read_reaction(
         self, cluster_id: int, post_content: str, agent_attrs: dict = None
     ) -> str:
         """Decide how to react to a post discovered via read/recommendation."""
         persona = self._build_persona(cluster_id, agent_attrs)
+        memory_blocks = self._memory_blocks(agent_attrs)
 
         opinion_instruction = ""
         if agent_attrs and "post_topics" in agent_attrs and agent_attrs["post_topics"]:
@@ -1710,6 +1848,8 @@ class VLLMService:
 
         if opinion_instruction:
             user_msg += opinion_instruction
+        if memory_blocks["browse_context"]:
+            user_msg += f"\n\nBrowsing memory:\n{memory_blocks['browse_context']}"
 
         prompt = self._format_prompt(system_msg, user_msg)
 
@@ -1717,6 +1857,12 @@ class VLLMService:
             outputs = self.llm.generate([prompt], self.sampling_params)
             result = outputs[0].outputs[0].text.strip().upper()
 
+            if "REPORT_TOXIC" in result or ("REPORT" in result and "TOXIC" in result):
+                return "REPORT_TOXIC"
+            if "REPORT_OFFENSIVE" in result or (
+                "REPORT" in result and "OFFENSIVE" in result
+            ):
+                return "REPORT_OFFENSIVE"
             if "LOVE" in result:
                 return "LOVE"
             if "LIKE" in result:
@@ -1831,6 +1977,74 @@ class VLLMService:
                 return "unfollow"
 
         return "no_change"
+
+    def generate_reciprocal_follow_decision(
+        self, cluster_id: int, source_agent_profile, action: str, agent_attrs: dict = None
+    ) -> str:
+        """Decide whether to reciprocate a direct follow/unfollow event based on the other agent profile."""
+        persona = self._build_persona(cluster_id, agent_attrs)
+        normalized_action = str(action or "").strip().lower()
+        source_summary = self._format_other_agent_profile(source_agent_profile)
+        if not source_summary or normalized_action not in {"follow", "unfollow"}:
+            return "no_change"
+
+        desired_reply = "FOLLOW" if normalized_action == "follow" else "UNFOLLOW"
+        action_text = "followed" if normalized_action == "follow" else "unfollowed"
+        system_msg = (
+            f"{persona}\n"
+            "You are deciding whether to reciprocate a direct social-link change."
+        )
+        user_msg = (
+            f"Another user has just {action_text} you.\n"
+            f"Their profile:\n{source_summary}\n\n"
+            f"Reply with ONLY '{desired_reply}' or 'NOCHANGE'."
+        )
+        prompt = self._format_prompt(system_msg, user_msg)
+        try:
+            outputs = self.llm.generate([prompt], self.sampling_params)
+            result = outputs[0].outputs[0].text.strip().upper()
+        except Exception:
+            return "no_change"
+
+        if desired_reply in result:
+            return normalized_action
+        return "no_change"
+
+    @staticmethod
+    def _format_other_agent_profile(source_agent_profile) -> str:
+        if isinstance(source_agent_profile, dict):
+            data = source_agent_profile
+        else:
+            data = getattr(source_agent_profile, "__dict__", {}) or {}
+        fields = [
+            ("username", data.get("username")),
+            ("age", data.get("age")),
+            ("leaning", data.get("leaning")),
+            ("language", data.get("language")),
+            ("education_level", data.get("education_level")),
+            ("profession", data.get("profession")),
+            ("toxicity", data.get("toxicity")),
+            ("archetype", data.get("archetype")),
+        ]
+        interests = data.get("interests")
+        if isinstance(interests, (list, tuple)) and interests:
+            if len(interests) == 2 and isinstance(interests[0], list):
+                fields.append(("interests", ", ".join(str(item) for item in interests[0][:5])))
+            else:
+                fields.append(("interests", ", ".join(str(item) for item in list(interests)[:5])))
+        custom_features = data.get("custom_features")
+        if isinstance(custom_features, dict) and custom_features:
+            fields.append(
+                (
+                    "custom_features",
+                    ", ".join(
+                        f"{key}:{value}"
+                        for key, value in list(custom_features.items())[:5]
+                        if str(key).strip()
+                    ),
+                )
+            )
+        return "\n".join(f"{key}={value}" for key, value in fields if value not in (None, ""))
 
     def extract_topics_from_article(self, article_title: str, article_summary: str) -> list:
         """Extract up to 2 topics from an article using LLM."""

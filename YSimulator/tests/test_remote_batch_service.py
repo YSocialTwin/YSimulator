@@ -86,6 +86,36 @@ def test_resolve_remote_batch_provider_prefers_openai_when_available(monkeypatch
     assert provider == "openai"
 
 
+def test_resolve_remote_batch_provider_prefers_ollama_for_ollama_backend(monkeypatch):
+    openai_probe = Mock(
+        side_effect=AssertionError("openai probe should not run first for ollama backend")
+    )
+    ollama_probe = Mock(return_value=True)
+
+    monkeypatch.setattr(
+        "YSimulator.YClient.LLM_interactions.remote_batch_service._probe_openai_batch_support",
+        openai_probe,
+    )
+    monkeypatch.setattr(
+        "YSimulator.YClient.LLM_interactions.remote_batch_service._probe_ollama_batch_support",
+        ollama_probe,
+    )
+
+    provider = resolve_remote_batch_provider(
+        {
+            "address": "localhost",
+            "port": 11434,
+            "model": "llama3.2",
+            "backend": "ollama",
+            "api_format": "auto",
+        },
+        logger=Mock(),
+    )
+
+    assert provider == "ollama"
+    ollama_probe.assert_called_once()
+
+
 def test_probe_remote_batch_support_failure(monkeypatch):
     class _FailingChatOllama:
         def __init__(self, **kwargs):

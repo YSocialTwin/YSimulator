@@ -5,10 +5,13 @@ Tests the Orchestrator Server functionality with comprehensive mocking.
 """
 
 import tempfile
+import uuid
 from pathlib import Path
 from unittest.mock import Mock, patch
 
 import pytest
+from sqlalchemy.exc import OperationalError
+from sqlalchemy.orm import Session
 
 # Mark all tests in this module to run in isolated execution group
 pytestmark = pytest.mark.xdist_group(name="server_tests")
@@ -26,6 +29,16 @@ def mock_ray_remote_for_server_tests():
 
     # Replace with identity function
     ray.remote = lambda x: x
+
+    # Normalize the already-imported server module if another test imported it first.
+    try:
+        import YSimulator.YServer.server as server_module
+
+        orchestrator = getattr(server_module, "OrchestratorServer", None)
+        if hasattr(orchestrator, "__ray_actor_class__"):
+            server_module.OrchestratorServer = orchestrator.__ray_actor_class__
+    except Exception:
+        pass
 
     yield
 
@@ -172,6 +185,42 @@ class TestOrchestratorServerInit:
 
             # Note: With service layer, DatabaseMiddleware mock is bypassed
             # The server uses real repository implementations that generate UUIDs
+
+
+class TestRecommendationPersistence:
+    def test_save_recommendation_retries_when_sqlite_is_locked(self, monkeypatch):
+        from YSimulator.YServer import server as server_module
+
+        state = {"commits": 0}
+
+        class _FakeSession:
+            def add(self, _recommendation):
+                return None
+
+            def commit(self):
+                state["commits"] += 1
+                if state["commits"] == 1:
+                    raise OperationalError("INSERT INTO recommendations", {}, Exception("database is locked"))
+
+            def rollback(self):
+                return None
+
+            def close(self):
+                return None
+
+        monkeypatch.setattr(server_module, "Session", lambda _engine: _FakeSession())
+        monkeypatch.setattr(server_module.time, "sleep", lambda _seconds: None)
+
+        server = Mock()
+        server.db = Mock(engine=object())
+        server.current_round_id = "round-1"
+        server.use_redis = False
+        server.logger = Mock()
+
+        server_module.OrchestratorServer._save_recommendation(server, "agent-1", ["post-1", "post-2"])
+
+        assert state["commits"] == 2
+        server.logger.error.assert_not_called()
 
     @patch("YSimulator.YServer.server.InterestManager")
     @patch("redis.Redis")
@@ -450,9 +499,9 @@ class TestCheckFollowRelationship:
 
         mock_follow = Mock()
         mock_follow.action = "follow"
-        mock_session.query.return_value.filter_by.return_value.order_by.return_value.first.return_value = (
-            mock_follow
-        )
+        (
+            mock_session.query.return_value.outerjoin.return_value.filter.return_value.order_by.return_value.first.return_value
+        ) = mock_follow
 
         with tempfile.TemporaryDirectory() as tmpdir:
             db_config = {"type": "sqlite", "sqlite": {"filename": ":memory:"}}
@@ -476,9 +525,9 @@ class TestCheckFollowRelationship:
         # Mock the SQLAlchemy session and query to return None
         mock_session = Mock()
         mock_session_class.return_value.__enter__.return_value = mock_session
-        mock_session.query.return_value.filter_by.return_value.order_by.return_value.first.return_value = (
-            None
-        )
+        (
+            mock_session.query.return_value.outerjoin.return_value.filter.return_value.order_by.return_value.first.return_value
+        ) = None
 
         with tempfile.TemporaryDirectory() as tmpdir:
             db_config = {"type": "sqlite", "sqlite": {"filename": ":memory:"}}
@@ -685,3 +734,171 @@ class TestEdgeCases:
             # Should handle zero visibility
             assert visibility_day == server.day
             assert visibility_slot == server.slot
+
+
+class TestStressRewardWindowing:
+    """Regression tests for stress/reward aggregate reconstruction."""
+
+    @patch("YSimulator.YServer.server.InterestManager")
+    def test_get_stress_reward_uses_round_day_hour_not_uuid_order(self, mock_interest_mgr_class):
+        """Stress/reward windowing should be based on Round(day, hour) even when tids are UUIDs."""
+        from YSimulator.YServer.classes.models import Round, StressReward
+        from YSimulator.YServer.server import OrchestratorServer
+
+        mock_interest_mgr = Mock()
+        mock_interest_mgr_class.return_value = mock_interest_mgr
+
+        simulation_config = {"stress_reward": {"enabled": True}}
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_config = {"type": "sqlite", "sqlite": {"filename": ":memory:"}}
+            server = OrchestratorServer(
+                db_config=db_config, config_path=tmpdir, simulation_config=simulation_config
+            )
+
+            target_round_id = str(uuid.uuid4())
+            sparse_mid_round_id = str(uuid.uuid4())
+            old_round_id = str(uuid.uuid4())
+            agent_id = str(uuid.uuid4())
+
+            with Session(server.db.engine) as session:
+                session.add_all(
+                    [
+                        Round(id=old_round_id, day=1, hour=3),
+                        Round(id=sparse_mid_round_id, day=4, hour=18),
+                        Round(id=target_round_id, day=9, hour=7),
+                    ]
+                )
+                session.add_all(
+                    [
+                        StressReward(
+                            id=str(uuid.uuid4()),
+                            uid=agent_id,
+                            variable="stress",
+                            value=0.45,
+                            type="aggregate",
+                            action=None,
+                            tid=old_round_id,
+                        ),
+                        StressReward(
+                            id=str(uuid.uuid4()),
+                            uid=agent_id,
+                            variable="stress",
+                            value=0.15,
+                            type="variation",
+                            action="comment:hostile",
+                            tid=sparse_mid_round_id,
+                        ),
+                        StressReward(
+                            id=str(uuid.uuid4()),
+                            uid=agent_id,
+                            variable="reward",
+                            value=0.25,
+                            type="aggregate",
+                            action=None,
+                            tid=old_round_id,
+                        ),
+                        StressReward(
+                            id=str(uuid.uuid4()),
+                            uid=agent_id,
+                            variable="reward",
+                            value=0.10,
+                            type="variation",
+                            action="reaction:like",
+                            tid=sparse_mid_round_id,
+                        ),
+                    ]
+                )
+                session.commit()
+
+            payload = server.get_stress_reward(agent_id, target_round_id, backward_rounds=1)
+
+            assert payload["status"] == 200
+            assert payload["stress"] == pytest.approx(0.60)
+            assert payload["reward"] == pytest.approx(0.35)
+
+            with Session(server.db.engine) as session:
+                persisted = (
+                    session.query(StressReward)
+                    .filter_by(uid=agent_id, type="aggregate", tid=target_round_id)
+                    .all()
+                )
+                persisted_by_var = {row.variable: row.value for row in persisted}
+
+    @patch("YSimulator.YServer.server.InterestManager")
+    def test_get_stress_reward_includes_same_round_variations_after_anchor(
+        self, mock_interest_mgr_class
+    ):
+        """A prior aggregate checkpoint must not discard variations written in the same round."""
+        from YSimulator.YServer.classes.models import Round, StressReward
+        from YSimulator.YServer.server import OrchestratorServer
+
+        mock_interest_mgr = Mock()
+        mock_interest_mgr_class.return_value = mock_interest_mgr
+
+        simulation_config = {"stress_reward": {"enabled": True}}
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_config = {"type": "sqlite", "sqlite": {"filename": ":memory:"}}
+            server = OrchestratorServer(
+                db_config=db_config, config_path=tmpdir, simulation_config=simulation_config
+            )
+
+            anchor_round_id = str(uuid.uuid4())
+            target_round_id = str(uuid.uuid4())
+            agent_id = str(uuid.uuid4())
+
+            with Session(server.db.engine) as session:
+                session.add_all(
+                    [
+                        Round(id=anchor_round_id, day=1, hour=5),
+                        Round(id=target_round_id, day=1, hour=6),
+                    ]
+                )
+                session.add_all(
+                    [
+                        StressReward(
+                            id=str(uuid.uuid4()),
+                            uid=agent_id,
+                            variable="stress",
+                            value=0.0,
+                            type="aggregate",
+                            action=None,
+                            tid=anchor_round_id,
+                        ),
+                        StressReward(
+                            id=str(uuid.uuid4()),
+                            uid=agent_id,
+                            variable="stress",
+                            value=0.03,
+                            type="variation",
+                            action="reaction:angry",
+                            tid=anchor_round_id,
+                        ),
+                        StressReward(
+                            id=str(uuid.uuid4()),
+                            uid=agent_id,
+                            variable="reward",
+                            value=0.0,
+                            type="aggregate",
+                            action=None,
+                            tid=anchor_round_id,
+                        ),
+                        StressReward(
+                            id=str(uuid.uuid4()),
+                            uid=agent_id,
+                            variable="reward",
+                            value=-0.02,
+                            type="variation",
+                            action="reaction:angry",
+                            tid=anchor_round_id,
+                        ),
+                    ]
+                )
+                session.commit()
+
+            payload = server.get_stress_reward(agent_id, target_round_id, backward_rounds=1)
+
+            assert payload["status"] == 200
+            assert payload["stress"] == pytest.approx(0.03)
+            assert payload["reward"] == pytest.approx(0.0)

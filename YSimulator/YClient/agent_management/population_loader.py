@@ -99,6 +99,7 @@ class PopulationLoader:
                 profession=agent_data.get("profession", ""),
                 activity_profile=agent_data.get("activity_profile", "Always On"),
                 archetype=agent_data.get("archetype"),
+                cover_image=agent_data.get("cover_image", ""),
                 cluster=agent_data.get("cluster", 0),
                 llm=agent_data.get("llm", False),
                 toxicity=agent_data.get("toxicity", "no"),
@@ -108,6 +109,8 @@ class PopulationLoader:
                 feed_url=agent_data.get("feed_url"),
                 interests=agent_data.get("interests"),
                 opinions=agent_data.get("opinions"),
+                stubborn_topics=agent_data.get("stubborn_topics"),
+                custom_features=agent_data.get("custom_features"),
             )
             agents.append(profile)
         return agents
@@ -116,7 +119,11 @@ class PopulationLoader:
         """Generate additional agents based on generation configuration."""
         agents = []
         num_additional = gen_config.get("num_additional_agents", 0)
-        cluster_weights = gen_config["cluster_distribution"]["weights"]
+        if num_additional <= 0:
+            return agents
+
+        cluster_distribution = gen_config.get("cluster_distribution") or {}
+        cluster_weights = cluster_distribution.get("weights", [1, 1, 1])
         llm_prob = gen_config.get("llm_enabled_probability", 0.1)
         defaults = gen_config.get("default_settings", {})
         age_range = gen_config.get("age_range", [18, 65])
@@ -249,6 +256,7 @@ class PopulationLoader:
                 "profession": agent.profession,
                 "activity_profile": agent.activity_profile,
                 "archetype": agent.archetype,
+                "cover_image": agent.cover_image,
                 "cluster": agent.cluster,
                 "llm": agent.llm,
                 "toxicity": agent.toxicity,

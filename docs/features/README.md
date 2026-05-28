@@ -33,6 +33,12 @@ This directory contains documentation for YSimulator's core features and systems
   - Sentiment analysis
   - Implementation details
 
+- **[MEMORY.md](MEMORY.md)** - Client-side memory integration
+  - YSocial-compatible memory JSON contract
+  - Ray-safe architecture
+  - Prompt augmentation and event recording
+  - Ollama/vLLM compatibility notes
+
 ### vLLM Backend & Performance
 
 - **[VLLM_INTEGRATION_GUIDE](../configuration/VLLM_INTEGRATION_GUIDE.md)** - vLLM setup and configuration (450+ lines)

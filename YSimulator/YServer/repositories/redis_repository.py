@@ -483,6 +483,10 @@ class RedisPostRepository(PostRepository):
             )
             return []
 
+    def get_active_system_messages(self, user_id: str, round_id: str) -> List[Dict[str, Any]]:
+        """System messages are stored in SQL-backed experiment DB, not Redis."""
+        return []
+
     # Metadata methods
     def add_post_emotion(self, post_id: str, emotion_id: str) -> bool:
         """Add emotion to a post."""
@@ -806,6 +810,23 @@ class RedisPostRepository(PostRepository):
             )
             return []
 
+    def get_users_with_unreplied_mentions(self, user_ids: List[str]) -> List[str]:
+        """Return user IDs that currently have at least one unreplied mention."""
+        if not user_ids:
+            return []
+        try:
+            matched_users = []
+            for user_id in user_ids:
+                if self.get_unreplied_mentions(user_id):
+                    matched_users.append(str(user_id))
+            return matched_users
+        except Exception as e:
+            self.logger.error(
+                f"Error getting users with unreplied mentions from Redis: {e}",
+                extra={"extra_data": {"error": str(e)}},
+            )
+            return []
+
     def get_mention_by_id(self, mention_id: str) -> Optional[Dict[str, Any]]:
         """Get mention by ID."""
         try:
@@ -1064,6 +1085,34 @@ class RedisInterestRepository(InterestRepository):
             )
             return None
 
+    def list_interests(self) -> List[Dict[str, Any]]:
+        """Return all known interests/topics."""
+        try:
+            pattern = self._redis_key("interests", "*")
+            records = []
+            for key in self.redis_client.scan_iter(match=pattern):
+                key_str = key.decode() if isinstance(key, bytes) else key
+                if ":by_name:" in key_str:
+                    continue
+                data = self.redis_client.hgetall(key)
+                if not data:
+                    continue
+                normalized = {
+                    k.decode() if isinstance(k, bytes) else k: (
+                        v.decode() if isinstance(v, bytes) else v
+                    )
+                    for k, v in data.items()
+                }
+                if normalized.get("iid") and normalized.get("interest"):
+                    records.append(normalized)
+            return records
+        except Exception as e:
+            self.logger.error(
+                f"Error listing interests from Redis: {e}",
+                extra={"extra_data": {"error": str(e)}},
+            )
+            return []
+
     def add_user_interest(self, user_id: str, interest_id: str, round_id: str) -> bool:
         """Add a user interest."""
         try:
@@ -1207,6 +1256,35 @@ class RedisRecommendationRepository(RecommendationRepository):
                 extra={"extra_data": {"error": str(e)}},
             )
             raise RuntimeError(f"Failed to get or create round for day={day}, hour={hour}: {e}")
+
+    def get_latest_round(self) -> Optional[Dict[str, Any]]:
+        """Return the highest day/hour round stored in Redis."""
+        try:
+            latest = None
+            pattern = self._redis_key("round_data", "*")
+            for key in self.redis_client.scan_iter(match=pattern):
+                data = self.redis_client.hgetall(key)
+                if not data:
+                    continue
+
+                def _decode(value):
+                    return value.decode() if isinstance(value, bytes) else value
+
+                round_id = _decode(data.get(b"id") or data.get("id"))
+                day = int(_decode(data.get(b"day") or data.get("day") or 0) or 0)
+                hour = int(_decode(data.get(b"hour") or data.get("hour") or 0) or 0)
+                if not round_id or day <= 0 or hour <= 0:
+                    continue
+                row = {"id": round_id, "day": day, "hour": hour}
+                if latest is None or (day, hour) > (latest["day"], latest["hour"]):
+                    latest = row
+            return latest
+        except Exception as e:
+            self.logger.error(
+                f"Error retrieving latest round from Redis: {e}",
+                extra={"extra_data": {"error": str(e)}},
+            )
+            return None
 
     def cleanup_old_posts_from_redis(self, current_day: int, current_slot: int) -> Dict[str, int]:
         """

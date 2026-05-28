@@ -128,6 +128,32 @@ class ArticleService:
             self.logger.error(f"Error in article service get_article_topics: {e}")
             return []
 
+    def select_page_article_for_sharing(
+        self,
+        website_id: str,
+        current_round_id: str,
+        feed_articles: List[Dict[str, Any]],
+        cooldown_slots: int = 24,
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Select an article a page can share at the current round.
+
+        Preference order:
+        1. Fresh feed articles that have never been shared by the page
+        2. Feed articles already seen but last shared at least ``cooldown_slots`` ago
+        3. Older already-shared articles from the DB that satisfy the cooldown
+        """
+        try:
+            return self.article_repo.select_page_article_for_sharing(
+                website_id=website_id,
+                current_round_id=current_round_id,
+                feed_articles=feed_articles,
+                cooldown_slots=cooldown_slots,
+            )
+        except Exception as e:
+            self.logger.error(f"Error selecting page article for sharing: {e}")
+            return None
+
     def get_article_with_topics(self, article_id: str) -> Optional[Dict[str, Any]]:
         """
         Get article with its associated topic names.

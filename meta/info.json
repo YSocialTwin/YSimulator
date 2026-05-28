@@ -1,0 +1,10 @@
+{
+  "plugin_name": "YSimulator",
+  "category": "Simulation Runtime Stack",
+  "group": "HPC",
+  "description": "Distributed HPC simulation runtime for large-scale YSocial experiments.",
+  "authors": [
+    "YSocialTwin"
+  ],
+  "repository_url": "https://github.com/YSocialTwin/YSimulator"
+}

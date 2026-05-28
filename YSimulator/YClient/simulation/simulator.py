@@ -59,6 +59,9 @@ class Simulator:
         log_hourly_summary_fn,
         log_daily_summary_fn,
         update_round_info_fn=None,
+        memory_after_submit_fn=None,
+        prepare_active_agents_fn=None,
+        prepare_actions_fn=None,
     ):
         """
         Initialize the Simulator.
@@ -105,6 +108,9 @@ class Simulator:
         self.log_hourly_summary_fn = log_hourly_summary_fn
         self.log_daily_summary_fn = log_daily_summary_fn
         self.update_round_info_fn = update_round_info_fn
+        self.memory_after_submit_fn = memory_after_submit_fn
+        self.prepare_active_agents_fn = prepare_active_agents_fn
+        self.prepare_actions_fn = prepare_actions_fn
 
     def run(self, calculate_opinion_updates_fn) -> None:
         """
@@ -181,6 +187,7 @@ class Simulator:
 
         slot_count = 0
         last_heartbeat_time = time.time()
+        completed_successfully = False
 
         # Track active agents per day for daily follow evaluation
         current_day = start_day
@@ -216,6 +223,7 @@ class Simulator:
                         f"[{self.client_id}] Completed {self.num_days} days "
                         f"(day {start_day} to {instruction.day - 1}). Total slots: {slot_count}"
                     )
+                    completed_successfully = True
                     break
 
                 # Process simulation round
@@ -246,6 +254,10 @@ class Simulator:
                     active_agents_today = set()
                     current_day = instruction.day
 
+                self.secondary_follow_processor.process_reciprocal_follows(
+                    actions, self.agent_profiles
+                )
+
                 # Log actions
                 self._log_actions(actions, instruction.day, instruction.slot, sim_time)
 
@@ -258,6 +270,8 @@ class Simulator:
                 submit_start = time.time()
                 ray.get(self.server.submit_actions.remote(self.client_id, actions))
                 submit_time = (time.time() - submit_start) * 1000
+                if self.memory_after_submit_fn:
+                    self.memory_after_submit_fn(actions, instruction.day, instruction.slot)
 
                 slot_count += 1
 
@@ -280,15 +294,20 @@ class Simulator:
                 )
 
         finally:
-            # Notify server that this client has completed all activities
-            try:
-                ray.get(self.server.complete_client.remote(self.client_id))
-                self.logger.info("Notified server of completion")
-                self.logger.info(" Simulation complete. Server notified.")
-            except Exception as e:
-                self.logger.warning(
-                    f"Failed to notify server of completion: {e}",
-                    extra={"extra_data": {"error": str(e)}},
+            if completed_successfully:
+                # Notify server that this client has completed all planned activities
+                try:
+                    ray.get(self.server.complete_client.remote(self.client_id))
+                    self.logger.info("Notified server of completion")
+                    self.logger.info(" Simulation complete. Server notified.")
+                except Exception as e:
+                    self.logger.warning(
+                        f"Failed to notify server of completion: {e}",
+                        extra={"extra_data": {"error": str(e)}},
+                    )
+            else:
+                self.logger.error(
+                    "Client run exited before normal completion; server completion notification skipped"
                 )
 
     def _load_network_if_available(self):
@@ -352,6 +371,10 @@ class Simulator:
 
         # Create action generator factory
         action_generator_factory = self.create_action_generator_factory_fn(day, slot, recent_posts)
+        current_round_id = action_generator_factory.context.round_id
+
+        if self.prepare_active_agents_fn:
+            active_agents = self.prepare_active_agents_fn(active_agents, current_round_id)
 
         # Execute round (scatter phase)
         (
@@ -385,6 +408,9 @@ class Simulator:
         self.secondary_follow_processor.process_secondary_follows(
             secondary_follow_candidates, rule_based_interactions, actions
         )
+
+        if self.prepare_actions_fn:
+            actions = self.prepare_actions_fn(actions, current_round_id)
 
         self.logger.info(
             f"Returning {len(actions)} total actions, {len(active_agents)} active agents"

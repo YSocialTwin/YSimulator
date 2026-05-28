@@ -9,6 +9,8 @@ import gzip
 import json
 import logging
 import os
+import random
+import re
 import shutil
 from datetime import datetime
 from logging.handlers import RotatingFileHandler
@@ -20,6 +22,8 @@ import ray
 # Phase 5: Removed ActionExecutorMixin - dead code replaced by action generators in Phase 1
 from YSimulator.YClient.action_generators import ActionContext, ActionGeneratorFactory
 from YSimulator.YClient.classes.ray_models import ActionDTO, AgentProfile
+from YSimulator.YClient.llm_utils.llm_manager import _get_llm_actor_for_manager
+from YSimulator.YClient.memory_runtime import YSimulatorMemoryManager
 from YSimulator.YClient.recsys import (
     CommonInterests,
     CommonUserInterests,
@@ -39,6 +43,7 @@ from YSimulator.YClient.recsys.FollowRecSysRay import (
     PreferentialAttachmentFollowRecSys,
     RandomFollowRecSys,
 )
+from YSimulator.YClient.stress_reward import StressRewardSystem, deep_update
 from YSimulator.YClient.text_support.text_annotator import annotate_text
 
 # Constants
@@ -70,6 +75,52 @@ FOLLOW_RECSYS_CLASS_MAP = {
     "preferential_attachment": PreferentialAttachmentFollowRecSys,
     "default": CommonNeighborsFollowRecSys,  # Default to common neighbors algorithm
 }
+
+
+def _stress_reward_settings_from_config(config: Optional[dict]) -> dict:
+    settings = {
+        "enabled": False,
+        "backward_rounds": 24,
+        "system": {},
+    }
+    if not isinstance(config, dict):
+        return settings
+
+    simulation_cfg = config.get("simulation", {})
+    if not isinstance(simulation_cfg, dict):
+        simulation_cfg = {}
+
+    top_level_cfg = config.get("stress_reward")
+    if isinstance(top_level_cfg, dict):
+        settings["system"] = deep_update(settings["system"], top_level_cfg.get("system") or {})
+        if "enabled" in top_level_cfg:
+            settings["enabled"] = bool(top_level_cfg.get("enabled"))
+        if "backward_rounds" in top_level_cfg:
+            settings["backward_rounds"] = int(top_level_cfg.get("backward_rounds") or 24)
+
+    simulation_sr_cfg = simulation_cfg.get("stress_reward")
+    if isinstance(simulation_sr_cfg, dict):
+        settings["system"] = deep_update(
+            settings["system"], simulation_sr_cfg.get("system") or {}
+        )
+        if "enabled" in simulation_sr_cfg:
+            settings["enabled"] = bool(simulation_sr_cfg.get("enabled"))
+        if "backward_rounds" in simulation_sr_cfg:
+            settings["backward_rounds"] = int(simulation_sr_cfg.get("backward_rounds") or 24)
+
+    if "stress_reward_enabled" in config:
+        settings["enabled"] = bool(config.get("stress_reward_enabled"))
+    if "stress_reward_enabled" in simulation_cfg:
+        settings["enabled"] = bool(simulation_cfg.get("stress_reward_enabled"))
+    if "stress_reward_annotation" in config:
+        settings["enabled"] = bool(config.get("stress_reward_annotation"))
+    if "stress_reward_annotation" in simulation_cfg:
+        settings["enabled"] = bool(simulation_cfg.get("stress_reward_annotation"))
+
+    if settings["backward_rounds"] < 0:
+        settings["backward_rounds"] = 24
+
+    return settings
 
 
 def compress_rotated_log(source: str, dest: str) -> None:
@@ -195,6 +246,9 @@ class SimulationClient:
         self.probability_of_secondary_follow = agents_config.get(
             "probability_of_secondary_follow", 0.0
         )
+        self.probability_of_follow_back = agents_config.get(
+            "probability_of_follow_back", 0.0
+        )
         self.probability_of_daily_follow = agents_config.get("probability_of_daily_follow", 0.0)
         self.max_length_thread_reading = agents_config.get("max_length_thread_reading", 5)
 
@@ -223,12 +277,29 @@ class SimulationClient:
         self.perspective_api_key = simulation_config["simulation"].get("perspective_api_key", None)
         self.enable_emotions = simulation_config["simulation"].get("emotion_annotation", False)
 
+        # Load stress/reward configuration
+        stress_reward_settings = _stress_reward_settings_from_config(simulation_config)
+        self.stress_reward_enabled = bool(stress_reward_settings.get("enabled", False))
+        self.stress_reward_backward_rounds = int(
+            stress_reward_settings.get("backward_rounds", 24) or 24
+        )
+        self.stress_reward_system = StressRewardSystem(
+            stress_reward_settings.get("system") or {}
+        )
+        self.current_stress_reward = {}
+        self.current_churn_probability = {}
+        self._current_prompt_round_id = None
+
         # Cache for churned agents (refreshed after churn evaluation)
         self._churned_agents_cache = set()
         self._churned_agents_cache_valid = False
 
         # Connect to the Named Server Actor
         self.server = ray.get_actor("Orchestrator")
+
+        # Memory prompt construction stays client-side; persisted memory state is
+        # owned by the server and accessed through remote methods only.
+        self.memory_manager = YSimulatorMemoryManager(self, simulation_config)
 
         # Initialize agent manager (Phase 6 refactoring - NEW)
         # Centralized agent lifecycle management
@@ -320,6 +391,9 @@ class SimulationClient:
         """
         # Get current round_id for opinion dynamics tracking
         round_id = ray.get(self.server.get_current_round_id.remote())
+        self._current_prompt_round_id = str(round_id)
+        if self.memory_manager and self.memory_manager.is_enabled():
+            self.memory_manager.set_recent_post_ids(recent_posts)
 
         # Build action context with all dependencies
         # Phase 4: Use OpinionManager for opinion dynamics operations
@@ -351,6 +425,7 @@ class SimulationClient:
             infer_page_agent_opinion_fn=self.opinion_manager.infer_page_agent_opinion,
             get_opinions_for_post_fn=self.opinion_manager.get_opinions_for_post,
             calculate_opinion_updates_fn=self.opinion_manager.calculate_opinion_updates,
+            memory_manager=self.memory_manager,
         )
 
         return ActionGeneratorFactory(context)
@@ -441,6 +516,7 @@ class SimulationClient:
             logger=self.logger,
             llm_manager=self.llm_manager,
             probability_of_secondary_follow=self.probability_of_secondary_follow,
+            probability_of_follow_back=self.probability_of_follow_back,
         )
 
         # Initialize Simulator
@@ -465,9 +541,301 @@ class SimulationClient:
             log_hourly_summary_fn=self._log_hourly_summary,
             log_daily_summary_fn=self._log_daily_summary,
             update_round_info_fn=self._update_round_info,
+            memory_after_submit_fn=self._record_memory_after_submit,
+            prepare_active_agents_fn=self.prepare_stress_reward_active_agents,
+            prepare_actions_fn=self.prepare_stress_reward_actions,
         )
 
         self.logger.info("Simulation orchestrator initialized (Phase 2)")
+
+    @staticmethod
+    def _stress_reward_clamp01(value) -> float:
+        try:
+            return max(0.0, min(1.0, float(value)))
+        except Exception:
+            return 0.0
+
+    def refresh_stress_reward_state(
+        self, agent_id: str, current_tid: str, *, force: bool = False
+    ) -> dict:
+        if not self.stress_reward_enabled:
+            return {"stress": 0.0, "reward": 0.0}
+
+        cache_key = (str(agent_id), str(current_tid))
+        if not force and cache_key in self.current_stress_reward:
+            return dict(self.current_stress_reward[cache_key])
+
+        try:
+            state = self.stress_reward_system.compute_current_stress_reward(
+                server=self.server,
+                agent_id=str(agent_id),
+                current_tid=str(current_tid),
+                backward_rounds=self.stress_reward_backward_rounds,
+            )
+        except Exception as exc:
+            self.logger.warning(f"stress/reward state refresh failed for {agent_id}: {exc}")
+            state = {"stress": 0.0, "reward": 0.0}
+
+        normalized = {
+            "stress": self._stress_reward_clamp01((state or {}).get("stress", 0.0)),
+            "reward": self._stress_reward_clamp01((state or {}).get("reward", 0.0)),
+        }
+        self.current_stress_reward[cache_key] = normalized
+        return dict(normalized)
+
+    def current_stress_reward_churn_probability(
+        self, agent_id: str, current_tid: str, *, force: bool = False
+    ) -> float:
+        if not self.stress_reward_enabled or not self.stress_reward_system.churn_enabled():
+            return 0.0
+
+        state = self.refresh_stress_reward_state(agent_id, current_tid, force=force)
+        try:
+            probability = float(
+                self.stress_reward_system.compute_churn_probability(
+                    current_stress=state.get("stress", 0.0),
+                    current_reward=state.get("reward", 0.0),
+                )
+            )
+        except Exception as exc:
+            self.logger.warning(f"stress/reward churn probability failed for {agent_id}: {exc}")
+            probability = 0.0
+        probability = self._stress_reward_clamp01(probability)
+        self.current_churn_probability[str(agent_id)] = probability
+        return probability
+
+    def evaluate_stress_reward_churn(
+        self, agent: AgentProfile, current_tid: str, *, rng=None
+    ) -> bool:
+        if getattr(agent, "left_on", None) is not None:
+            return False
+        probability = self.current_stress_reward_churn_probability(
+            str(agent.id), str(current_tid), force=True
+        )
+        if probability <= 0.0:
+            return False
+        draw = random.random() if rng is None else rng.random()
+        if draw >= probability:
+            return False
+        try:
+            churned = bool(ray.get(self.server.set_agent_churned.remote(str(agent.id), str(current_tid))))
+            if churned:
+                agent.left_on = str(current_tid)
+                self._churned_agents_cache.add(str(agent.id))
+                self._churned_agents_cache_valid = True
+            return churned
+        except Exception as exc:
+            self.logger.warning(f"stress/reward churn action failed for {agent.id}: {exc}")
+            return False
+
+    @staticmethod
+    def _stress_reward_extract_json_obj(raw_text):
+        if isinstance(raw_text, dict):
+            return raw_text
+        if not isinstance(raw_text, str):
+            return {}
+        text = raw_text.strip()
+        if not text:
+            return {}
+        try:
+            data = json.loads(text)
+            return data if isinstance(data, dict) else {}
+        except Exception:
+            pass
+        match = re.search(r"\{.*\}", text, re.DOTALL)
+        if not match:
+            return {}
+        try:
+            data = json.loads(match.group(0))
+            return data if isinstance(data, dict) else {}
+        except Exception:
+            return {}
+
+    def _annotate_stress_reward_text(
+        self,
+        *,
+        agent_id: str,
+        prompt_key: str,
+        text: str,
+        target_user_id: Optional[str] = None,
+    ) -> dict:
+        if not self.stress_reward_enabled or not self.llm:
+            return {}
+        if not isinstance(text, str) or not text.strip():
+            return {}
+        llm_actor = _get_llm_actor_for_manager(self.llm, agent_id)
+        try:
+            response = ray.get(
+                llm_actor.annotate_stress_reward_text.remote(
+                    text.strip(),
+                    prompt_key,
+                    actor_user_id=str(agent_id),
+                    recipient_user_id=("" if target_user_id is None else str(target_user_id)),
+                )
+            )
+        except Exception as exc:
+            self.logger.warning(f"stress/reward annotation failed for {agent_id}: {exc}")
+            return {}
+        data = self._stress_reward_extract_json_obj(response)
+        tone = str(data.get("tone") or "").strip().lower()
+        return {
+            "tone": tone,
+            "directness": self._stress_reward_clamp01(data.get("directness", 1.0)),
+            "support_strength": self._stress_reward_clamp01(data.get("support_strength", 0.0)),
+        }
+
+    def _target_user_id_from_post(self, post_id: Optional[str]) -> Optional[str]:
+        if not post_id:
+            return None
+        try:
+            post_data = ray.get(self.server.get_post.remote(str(post_id), client_id=self.client_id))
+        except Exception:
+            return None
+        if not isinstance(post_data, dict):
+            return None
+        user_id = post_data.get("user_id")
+        return str(user_id) if user_id is not None else None
+
+    def prepare_stress_reward_active_agents(self, active_agents: list[AgentProfile], current_tid: str):
+        if not self.stress_reward_enabled:
+            return active_agents
+
+        filtered_agents = []
+        for agent in active_agents:
+            if getattr(agent, "left_on", None) is not None:
+                continue
+            state = self.refresh_stress_reward_state(str(agent.id), str(current_tid), force=True)
+            if self.stress_reward_system.churn_enabled() and self.evaluate_stress_reward_churn(
+                agent, str(current_tid)
+            ):
+                self.logger.info(
+                    f"Stress/reward churned agent {agent.username} ({agent.id}) at round {current_tid}"
+                )
+                continue
+            activity_effect = self.stress_reward_system.compute_activity_effect(
+                current_stress=state.get("stress", 0.0),
+                current_reward=state.get("reward", 0.0),
+            )
+            setattr(
+                agent,
+                "stress_reward_activity_multiplier",
+                float(activity_effect.get("action_multiplier", 1.0)),
+            )
+            skip_probability = self._stress_reward_clamp01(
+                activity_effect.get("skip_probability", 0.0)
+            )
+            if (
+                getattr(agent, "is_page", 0) != 1
+                and skip_probability > 0.0
+                and random.random() < skip_probability
+            ):
+                self.logger.info(
+                    f"Stress/reward suppressed activity for {agent.username} ({agent.id}) at round {current_tid}: "
+                    f"stress={state.get('stress', 0.0):.3f}, reward={state.get('reward', 0.0):.3f}, "
+                    f"skip_probability={skip_probability:.3f}"
+                )
+                continue
+            filtered_agents.append(agent)
+        return filtered_agents
+
+    def _attach_stress_reward_payload(self, action: ActionDTO, current_tid: str) -> None:
+        if not self.stress_reward_enabled:
+            return
+
+        action_type = str(action.action_type or "").upper()
+        if action_type in {"POST", "FOLLOW", "UNFOLLOW", "REPORT"}:
+            return
+
+        target_user_id = action.target_user_id or self._target_user_id_from_post(action.target_post_id)
+        if not target_user_id or str(target_user_id) == str(action.agent_id):
+            return
+
+        target_state = self.refresh_stress_reward_state(
+            str(target_user_id), str(current_tid), force=True
+        )
+
+        variations = None
+        action_name = None
+        try:
+            if action_type in {"LIKE", "LOVE", "LAUGH"}:
+                deltas = self.stress_reward_system.compute_reaction_delta(
+                    reaction="like",
+                    current_stress=target_state["stress"],
+                    current_reward=target_state["reward"],
+                )
+                action_name = f"reaction:{action_type.lower()}"
+            elif action_type in {"ANGRY", "SAD"}:
+                deltas = self.stress_reward_system.compute_reaction_delta(
+                    reaction="dislike",
+                    current_stress=target_state["stress"],
+                    current_reward=target_state["reward"],
+                )
+                action_name = f"reaction:{action_type.lower()}"
+            elif action_type == "COMMENT":
+                annotation = self._annotate_stress_reward_text(
+                    agent_id=str(action.agent_id),
+                    prompt_key="agent_comment_stress_reward_annotation",
+                    text=action.content or "",
+                    target_user_id=str(target_user_id),
+                )
+                tone = annotation.get("tone")
+                if tone not in {"positive", "neutral", "critical", "hostile", "supportive"}:
+                    return
+                deltas = self.stress_reward_system.compute_comment_delta(
+                    tone=tone,
+                    current_stress=target_state["stress"],
+                    current_reward=target_state["reward"],
+                    directness=annotation.get("directness", 1.0),
+                    support_strength=annotation.get("support_strength", 0.0),
+                )
+                action_name = f"comment:{tone}"
+            elif action_type == "SHARE":
+                annotation = self._annotate_stress_reward_text(
+                    agent_id=str(action.agent_id),
+                    prompt_key="agent_post_stress_reward_annotation",
+                    text=action.content or "",
+                    target_user_id=str(target_user_id),
+                )
+                tone = annotation.get("tone")
+                if tone == "supportive":
+                    tone = "positive"
+                if tone not in {"positive", "hostile"}:
+                    return
+                deltas = self.stress_reward_system.compute_share_delta(
+                    tone=tone,
+                    current_stress=target_state["stress"],
+                    current_reward=target_state["reward"],
+                    public_exposure=max(0.1, annotation.get("directness", 1.0)),
+                )
+                action_name = f"share:{tone}"
+            else:
+                return
+        except Exception as exc:
+            self.logger.warning(
+                f"stress/reward delta computation failed for {action.agent_id}/{action_type}: {exc}"
+            )
+            return
+
+        variations = []
+        delta_stress = float(deltas.get("delta_stress", 0.0) or 0.0)
+        delta_reward = float(deltas.get("delta_reward", 0.0) or 0.0)
+        if abs(delta_stress) > 1e-9:
+            variations.append({"variable": "stress", "value": delta_stress})
+        if abs(delta_reward) > 1e-9:
+            variations.append({"variable": "reward", "value": delta_reward})
+        if not variations:
+            return
+
+        action.stress_reward_target_user_id = str(target_user_id)
+        action.stress_reward_variations = variations
+        action.stress_reward_action = action_name
+
+    def prepare_stress_reward_actions(self, actions: list[ActionDTO], current_tid: str) -> list[ActionDTO]:
+        if not self.stress_reward_enabled:
+            return actions
+        for action in actions:
+            self._attach_stress_reward_payload(action, str(current_tid))
+        return actions
 
     def _setup_logging(self):
         """Set up JSON logging for the client actor with gzip compression."""
@@ -739,12 +1107,51 @@ class SimulationClient:
         Extract agent attributes for dynamic persona building.
         Delegates to agent_manager (Phase 6).
         """
-        return self.agent_manager.extract_agent_attrs(
+        attrs = self.agent_manager.extract_agent_attrs(
             agent,
             self._validate_and_extract_interests,
             self._is_opinion_dynamics_enabled,
             self._map_opinion_to_group,
         )
+        if not self.stress_reward_enabled:
+            return attrs
+        current_tid = str(getattr(self, "_current_prompt_round_id", "") or "").strip()
+        if not current_tid:
+            return attrs
+        try:
+            state = self.refresh_stress_reward_state(str(agent.id), current_tid, force=False)
+        except Exception as exc:
+            self.logger.warning(f"stress/reward prompt context failed for {agent.id}: {exc}")
+            return attrs
+        try:
+            stress_value = max(0.0, min(1.0, float((state or {}).get("stress", 0.0))))
+        except Exception:
+            stress_value = 0.0
+        if stress_value <= 0.0:
+            scale, label = 1, "none"
+        elif stress_value <= 0.25:
+            scale, label = 2, "slightly stressed"
+        elif stress_value <= 0.5:
+            scale, label = 3, "moderately stressed"
+        elif stress_value <= 0.75:
+            scale, label = 4, "very stressed"
+        else:
+            scale, label = 5, "extremely stressed"
+        attrs["stress_level_scale"] = scale
+        attrs["stress_level_label"] = label
+        return attrs
+
+    def round_number(self, day: int, slot: int) -> int:
+        return int(day) * int(self.num_slots_per_day) + int(slot)
+
+    def get_recent_post_ids(self):
+        if self.memory_manager:
+            return self.memory_manager.get_recent_post_ids()
+        return []
+
+    def _record_memory_after_submit(self, actions, day: int, slot: int) -> None:
+        if self.memory_manager and self.memory_manager.is_enabled():
+            self.memory_manager.record_submitted_actions(actions, day, slot)
 
     def _save_updated_agent_population(self, updated_interests: dict):
         """

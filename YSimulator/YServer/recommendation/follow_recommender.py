@@ -88,7 +88,7 @@ class FollowRecommender:
             from sqlalchemy import and_, func
             from sqlalchemy.orm import Session
 
-            from YSimulator.YServer.classes.models import Follow, User_mgmt
+            from YSimulator.YServer.classes.models import Follow, Round, User_mgmt
 
             with Session(self.db.engine) as session:
                 # Get agent's info
@@ -100,25 +100,31 @@ class FollowRecommender:
                 # Get users that agent is currently following
                 latest_follows_subq = (
                     session.query(
-                        Follow.follower_id,
-                        Follow.user_id,
-                        func.max(Follow.round).label("max_round"),
+                        Follow.follower_id.label("follower_id"),
+                        Follow.user_id.label("user_id"),
+                        Follow.action.label("action"),
+                        func.row_number()
+                        .over(
+                            partition_by=(Follow.follower_id, Follow.user_id),
+                            order_by=(
+                                func.coalesce(Round.day, -1).desc(),
+                                func.coalesce(Round.hour, -1).desc(),
+                                Follow.id.desc(),
+                            ),
+                        )
+                        .label("rn"),
                     )
+                    .outerjoin(Round, Follow.round == Round.id)
                     .filter(Follow.follower_id == agent_id)
-                    .group_by(Follow.follower_id, Follow.user_id)
                     .subquery()
                 )
 
                 following = (
-                    session.query(Follow.user_id)
-                    .join(
-                        latest_follows_subq,
-                        and_(
-                            Follow.follower_id == latest_follows_subq.c.follower_id,
-                            Follow.user_id == latest_follows_subq.c.user_id,
-                            Follow.round == latest_follows_subq.c.max_round,
-                            Follow.action == "follow",
-                        ),
+                    session.query(latest_follows_subq.c.user_id)
+                    .filter(
+                        latest_follows_subq.c.follower_id == agent_id,
+                        latest_follows_subq.c.rn == 1,
+                        latest_follows_subq.c.action == "follow",
                     )
                     .all()
                 )

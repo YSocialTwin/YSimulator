@@ -83,7 +83,10 @@ class ShareLinkGenerator(BaseActionGenerator):
             self.context.logger.info(
                 f"Page {agent.username} fetching article from {agent.feed_url[:50]}"
             )
-            article_future = self.context.news_service.get_article_from_feed.remote(agent.feed_url)
+            article_future = self.context.news_service.get_article_from_feed.remote(
+                agent.feed_url,
+                self.context.round_id,
+            )
             article = ray.get(article_future)
 
             if not article:
@@ -118,6 +121,7 @@ class ShareLinkGenerator(BaseActionGenerator):
                     agent.cluster,
                     article,
                     agent.username,
+                    include_article_content=True,
                 )
                 self.context.logger.info(f"LLM Page {agent.username} got article_id: {article_id}")
 
@@ -137,6 +141,7 @@ class ShareLinkGenerator(BaseActionGenerator):
 
                 # Extract agent attributes for vLLM batch processing
                 agent_attrs = self._extract_agent_attrs(agent)
+                agent_attrs = self._apply_post_memory(agent, agent_attrs)
 
                 # OPTIMIZATION: Add article content to agent_attrs to avoid DB re-fetch
                 # This passes the article content directly to batch processor

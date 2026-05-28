@@ -5,7 +5,7 @@ This service encapsulates all interest/topic-related business operations.
 """
 
 import logging
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 from YSimulator.YServer.repositories.base_repository import InterestRepository
 
@@ -109,6 +109,19 @@ class InterestService:
         except Exception as e:
             self.logger.error(f"Error getting topic name: {e}")
             return None
+
+    def list_interests(self) -> List[Dict[str, Any]]:
+        """
+        Return all known interests/topics.
+
+        Returns:
+            List of dicts with ``iid`` and ``interest``
+        """
+        try:
+            return self.interest_repo.list_interests()
+        except Exception as e:
+            self.logger.error(f"Error listing interests: {e}")
+            return []
 
     def add_agent_opinion(
         self,

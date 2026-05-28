@@ -60,6 +60,7 @@ def create_agents_from_config(agent_config: dict, logger: logging.Logger) -> Lis
                 profession=agent_data.get("profession", ""),
                 activity_profile=agent_data.get("activity_profile", "Always On"),
                 archetype=agent_data.get("archetype"),
+                cover_image=agent_data.get("cover_image", ""),
                 cluster=agent_data.get("cluster", 0),
                 llm=agent_data.get("llm", False),
                 toxicity=agent_data.get("toxicity", "no"),
@@ -69,6 +70,8 @@ def create_agents_from_config(agent_config: dict, logger: logging.Logger) -> Lis
                 feed_url=agent_data.get("feed_url"),  # RSS feed for page agents
                 interests=agent_data.get("interests"),  # Interest topics and counts
                 opinions=agent_data.get("opinions"),  # Opinion values for topics
+                stubborn_topics=agent_data.get("stubborn_topics"),
+                custom_features=agent_data.get("custom_features"),
             )
             agents.append(profile)
 
@@ -298,6 +301,7 @@ def extract_agent_attrs(
         "ne": agent.ne if agent.ne else "average in neuroticism",
         "toxicity": agent.toxicity if agent.toxicity and agent.toxicity != "" else "no",
         "topic": selected_topic,  # Include the sampled topic
+        "custom_features": dict(agent.custom_features or {}),
     }
 
     # Add opinion information if available and opinion dynamics is enabled
@@ -448,6 +452,7 @@ def add_agent_to_population_file(
             "profession": agent.profession,
             "activity_profile": agent.activity_profile,
             "archetype": agent.archetype,
+            "cover_image": agent.cover_image,
             "cluster": agent.cluster,
             "llm": agent.llm,
             "toxicity": agent.toxicity,

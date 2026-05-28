@@ -27,9 +27,11 @@ from YSimulator.YServer.classes.models import (
     Follow,
     Post,
     Reaction,
+    Reported,
     Round,
     User_mgmt,
 )
+from YSimulator.YServer.schema_migrations import ensure_moderation_schema
 
 # Constants
 DEFAULT_USERNAME = "Someone"  # Default username when user data is not found
@@ -126,8 +128,12 @@ class DatabaseMiddleware:
         connection_string = self._build_connection_string(db_config)
 
         # Initialize SQL database backend
-        self.engine = create_engine(connection_string)
+        engine_kwargs = {}
+        if self.db_type == "sqlite":
+            engine_kwargs["connect_args"] = {"timeout": 30}
+        self.engine = create_engine(connection_string, **engine_kwargs)
         Base.metadata.create_all(self.engine)
+        ensure_moderation_schema(self.engine)
 
         # Initialize round cache for performance
         self.round_cache = {}  # Cache: (day, hour) -> round_id
@@ -506,6 +512,40 @@ class DatabaseMiddleware:
         except Exception as e:
             self.logger.error(
                 f"Error adding interaction: {e}", extra={"extra_data": {"error": str(e)}}
+            )
+            return False
+
+    def add_report(self, report_data: Dict[str, Any]) -> bool:
+        """
+        Add a moderation report to the database.
+
+        Args:
+            report_data: Dictionary containing report data
+
+        Returns:
+            bool: True if successful, False otherwise
+        """
+        try:
+            report_id = str(uuid.uuid4())
+            report_data["id"] = report_id
+
+            if self.use_redis:
+                key = self._redis_key("reported", report_id)
+                redis_data = {k: v for k, v in report_data.items() if v is not None}
+                self.redis_client.hset(key, mapping=redis_data)
+                return True
+            else:
+                session = Session(self.engine)
+                try:
+                    report = Reported(**report_data)
+                    session.add(report)
+                    session.commit()
+                    return True
+                finally:
+                    session.close()
+        except Exception as e:
+            self.logger.error(
+                f"Error adding report: {e}", extra={"extra_data": {"error": str(e)}}
             )
             return False
 
@@ -2168,6 +2208,7 @@ class DatabaseMiddleware:
         opinion: float,
         id_interacted_with: Optional[str] = None,
         id_post: Optional[str] = None,
+        stubborn: bool = False,
     ) -> bool:
         """
         Add an agent opinion record to the database.
@@ -2206,6 +2247,20 @@ class DatabaseMiddleware:
 
         session = Session(self.engine)
         try:
+            latest_opinion = (
+                session.query(Agent_Opinion)
+                .filter_by(agent_id=agent_id, topic_id=topic_id)
+                .order_by(Agent_Opinion.tid.desc(), Agent_Opinion.id.desc())
+                .first()
+            )
+            effective_stubborn = bool(stubborn) or bool(
+                latest_opinion.stubborn if latest_opinion is not None else False
+            )
+            effective_opinion = (
+                float(latest_opinion.opinion)
+                if latest_opinion is not None and bool(latest_opinion.stubborn)
+                else opinion
+            )
             # Create agent opinion record
             opinion_id = str(uuid.uuid4())
             agent_opinion = Agent_Opinion(
@@ -2213,9 +2268,10 @@ class DatabaseMiddleware:
                 agent_id=agent_id,
                 tid=round_id,
                 topic_id=topic_id,
-                opinion=opinion,
+                opinion=effective_opinion,
                 id_interacted_with=id_interacted_with,
                 id_post=id_post,
+                stubborn=effective_stubborn,
             )
             session.add(agent_opinion)
             session.commit()

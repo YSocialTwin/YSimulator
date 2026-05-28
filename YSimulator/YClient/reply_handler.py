@@ -30,6 +30,7 @@ def handle_reply_to_mention(
     logger: logging.Logger,
     extract_agent_attrs_func,
     annotate_action_content_func,
+    calculate_opinion_updates_func=None,
 ) -> Optional[str]:
     """
     Handle reply to mention for an agent.
@@ -50,6 +51,7 @@ def handle_reply_to_mention(
         logger: Logger instance
         extract_agent_attrs_func: Function to extract agent attributes
         annotate_action_content_func: Function to annotate action content
+        calculate_opinion_updates_func: Optional function to calculate opinion updates
 
     Returns:
         str or None: mention_id if a reply was generated, None otherwise
@@ -123,6 +125,17 @@ def handle_reply_to_mention(
 
             # Fire off async LLM call to generate reply
             agent_attrs = extract_agent_attrs_func(agent)
+            try:
+                messages = ray.get(
+                    server.get_active_system_messages.remote(
+                        agent.id,
+                        client_id=client_id,
+                    )
+                )
+                if isinstance(messages, list) and messages:
+                    agent_attrs["system_messages"] = messages
+            except Exception:
+                pass
             future = generate_llm_reply_to_mention_async(
                 llm_handle,
                 agent.cluster,
@@ -143,6 +156,10 @@ def handle_reply_to_mention(
             )
             # Annotate rule-based comment
             annotate_action_content_func(action)
+            if calculate_opinion_updates_func is not None:
+                updated_opinions = calculate_opinion_updates_func(agent.id, post_id, post_data)
+                if updated_opinions:
+                    action.updated_opinions = updated_opinions
             actions.append(action)
             logger.info(
                 f"[REPLY] Rule-based reply created: '{action.content}' for agent {agent.username}"

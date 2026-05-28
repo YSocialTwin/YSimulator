@@ -309,6 +309,35 @@ class LLMManager:
             cluster_id, post_content, is_currently_following
         )
 
+    def generate_reciprocal_follow_decision(
+        self,
+        cluster_id: int,
+        source_agent_profile,
+        action: str,
+        agent_attrs: dict = None,
+        agent_id: Optional[str] = None,
+    ) -> Any:
+        """
+        Decide whether to reciprocate a direct follow/unfollow event using the LLM.
+
+        Args:
+            cluster_id: Target agent cluster/persona
+            source_agent_profile: Profile of the agent who initiated the link action
+            action: "follow" or "unfollow"
+            agent_attrs: Optional target agent attributes for persona building
+            agent_id: Optional target agent ID for load balancing
+
+        Returns:
+            Ray ObjectRef (future) for the LLM call
+        """
+        self.logger.debug(
+            f"LLM generate_reciprocal_follow_decision: cluster={cluster_id}, action={action}"
+        )
+        llm_actor = _get_llm_actor_for_manager(self.llm, agent_id)
+        return llm_actor.generate_reciprocal_follow_decision.remote(
+            cluster_id, source_agent_profile, action, agent_attrs
+        )
+
     def evaluate_opinion(
         self,
         agent_opinion: str,

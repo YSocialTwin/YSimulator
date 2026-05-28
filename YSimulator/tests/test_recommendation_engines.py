@@ -4,9 +4,11 @@ Unit tests for recommendation engines.
 Tests ContentRecommender and FollowRecommender classes with mocked backends.
 """
 
+from pathlib import Path
 from unittest.mock import Mock, patch
 
 import pytest
+from sqlalchemy import create_engine, text
 
 from YSimulator.YServer.recommendation.content_recommender import ContentRecommender
 from YSimulator.YServer.recommendation.follow_recommender import FollowRecommender
@@ -180,6 +182,37 @@ class TestContentRecommender:
         mock_recsys_redis.recommend_content_based_vector_redis = Mock(
             return_value=["post7", "post8"]
         )
+
+    def test_shadow_ban_filter_removes_banned_authors(self, tmp_path: Path):
+        db_path = tmp_path / "shadow_ban_filter.db"
+        engine = create_engine(f"sqlite:///{db_path}")
+        with engine.begin() as conn:
+            conn.execute(text("CREATE TABLE rounds (id VARCHAR(36) PRIMARY KEY, day INTEGER, hour INTEGER)"))
+            conn.execute(text("CREATE TABLE user_mgmt (id VARCHAR(36) PRIMARY KEY, username TEXT)"))
+            conn.execute(text("CREATE TABLE post (id VARCHAR(36) PRIMARY KEY, user_id VARCHAR(36), round VARCHAR(36))"))
+            conn.execute(text("CREATE TABLE shadow_ban (uid VARCHAR(36), start_tid VARCHAR(36), duration INTEGER)"))
+            conn.execute(text("INSERT INTO rounds (id, day, hour) VALUES ('r0', 0, 0)"))
+            conn.execute(text("INSERT INTO rounds (id, day, hour) VALUES ('r4', 0, 4)"))
+            conn.execute(text("INSERT INTO user_mgmt (id, username) VALUES ('u1', 'banned_user')"))
+            conn.execute(text("INSERT INTO user_mgmt (id, username) VALUES ('u2', 'visible_user')"))
+            conn.execute(text("INSERT INTO post (id, user_id, round) VALUES ('p1', 'u1', 'r0')"))
+            conn.execute(text("INSERT INTO post (id, user_id, round) VALUES ('p2', 'u2', 'r0')"))
+            conn.execute(text("INSERT INTO shadow_ban (uid, start_tid, duration) VALUES ('u1', 'r0', 8)"))
+
+        db = Mock()
+        db.engine = engine
+        db.use_redis = False
+        recommender = ContentRecommender(db, visibility_rounds=36)
+
+        filtered = recommender._filter_shadow_banned_posts(["p1", "p2"], day=0, slot=4)
+
+        assert filtered == ["p2"]
+
+    def test_shadow_ban_filter_is_noop_when_table_missing(self, mock_db_adapter):
+        recommender = ContentRecommender(mock_db_adapter, visibility_rounds=36)
+        with patch("YSimulator.YServer.recommendation.content_recommender.inspect") as mock_inspect:
+            mock_inspect.return_value.get_table_names.return_value = []
+            assert recommender._filter_shadow_banned_posts(["post1"], day=0, slot=1) == ["post1"]
 
         recommender = ContentRecommender(mock_db_adapter_redis, visibility_rounds=36)
 

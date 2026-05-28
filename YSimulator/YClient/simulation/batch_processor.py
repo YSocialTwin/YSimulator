@@ -31,6 +31,7 @@ from YSimulator.YClient.text_support.text_annotator import annotate_text
 
 # Constants
 REACTION_TYPES = ["LIKE", "LOVE", "LAUGH", "ANGRY", "SAD", "IGNORE"]
+REPORT_TYPES = ["REPORT_TOXIC", "REPORT_OFFENSIVE"]
 
 # Token estimation constants (Phase 3: LLM usage tracking)
 # Rough estimates for tracking purposes - actual tokens may vary
@@ -39,6 +40,7 @@ PROMPT_TOKENS_POST = 100  # Estimated prompt tokens for post generation
 PROMPT_TOKENS_COMMENT = 120  # Estimated prompt tokens for comment/reaction generation
 PROMPT_TOKENS_FOLLOW = 60  # Estimated prompt tokens for follow decision
 REACTION_OUTPUT_TOKENS = 5  # Simple reaction outputs (LIKE, LOVE, etc.)
+LLM_BATCH_TIMEOUT_SECONDS = 45.0
 
 
 class BatchProcessor:
@@ -118,6 +120,22 @@ class BatchProcessor:
             return self.llm.get_actor_for_agent(agent_id)
         # Direct actor handle (including Ray actors)
         return self.llm
+
+    def _resolve_batch_future(self, batch_future, error_message: str):
+        """Resolve a batched Ray future with a bounded wait."""
+        batch_results = self.retry_handler.retry_with_backoff(
+            lambda f: self.batch_handler.gather_with_timeout(
+                [f], timeout=LLM_BATCH_TIMEOUT_SECONDS
+            ),
+            batch_future,
+            error_message=error_message,
+        )
+        result = batch_results[0] if batch_results else None
+        if result is None:
+            raise TimeoutError(
+                f"{error_message} timed out after {LLM_BATCH_TIMEOUT_SECONDS:.0f}s"
+            )
+        return result
 
     def _is_vllm_backend(self) -> bool:
         """
@@ -375,10 +393,28 @@ class BatchProcessor:
             batchable_posts: List of tuples with format (agent_id, cluster_id, future, topic, day, slot, agent_attrs)
             actions: List to append resolved post actions to
         """
+        def unpack_post_item(item: Tuple):
+            if len(item) < 7:
+                raise ValueError(
+                    f"Expected at least 7 fields in vLLM post item, got {len(item)}: {item!r}"
+                )
+            agent_id, cluster_id, future, topic, item_day, item_slot, agent_attrs, *extra = item
+            image_id = extra[0] if extra else None
+            return agent_id, cluster_id, future, topic, item_day, item_slot, agent_attrs, image_id
+
         # Build batch requests
         batch_requests = []
         for item in batchable_posts:
-            agent_id, cluster_id, future, topic, item_day, item_slot, agent_attrs = item
+            (
+                agent_id,
+                cluster_id,
+                future,
+                topic,
+                item_day,
+                item_slot,
+                agent_attrs,
+                _image_id,
+            ) = unpack_post_item(item)
 
             # Check if article content is already in agent_attrs (optimization to avoid DB fetch)
             article_content = None
@@ -452,9 +488,7 @@ class BatchProcessor:
         self.logger.info(f"Calling generate_post_batch for {len(batch_requests)} requests")
         try:
             batch_future = llm_actor.generate_post_batch.remote(batch_requests)
-            results = self.retry_handler.retry_with_backoff(
-                lambda f: ray.get(f), batch_future, error_message="vLLM batch post generation"
-            )
+            results = self._resolve_batch_future(batch_future, "vLLM batch post generation")
         except Exception as e:
             self.logger.error(f"vLLM batch generation failed: {e}, falling back to standard gather")
             self._gather_posts_standard(batchable_posts, actions)
@@ -467,9 +501,16 @@ class BatchProcessor:
 
         for i, res_txt in enumerate(results):
             pending_item = batchable_posts[i]
-            agent_id = pending_item[0]
-            cluster_id = pending_item[1]
-            topic = pending_item[3]  # topic_or_article_id
+            (
+                agent_id,
+                cluster_id,
+                _future,
+                topic,
+                _item_day,
+                _item_slot,
+                _agent_attrs,
+                image_id,
+            ) = unpack_post_item(pending_item)
 
             # Validate response
             res_txt = self.response_parser.parse_text_response(res_txt, default="")
@@ -486,6 +527,8 @@ class BatchProcessor:
 
             # Create action (same logic as standard gather)
             action = ActionDTO(agent_id, cluster_id, "POST", content=res_txt)
+            if image_id:
+                action.image_id = image_id
 
             # Handle topic/article assignment
             if topic:
@@ -628,7 +671,11 @@ class BatchProcessor:
             # Phase 3: Track LLM usage
             if self.cost_tracker and res_act:
                 # Estimate tokens based on response type
-                if res_act.upper() in REACTION_TYPES or res_act.upper() == "SHARE":
+                if (
+                    res_act.upper() in REACTION_TYPES
+                    or res_act.upper() in REPORT_TYPES
+                    or res_act.upper() == "SHARE"
+                ):
                     # Simple reaction - minimal tokens
                     output_tokens = REACTION_OUTPUT_TOKENS
                 else:
@@ -664,7 +711,18 @@ class BatchProcessor:
                     mention_id = fifth_element
 
             # Check if result is a comment/share commentary (text) or a reaction type
-            if res_act and res_act.upper() not in REACTION_TYPES:
+            if res_act.upper() in REPORT_TYPES:
+                report_type = "toxic" if res_act.upper() == "REPORT_TOXIC" else "offensive"
+                self.logger.debug(f"[REPLY] LLM generated report for agent {a_id}: {report_type}")
+                action = ActionDTO(
+                    a_id,
+                    cid,
+                    "REPORT",
+                    target_post_id=target,
+                    report_type=report_type,
+                )
+                actions.append(action)
+            elif res_act and res_act.upper() not in REACTION_TYPES:
                 # Validate content is not empty or whitespace-only
                 if not res_act.strip():
                     self.logger.warning(
@@ -962,9 +1020,7 @@ class BatchProcessor:
         self.logger.info(f"Calling generate_comment_batch for {len(batch_requests)} requests")
         try:
             batch_future = llm_actor.generate_comment_batch.remote(batch_requests)
-            results = self.retry_handler.retry_with_backoff(
-                lambda f: ray.get(f), batch_future, error_message="vLLM batch comment generation"
-            )
+            results = self._resolve_batch_future(batch_future, "vLLM batch comment generation")
         except Exception as e:
             self.logger.error(
                 f"vLLM batch comment generation failed: {e}, falling back to standard gather"
@@ -1121,10 +1177,8 @@ class BatchProcessor:
         self.logger.info(f"Calling generate_comment_batch for {len(batch_requests)} share requests")
         try:
             batch_future = llm_actor.generate_comment_batch.remote(batch_requests)
-            results = self.retry_handler.retry_with_backoff(
-                lambda f: ray.get(f),
-                batch_future,
-                error_message="vLLM batch share commentary generation",
+            results = self._resolve_batch_future(
+                batch_future, "vLLM batch share commentary generation"
             )
         except Exception as e:
             self.logger.error(
@@ -1272,10 +1326,8 @@ class BatchProcessor:
         )
         try:
             batch_future = llm_actor.generate_read_reaction_batch.remote(batch_requests)
-            results = self.retry_handler.retry_with_backoff(
-                lambda f: ray.get(f),
-                batch_future,
-                error_message="vLLM batch read reaction generation",
+            results = self._resolve_batch_future(
+                batch_future, "vLLM batch read reaction generation"
             )
         except Exception as e:
             self.logger.error(
@@ -1301,7 +1353,11 @@ class BatchProcessor:
 
             # Track LLM usage
             if self.cost_tracker:
-                if reaction_type.upper() in REACTION_TYPES or reaction_type.upper() == "SHARE":
+                if (
+                    reaction_type.upper() in REACTION_TYPES
+                    or reaction_type.upper() in REPORT_TYPES
+                    or reaction_type.upper() == "SHARE"
+                ):
                     output_tokens = REACTION_OUTPUT_TOKENS
                 else:
                     # Comment text
@@ -1316,7 +1372,22 @@ class BatchProcessor:
             )
 
             # Handle different reaction types
-            if reaction_type and reaction_type.upper() not in REACTION_TYPES:
+            if reaction_type.upper() in REPORT_TYPES:
+                report_type = (
+                    "toxic" if reaction_type.upper() == "REPORT_TOXIC" else "offensive"
+                )
+                self.logger.debug(
+                    f"[READ] LLM generated report for agent {agent_id}: {report_type}"
+                )
+                action = ActionDTO(
+                    agent_id,
+                    cluster_id,
+                    "REPORT",
+                    target_post_id=target_post,
+                    report_type=report_type,
+                )
+                actions.append(action)
+            elif reaction_type and reaction_type.upper() not in REACTION_TYPES:
                 # This is comment text from LLM - treat as COMMENT action
                 self.logger.debug(
                     f"[READ] LLM generated comment for agent {agent_id}: '{reaction_type[:50]}...'"
@@ -1440,10 +1511,9 @@ class BatchProcessor:
                         f"Batch extracting emotions for {len(texts_for_emotions)} read comment texts"
                     )
                     batch_future = llm_actor.extract_emotions_batch.remote(texts_for_emotions)
-                    results = self.retry_handler.retry_with_backoff(
-                        lambda f: ray.get(f),
+                    results = self._resolve_batch_future(
                         batch_future,
-                        error_message="vLLM batch emotion extraction for read comments",
+                        "vLLM batch emotion extraction for read comments",
                     )
                     # Update actions with extracted emotions
                     for i, emotions in enumerate(results):
@@ -1522,10 +1592,8 @@ class BatchProcessor:
         )
         try:
             batch_future = llm_actor.generate_search_action_batch.remote(batch_requests)
-            results = self.retry_handler.retry_with_backoff(
-                lambda f: ray.get(f),
-                batch_future,
-                error_message="vLLM batch search action decision",
+            results = self._resolve_batch_future(
+                batch_future, "vLLM batch search action decision"
             )
         except Exception as e:
             self.logger.error(
@@ -1779,10 +1847,8 @@ class BatchProcessor:
 
                 # Call batch emotion extraction
                 batch_future = llm_actor.extract_emotions_batch.remote(texts)
-                results = self.retry_handler.retry_with_backoff(
-                    lambda f: ray.get(f),
-                    batch_future,
-                    error_message="vLLM batch emotion extraction",
+                results = self._resolve_batch_future(
+                    batch_future, "vLLM batch emotion extraction"
                 )
 
                 self.logger.info(f"Successfully batch extracted emotions for {len(results)} texts")
@@ -1978,10 +2044,8 @@ class BatchProcessor:
                 f"Batch evaluating {len(batch_requests)} LLM opinion interactions with vLLM"
             )
             batch_future = llm_actor.evaluate_opinion_batch.remote(batch_requests)
-            responses = self.retry_handler.retry_with_backoff(
-                lambda f: ray.get(f),
-                batch_future,
-                error_message="vLLM batch opinion evaluation",
+            responses = self._resolve_batch_future(
+                batch_future, "vLLM batch opinion evaluation"
             )
 
             for i, response in enumerate(responses):

@@ -5,7 +5,7 @@ This service encapsulates simulation-related operations.
 """
 
 import logging
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 from YSimulator.YServer.repositories.base_repository import RecommendationRepository
 
@@ -44,6 +44,14 @@ class SimulationService:
         except Exception as e:
             self.logger.error(f"Error getting/creating round: {e}")
             raise
+
+    def get_latest_round(self) -> Optional[Dict[str, Any]]:
+        """Return the most advanced persisted round, if available."""
+        try:
+            return self.recommendation_repo.get_latest_round()
+        except Exception as e:
+            self.logger.error(f"Error retrieving latest round: {e}")
+            return None
 
     def get_round_info(self, round_id: str) -> dict:
         """

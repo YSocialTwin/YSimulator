@@ -72,6 +72,41 @@ class TestLLMManager(unittest.TestCase):
         self.assertIsNotNone(future)
 
 
+class TestStressPromptFormatting(unittest.TestCase):
+    """Test stress prompt formatting helpers used by LLM services."""
+
+    def test_llm_service_stress_prompt_block(self):
+        from YSimulator.YClient.LLM_interactions.llm_service import _stress_prompt_block
+
+        block = _stress_prompt_block(
+            {
+                "stress_level_label": "moderately stressed",
+                "stress_level_scale": 3,
+            }
+        )
+
+        self.assertIn("moderately stressed", block)
+        self.assertIn("3/5", block)
+
+    def test_vllm_service_stress_prompt_block(self):
+        from YSimulator.YClient.LLM_interactions.vllm_service import _stress_prompt_block
+
+        block = _stress_prompt_block(
+            {
+                "stress_level_label": "slightly stressed",
+                "stress_level_scale": 2,
+            }
+        )
+
+        self.assertIn("slightly stressed", block)
+        self.assertIn("2/5", block)
+
+    def test_stress_prompt_block_is_empty_without_metadata(self):
+        from YSimulator.YClient.LLM_interactions.llm_service import _stress_prompt_block
+
+        self.assertEqual(_stress_prompt_block({}), "")
+
+
 class TestBatchHandler(unittest.TestCase):
     """Test BatchHandler functionality."""
 

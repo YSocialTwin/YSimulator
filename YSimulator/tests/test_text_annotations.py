@@ -106,6 +106,37 @@ def test_annotate_text_empty():
     assert annotations["sentiment"] is not None
 
 
+def test_annotate_text_toxicity_empty_api_key_uses_detoxify(monkeypatch):
+    monkeypatch.setattr(
+        "YSimulator.YClient.text_support.annotations._get_detoxify_model",
+        lambda: type(
+            "FakeDetoxify",
+            (),
+            {
+                "predict": lambda self, text: {
+                    "toxicity": 0.05,
+                    "severe_toxicity": 0.01,
+                    "identity_attack": 0.01,
+                    "insult": 0.02,
+                    "obscene": 0.01,
+                    "threat": 0.01,
+                    "sexual_explicit": 0.01,
+                }
+            },
+        )(),
+    )
+
+    annotations = annotate_text(
+        "Test text",
+        enable_sentiment=False,
+        enable_toxicity=True,
+        perspective_api_key="",
+    )
+
+    assert annotations["toxicity"] is not None
+    assert "TOXICITY" in annotations["toxicity"]
+
+
 def test_multiple_hashtags_and_mentions():
     """Test text with many hashtags and mentions."""
     text = "#first #second #third post mentioning @user1 @user2 @user3 and more #tags"

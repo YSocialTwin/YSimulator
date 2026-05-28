@@ -119,6 +119,11 @@ class OpinionCalculator:
                 if not topic_name:
                     continue
 
+                agent_profile = next((a for a in agent_profiles if a.id == agent_id), None)
+                stubborn_topics = getattr(agent_profile, "stubborn_topics", {}) or {}
+                if bool(stubborn_topics.get(str(topic_name), False)):
+                    continue
+
                 # Get agent's LATEST opinion from database (not cached profile)
                 agent_opinion = ray.get(
                     self.server.get_latest_agent_opinion.remote(

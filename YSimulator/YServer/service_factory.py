@@ -34,6 +34,7 @@ try:
     from YSimulator.YServer.services.image_service import ImageService
     from YSimulator.YServer.services.interest_service import InterestService
     from YSimulator.YServer.services.mention_service import MentionService
+    from YSimulator.YServer.services.memory_service import MemoryService
     from YSimulator.YServer.services.metadata_service import MetadataService
     from YSimulator.YServer.services.post_service import PostService
     from YSimulator.YServer.services.simulation_service import SimulationService
@@ -100,18 +101,23 @@ def create_database_engine(
     else:
         raise ValueError(f"Unsupported database type: {db_type}")
 
+    engine_kwargs = {
+        "pool_pre_ping": True,
+        "pool_recycle": 3600,
+    }
+    if db_type == "sqlite":
+        engine_kwargs["connect_args"] = {"timeout": 30}
+
     # Create engine with connection pooling
-    engine = create_engine(
-        connection_string,
-        pool_pre_ping=True,  # Verify connections before using
-        pool_recycle=3600,  # Recycle connections after 1 hour
-    )
+    engine = create_engine(connection_string, **engine_kwargs)
 
     # Create all tables if they don't exist
     try:
         from YSimulator.YServer.classes.models import Base
+        from YSimulator.YServer.schema_migrations import ensure_moderation_schema
 
         Base.metadata.create_all(engine)
+        ensure_moderation_schema(engine)
         logger.info(f"Database tables created/verified for {db_type}")
     except Exception as e:
         logger.error(f"Error creating database tables: {e}")
@@ -216,7 +222,14 @@ def create_all_services(
 
     mention_service = MentionService(
         post_repository=post_repo,
+        engine=engine,
         logger=logger,
+    )
+
+    memory_service = MemoryService(
+        engine=engine,
+        logger=logger,
+        config_path=config_path,
     )
 
     return (
@@ -230,6 +243,7 @@ def create_all_services(
         simulation_service,
         metadata_service,
         mention_service,
+        memory_service,
     )
 
 

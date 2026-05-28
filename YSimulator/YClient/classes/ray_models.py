@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import List, Literal, Optional, Tuple
+from typing import Dict, List, Literal, Optional, Tuple
 
 
 @dataclass
@@ -45,6 +45,7 @@ class AgentProfile:
     profession: str = ""
     activity_profile: str = "Always On"
     archetype: Optional[str] = None
+    cover_image: str = ""
     # Page-specific field
     feed_url: Optional[str] = None  # RSS feed URL for page agents
     # Simulation-specific fields
@@ -56,6 +57,8 @@ class AgentProfile:
     # Opinions field: {"Topic1": 0.5, "Topic2": 0.8}
     # Maps topic names to opinion values in [0, 1]
     opinions: Optional[dict] = None
+    stubborn_topics: Optional[Dict[str, bool]] = None
+    custom_features: Optional[Dict[str, str]] = None
 
 
 @dataclass
@@ -64,16 +67,20 @@ class ActionDTO:
 
     agent_id: str
     cluster_id: int
-    action_type: Literal["POST", "LIKE", "COMMENT", "SHARE", "FOLLOW", "UNFOLLOW"]
+    action_type: Literal["POST", "LIKE", "COMMENT", "SHARE", "FOLLOW", "UNFOLLOW", "REPORT"]
     content: Optional[str] = None
     target_post_id: Optional[str] = None  # UUID string - for comments, reactions, and shares
     article_id: Optional[str] = None  # UUID string for news posts
     target_user_id: Optional[str] = None  # UUID string for follow/unfollow actions
     topic: Optional[str] = None  # Topic name for posts
+    report_type: Optional[str] = None  # "toxic" or "offensive" for REPORT actions
     # Text annotations (populated by client before submission)
     annotations: Optional[dict] = None  # Dict with 'hashtags', 'mentions', 'sentiment', 'toxicity'
     # Updated opinions for comment actions: {topic_id: opinion_value}
     updated_opinions: Optional[dict] = None
+    stress_reward_target_user_id: Optional[str] = None
+    stress_reward_variations: Optional[List[dict]] = None
+    stress_reward_action: Optional[str] = None
 
 
 @dataclass

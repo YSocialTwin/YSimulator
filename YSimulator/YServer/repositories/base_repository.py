@@ -100,6 +100,10 @@ class PostRepository(BaseRepository):
     def search_posts_by_topic(self, topic_id: str, agent_id: str, limit: int = 10) -> List[str]:
         """Search posts by topic."""
 
+    @abstractmethod
+    def get_active_system_messages(self, user_id: str, round_id: str) -> List[Dict[str, Any]]:
+        """Get active system messages for a user at the given round."""
+
     # Metadata methods
     @abstractmethod
     def add_post_emotion(self, post_id: str, emotion_id: str) -> bool:
@@ -143,6 +147,10 @@ class PostRepository(BaseRepository):
         """Get unreplied mentions for a user."""
 
     @abstractmethod
+    def get_users_with_unreplied_mentions(self, user_ids: List[str]) -> List[str]:
+        """Return user IDs that currently have at least one unreplied mention."""
+
+    @abstractmethod
     def get_mention_by_id(self, mention_id: str) -> Optional[Dict[str, Any]]:
         """Get mention by ID."""
 
@@ -183,6 +191,10 @@ class InterestRepository(BaseRepository):
         """Get topic name from ID."""
 
     @abstractmethod
+    def list_interests(self) -> List[Dict[str, Any]]:
+        """Return all known interests/topics."""
+
+    @abstractmethod
     def add_user_interest(self, user_id: str, interest_id: str, round_id: str) -> bool:
         """Add a user interest."""
 
@@ -209,6 +221,10 @@ class RecommendationRepository(BaseRepository):
     @abstractmethod
     def get_or_create_round(self, day: int, hour: int) -> str:
         """Get or create a round ID."""
+
+    @abstractmethod
+    def get_latest_round(self) -> Optional[Dict[str, Any]]:
+        """Return the most advanced persisted round, if any."""
 
     @abstractmethod
     def cleanup_old_posts_from_redis(self, current_day: int, current_slot: int) -> Dict[str, int]:
@@ -245,6 +261,16 @@ class ArticleRepository(BaseRepository):
     @abstractmethod
     def get_article_topics(self, article_id: str) -> List[str]:
         """Get topics associated with an article."""
+
+    @abstractmethod
+    def select_page_article_for_sharing(
+        self,
+        website_id: str,
+        current_round_id: str,
+        feed_articles: List[Dict[str, Any]],
+        cooldown_slots: int = 24,
+    ) -> Optional[Dict[str, Any]]:
+        """Select a feed or reusable article for a page according to cooldown rules."""
 
 
 class ImageRepository(BaseRepository):

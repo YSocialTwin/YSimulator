@@ -101,9 +101,11 @@ nav:
     - YClient Audit: architecture/YCLIENT_AUDIT.md
   - Features:
     - features/README.md
+    - Social Feedback & Reciprocal Follows: features/SOCIAL_FEEDBACK_AND_RECIPROCAL_FOLLOWS.md
     - Recommendation Systems: features/RECOMMENDATION_SYSTEMS.md
     - Opinion Dynamics: features/OPINION_DYNAMICS.md
     - Opinion Dynamics Architecture: features/OPINION_DYNAMICS_ARCHITECTURE.md
+    - Agent Memory: features/MEMORY.md
     - Interests & Topics: features/INTERESTS.md
     - Annotation Implementation: features/ANNOTATION_IMPLEMENTATION.md
     - vLLM Batch Inference: features/VLLM_BATCH_INFERENCE.md

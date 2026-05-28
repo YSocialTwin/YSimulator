@@ -220,6 +220,9 @@ class TestSQLPostRepository:
         mock_post.round = "round1"
         mock_post.comment_to = None  # Model uses comment_to not parent_post
         mock_post.thread_id = None  # Model uses thread_id not root_post
+        mock_post.news_id = None
+        mock_post.shared_from = None
+        mock_post.is_moderation_comment = 0
         mock_post.reaction_count = 5  # Model uses reaction_count not num_reactions
 
         mock_session = Mock(spec=Session)
@@ -378,6 +381,7 @@ class TestSQLInterestRepository:
     def test_add_agent_opinion(self, repository, mock_engine):
         """Test adding an agent opinion."""
         mock_session = Mock(spec=Session)
+        mock_session.query().filter_by().order_by().first.return_value = None
 
         with patch(
             "YSimulator.YServer.repositories.sql_repository.Session", return_value=mock_session
@@ -388,6 +392,25 @@ class TestSQLInterestRepository:
         mock_session.add.assert_called_once()
         mock_session.commit.assert_called_once()
         mock_session.close.assert_called_once()
+
+    def test_add_agent_opinion_preserves_stubborn_value(self, repository, mock_engine):
+        """A stubborn latest opinion should keep its value across subsequent writes."""
+        latest = Mock()
+        latest.stubborn = True
+        latest.opinion = 0.3
+
+        mock_session = Mock(spec=Session)
+        mock_session.query().filter_by().order_by().first.return_value = latest
+
+        with patch(
+            "YSimulator.YServer.repositories.sql_repository.Session", return_value=mock_session
+        ):
+            result = repository.add_agent_opinion("agent1", "topic1", 0.9, "round2")
+
+        assert result is True
+        added = mock_session.add.call_args.args[0]
+        assert added.opinion == 0.3
+        assert added.stubborn is True
 
 
 class TestSQLRecommendationRepository:

@@ -130,6 +130,10 @@ class AgentScheduler:
                     # Random sampling when archetypes are disabled
                     active_regular_agents = random.sample(regular_agents, k=num_active)
 
+        active_regular_agents = self._promote_agents_with_pending_mentions(
+            active_regular_agents, churned_agent_ids
+        )
+
         # Combine regular agents and ALL page agents that are available
         self.logger.info(
             f"Total active agents for this round: {len(active_regular_agents) + len(page_agents)} "
@@ -137,6 +141,47 @@ class AgentScheduler:
         )
 
         return active_regular_agents, page_agents
+
+    def _promote_agents_with_pending_mentions(
+        self, active_regular_agents: List[AgentProfile], churned_agent_ids: Set[str]
+    ) -> List[AgentProfile]:
+        """Ensure users with pending mentions are active for this round."""
+        try:
+            candidate_agents = [
+                agent
+                for agent in self.agent_profiles
+                if agent.is_page != 1 and agent.id not in churned_agent_ids
+            ]
+            candidate_ids = [str(agent.id) for agent in candidate_agents]
+            if not candidate_ids:
+                return active_regular_agents
+
+            pending_ids = set(
+                ray.get(
+                    self.server.get_users_with_unreplied_mentions.remote(candidate_ids)
+                )
+                or []
+            )
+            if not pending_ids:
+                return active_regular_agents
+
+            active_ids = {str(agent.id) for agent in active_regular_agents}
+            promoted_agents = [
+                agent
+                for agent in candidate_agents
+                if str(agent.id) in pending_ids and str(agent.id) not in active_ids
+            ]
+            if promoted_agents:
+                self.logger.info(
+                    f"Promoting {len(promoted_agents)} agent(s) with pending mentions into the active set"
+                )
+            return active_regular_agents + promoted_agents
+        except Exception as e:
+            self.logger.warning(
+                f"Error promoting agents with pending mentions: {e}",
+                extra={"extra_data": {"error": str(e)}},
+            )
+            return active_regular_agents
 
     def _get_churned_agents(self) -> Set[str]:
         """

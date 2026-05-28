@@ -449,7 +449,12 @@ class NewsFeedService:
         # Return a random article
         return random.choice(all_articles)
 
-    def get_article_from_feed(self, feed_url: str) -> Optional[Dict]:
+    def get_article_from_feed(
+        self,
+        feed_url: str,
+        current_round_id: Optional[str] = None,
+        cooldown_slots: int = 24,
+    ) -> Optional[Dict]:
         """
         Get a random article from a specific feed URL.
         Used by page agents to get articles from their assigned feed.
@@ -475,15 +480,39 @@ class NewsFeedService:
             articles = self.cached_news[feed_url].get("articles", [])
             self.logger.debug(f"Feed has {len(articles)} cached articles")
 
+            website_id = self.website_ids.get(feed_url)
+            if self.server and website_id and current_round_id:
+                try:
+                    selected_article = ray.get(
+                        self.server.select_page_article_for_sharing.remote(
+                            str(website_id),
+                            str(current_round_id),
+                            articles or [],
+                            int(cooldown_slots),
+                        )
+                    )
+                    if selected_article:
+                        image_count = len(selected_article.get("image_urls", []))
+                        self.logger.info(
+                            f"Returning eligible article: '{selected_article.get('title', 'NO TITLE')[:50]}' "
+                            f"with {image_count}image(s)"
+                        )
+                        return selected_article
+                except Exception as exc:
+                    self.logger.warning(
+                        f"Server article selection failed for feed {feed_url[:80]}: {exc}"
+                    )
+
             if articles:
                 article = random.choice(articles)
                 image_count = len(article.get("image_urls", []))
                 self.logger.info(
-                    f"Returning article: '{article.get( 'title', 'NO TITLE')[ :50]}' with {image_count}image(s)"
+                    f"Returning article without server cooldown filtering: "
+                    f"'{article.get('title', 'NO TITLE')[:50]}' with {image_count}image(s)"
                 )
                 return article
-            else:
-                self.logger.warning("No articles available in cache")
+
+            self.logger.warning("No articles available in cache")
         else:
             self.logger.warning("Feed URL not in cached_news dictionary")
 

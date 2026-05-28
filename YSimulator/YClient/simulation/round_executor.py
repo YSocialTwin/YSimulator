@@ -128,24 +128,34 @@ class RoundExecutor:
             # Add pending LLM calls to the pending_llm_reactions list
             pending_llm_reactions.extend(pending_calls)
 
-            # Sample number of actions for this agent based on daily_activity_level
-            # Page agents can perform at most 1 action (0 or 1)
-            # Regular agents: Random from 1 to daily_activity_level (minimum 1)
+            # Sample number of actions for this agent based on daily_activity_level.
+            # Page agents are already filtered by their activity profile in the scheduler,
+            # so an active page should reliably emit its single share action for the slot.
+            # Regular agents still sample from their activity budget.
             if agent.daily_activity_level <= 0:
                 # Skip agents with 0 or negative activity level
                 continue
 
             if agent.is_page == 1:
-                # Page agents perform at most 1 action (0 or 1)
-                # Use a probability-based decision: 50% chance to act
-                num_actions = 1 if random.random() < 0.5 else 0
+                num_actions = 1
                 if num_actions > 0:
                     self.logger.info(f"Page agent {agent.username} will perform 1 action")
                 else:
                     self.logger.debug(f"Page agent {agent.username} will skip this round")
             else:
                 # Regular agents perform 1 to daily_activity_level actions
-                num_actions = random.randint(1, agent.daily_activity_level)
+                activity_multiplier = max(
+                    0.0,
+                    min(
+                        1.0,
+                        float(getattr(agent, "stress_reward_activity_multiplier", 1.0) or 1.0),
+                    ),
+                )
+                effective_daily_activity = max(
+                    1,
+                    int(round(float(agent.daily_activity_level) * activity_multiplier)),
+                )
+                num_actions = random.randint(1, effective_daily_activity)
 
             for action_idx in range(num_actions):
                 action_type, agent_type, target = self.select_action_fn(agent, recent_posts)

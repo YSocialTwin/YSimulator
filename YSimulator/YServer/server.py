@@ -18,9 +18,12 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import ray
+from sqlalchemy import and_, func, or_
+from sqlalchemy.exc import OperationalError
+from sqlalchemy.orm import Session
 
 from YSimulator.YClient.classes.ray_models import SimulationInstruction
-from YSimulator.YServer.classes.models import Recommendation
+from YSimulator.YServer.classes.models import Recommendation, Round, StressReward
 from YSimulator.YServer.interests_modeling import InterestManager
 
 # Constants
@@ -247,6 +250,7 @@ class OrchestratorServer:
                 simulation_service,
                 metadata_service,
                 mention_service,
+                memory_service,
             ) = create_all_services(db_config, str(self.config_path), self.logger)
 
             # Phase 5: Expose services directly for explicit usage
@@ -260,6 +264,7 @@ class OrchestratorServer:
             self.simulation_service = simulation_service
             self.metadata_service = metadata_service
             self.mention_service = mention_service
+            self.memory_service = memory_service
             self.redis_client = redis_client
             self.use_redis = redis_client is not None
 
@@ -275,6 +280,7 @@ class OrchestratorServer:
                 simulation_service=simulation_service,
                 metadata_service=metadata_service,
                 mention_service=mention_service,
+                memory_service=memory_service,
                 redis_client=redis_client,
                 logger=self.logger,
             )
@@ -282,7 +288,7 @@ class OrchestratorServer:
                 "Orchestrator server initialized - Repository/Service pattern 100% with direct service access!",
                 extra={
                     "migration_status": "PHASE_5_COMPLETE",
-                    "services": "User, Post, Follow, Interest, Article, Image, Content, Simulation, Metadata, Mention",
+                    "services": "User, Post, Follow, Interest, Article, Image, Content, Simulation, Metadata, Mention, Memory",
                     "service_access": "Direct - no adapter facade",
                     "legacy_middleware": "None - fully eliminated",
                 },
@@ -369,8 +375,8 @@ class OrchestratorServer:
             "Coordination layer initialized (ClientManager, BarrierHandler, RoundManager, ArchetypeManager)"
         )
 
-        # Initialize first round using RoundManager (no need to store, accessed via property)
-        self.round_manager.initialize_first_round()
+        # Restore the latest persisted round when restarting an existing simulation.
+        self.round_manager.initialize_from_persisted_state()
 
         # Expose properties for backward compatibility
         self.registered_clients = self.client_manager.registered_clients
@@ -867,6 +873,26 @@ class OrchestratorServer:
         """
         return self.article_service.get_article(article_id)
 
+    def select_page_article_for_sharing(
+        self,
+        website_id: str,
+        current_round_id: str,
+        feed_articles: List[Dict[str, Any]],
+        cooldown_slots: int = 24,
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Select an eligible article for a page agent to share.
+
+        The server owns the DB-backed cooldown policy so clients do not need to
+        inspect prior posts directly.
+        """
+        return self.article_service.select_page_article_for_sharing(
+            website_id=website_id,
+            current_round_id=current_round_id,
+            feed_articles=feed_articles,
+            cooldown_slots=cooldown_slots,
+        )
+
     def get_topic_id_by_name(self, topic_name: str) -> Optional[str]:
         """
         Get topic ID by topic name.
@@ -951,6 +977,7 @@ class OrchestratorServer:
                 "profession": agent_profile.profession,
                 "activity_profile": agent_profile.activity_profile,
                 "archetype": agent_profile.archetype,
+                "cover_image": getattr(agent_profile, "cover_image", "") or "",
                 "last_active_day": self.day,  # Initialize last_active_day to current day
             }
             users_data.append(user_data)
@@ -1005,11 +1032,12 @@ class OrchestratorServer:
                             }
                         )
 
-                    if agent_profile.opinions:
+                if agent_profile.opinions:
                         agents_with_opinions.append(
                             {
                                 "agent_id": agent_id,
                                 "opinions": agent_profile.opinions,
+                                "stubborn_topics": agent_profile.stubborn_topics or {},
                             }
                         )
                         # Collect all unique topic names for batch lookup
@@ -1038,6 +1066,7 @@ class OrchestratorServer:
                 for agent_data in agents_with_opinions:
                     agent_id = agent_data["agent_id"]
                     opinions = agent_data["opinions"]
+                    stubborn_topics = agent_data.get("stubborn_topics") or {}
 
                     for topic_name, opinion_value in opinions.items():
                         topic_id = topic_name_to_id.get(topic_name)
@@ -1050,6 +1079,7 @@ class OrchestratorServer:
                                     "opinion": opinion_value,
                                     "id_interacted_with": None,
                                     "id_post": None,
+                                    "stubborn": bool(stubborn_topics.get(topic_name, False)),
                                 }
                             )
 
@@ -1062,6 +1092,48 @@ class OrchestratorServer:
                         f"Batch initialized {opinions_added} opinions for "
                         f"{len(agents_with_opinions)} agents"
                     )
+
+            custom_feature_rows = []
+            for agent_id in newly_registered_ids:
+                agent_profile = agent_id_to_profile.get(agent_id)
+                if not agent_profile or not getattr(agent_profile, "custom_features", None):
+                    continue
+                for feature_key, feature_value in (agent_profile.custom_features or {}).items():
+                    feature_key = str(feature_key or "").strip()
+                    if not feature_key:
+                        continue
+                    custom_feature_rows.append(
+                        {
+                            "agent_id": str(agent_id),
+                            "feature_type": "custom",
+                            "key": feature_key,
+                            "value": "" if feature_value is None else str(feature_value),
+                        }
+                    )
+
+            if custom_feature_rows:
+                from sqlalchemy.orm import Session
+                from YSimulator.YServer.classes.models import Agent_Custom_Feature
+                import uuid
+
+                session = Session(self.db.engine)
+                try:
+                    for row in custom_feature_rows:
+                        session.add(
+                            Agent_Custom_Feature(
+                                id=str(uuid.uuid4()),
+                                agent_id=row["agent_id"],
+                                feature_type=row["feature_type"],
+                                key=row["key"],
+                                value=row["value"],
+                            )
+                        )
+                    session.commit()
+                except Exception:
+                    session.rollback()
+                    raise
+                finally:
+                    session.close()
 
             # Batch register websites for page agents
             pages_registered = 0
@@ -1249,17 +1321,23 @@ class OrchestratorServer:
             bool: True if follower follows user with action="follow", False otherwise
         """
         try:
+            from sqlalchemy import func
             from sqlalchemy.orm import Session
 
-            from YSimulator.YServer.classes.models import Follow
+            from YSimulator.YServer.classes.models import Follow, Round
 
             with Session(self.db.engine) as session:
                 # Check for active follow relationship
                 # Get the most recent follow action between these users
                 latest_follow = (
                     session.query(Follow)
-                    .filter_by(follower_id=follower_id, user_id=user_id)
-                    .order_by(Follow.round.desc())
+                    .outerjoin(Round, Follow.round == Round.id)
+                    .filter(Follow.follower_id == follower_id, Follow.user_id == user_id)
+                    .order_by(
+                        func.coalesce(Round.day, -1).desc(),
+                        func.coalesce(Round.hour, -1).desc(),
+                        Follow.id.desc(),
+                    )
                     .first()
                 )
 
@@ -1290,6 +1368,17 @@ class OrchestratorServer:
         result = self.mention_service.get_unreplied_mentions(user_id)
         self.logger.debug(
             f"[REPLY_SERVER] get_unreplied_mentions for user {user_id}: found {len(result)} unreplied mentions"
+        )
+        return result
+
+    @log_server_request
+    def get_users_with_unreplied_mentions(
+        self, user_ids: List[str], client_id: str = None
+    ) -> List[str]:
+        """Return the subset of user_ids that have at least one unreplied mention."""
+        result = self.mention_service.get_users_with_unreplied_mentions(user_ids or [])
+        self.logger.debug(
+            f"[REPLY_SERVER] get_users_with_unreplied_mentions for {len(user_ids or [])} users: found {len(result)} matches"
         )
         return result
 
@@ -1473,6 +1562,18 @@ class OrchestratorServer:
                 if result.success and result.new_ids:
                     new_ids.extend(result.new_ids)
 
+                if (
+                    result.success
+                    and getattr(act, "stress_reward_target_user_id", None)
+                    and getattr(act, "stress_reward_variations", None)
+                ):
+                    self.set_stress_reward_variations(
+                        str(act.stress_reward_target_user_id),
+                        str(self.current_round_id),
+                        list(act.stress_reward_variations or []),
+                        action_name=getattr(act, "stress_reward_action", None),
+                    )
+
             # Update recent posts cache
             if new_ids:
                 self.recent_posts_cache.extend(new_ids)
@@ -1512,6 +1613,161 @@ class OrchestratorServer:
 
         # Check if EVERYONE is done
         self._check_barrier_and_advance()
+
+    def get_stress_reward(self, agent_id: str, round_id: str, backward_rounds: int = 24) -> dict:
+        """
+        Get latest aggregate stress/reward state for an agent and persist current aggregate rows.
+        """
+        stress_reward_cfg = (self.simulation_config or {}).get("stress_reward") or {}
+        if not bool(stress_reward_cfg.get("enabled", False)):
+            return {"stress": 0.0, "reward": 0.0, "status": 200}
+
+        try:
+            payload = {"stress": 0.0, "reward": 0.0, "status": 200}
+            with Session(self.db.engine) as session:
+                target_round = session.query(Round).filter_by(id=str(round_id)).first()
+                if target_round is None:
+                    return {"stress": 0.0, "reward": 0.0, "status": 404}
+
+                target_day = int(target_round.day or 0)
+                target_hour = int(target_round.hour or 0)
+                window_size = max(1, int(backward_rounds or 24) + 1)
+
+                def _before(day: int, hour: int):
+                    return or_(Round.day < day, and_(Round.day == day, Round.hour < hour))
+
+                def _at_or_before(day: int, hour: int):
+                    return or_(Round.day < day, and_(Round.day == day, Round.hour <= hour))
+
+                def _after(day: int, hour: int):
+                    return or_(Round.day > day, and_(Round.day == day, Round.hour > hour))
+
+                def _at_or_after(day: int, hour: int):
+                    return or_(Round.day > day, and_(Round.day == day, Round.hour >= hour))
+
+                window_rounds = (
+                    session.query(Round)
+                    .filter(_at_or_before(target_day, target_hour))
+                    .order_by(Round.day.desc(), Round.hour.desc())
+                    .limit(window_size)
+                    .all()
+                )
+                earliest_window_round = window_rounds[-1] if window_rounds else target_round
+                earliest_day = int(earliest_window_round.day or 0)
+                earliest_hour = int(earliest_window_round.hour or 0)
+
+                for variable in ("stress", "reward"):
+                    latest_aggregate_row = (
+                        session.query(StressReward, Round)
+                        .join(Round, Round.id == StressReward.tid)
+                        .filter(
+                            StressReward.uid == str(agent_id),
+                            StressReward.variable == variable,
+                            StressReward.type == "aggregate",
+                            _before(target_day, target_hour),
+                        )
+                        .order_by(
+                            Round.day.desc(),
+                            Round.hour.desc(),
+                        )
+                        .first()
+                    )
+
+                    anchor_value = 0.0
+                    variation_lower_bound = _at_or_after(earliest_day, earliest_hour)
+                    if latest_aggregate_row is not None:
+                        latest_aggregate, aggregate_round = latest_aggregate_row
+                        anchor_value = float(latest_aggregate.value)
+                        variation_lower_bound = _at_or_after(
+                            int(aggregate_round.day or 0), int(aggregate_round.hour or 0)
+                        )
+
+                    variation_sum = (
+                        session.query(func.coalesce(func.sum(StressReward.value), 0.0))
+                        .join(Round, Round.id == StressReward.tid)
+                        .filter(
+                            StressReward.uid == str(agent_id),
+                            StressReward.variable == variable,
+                            StressReward.type == "variation",
+                            variation_lower_bound,
+                            _at_or_before(target_day, target_hour),
+                        )
+                        .scalar()
+                    )
+                    current_value = max(0.0, min(1.0, anchor_value + float(variation_sum or 0.0)))
+                    payload[variable] = current_value
+
+                    existing = (
+                        session.query(StressReward)
+                        .filter_by(
+                            uid=str(agent_id),
+                            variable=variable,
+                            type="aggregate",
+                            tid=str(round_id),
+                        )
+                        .first()
+                    )
+                    if existing is None:
+                        session.add(
+                            StressReward(
+                                id=str(uuid.uuid4()),
+                                uid=str(agent_id),
+                                variable=variable,
+                                value=current_value,
+                                type="aggregate",
+                                action=None,
+                                tid=str(round_id),
+                            )
+                        )
+                    else:
+                        existing.value = current_value
+                session.commit()
+            return payload
+        except Exception as e:
+            self.logger.error(f"Error getting stress/reward for agent {agent_id}: {e}")
+            return {"stress": 0.0, "reward": 0.0, "status": 500}
+
+    def set_stress_reward_variations(
+        self, user_id: str, round_id: str, variations: list, action_name: Optional[str] = None
+    ) -> int:
+        """
+        Persist stress/reward variation rows for a user.
+        """
+        stress_reward_cfg = (self.simulation_config or {}).get("stress_reward") or {}
+        if not bool(stress_reward_cfg.get("enabled", False)):
+            return 0
+
+        written = 0
+        try:
+            with Session(self.db.engine) as session:
+                for variation in variations or []:
+                    variable = str((variation or {}).get("variable") or "").strip().lower()
+                    if variable not in {"stress", "reward"}:
+                        continue
+                    try:
+                        value = float((variation or {}).get("value"))
+                    except (TypeError, ValueError):
+                        continue
+                    if value < -1.0 or value > 1.0:
+                        continue
+                    session.add(
+                        StressReward(
+                            id=str(uuid.uuid4()),
+                            uid=str(user_id),
+                            variable=variable,
+                            value=value,
+                            type="variation",
+                            action=str(action_name).strip() if action_name else None,
+                            tid=str(round_id),
+                        )
+                    )
+                    written += 1
+                session.commit()
+        except Exception as e:
+            self.logger.error(f"Error writing stress/reward variations for {user_id}: {e}")
+            return 0
+
+        return written
 
     def get_current_day(self) -> int:
         """
@@ -1768,25 +2024,34 @@ class OrchestratorServer:
             return
 
         try:
-            from sqlalchemy.orm import Session
-
             # Format post IDs as pipe-separated string (original implementation format)
             post_ids_str = "|".join(post_ids)
             recommendation_id = str(uuid.uuid4())
 
             # Save to SQL database using SQLAlchemy ORM
-            session = Session(self.db.engine)
-            try:
-                recommendation = Recommendation(
-                    id=recommendation_id,
-                    user_id=agent_id,
-                    post_ids=post_ids_str,
-                    round=self.current_round_id,
-                )
-                session.add(recommendation)
-                session.commit()
-            finally:
-                session.close()
+            max_attempts = 4
+            for attempt in range(max_attempts):
+                session = Session(self.db.engine)
+                try:
+                    recommendation = Recommendation(
+                        id=recommendation_id,
+                        user_id=agent_id,
+                        post_ids=post_ids_str,
+                        round=self.current_round_id,
+                    )
+                    session.add(recommendation)
+                    session.commit()
+                    break
+                except OperationalError as e:
+                    session.rollback()
+                    if "database is locked" not in str(e).lower() or attempt == max_attempts - 1:
+                        raise
+                    time.sleep(0.15 * (attempt + 1))
+                except Exception:
+                    session.rollback()
+                    raise
+                finally:
+                    session.close()
 
             # Also save to Redis if enabled
             if self.use_redis:
@@ -1909,6 +2174,62 @@ class OrchestratorServer:
         return self.user_service.get_user(user_id)
 
     @log_server_request
+    def memory_reset(self, run_id: str, client_id: str = None) -> Dict[str, Any]:
+        """Clear server-owned memory state for a run_id."""
+        return self.memory_service.reset(run_id)
+
+    @log_server_request
+    def memory_event(self, payload: Dict[str, Any], client_id: str = None) -> Dict[str, Any]:
+        """Persist a client-generated memory event."""
+        payload = payload or {}
+        result = self.memory_service.record_event(payload)
+        try:
+            if int(result.get("status") or 0) == 200 and self.server_request_logger:
+                self.server_request_logger.info(
+                    json.dumps(
+                        {
+                            "message": "agent_decision",
+                            "run_id": str(payload.get("run_id") or ""),
+                            "agent_user_id": str(payload.get("actor_user_id") or ""),
+                            "memory_event_id": result.get("id"),
+                            "memory_event_type": payload.get("event_type"),
+                            "day": self.day,
+                            "hour": self.slot,
+                            "time": datetime.now(timezone.utc).isoformat(),
+                        }
+                    )
+                )
+        except Exception:
+            pass
+        return result
+
+    @log_server_request
+    def memory_item_upsert(
+        self, payload: Dict[str, Any], client_id: str = None
+    ) -> Dict[str, Any]:
+        """Persist or update a searchable memory item."""
+        return self.memory_service.upsert_item(payload or {})
+
+    @log_server_request
+    def memory_search(self, payload: Dict[str, Any], client_id: str = None) -> Dict[str, Any]:
+        """Search persisted memory. Search is lexical server-side and uses no LLM."""
+        return self.memory_service.search(payload or {})
+
+    @log_server_request
+    def memory_get_context(
+        self, payload: Dict[str, Any], client_id: str = None
+    ) -> Dict[str, Any]:
+        """Return persisted memory context for a client-side prompt."""
+        return self.memory_service.get_context(payload or {})
+
+    @log_server_request
+    def memory_events_recent(
+        self, payload: Dict[str, Any], client_id: str = None
+    ) -> Dict[str, Any]:
+        """Return recent persisted memory events."""
+        return self.memory_service.events_recent(payload or {})
+
+    @log_server_request
     def search_posts_by_topic(
         self, topic_id: str, agent_id: str, limit: int = 10, client_id: str = None
     ) -> List[str]:
@@ -1938,6 +2259,24 @@ class OrchestratorServer:
             List of topic UUIDs
         """
         return self.post_service.get_post_topics(post_id)
+
+    @log_server_request
+    def get_active_system_messages(
+        self, user_id: str, round_id: Optional[str] = None, client_id: str = None
+    ) -> List[Dict[str, Any]]:
+        """
+        Get active system messages for a user at the specified round.
+
+        Args:
+            user_id: User UUID
+            round_id: Round UUID; defaults to current round when omitted
+            client_id: Optional client identifier for logging
+
+        Returns:
+            List of active system message dictionaries
+        """
+        resolved_round_id = round_id or self.current_round_id
+        return self.post_service.get_active_system_messages(user_id, resolved_round_id)
 
     @log_server_request
     def get_topic_name_from_id(self, topic_id: str, client_id: str = None) -> Optional[str]:
