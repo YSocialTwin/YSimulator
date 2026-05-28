@@ -201,9 +201,7 @@ def test_reply_generator_rule_based_attaches_opinion_updates(mock_context, mock_
     mock_context.server.get_user.remote = MagicMock(return_value=author_data)
     mock_context.server.mark_mention_replied.remote = MagicMock(return_value=True)
     mock_context.annotate_action_fn = MagicMock()
-    mock_context.calculate_opinion_updates_fn = MagicMock(
-        return_value={"topic-1": 0.72}
-    )
+    mock_context.calculate_opinion_updates_fn = MagicMock(return_value={"topic-1": 0.72})
 
     generator = ReplyGenerator(mock_context)
 

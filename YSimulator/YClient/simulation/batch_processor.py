@@ -132,9 +132,7 @@ class BatchProcessor:
         )
         result = batch_results[0] if batch_results else None
         if result is None:
-            raise TimeoutError(
-                f"{error_message} timed out after {LLM_BATCH_TIMEOUT_SECONDS:.0f}s"
-            )
+            raise TimeoutError(f"{error_message} timed out after {LLM_BATCH_TIMEOUT_SECONDS:.0f}s")
         return result
 
     def _is_vllm_backend(self) -> bool:
@@ -393,6 +391,7 @@ class BatchProcessor:
             batchable_posts: List of tuples with format (agent_id, cluster_id, future, topic, day, slot, agent_attrs)
             actions: List to append resolved post actions to
         """
+
         def unpack_post_item(item: Tuple):
             if len(item) < 7:
                 raise ValueError(
@@ -1373,9 +1372,7 @@ class BatchProcessor:
 
             # Handle different reaction types
             if reaction_type.upper() in REPORT_TYPES:
-                report_type = (
-                    "toxic" if reaction_type.upper() == "REPORT_TOXIC" else "offensive"
-                )
+                report_type = "toxic" if reaction_type.upper() == "REPORT_TOXIC" else "offensive"
                 self.logger.debug(
                     f"[READ] LLM generated report for agent {agent_id}: {report_type}"
                 )
@@ -1592,9 +1589,7 @@ class BatchProcessor:
         )
         try:
             batch_future = llm_actor.generate_search_action_batch.remote(batch_requests)
-            results = self._resolve_batch_future(
-                batch_future, "vLLM batch search action decision"
-            )
+            results = self._resolve_batch_future(batch_future, "vLLM batch search action decision")
         except Exception as e:
             self.logger.error(
                 f"vLLM batch search action failed: {e}, falling back to standard gather"
@@ -1847,9 +1842,7 @@ class BatchProcessor:
 
                 # Call batch emotion extraction
                 batch_future = llm_actor.extract_emotions_batch.remote(texts)
-                results = self._resolve_batch_future(
-                    batch_future, "vLLM batch emotion extraction"
-                )
+                results = self._resolve_batch_future(batch_future, "vLLM batch emotion extraction")
 
                 self.logger.info(f"Successfully batch extracted emotions for {len(results)} texts")
             else:
@@ -2044,9 +2037,7 @@ class BatchProcessor:
                 f"Batch evaluating {len(batch_requests)} LLM opinion interactions with vLLM"
             )
             batch_future = llm_actor.evaluate_opinion_batch.remote(batch_requests)
-            responses = self._resolve_batch_future(
-                batch_future, "vLLM batch opinion evaluation"
-            )
+            responses = self._resolve_batch_future(batch_future, "vLLM batch opinion evaluation")
 
             for i, response in enumerate(responses):
                 mapping = request_mappings[i]

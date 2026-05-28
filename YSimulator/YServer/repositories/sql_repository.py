@@ -549,9 +549,7 @@ class SQLPostRepository(PostRepository):
             finally:
                 session.close()
         except Exception as e:
-            self.logger.error(
-                f"Error adding report: {e}", extra={"extra_data": {"error": str(e)}}
-            )
+            self.logger.error(f"Error adding report: {e}", extra={"extra_data": {"error": str(e)}})
             return False
 
     def increment_post_reaction_count(self, post_id: str) -> bool:
@@ -1451,7 +1449,9 @@ class SQLInterestRepository(InterestRepository):
             session = Session(self.engine)
             try:
                 interests = session.query(Interest).all()
-                return [{"iid": interest.iid, "interest": interest.interest} for interest in interests]
+                return [
+                    {"iid": interest.iid, "interest": interest.interest} for interest in interests
+                ]
             finally:
                 session.close()
         except Exception as e:
@@ -1917,11 +1917,7 @@ class SQLRecommendationRepository(RecommendationRepository):
         try:
             session = Session(self.engine)
             try:
-                latest = (
-                    session.query(Round)
-                    .order_by(Round.day.desc(), Round.hour.desc())
-                    .first()
-                )
+                latest = session.query(Round).order_by(Round.day.desc(), Round.hour.desc()).first()
                 if latest is None:
                     return None
                 return {"id": latest.id, "day": latest.day, "hour": latest.hour}

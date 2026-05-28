@@ -50,4 +50,3 @@ def test_follow_recommender_uses_round_day_hour_not_uuid_order():
     )
 
     assert "target" in suggestions
-

@@ -86,7 +86,13 @@ class StressRewardSystem:
     def churn_enabled(self) -> bool:
         return bool((self.config.get("churn") or {}).get("enabled", False))
 
-    def compute_reaction_delta(self, *, reaction: str, current_stress: Optional[float] = None, current_reward: Optional[float] = None) -> Dict[str, float]:
+    def compute_reaction_delta(
+        self,
+        *,
+        reaction: str,
+        current_stress: Optional[float] = None,
+        current_reward: Optional[float] = None,
+    ) -> Dict[str, float]:
         return self._compute_delta(
             family="reaction",
             subtype=reaction,
@@ -95,7 +101,15 @@ class StressRewardSystem:
             volume=1,
         )
 
-    def compute_comment_delta(self, *, tone: str, current_stress: Optional[float] = None, current_reward: Optional[float] = None, directness: float = 1.0, support_strength: float = 1.0) -> Dict[str, float]:
+    def compute_comment_delta(
+        self,
+        *,
+        tone: str,
+        current_stress: Optional[float] = None,
+        current_reward: Optional[float] = None,
+        directness: float = 1.0,
+        support_strength: float = 1.0,
+    ) -> Dict[str, float]:
         return self._compute_delta(
             family="comment",
             subtype=tone,
@@ -105,7 +119,14 @@ class StressRewardSystem:
             support_strength=support_strength,
         )
 
-    def compute_share_delta(self, *, tone: str, current_stress: Optional[float] = None, current_reward: Optional[float] = None, public_exposure: float = 1.0) -> Dict[str, float]:
+    def compute_share_delta(
+        self,
+        *,
+        tone: str,
+        current_stress: Optional[float] = None,
+        current_reward: Optional[float] = None,
+        public_exposure: float = 1.0,
+    ) -> Dict[str, float]:
         return self._compute_delta(
             family="share",
             subtype=tone,
@@ -114,7 +135,18 @@ class StressRewardSystem:
             public_exposure=public_exposure,
         )
 
-    def _compute_delta(self, *, family: str, subtype: str, current_stress: Optional[float] = None, current_reward: Optional[float] = None, directness: float = 1.0, public_exposure: float = 1.0, support_strength: float = 1.0, volume: int = 1) -> Dict[str, float]:
+    def _compute_delta(
+        self,
+        *,
+        family: str,
+        subtype: str,
+        current_stress: Optional[float] = None,
+        current_reward: Optional[float] = None,
+        directness: float = 1.0,
+        public_exposure: float = 1.0,
+        support_strength: float = 1.0,
+        volume: int = 1,
+    ) -> Dict[str, float]:
         base = self.config["events"][family][subtype]
         stress_ctx = 0.2 if current_stress is None else current_stress
         reward_ctx = 0.4 if current_reward is None else current_reward
@@ -148,7 +180,9 @@ class StressRewardSystem:
             "projected_reward": self._clamp01(reward_ctx + dr),
         }
 
-    def compute_current_stress_reward(self, *, server, agent_id: str, current_tid: str, backward_rounds: int = 24) -> Dict[str, float]:
+    def compute_current_stress_reward(
+        self, *, server, agent_id: str, current_tid: str, backward_rounds: int = 24
+    ) -> Dict[str, float]:
         payload = ray.get(
             server.get_stress_reward.remote(
                 str(agent_id),
@@ -176,7 +210,9 @@ class StressRewardSystem:
         probability = min(float(churn_cfg.get("max_probability", 0.95)), probability)
         return self._clamp01(probability)
 
-    def compute_activity_effect(self, *, current_stress: float, current_reward: float) -> Dict[str, float]:
+    def compute_activity_effect(
+        self, *, current_stress: float, current_reward: float
+    ) -> Dict[str, float]:
         activity_cfg = self.config.get("activity_impact") or {}
         if not bool(activity_cfg.get("enabled", True)):
             return {"action_multiplier": 1.0, "skip_probability": 0.0}

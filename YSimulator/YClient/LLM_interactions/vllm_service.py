@@ -837,7 +837,9 @@ class VLLMService:
                 pass
 
         # Fallback to cluster-based persona
-        persona = self.prompts_config["personas"].get(str(cluster_id), "You are a social media user.")
+        persona = self.prompts_config["personas"].get(
+            str(cluster_id), "You are a social media user."
+        )
         return _append_custom_features_to_persona(persona, agent_attrs)
 
     def _memory_blocks(self, agent_attrs: Optional[dict]) -> Dict[str, str]:
@@ -1353,9 +1355,7 @@ class VLLMService:
                     system_template = self.prompts_config["generate_read_reaction"][
                         "system_template"
                     ]
-                    user_template = self.prompts_config["generate_read_reaction"][
-                        "user_template"
-                    ]
+                    user_template = self.prompts_config["generate_read_reaction"]["user_template"]
 
                     # Format templates with persona and opinion instruction
                     system_msg = (
@@ -1859,9 +1859,7 @@ class VLLMService:
 
             if "REPORT_TOXIC" in result or ("REPORT" in result and "TOXIC" in result):
                 return "REPORT_TOXIC"
-            if "REPORT_OFFENSIVE" in result or (
-                "REPORT" in result and "OFFENSIVE" in result
-            ):
+            if "REPORT_OFFENSIVE" in result or ("REPORT" in result and "OFFENSIVE" in result):
                 return "REPORT_OFFENSIVE"
             if "LOVE" in result:
                 return "LOVE"
@@ -1991,8 +1989,7 @@ class VLLMService:
         desired_reply = "FOLLOW" if normalized_action == "follow" else "UNFOLLOW"
         action_text = "followed" if normalized_action == "follow" else "unfollowed"
         system_msg = (
-            f"{persona}\n"
-            "You are deciding whether to reciprocate a direct social-link change."
+            f"{persona}\n" "You are deciding whether to reciprocate a direct social-link change."
         )
         user_msg = (
             f"Another user has just {action_text} you.\n"

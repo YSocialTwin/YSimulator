@@ -33,8 +33,8 @@ try:
     from YSimulator.YServer.services.follow_service import FollowService
     from YSimulator.YServer.services.image_service import ImageService
     from YSimulator.YServer.services.interest_service import InterestService
-    from YSimulator.YServer.services.mention_service import MentionService
     from YSimulator.YServer.services.memory_service import MemoryService
+    from YSimulator.YServer.services.mention_service import MentionService
     from YSimulator.YServer.services.metadata_service import MetadataService
     from YSimulator.YServer.services.post_service import PostService
     from YSimulator.YServer.services.simulation_service import SimulationService

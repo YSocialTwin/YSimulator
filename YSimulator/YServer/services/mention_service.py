@@ -8,8 +8,8 @@ import logging
 from typing import Any, Dict, List
 
 from sqlalchemy import MetaData, Table, cast, inspect, select
-from sqlalchemy.types import Integer
 from sqlalchemy.orm import Session
+from sqlalchemy.types import Integer
 
 from YSimulator.YServer.repositories.base_repository import PostRepository
 
@@ -113,7 +113,10 @@ class MentionService:
             inspector = inspect(self.engine)
             if "shadow_ban" not in inspector.get_table_names():
                 return mentions
-            if "post" not in inspector.get_table_names() or "rounds" not in inspector.get_table_names():
+            if (
+                "post" not in inspector.get_table_names()
+                or "rounds" not in inspector.get_table_names()
+            ):
                 return mentions
 
             metadata = MetaData()
@@ -140,11 +143,14 @@ class MentionService:
                             row[0]
                             for row in session.execute(
                                 select(shadow_ban.c.uid)
-                                .where(cast(shadow_ban.c.start_tid, Integer) <= int(current_round_id))
+                                .where(
+                                    cast(shadow_ban.c.start_tid, Integer) <= int(current_round_id)
+                                )
                                 .where(
                                     (shadow_ban.c.duration.is_(None))
                                     | (
-                                        cast(shadow_ban.c.start_tid, Integer) + shadow_ban.c.duration
+                                        cast(shadow_ban.c.start_tid, Integer)
+                                        + shadow_ban.c.duration
                                         >= int(current_round_id)
                                     )
                                 )

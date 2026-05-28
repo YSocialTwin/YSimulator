@@ -266,7 +266,9 @@ class YSimulatorMemoryManager:
                 extra={
                     "extra_data": {
                         "run_id": self.run_id,
-                        "backend": self.agent_memory_config.get("memory_backend", "hybrid_semantic"),
+                        "backend": self.agent_memory_config.get(
+                            "memory_backend", "hybrid_semantic"
+                        ),
                     }
                 },
             )
@@ -322,9 +324,7 @@ class YSimulatorMemoryManager:
                 )
                 return result if result is not None else ({} if as_json else "")
             except Exception as exc:
-                self.logger.debug(
-                    f"Client LLM provider call failed for '{prompt_key}': {exc}"
-                )
+                self.logger.debug(f"Client LLM provider call failed for '{prompt_key}': {exc}")
                 return {} if as_json else ""
 
         return _provider
@@ -492,9 +492,7 @@ class YSimulatorMemoryManager:
                 self.agent_memory_config.get("memory_reflection_min_events", 12)
             ),
             "memory_reflection_trigger_importance_sum": float(
-                self.agent_memory_config.get(
-                    "memory_reflection_trigger_importance_sum", 3.5
-                )
+                self.agent_memory_config.get("memory_reflection_trigger_importance_sum", 3.5)
             ),
             "memory_reflection_max_items_per_run": int(
                 self.agent_memory_config.get("memory_reflection_max_items_per_run", 60)
@@ -665,7 +663,9 @@ class YSimulatorMemoryManager:
                 "agent_user_id": str(agent_id),
                 "item_type": "event",
                 "text": text[:4000],
-                "source_event_id": event_result.get("id") if isinstance(event_result, dict) else None,
+                "source_event_id": (
+                    event_result.get("id") if isinstance(event_result, dict) else None
+                ),
                 "thread_root_id": thread_root_id,
                 "other_user_id": target_user_id,
                 "round_id": int(round_id),
@@ -736,23 +736,17 @@ class YSimulatorMemoryManager:
             if not post:
                 return
             other_user = (
-                self.runtime._fetch_user(str(post.get("user_id")))
-                if post.get("user_id")
-                else None
+                self.runtime._fetch_user(str(post.get("user_id"))) if post.get("user_id") else None
             )
             try:
                 engine.record_comment(
                     self._pkg["CommentMemoryEvent"](
                         round_id=round_id,
-                        target_post_id=self.runtime.intern_post_id(
-                            str(action.target_post_id)
-                        ),
+                        target_post_id=self.runtime.intern_post_id(str(action.target_post_id)),
                         thread_root_id=self.runtime.intern_post_id(
                             str(post.get("thread_id") or action.target_post_id)
                         ),
-                        other_user_id=self.runtime.intern_user_id(
-                            str(post.get("user_id") or "")
-                        ),
+                        other_user_id=self.runtime.intern_user_id(str(post.get("user_id") or "")),
                         other_username=(other_user or {}).get("username"),
                         other_text=post.get("tweet") or post.get("text") or "",
                         my_text=action.content or "",
@@ -780,22 +774,16 @@ class YSimulatorMemoryManager:
             if not post:
                 return
             other_user = (
-                self.runtime._fetch_user(str(post.get("user_id")))
-                if post.get("user_id")
-                else None
+                self.runtime._fetch_user(str(post.get("user_id"))) if post.get("user_id") else None
             )
-            vote_type = (
-                "like" if action.action_type in {"LIKE", "LOVE", "LAUGH"} else "downvote"
-            )
+            vote_type = "like" if action.action_type in {"LIKE", "LOVE", "LAUGH"} else "downvote"
             try:
                 engine.record_vote(
                     self._pkg["VoteMemoryEvent"](
                         round_id=round_id,
                         post_id=self.runtime.intern_post_id(str(action.target_post_id)),
                         vote_type=vote_type,
-                        other_user_id=self.runtime.intern_user_id(
-                            str(post.get("user_id") or "")
-                        ),
+                        other_user_id=self.runtime.intern_user_id(str(post.get("user_id") or "")),
                         other_username=(other_user or {}).get("username"),
                         thread_root_id=self.runtime.intern_post_id(
                             str(post.get("thread_id") or action.target_post_id)
@@ -804,9 +792,7 @@ class YSimulatorMemoryManager:
                     )
                 )
             except Exception as exc:
-                self.logger.debug(
-                    f"Engine record_vote failed for agent {action.agent_id}: {exc}"
-                )
+                self.logger.debug(f"Engine record_vote failed for agent {action.agent_id}: {exc}")
             self._persist_memory_event(
                 agent_id=str(action.agent_id),
                 round_id=round_id,
@@ -845,12 +831,12 @@ class YSimulatorMemoryManager:
                 event_type="share",
                 text=share_text,
                 target_user_id=str(post.get("user_id") or "") if post else None,
-                thread_root_id=str(post.get("thread_id") or action.target_post_id)
-                if post
-                else None,
-                target_post_id=str(action.target_post_id)
-                if getattr(action, "target_post_id", None)
-                else None,
+                thread_root_id=(
+                    str(post.get("thread_id") or action.target_post_id) if post else None
+                ),
+                target_post_id=(
+                    str(action.target_post_id) if getattr(action, "target_post_id", None) else None
+                ),
                 origin_kind="share_link" if post and post.get("news_id") else "text_post",
                 importance=0.4,
             )

@@ -244,9 +244,7 @@ class MemorySocialCard(Base):
 
     __tablename__ = "memory_social_cards"
     __table_args__ = (
-        UniqueConstraint(
-            "run_id", "agent_user_id", "other_user_id", name="uq_memory_social_card"
-        ),
+        UniqueConstraint("run_id", "agent_user_id", "other_user_id", name="uq_memory_social_card"),
     )
 
     id = Column(Integer, primary_key=True)
@@ -271,9 +269,7 @@ class MemoryThreadCard(Base):
 
     __tablename__ = "memory_thread_cards"
     __table_args__ = (
-        UniqueConstraint(
-            "run_id", "agent_user_id", "thread_root_id", name="uq_memory_thread_card"
-        ),
+        UniqueConstraint("run_id", "agent_user_id", "thread_root_id", name="uq_memory_thread_card"),
     )
 
     id = Column(Integer, primary_key=True)
@@ -569,7 +565,9 @@ class SysMessage(Base):
     duration = Column(Integer, nullable=True)
 
     target_user = relationship("User_mgmt", foreign_keys=[to_uid], back_populates="system_messages")
-    from_round_obj = relationship("Round", foreign_keys=[from_round], back_populates="incoming_system_messages")
+    from_round_obj = relationship(
+        "Round", foreign_keys=[from_round], back_populates="incoming_system_messages"
+    )
 
 
 Index("idx_sys_messages_to_uid", SysMessage.to_uid)
@@ -586,9 +584,13 @@ class Reported(Base):
     from_uid = Column(String(36), ForeignKey("user_mgmt.id", ondelete="CASCADE"), nullable=False)
     tid = Column(String(36), ForeignKey("rounds.id", ondelete="CASCADE"), nullable=False)
 
-    reported_user = relationship("User_mgmt", foreign_keys=[to_uid], back_populates="reports_received")
+    reported_user = relationship(
+        "User_mgmt", foreign_keys=[to_uid], back_populates="reports_received"
+    )
     reported_post = relationship("Post", foreign_keys=[to_post], back_populates="reports")
-    reporter_user = relationship("User_mgmt", foreign_keys=[from_uid], back_populates="reports_sent")
+    reporter_user = relationship(
+        "User_mgmt", foreign_keys=[from_uid], back_populates="reports_sent"
+    )
     round_obj = relationship("Round", foreign_keys=[tid], back_populates="reported_items")
 
 

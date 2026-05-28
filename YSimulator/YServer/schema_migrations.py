@@ -18,9 +18,7 @@ def _ensure_sys_messages_duration_schema(engine, inspector) -> None:
     dialect = engine.dialect.name
     with engine.begin() as conn:
         if dialect == "sqlite":
-            conn.execute(
-                text(
-                    """
+            conn.execute(text("""
                     CREATE TABLE sys_messages__new (
                         id VARCHAR(36) PRIMARY KEY,
                         type TEXT NOT NULL,
@@ -29,13 +27,9 @@ def _ensure_sys_messages_duration_schema(engine, inspector) -> None:
                         from_round VARCHAR(36) REFERENCES rounds(id),
                         duration INTEGER
                     )
-                    """
-                )
-            )
+                    """))
             if has_to_round:
-                conn.execute(
-                    text(
-                        """
+                conn.execute(text("""
                         INSERT INTO sys_messages__new (id, type, to_uid, message, from_round, duration)
                         SELECT
                             sm.id,
@@ -54,28 +48,20 @@ def _ensure_sys_messages_duration_schema(engine, inspector) -> None:
                         FROM sys_messages sm
                         LEFT JOIN rounds rf ON rf.id = sm.from_round
                         LEFT JOIN rounds rt ON rt.id = sm.to_round
-                        """
-                    )
-                )
+                        """))
             else:
-                conn.execute(
-                    text(
-                        """
+                conn.execute(text("""
                         INSERT INTO sys_messages__new (id, type, to_uid, message, from_round, duration)
                         SELECT id, type, to_uid, message, from_round, duration
                         FROM sys_messages
-                        """
-                    )
-                )
+                        """))
             conn.execute(text("DROP TABLE sys_messages"))
             conn.execute(text("ALTER TABLE sys_messages__new RENAME TO sys_messages"))
         else:
             if not has_duration:
                 conn.execute(text("ALTER TABLE sys_messages ADD COLUMN duration INTEGER"))
             if has_to_round:
-                conn.execute(
-                    text(
-                        """
+                conn.execute(text("""
                         UPDATE sys_messages AS sm
                         SET duration = CASE
                             WHEN sm.duration IS NOT NULL THEN sm.duration
@@ -88,9 +74,7 @@ def _ensure_sys_messages_duration_schema(engine, inspector) -> None:
                         END
                         FROM rounds AS rf, rounds AS rt
                         WHERE rf.id = sm.from_round AND rt.id = sm.to_round
-                        """
-                    )
-                )
+                        """))
                 conn.execute(text("ALTER TABLE sys_messages DROP COLUMN to_round"))
 
 
@@ -142,6 +126,8 @@ def ensure_moderation_schema(engine) -> None:
         opinion_columns = {column["name"] for column in inspector.get_columns("agent_opinion")}
         if "stubborn" not in opinion_columns:
             with engine.begin() as conn:
-                conn.execute(text("ALTER TABLE agent_opinion ADD COLUMN stubborn BOOLEAN DEFAULT 0"))
+                conn.execute(
+                    text("ALTER TABLE agent_opinion ADD COLUMN stubborn BOOLEAN DEFAULT 0")
+                )
     inspector = inspect(engine)
     _ensure_sys_messages_duration_schema(engine, inspector)

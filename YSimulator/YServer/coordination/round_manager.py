@@ -71,7 +71,11 @@ class RoundManager:
         except Exception:
             latest_round = None
 
-        if latest_round and latest_round.get("day") is not None and latest_round.get("hour") is not None:
+        if (
+            latest_round
+            and latest_round.get("day") is not None
+            and latest_round.get("hour") is not None
+        ):
             self.day = int(latest_round["day"])
             self.slot = int(latest_round["hour"])
             self.current_round_id = str(latest_round["id"])

@@ -544,9 +544,7 @@ class DatabaseMiddleware:
                 finally:
                     session.close()
         except Exception as e:
-            self.logger.error(
-                f"Error adding report: {e}", extra={"extra_data": {"error": str(e)}}
-            )
+            self.logger.error(f"Error adding report: {e}", extra={"extra_data": {"error": str(e)}})
             return False
 
     def increment_post_reaction_count(self, post_id: str) -> bool:

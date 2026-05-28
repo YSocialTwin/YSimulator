@@ -8,39 +8,27 @@ def test_ensure_moderation_schema_adds_tables_and_post_column(tmp_path):
     engine = create_engine(f"sqlite:///{db_path}")
 
     with engine.begin() as conn:
-        conn.execute(
-            text(
-                """
+        conn.execute(text("""
                 CREATE TABLE user_mgmt (
                     id VARCHAR(36) PRIMARY KEY,
                     username TEXT NOT NULL
                 )
-                """
-            )
-        )
-        conn.execute(
-            text(
-                """
+                """))
+        conn.execute(text("""
                 CREATE TABLE rounds (
                     id VARCHAR(36) PRIMARY KEY,
                     day INTEGER,
                     hour INTEGER
                 )
-                """
-            )
-        )
-        conn.execute(
-            text(
-                """
+                """))
+        conn.execute(text("""
                 CREATE TABLE post (
                     id VARCHAR(36) PRIMARY KEY,
                     tweet TEXT NOT NULL,
                     round VARCHAR(36),
                     user_id VARCHAR(36) NOT NULL
                 )
-                """
-            )
-        )
+                """))
 
     ensure_moderation_schema(engine)
 
@@ -62,30 +50,20 @@ def test_ensure_moderation_schema_adds_stubborn_and_custom_features(tmp_path):
     engine = create_engine(f"sqlite:///{db_path}")
 
     with engine.begin() as conn:
-        conn.execute(
-            text(
-                """
+        conn.execute(text("""
                 CREATE TABLE user_mgmt (
                     id VARCHAR(36) PRIMARY KEY,
                     username TEXT NOT NULL
                 )
-                """
-            )
-        )
-        conn.execute(
-            text(
-                """
+                """))
+        conn.execute(text("""
                 CREATE TABLE rounds (
                     id VARCHAR(36) PRIMARY KEY,
                     day INTEGER,
                     hour INTEGER
                 )
-                """
-            )
-        )
-        conn.execute(
-            text(
-                """
+                """))
+        conn.execute(text("""
                 CREATE TABLE agent_opinion (
                     id VARCHAR(36) PRIMARY KEY,
                     agent_id VARCHAR(36) NOT NULL,
@@ -95,9 +73,7 @@ def test_ensure_moderation_schema_adds_stubborn_and_custom_features(tmp_path):
                     id_interacted_with VARCHAR(36),
                     id_post VARCHAR(36)
                 )
-                """
-            )
-        )
+                """))
 
     ensure_moderation_schema(engine)
 

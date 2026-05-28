@@ -386,7 +386,11 @@ class ContentRecommender:
                         .where(
                             (shadow_ban.c.duration.is_(None))
                             | (
-                                ((rounds.c.day * self.num_slots_per_day) + rounds.c.hour + shadow_ban.c.duration)
+                                (
+                                    (rounds.c.day * self.num_slots_per_day)
+                                    + rounds.c.hour
+                                    + shadow_ban.c.duration
+                                )
                                 >= current_total_rounds
                             )
                         )

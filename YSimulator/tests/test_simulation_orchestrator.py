@@ -12,10 +12,9 @@ Tests cover:
 import logging
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
-from unittest.mock import patch
 
 from YSimulator.YClient.classes.ray_models import AgentProfile
 from YSimulator.YClient.simulation import (
@@ -116,9 +115,7 @@ class TestAgentScheduler:
     ):
         """Agents with pending mentions should be added even if not sampled by hourly activity."""
         mock_server = MagicMock()
-        mock_server.get_users_with_unreplied_mentions.remote = MagicMock(
-            return_value=["agent_4"]
-        )
+        mock_server.get_users_with_unreplied_mentions.remote = MagicMock(return_value=["agent_4"])
 
         scheduler = AgentScheduler(
             agent_profiles=sample_agents,
@@ -256,7 +253,9 @@ class TestRoundExecutor:
 
         assert executor.client_id == "test_client"
 
-    def test_execute_round_respects_stress_reward_activity_multiplier(self, sample_agents, mock_logger):
+    def test_execute_round_respects_stress_reward_activity_multiplier(
+        self, sample_agents, mock_logger
+    ):
         sample_agents[0].daily_activity_level = 4
         setattr(sample_agents[0], "stress_reward_activity_multiplier", 0.25)
 
@@ -290,13 +289,16 @@ class TestRoundExecutor:
         assert select_action.call_count == 1
         assert len(executor.agent_profiles) == 5
 
-    def test_execute_round_keeps_active_page_agents_always_posting(self, sample_agents, mock_logger):
+    def test_execute_round_keeps_active_page_agents_always_posting(
+        self, sample_agents, mock_logger
+    ):
         page_agent = sample_agents[0]
         page_agent.is_page = 1
         page_agent.daily_activity_level = 1
 
         select_action = MagicMock(return_value=("share_link", "llm", None))
         determine_agent_type = MagicMock(return_value="llm")
+
         def dispatch(action_type, agent, agent_type, target):
             if action_type == "reply":
                 return [], [], {}

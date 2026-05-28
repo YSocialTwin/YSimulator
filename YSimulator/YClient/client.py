@@ -100,9 +100,7 @@ def _stress_reward_settings_from_config(config: Optional[dict]) -> dict:
 
     simulation_sr_cfg = simulation_cfg.get("stress_reward")
     if isinstance(simulation_sr_cfg, dict):
-        settings["system"] = deep_update(
-            settings["system"], simulation_sr_cfg.get("system") or {}
-        )
+        settings["system"] = deep_update(settings["system"], simulation_sr_cfg.get("system") or {})
         if "enabled" in simulation_sr_cfg:
             settings["enabled"] = bool(simulation_sr_cfg.get("enabled"))
         if "backward_rounds" in simulation_sr_cfg:
@@ -246,9 +244,7 @@ class SimulationClient:
         self.probability_of_secondary_follow = agents_config.get(
             "probability_of_secondary_follow", 0.0
         )
-        self.probability_of_follow_back = agents_config.get(
-            "probability_of_follow_back", 0.0
-        )
+        self.probability_of_follow_back = agents_config.get("probability_of_follow_back", 0.0)
         self.probability_of_daily_follow = agents_config.get("probability_of_daily_follow", 0.0)
         self.max_length_thread_reading = agents_config.get("max_length_thread_reading", 5)
 
@@ -283,9 +279,7 @@ class SimulationClient:
         self.stress_reward_backward_rounds = int(
             stress_reward_settings.get("backward_rounds", 24) or 24
         )
-        self.stress_reward_system = StressRewardSystem(
-            stress_reward_settings.get("system") or {}
-        )
+        self.stress_reward_system = StressRewardSystem(stress_reward_settings.get("system") or {})
         self.current_stress_reward = {}
         self.current_churn_probability = {}
         self._current_prompt_round_id = None
@@ -618,7 +612,9 @@ class SimulationClient:
         if draw >= probability:
             return False
         try:
-            churned = bool(ray.get(self.server.set_agent_churned.remote(str(agent.id), str(current_tid))))
+            churned = bool(
+                ray.get(self.server.set_agent_churned.remote(str(agent.id), str(current_tid)))
+            )
             if churned:
                 agent.left_on = str(current_tid)
                 self._churned_agents_cache.add(str(agent.id))
@@ -696,7 +692,9 @@ class SimulationClient:
         user_id = post_data.get("user_id")
         return str(user_id) if user_id is not None else None
 
-    def prepare_stress_reward_active_agents(self, active_agents: list[AgentProfile], current_tid: str):
+    def prepare_stress_reward_active_agents(
+        self, active_agents: list[AgentProfile], current_tid: str
+    ):
         if not self.stress_reward_enabled:
             return active_agents
 
@@ -746,7 +744,9 @@ class SimulationClient:
         if action_type in {"POST", "FOLLOW", "UNFOLLOW", "REPORT"}:
             return
 
-        target_user_id = action.target_user_id or self._target_user_id_from_post(action.target_post_id)
+        target_user_id = action.target_user_id or self._target_user_id_from_post(
+            action.target_post_id
+        )
         if not target_user_id or str(target_user_id) == str(action.agent_id):
             return
 
@@ -830,7 +830,9 @@ class SimulationClient:
         action.stress_reward_variations = variations
         action.stress_reward_action = action_name
 
-    def prepare_stress_reward_actions(self, actions: list[ActionDTO], current_tid: str) -> list[ActionDTO]:
+    def prepare_stress_reward_actions(
+        self, actions: list[ActionDTO], current_tid: str
+    ) -> list[ActionDTO]:
         if not self.stress_reward_enabled:
             return actions
         for action in actions:

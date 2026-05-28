@@ -127,7 +127,9 @@ class TestStubbornTopics:
     """Opinion updates must skip topics marked as stubborn."""
 
     def test_calculate_updates_skips_stubborn_topic(self, monkeypatch):
-        monkeypatch.setattr("YSimulator.YClient.opinion.opinion_calculator.ray.get", lambda value: value)
+        monkeypatch.setattr(
+            "YSimulator.YClient.opinion.opinion_calculator.ray.get", lambda value: value
+        )
 
         server = Mock()
         server.get_post_topics.remote.return_value = ["topic-1"]

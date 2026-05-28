@@ -133,7 +133,9 @@ class TestPostProcessor:
         # Verify add_or_get_interest was called with the topic
         mock_services.interest_service.add_or_get_interest.assert_called_with("Technology")
 
-    def test_process_image_post_infers_topics_from_text(self, mock_services, action_context, mock_action):
+    def test_process_image_post_infers_topics_from_text(
+        self, mock_services, action_context, mock_action
+    ):
         processor = PostProcessor(mock_services)
         mock_action.image_id = "img_1"
         mock_action.article_id = None
@@ -213,7 +215,9 @@ class TestShareProcessor:
         assert result.success is False
         assert "Original post not found" in result.error
 
-    def test_share_uses_upstream_topics_when_target_has_none(self, mock_services, action_context, mock_action):
+    def test_share_uses_upstream_topics_when_target_has_none(
+        self, mock_services, action_context, mock_action
+    ):
         processor = ShareProcessor(mock_services)
         mock_action.action_type = "SHARE"
         mock_action.target_post_id = "post_1"

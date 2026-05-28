@@ -157,10 +157,7 @@ class AgentScheduler:
                 return active_regular_agents
 
             pending_ids = set(
-                ray.get(
-                    self.server.get_users_with_unreplied_mentions.remote(candidate_ids)
-                )
-                or []
+                ray.get(self.server.get_users_with_unreplied_mentions.remote(candidate_ids)) or []
             )
             if not pending_ids:
                 return active_regular_agents

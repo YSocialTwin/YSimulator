@@ -360,7 +360,9 @@ class LLMService:
                 pass
 
         # Fallback to cluster-based persona
-        persona = self.prompts_config["personas"].get(str(cluster_id), "You are a social media user.")
+        persona = self.prompts_config["personas"].get(
+            str(cluster_id), "You are a social media user."
+        )
         return _append_custom_features_to_persona(persona, agent_attrs)
 
     def _memory_blocks(self, agent_attrs: Optional[dict]) -> Dict[str, str]:
@@ -864,9 +866,7 @@ class LLMService:
 
             if "REPORT_TOXIC" in result or ("REPORT" in result and "TOXIC" in result):
                 return "REPORT_TOXIC"
-            if "REPORT_OFFENSIVE" in result or (
-                "REPORT" in result and "OFFENSIVE" in result
-            ):
+            if "REPORT_OFFENSIVE" in result or ("REPORT" in result and "OFFENSIVE" in result):
                 return "REPORT_OFFENSIVE"
             # Parse LLM response - look for valid reactions
             if "LOVE" in result:

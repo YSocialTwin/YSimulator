@@ -1,5 +1,9 @@
-from YSimulator.YClient.LLM_interactions.llm_service import _append_custom_features_to_persona as append_ollama_persona
-from YSimulator.YClient.LLM_interactions.vllm_service import _append_custom_features_to_persona as append_vllm_persona
+from YSimulator.YClient.LLM_interactions.llm_service import (
+    _append_custom_features_to_persona as append_ollama_persona,
+)
+from YSimulator.YClient.LLM_interactions.vllm_service import (
+    _append_custom_features_to_persona as append_vllm_persona,
+)
 
 
 def test_ollama_persona_appends_custom_features():

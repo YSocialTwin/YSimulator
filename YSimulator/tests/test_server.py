@@ -200,7 +200,9 @@ class TestRecommendationPersistence:
             def commit(self):
                 state["commits"] += 1
                 if state["commits"] == 1:
-                    raise OperationalError("INSERT INTO recommendations", {}, Exception("database is locked"))
+                    raise OperationalError(
+                        "INSERT INTO recommendations", {}, Exception("database is locked")
+                    )
 
             def rollback(self):
                 return None
@@ -217,7 +219,9 @@ class TestRecommendationPersistence:
         server.use_redis = False
         server.logger = Mock()
 
-        server_module.OrchestratorServer._save_recommendation(server, "agent-1", ["post-1", "post-2"])
+        server_module.OrchestratorServer._save_recommendation(
+            server, "agent-1", ["post-1", "post-2"]
+        )
 
         assert state["commits"] == 2
         server.logger.error.assert_not_called()

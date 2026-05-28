@@ -129,9 +129,7 @@ class SecondaryFollowProcessor:
             futures = [item[4] for item in pending_secondary_follow_llm]
             results = ray.get(futures)
             for idx, decision in enumerate(results):
-                agent_id, cluster_id, author_id, is_following, _ = pending_secondary_follow_llm[
-                    idx
-                ]
+                agent_id, cluster_id, author_id, is_following, _ = pending_secondary_follow_llm[idx]
                 normalized_decision = str(decision or "").strip().lower()
                 if normalized_decision == "follow" and not is_following:
                     actions.append(

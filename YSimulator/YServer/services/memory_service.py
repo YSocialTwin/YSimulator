@@ -66,11 +66,7 @@ def _opt_int(value: Any) -> Optional[int]:
 
 
 def _tokenize(value: str) -> set:
-    return {
-        tok
-        for tok in re.findall(r"[a-z0-9_]{3,}", str(value or "").lower())
-        if tok
-    }
+    return {tok for tok in re.findall(r"[a-z0-9_]{3,}", str(value or "").lower()) if tok}
 
 
 class MemoryService:
@@ -267,7 +263,9 @@ class MemoryService:
             else:
                 provider = self._embedding_provider
                 if provider and provider.available:
-                    should_sync = bool(payload.get("force_sync_embedding")) or not self._embedding_async
+                    should_sync = (
+                        bool(payload.get("force_sync_embedding")) or not self._embedding_async
+                    )
                     if should_sync:
                         vec = provider.encode(text)
                         if isinstance(vec, list) and vec:
@@ -323,12 +321,24 @@ class MemoryService:
                 MemoryItem.item_type.in_(types),
             )
             if other_user_id:
-                q = q.filter(or_(MemoryItem.other_user_id == other_user_id, MemoryItem.other_user_id.is_(None)))
+                q = q.filter(
+                    or_(
+                        MemoryItem.other_user_id == other_user_id,
+                        MemoryItem.other_user_id.is_(None),
+                    )
+                )
             if thread_root_id:
                 q = q.filter(
-                    or_(MemoryItem.thread_root_id == thread_root_id, MemoryItem.thread_root_id.is_(None))
+                    or_(
+                        MemoryItem.thread_root_id == thread_root_id,
+                        MemoryItem.thread_root_id.is_(None),
+                    )
                 )
-            if current_round is not None and time_window_rounds is not None and time_window_rounds > 0:
+            if (
+                current_round is not None
+                and time_window_rounds is not None
+                and time_window_rounds > 0
+            ):
                 q = q.filter(
                     or_(
                         MemoryItem.round_id.is_(None),
@@ -336,13 +346,13 @@ class MemoryService:
                     )
                 )
 
-            candidates = q.order_by(MemoryItem.importance.desc(), MemoryItem.id.desc()).limit(250).all()
+            candidates = (
+                q.order_by(MemoryItem.importance.desc(), MemoryItem.id.desc()).limit(250).all()
+            )
             query_tokens = _tokenize(query_text)
             provider = self._embedding_provider
             query_embedding = (
-                provider.encode(query_text)
-                if provider is not None and provider.available
-                else None
+                provider.encode(query_text) if provider is not None and provider.available else None
             )
             query_has_embedding = isinstance(query_embedding, list) and bool(query_embedding)
 
@@ -366,7 +376,9 @@ class MemoryService:
                 relevance = lexical
                 if query_has_embedding:
                     try:
-                        item_embedding = json.loads(item.embedding_json) if item.embedding_json else None
+                        item_embedding = (
+                            json.loads(item.embedding_json) if item.embedding_json else None
+                        )
                     except Exception:
                         item_embedding = None
                     if isinstance(item_embedding, list) and item_embedding:
@@ -375,7 +387,9 @@ class MemoryService:
                 anchor = item.recency_anchor_round or item.round_id
                 if current_round is not None and anchor is not None:
                     recency = 1.0 / (1.0 + max(0, current_round - int(anchor)) / 24.0)
-                score = (0.65 * relevance) + (0.25 * float(item.importance or 0.0)) + (0.10 * recency)
+                score = (
+                    (0.65 * relevance) + (0.25 * float(item.importance or 0.0)) + (0.10 * recency)
+                )
                 if score <= 0 and query_tokens:
                     continue
                 scored.append((score, item))
@@ -423,7 +437,9 @@ class MemoryService:
                     "query_embedding_available": bool(query_has_embedding),
                 },
             }
-            brief_lines = [f"Retrieved {returned_k} memory item(s) out of {candidate_count} candidates."]
+            brief_lines = [
+                f"Retrieved {returned_k} memory item(s) out of {candidate_count} candidates."
+            ]
             if degraded:
                 brief_lines.append("Embedding retrieval unavailable; using lexical fallback.")
             if no_ready_candidates:
@@ -459,7 +475,9 @@ class MemoryService:
 
         session = Session(self.engine)
         try:
-            q = session.query(MemoryInteractionEvent).filter(MemoryInteractionEvent.run_id == run_id)
+            q = session.query(MemoryInteractionEvent).filter(
+                MemoryInteractionEvent.run_id == run_id
+            )
             if agent_user_id:
                 q = q.filter(MemoryInteractionEvent.actor_user_id == agent_user_id)
             events = q.order_by(MemoryInteractionEvent.id.desc()).limit(limit).all()

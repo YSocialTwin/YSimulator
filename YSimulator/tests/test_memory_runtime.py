@@ -175,7 +175,10 @@ def _make_client(*, track_memory_calls=False):
         server=server,
         logger=MagicMock(),
         llm_manager=None,
-        agent_profiles=[SimpleNamespace(id="agent-1", llm=True), SimpleNamespace(id="agent-2", llm=False)],
+        agent_profiles=[
+            SimpleNamespace(id="agent-1", llm=True),
+            SimpleNamespace(id="agent-2", llm=False),
+        ],
         round_number=lambda day, slot: (day * 100) + slot,
         get_recent_post_ids=lambda: ["p2", "p1"],
     )
@@ -356,12 +359,12 @@ def test_memory_db_write_survives_engine_failure(monkeypatch):
     # DB writes must still have happened despite engine failures.
     event_calls = [c for c in client._memory_calls if c[0] == "memory_event"]
     upsert_calls = [c for c in client._memory_calls if c[0] == "memory_item_upsert"]
-    assert len(event_calls) == 2, (
-        f"Expected 2 memory_event DB calls even with engine failure, got {len(event_calls)}"
-    )
-    assert len(upsert_calls) == 2, (
-        f"Expected 2 memory_item_upsert DB calls even with engine failure, got {len(upsert_calls)}"
-    )
+    assert (
+        len(event_calls) == 2
+    ), f"Expected 2 memory_event DB calls even with engine failure, got {len(event_calls)}"
+    assert (
+        len(upsert_calls) == 2
+    ), f"Expected 2 memory_item_upsert DB calls even with engine failure, got {len(upsert_calls)}"
 
 
 def test_memory_runtime_filters_recent_root_posts(monkeypatch):

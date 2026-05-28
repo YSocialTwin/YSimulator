@@ -1,7 +1,7 @@
 from unittest.mock import MagicMock
 
-from YSimulator.YClient.client import SimulationClient
 from YSimulator.YClient.classes.ray_models import AgentProfile
+from YSimulator.YClient.client import SimulationClient
 from YSimulator.YClient.stress_reward.update_system import StressRewardSystem
 
 
@@ -55,7 +55,9 @@ def test_prepare_stress_reward_active_agents_suppresses_high_stress_agent(monkey
     client.refresh_stress_reward_state = lambda agent_id, current_tid, force=False: states[agent_id]
 
     calm_agent = AgentProfile(id="calm", username="calm_user", daily_activity_level=3, is_page=0)
-    strained_agent = AgentProfile(id="strained", username="strained_user", daily_activity_level=3, is_page=0)
+    strained_agent = AgentProfile(
+        id="strained", username="strained_user", daily_activity_level=3, is_page=0
+    )
 
     draws = iter([0.99, 0.10])
     monkeypatch.setattr("YSimulator.YClient.client.random.random", lambda: next(draws))

@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from sqlalchemy.exc import OperationalError
 from sqlalchemy import create_engine, text
+from sqlalchemy.exc import OperationalError
 
 from YSimulator.YServer.services.mention_service import MentionService
 
@@ -88,7 +88,9 @@ def _build_engine(path: Path):
         path.unlink()
     engine = create_engine(f"sqlite:///{path}")
     with engine.begin() as conn:
-        conn.execute(text("CREATE TABLE rounds (id INTEGER PRIMARY KEY, day INTEGER, hour INTEGER)"))
+        conn.execute(
+            text("CREATE TABLE rounds (id INTEGER PRIMARY KEY, day INTEGER, hour INTEGER)")
+        )
         conn.execute(text("CREATE TABLE post (id TEXT PRIMARY KEY, user_id TEXT NOT NULL)"))
         conn.execute(
             text(
@@ -128,7 +130,9 @@ def test_mention_service_falls_back_when_shadow_ban_table_missing(tmp_path: Path
         db_path.unlink()
     engine = create_engine(f"sqlite:///{db_path}")
     with engine.begin() as conn:
-        conn.execute(text("CREATE TABLE rounds (id INTEGER PRIMARY KEY, day INTEGER, hour INTEGER)"))
+        conn.execute(
+            text("CREATE TABLE rounds (id INTEGER PRIMARY KEY, day INTEGER, hour INTEGER)")
+        )
         conn.execute(text("CREATE TABLE post (id TEXT PRIMARY KEY, user_id TEXT NOT NULL)"))
         conn.execute(text("INSERT INTO rounds (id, day, hour) VALUES (1, 0, 0)"))
         conn.execute(text("INSERT INTO post (id, user_id) VALUES ('p1', 'u1')"))

@@ -187,17 +187,29 @@ class TestContentRecommender:
         db_path = tmp_path / "shadow_ban_filter.db"
         engine = create_engine(f"sqlite:///{db_path}")
         with engine.begin() as conn:
-            conn.execute(text("CREATE TABLE rounds (id VARCHAR(36) PRIMARY KEY, day INTEGER, hour INTEGER)"))
+            conn.execute(
+                text("CREATE TABLE rounds (id VARCHAR(36) PRIMARY KEY, day INTEGER, hour INTEGER)")
+            )
             conn.execute(text("CREATE TABLE user_mgmt (id VARCHAR(36) PRIMARY KEY, username TEXT)"))
-            conn.execute(text("CREATE TABLE post (id VARCHAR(36) PRIMARY KEY, user_id VARCHAR(36), round VARCHAR(36))"))
-            conn.execute(text("CREATE TABLE shadow_ban (uid VARCHAR(36), start_tid VARCHAR(36), duration INTEGER)"))
+            conn.execute(
+                text(
+                    "CREATE TABLE post (id VARCHAR(36) PRIMARY KEY, user_id VARCHAR(36), round VARCHAR(36))"
+                )
+            )
+            conn.execute(
+                text(
+                    "CREATE TABLE shadow_ban (uid VARCHAR(36), start_tid VARCHAR(36), duration INTEGER)"
+                )
+            )
             conn.execute(text("INSERT INTO rounds (id, day, hour) VALUES ('r0', 0, 0)"))
             conn.execute(text("INSERT INTO rounds (id, day, hour) VALUES ('r4', 0, 4)"))
             conn.execute(text("INSERT INTO user_mgmt (id, username) VALUES ('u1', 'banned_user')"))
             conn.execute(text("INSERT INTO user_mgmt (id, username) VALUES ('u2', 'visible_user')"))
             conn.execute(text("INSERT INTO post (id, user_id, round) VALUES ('p1', 'u1', 'r0')"))
             conn.execute(text("INSERT INTO post (id, user_id, round) VALUES ('p2', 'u2', 'r0')"))
-            conn.execute(text("INSERT INTO shadow_ban (uid, start_tid, duration) VALUES ('u1', 'r0', 8)"))
+            conn.execute(
+                text("INSERT INTO shadow_ban (uid, start_tid, duration) VALUES ('u1', 'r0', 8)")
+            )
 
         db = Mock()
         db.engine = engine

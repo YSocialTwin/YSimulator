@@ -1033,15 +1033,15 @@ class OrchestratorServer:
                         )
 
                 if agent_profile.opinions:
-                        agents_with_opinions.append(
-                            {
-                                "agent_id": agent_id,
-                                "opinions": agent_profile.opinions,
-                                "stubborn_topics": agent_profile.stubborn_topics or {},
-                            }
-                        )
-                        # Collect all unique topic names for batch lookup
-                        all_opinion_topic_names.update(agent_profile.opinions.keys())
+                    agents_with_opinions.append(
+                        {
+                            "agent_id": agent_id,
+                            "opinions": agent_profile.opinions,
+                            "stubborn_topics": agent_profile.stubborn_topics or {},
+                        }
+                    )
+                    # Collect all unique topic names for batch lookup
+                    all_opinion_topic_names.update(agent_profile.opinions.keys())
 
             # Batch initialize interests for all agents
             if agents_with_interests:
@@ -1112,9 +1112,11 @@ class OrchestratorServer:
                     )
 
             if custom_feature_rows:
-                from sqlalchemy.orm import Session
-                from YSimulator.YServer.classes.models import Agent_Custom_Feature
                 import uuid
+
+                from sqlalchemy.orm import Session
+
+                from YSimulator.YServer.classes.models import Agent_Custom_Feature
 
                 session = Session(self.db.engine)
                 try:
@@ -2204,9 +2206,7 @@ class OrchestratorServer:
         return result
 
     @log_server_request
-    def memory_item_upsert(
-        self, payload: Dict[str, Any], client_id: str = None
-    ) -> Dict[str, Any]:
+    def memory_item_upsert(self, payload: Dict[str, Any], client_id: str = None) -> Dict[str, Any]:
         """Persist or update a searchable memory item."""
         return self.memory_service.upsert_item(payload or {})
 
@@ -2216,9 +2216,7 @@ class OrchestratorServer:
         return self.memory_service.search(payload or {})
 
     @log_server_request
-    def memory_get_context(
-        self, payload: Dict[str, Any], client_id: str = None
-    ) -> Dict[str, Any]:
+    def memory_get_context(self, payload: Dict[str, Any], client_id: str = None) -> Dict[str, Any]:
         """Return persisted memory context for a client-side prompt."""
         return self.memory_service.get_context(payload or {})
 

@@ -218,7 +218,9 @@ class BaseActionGenerator(ABC):
             )
         return None
 
-    def _apply_post_memory(self, agent: AgentProfile, agent_attrs: Dict[str, Any]) -> Dict[str, Any]:
+    def _apply_post_memory(
+        self, agent: AgentProfile, agent_attrs: Dict[str, Any]
+    ) -> Dict[str, Any]:
         if not self.context.memory_manager:
             return agent_attrs
         return self.context.memory_manager.apply_post_memory(
