@@ -20,6 +20,7 @@ For complete mapping documentation, see docs/REPOSITORY_PATTERN.md
 from unittest.mock import Mock, patch
 
 import pytest
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
 from YSimulator.YServer.repositories.redis_repository import (
@@ -704,3 +705,29 @@ class TestRedisRecommendationRepository:
 
         assert result == round_id
         mock_redis.hset.assert_not_called()
+
+    def test_get_or_create_round_retries_on_sqlite_lock(self):
+        """Test that round creation retries when SQLite reports a lock."""
+        engine = Mock()
+        repository = SQLRecommendationRepository(engine)
+        first_session = Mock(spec=Session)
+        second_session = Mock(spec=Session)
+        first_session.query().filter_by().first.return_value = None
+        first_session.commit.side_effect = OperationalError(
+            "INSERT INTO rounds", {}, Exception("database is locked")
+        )
+        second_session.query().filter_by().first.return_value = None
+        second_session.commit.return_value = None
+
+        with patch(
+            "YSimulator.YServer.repositories.sql_repository.Session",
+            side_effect=[first_session, second_session],
+        ):
+            with patch("YSimulator.YServer.repositories.sql_repository.time.sleep") as sleep_mock:
+                result = repository.get_or_create_round(1, 2)
+
+        assert result is not None
+        assert first_session.rollback.called
+        assert first_session.close.called
+        assert second_session.commit.called
+        sleep_mock.assert_called_once()

@@ -89,6 +89,10 @@ class SQLUserRepository(UserRepository):
         except Exception:
             return False
 
+    @staticmethod
+    def _is_sqlite_lock_error(exc: Exception) -> bool:
+        return isinstance(exc, OperationalError) and "database is locked" in str(exc).lower()
+
     def register_user(self, user_data: Dict[str, Any]) -> bool:
         """Register a single user."""
         session = Session(self.engine)
@@ -1874,6 +1878,10 @@ class SQLRecommendationRepository(RecommendationRepository):
         except Exception:
             return False
 
+    @staticmethod
+    def _is_sqlite_lock_error(exc: Exception) -> bool:
+        return isinstance(exc, OperationalError) and "database is locked" in str(exc).lower()
+
     def get_or_create_round(self, day: int, hour: int) -> str:
         """
         Get or create a round ID.
@@ -1888,29 +1896,43 @@ class SQLRecommendationRepository(RecommendationRepository):
         Raises:
             RuntimeError: If unable to create or retrieve round
         """
+        session = Session(self.engine)
         try:
-            session = Session(self.engine)
+            existing = session.query(Round).filter_by(day=day, hour=hour).first()
+            if existing:
+                return existing.id
+
+            import uuid
+
+            round_id = str(uuid.uuid4())
+            session.add(Round(id=round_id, day=day, hour=hour))
             try:
-                # Check if round exists
-                existing = session.query(Round).filter_by(day=day, hour=hour).first()
-                if existing:
-                    return existing.id
-
-                # Create new round
-                import uuid
-
-                round_id = str(uuid.uuid4())
-                round_obj = Round(id=round_id, day=day, hour=hour)
-                session.add(round_obj)
                 session.commit()
                 return round_id
-            finally:
+            except Exception as exc:
+                session.rollback()
+                if not self._is_sqlite_lock_error(exc):
+                    raise
                 session.close()
+                time.sleep(0.2)
+                retry_session = Session(self.engine)
+                try:
+                    existing = retry_session.query(Round).filter_by(day=day, hour=hour).first()
+                    if existing:
+                        return existing.id
+                    round_id = str(uuid.uuid4())
+                    retry_session.add(Round(id=round_id, day=day, hour=hour))
+                    retry_session.commit()
+                    return round_id
+                finally:
+                    retry_session.close()
         except Exception as e:
             self.logger.error(
                 f"Error getting or creating round: {e}", extra={"extra_data": {"error": str(e)}}
             )
             raise RuntimeError(f"Failed to get or create round for day={day}, hour={hour}: {e}")
+        finally:
+            session.close()
 
     def get_latest_round(self) -> Optional[Dict[str, Any]]:
         """Return the most advanced persisted round, if any."""
