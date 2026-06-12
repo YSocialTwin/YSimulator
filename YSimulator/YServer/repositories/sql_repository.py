@@ -27,6 +27,7 @@ fixed as examples. Other write methods still need this fix applied.
 
 import logging
 import time
+from datetime import datetime
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 from sqlalchemy import func
@@ -408,6 +409,8 @@ class SQLPostRepository(PostRepository):
                 "post_img": post_data.get("post_img"),
                 "is_moderation_comment": post_data.get("is_moderation_comment", 0),
             }
+            if "created_at" in getattr(Post, "__table__").c:
+                mapped_data["created_at"] = post_data.get("created_at") or datetime.utcnow()
             # Filter out None values
             mapped_data = {k: v for k, v in mapped_data.items() if v is not None}
 
