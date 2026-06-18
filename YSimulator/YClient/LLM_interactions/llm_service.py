@@ -58,32 +58,6 @@ def _stress_prompt_block(agent_attrs: Optional[Dict[str, Any]]) -> str:
     )
 
 
-def _sanitize_generated_text(text: str) -> str:
-    """Keep only the actual generated content and drop explanatory preambles."""
-    if not text:
-        return ""
-
-    cleaned = str(text).strip().strip('"').strip("'")
-    cleaned = cleaned.replace('"""', "").strip()
-    for marker in (
-        "Since you don't know the specifics",
-        "As you can see",
-        "Let me provide",
-        "Here is",
-        "Here's",
-        "You could then use this",
-        "However, that is not",
-    ):
-        idx = cleaned.find(marker)
-        if idx >= 0:
-            cleaned = cleaned[:idx].strip()
-    if "\n" in cleaned:
-        first_line = cleaned.splitlines()[0].strip()
-        if first_line:
-            cleaned = first_line
-    return cleaned.strip()
-
-
 # Use standard Ray actor (CPU) - the GPU is managed by Ollama internally
 @ray.remote
 class LLMService:
@@ -121,7 +95,7 @@ class LLMService:
                 },
                 "generate_comment": {
                     "system_template": "{persona} You engage in discussions by commenting on posts. Generate {toxicity} confrontational language contents.",
-                    "user_template": '{author_name} posted this:\n\n"{post_content}"\n\n{thread_context_instruction}Write a single natural comment that directly responds to the post and thread context. Return only the comment text and no explanation, quotation, preamble, or formatting.',
+                    "user_template": '{author_name} posted this:\n\n"{post_content}"\n\n{thread_context_instruction}Write a single natural comment that directly responds to the post and thread context. Return only the comment text. Do not explain, summarize, quote the prompt, add preambles, or wrap it in markdown.',
                 },
                 "generate_read_reaction": {
                     "system_template": "{persona} You're deciding how to react to content you discovered.",
@@ -574,7 +548,7 @@ class LLMService:
         # Get commentary from LLM
         try:
             chain = prompt | self.llm | StrOutputParser()
-            commentary = _sanitize_generated_text(chain.invoke({}))
+            commentary = chain.invoke({}).strip()
 
             return commentary
         except Exception:
@@ -687,7 +661,7 @@ class LLMService:
 
         try:
             chain = prompt | self.llm | StrOutputParser()
-            comment = _sanitize_generated_text(chain.invoke({}))
+            comment = chain.invoke({}).strip()
 
             return comment
         except Exception:
@@ -779,7 +753,7 @@ class LLMService:
 
         try:
             chain = prompt | self.llm | StrOutputParser()
-            commentary = _sanitize_generated_text(chain.invoke({}))
+            commentary = chain.invoke({}).strip()
 
             return commentary
         except Exception:

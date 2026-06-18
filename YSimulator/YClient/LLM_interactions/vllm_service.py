@@ -16,32 +16,6 @@ import ray
 logger = logging.getLogger(__name__)
 
 
-def _sanitize_generated_text(text: str) -> str:
-    """Keep only the actual generated content and drop explanatory preambles."""
-    if not text:
-        return ""
-
-    cleaned = str(text).strip().strip('"').strip("'")
-    cleaned = cleaned.replace('"""', "").strip()
-    for marker in (
-        "Since you don't know the specifics",
-        "As you can see",
-        "Let me provide",
-        "Here is",
-        "Here's",
-        "You could then use this",
-        "However, that is not",
-    ):
-        idx = cleaned.find(marker)
-        if idx >= 0:
-            cleaned = cleaned[:idx].strip()
-    if "\n" in cleaned:
-        first_line = cleaned.splitlines()[0].strip()
-        if first_line:
-            cleaned = first_line
-    return cleaned.strip()
-
-
 def _append_custom_features_to_persona(persona: str, agent_attrs: Optional[Dict[str, Any]]) -> str:
     custom_features = dict((agent_attrs or {}).get("custom_features") or {})
     if not custom_features:
@@ -1545,7 +1519,7 @@ class VLLMService:
                 f"[vLLM] Generating comment for cluster_id={cluster_id}, author={author_name}"
             )
             outputs = self.llm.generate([prompt], self.sampling_params)
-            comment = _sanitize_generated_text(outputs[0].outputs[0].text)
+            comment = outputs[0].outputs[0].text.strip()
 
             logger.debug(f"[vLLM] Generated comment successfully (length={len(comment)})")
             return comment
@@ -1666,7 +1640,7 @@ class VLLMService:
             outputs = self.llm.generate(prompts, self.sampling_params)
             results = []
             for output in outputs:
-                comment = _sanitize_generated_text(output.outputs[0].text)
+                comment = output.outputs[0].text.strip()
                 results.append(comment)
             logger.debug(
                 f"[vLLM] Batch comment generation completed successfully ({len(results)} results)"
@@ -1724,7 +1698,7 @@ class VLLMService:
 
             logger.debug(f"[vLLM] Generating news commentary for article: {article_title[:50]}...")
             outputs = self.llm.generate([prompt], self.sampling_params)
-            commentary = _sanitize_generated_text(outputs[0].outputs[0].text)
+            commentary = outputs[0].outputs[0].text.strip()
 
             logger.debug(
                 f"[vLLM] Generated news commentary successfully (length={len(commentary)})"
