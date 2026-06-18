@@ -554,10 +554,6 @@ class LLMService:
             chain = prompt | self.llm | StrOutputParser()
             commentary = chain.invoke({})
 
-            # Ensure commentary doesn't exceed tweet length
-            if len(commentary) > 280:
-                commentary = commentary[:277] + "..."
-
             return commentary
         except Exception:
             # Fallback if LLM fails - truncate title if too long
@@ -668,10 +664,6 @@ class LLMService:
             chain = prompt | self.llm | StrOutputParser()
             comment = chain.invoke({}).strip()
 
-            # Ensure comment doesn't exceed length
-            if len(comment) > 280:
-                comment = comment[:277] + "..."
-
             return comment
         except Exception:
             # Fallback if LLM fails
@@ -759,10 +751,6 @@ class LLMService:
         try:
             chain = prompt | self.llm | StrOutputParser()
             commentary = chain.invoke({}).strip()
-
-            # Ensure commentary doesn't exceed 200 characters as specified
-            if len(commentary) > 200:
-                commentary = commentary[:197] + "..."
 
             return commentary
         except Exception:

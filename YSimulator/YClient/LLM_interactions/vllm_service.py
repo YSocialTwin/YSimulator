@@ -1085,9 +1085,6 @@ class VLLMService:
                             f"[vLLM Batch {idx}] ✅ USING NEWS COMMENTARY PATH for: '{article_title[:50]}...'"
                         )
 
-                        if len(article_text) > 500:
-                            article_text = article_text[:500] + "..."
-
                         # Get news commentary prompt templates
                         news_commentary_config = self.prompts_config.get(
                             "generate_news_commentary", {}
@@ -1520,10 +1517,6 @@ class VLLMService:
             outputs = self.llm.generate([prompt], self.sampling_params)
             comment = outputs[0].outputs[0].text.strip()
 
-            # Ensure comment doesn't exceed length
-            if len(comment) > 280:
-                comment = comment[:277] + "..."
-
             logger.debug(f"[vLLM] Generated comment successfully (length={len(comment)})")
             return comment
         except Exception as e:
@@ -1640,9 +1633,6 @@ class VLLMService:
             results = []
             for output in outputs:
                 comment = output.outputs[0].text.strip()
-                # Ensure comment doesn't exceed length
-                if len(comment) > 280:
-                    comment = comment[:277] + "..."
                 results.append(comment)
             logger.debug(
                 f"[vLLM] Batch comment generation completed successfully ({len(results)} results)"
@@ -1662,9 +1652,6 @@ class VLLMService:
         try:
             article_title = article.get("title", "News Article")
             article_text = article.get("summary", article.get("description", ""))
-
-            if len(article_text) > 500:
-                article_text = article_text[:500] + "..."
 
             if not website_name:
                 website_name = "this website"
@@ -1705,17 +1692,13 @@ class VLLMService:
             outputs = self.llm.generate([prompt], self.sampling_params)
             commentary = outputs[0].outputs[0].text.strip()
 
-            if len(commentary) > 280:
-                commentary = commentary[:277] + "..."
-
             logger.debug(
                 f"[vLLM] Generated news commentary successfully (length={len(commentary)})"
             )
             return commentary
         except KeyError as e:
             logger.error(f"[vLLM] Missing configuration key in generate_news_commentary: {e}")
-            title = article_title if len(article_title) <= 97 else article_title[:97] + "..."
-            return f"Check out this article: {title}"
+            return f"Check out this article: {article_title}"
         except Exception as e:
             logger.error(f"[vLLM] Failed to generate news commentary: {e}")
             logger.error(f"[vLLM] Article title: {article.get('title', 'Unknown')[:50]}")
