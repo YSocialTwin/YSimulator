@@ -10,7 +10,10 @@ def test_llm_prompt_contracts_require_content_only_output():
     assert "Return only the final comment text." in llm_source
     assert "Return only the final share commentary text." in llm_source
     assert "Write a single natural comment" in llm_source
-    assert "Do not explain, summarize, quote the prompt, add preambles, or wrap it in markdown." in llm_source
+    assert (
+        "Do not explain, summarize, quote the prompt, add preambles, or wrap it in markdown."
+        in llm_source
+    )
 
     assert "Return only the final comment text." in vllm_source
     assert "Return only the final share commentary text." in vllm_source
