@@ -16,6 +16,32 @@ import ray
 logger = logging.getLogger(__name__)
 
 
+def _sanitize_generated_text(text: str) -> str:
+    """Keep only the actual generated content and drop explanatory preambles."""
+    if not text:
+        return ""
+
+    cleaned = str(text).strip().strip('"').strip("'")
+    cleaned = cleaned.replace('"""', "").strip()
+    for marker in (
+        "Since you don't know the specifics",
+        "As you can see",
+        "Let me provide",
+        "Here is",
+        "Here's",
+        "You could then use this",
+        "However, that is not",
+    ):
+        idx = cleaned.find(marker)
+        if idx >= 0:
+            cleaned = cleaned[:idx].strip()
+    if "\n" in cleaned:
+        first_line = cleaned.splitlines()[0].strip()
+        if first_line:
+            cleaned = first_line
+    return cleaned.strip()
+
+
 def _append_custom_features_to_persona(persona: str, agent_attrs: Optional[Dict[str, Any]]) -> str:
     custom_features = dict((agent_attrs or {}).get("custom_features") or {})
     if not custom_features:
@@ -1502,6 +1528,10 @@ class VLLMService:
                 f"\n\nUse these continuity cues only if they fit naturally:\n"
                 f"{memory_blocks['reply_cues']}"
             )
+        user_msg += (
+            "\n\nReturn only the final comment text. Do not add explanations, "
+            "examples, quotations, labels, or formatting."
+        )
 
         # Log the prompt for debugging
         self._log_prompt("generate_comment", system_msg, user_msg, agent_attrs)
@@ -1515,7 +1545,7 @@ class VLLMService:
                 f"[vLLM] Generating comment for cluster_id={cluster_id}, author={author_name}"
             )
             outputs = self.llm.generate([prompt], self.sampling_params)
-            comment = outputs[0].outputs[0].text.strip()
+            comment = _sanitize_generated_text(outputs[0].outputs[0].text)
 
             logger.debug(f"[vLLM] Generated comment successfully (length={len(comment)})")
             return comment
@@ -1616,6 +1646,10 @@ class VLLMService:
                         user_msg += opinion_instruction
                     if system_messages_block:
                         user_msg += f"\n\n{system_messages_block}"
+                    user_msg += (
+                        "\n\nReturn only the final comment text. Do not add explanations, "
+                        "examples, quotations, labels, or formatting."
+                    )
 
                     # Create formatted prompt
                     prompt = self._format_prompt(system_msg, user_msg)
@@ -1632,7 +1666,7 @@ class VLLMService:
             outputs = self.llm.generate(prompts, self.sampling_params)
             results = []
             for output in outputs:
-                comment = output.outputs[0].text.strip()
+                comment = _sanitize_generated_text(output.outputs[0].text)
                 results.append(comment)
             logger.debug(
                 f"[vLLM] Batch comment generation completed successfully ({len(results)} results)"
@@ -1690,7 +1724,7 @@ class VLLMService:
 
             logger.debug(f"[vLLM] Generating news commentary for article: {article_title[:50]}...")
             outputs = self.llm.generate([prompt], self.sampling_params)
-            commentary = outputs[0].outputs[0].text.strip()
+            commentary = _sanitize_generated_text(outputs[0].outputs[0].text)
 
             logger.debug(
                 f"[vLLM] Generated news commentary successfully (length={len(commentary)})"
@@ -1703,8 +1737,7 @@ class VLLMService:
             logger.error(f"[vLLM] Failed to generate news commentary: {e}")
             logger.error(f"[vLLM] Article title: {article.get('title', 'Unknown')[:50]}")
             logger.warning("[vLLM] Returning fallback commentary")
-            title = article_title if len(article_title) <= 97 else article_title[:97] + "..."
-            return f"Check out this article: {title}"
+            return f"Check out this article: {article_title}"
 
     def generate_share_commentary(
         self,
@@ -1756,6 +1789,10 @@ class VLLMService:
                 f"\n\nUse these continuity cues only if they fit naturally:\n"
                 f"{memory_blocks['reply_cues']}"
             )
+        user_msg += (
+            "\n\nReturn only the final share commentary text. Do not add explanations, "
+            "examples, quotations, labels, or formatting."
+        )
 
         prompt = self._format_prompt(system_msg, user_msg)
 

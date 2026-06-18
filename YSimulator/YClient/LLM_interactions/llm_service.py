@@ -58,6 +58,32 @@ def _stress_prompt_block(agent_attrs: Optional[Dict[str, Any]]) -> str:
     )
 
 
+def _sanitize_generated_text(text: str) -> str:
+    """Keep only the actual generated content and drop explanatory preambles."""
+    if not text:
+        return ""
+
+    cleaned = str(text).strip().strip('"').strip("'")
+    cleaned = cleaned.replace('"""', "").strip()
+    for marker in (
+        "Since you don't know the specifics",
+        "As you can see",
+        "Let me provide",
+        "Here is",
+        "Here's",
+        "You could then use this",
+        "However, that is not",
+    ):
+        idx = cleaned.find(marker)
+        if idx >= 0:
+            cleaned = cleaned[:idx].strip()
+    if "\n" in cleaned:
+        first_line = cleaned.splitlines()[0].strip()
+        if first_line:
+            cleaned = first_line
+    return cleaned.strip()
+
+
 # Use standard Ray actor (CPU) - the GPU is managed by Ollama internally
 @ray.remote
 class LLMService:
@@ -95,7 +121,7 @@ class LLMService:
                 },
                 "generate_comment": {
                     "system_template": "{persona} You engage in discussions by commenting on posts. Generate {toxicity} confrontational language contents.",
-                    "user_template": '{author_name} posted this:\n\n"{post_content}"\n\n{thread_context_instruction}Write a brief, thoughtful comment. Max 100 characters.',
+                    "user_template": '{author_name} posted this:\n\n"{post_content}"\n\n{thread_context_instruction}Write a single natural comment that directly responds to the post and thread context. Return only the comment text and no explanation, quotation, preamble, or formatting.',
                 },
                 "generate_read_reaction": {
                     "system_template": "{persona} You're deciding how to react to content you discovered.",
@@ -531,10 +557,6 @@ class LLMService:
         article_title = article.get("title", "News Article")
         article_text = article.get("summary", article.get("description", ""))
 
-        # Truncate article text if too long (keep first 500 chars)
-        if len(article_text) > 500:
-            article_text = article_text[:500] + "..."
-
         # Default website name if not provided
         if not website_name:
             website_name = "this website"
@@ -552,13 +574,12 @@ class LLMService:
         # Get commentary from LLM
         try:
             chain = prompt | self.llm | StrOutputParser()
-            commentary = chain.invoke({})
+            commentary = _sanitize_generated_text(chain.invoke({}))
 
             return commentary
         except Exception:
-            # Fallback if LLM fails - truncate title if too long
-            title = article_title if len(article_title) <= 97 else article_title[:97] + "..."
-            return f"Check out this article: {title}"
+            # Fallback if LLM fails
+            return f"Check out this article: {article_title}"
 
     def generate_comment(
         self,
@@ -654,6 +675,10 @@ class LLMService:
                 f"\n\nUse these continuity cues only if they fit naturally:\n"
                 f"{memory_blocks['reply_cues']}"
             )
+        user_msg += (
+            "\n\nReturn only the final comment text. Do not add explanations, "
+            "examples, quotations, labels, or formatting."
+        )
 
         # Log the prompt for debugging
         self._log_prompt("generate_comment", system_msg, user_msg, agent_attrs)
@@ -662,7 +687,7 @@ class LLMService:
 
         try:
             chain = prompt | self.llm | StrOutputParser()
-            comment = chain.invoke({}).strip()
+            comment = _sanitize_generated_text(chain.invoke({}))
 
             return comment
         except Exception:
@@ -745,12 +770,16 @@ class LLMService:
                 f"\n\nUse these continuity cues only if they fit naturally:\n"
                 f"{memory_blocks['reply_cues']}"
             )
+        user_msg += (
+            "\n\nReturn only the final share commentary text. Do not add explanations, "
+            "examples, quotations, labels, or formatting."
+        )
 
         prompt = ChatPromptTemplate.from_messages([("system", system_msg), ("user", user_msg)])
 
         try:
             chain = prompt | self.llm | StrOutputParser()
-            commentary = chain.invoke({}).strip()
+            commentary = _sanitize_generated_text(chain.invoke({}))
 
             return commentary
         except Exception:
