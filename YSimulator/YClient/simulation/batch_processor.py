@@ -130,9 +130,7 @@ class BatchProcessor:
     ):
         """Resolve a batched Ray future with a bounded wait."""
         batch_results = self.retry_handler.retry_with_backoff(
-            lambda f: self.batch_handler.gather_with_timeout(
-                [f], timeout=timeout_seconds
-            ),
+            lambda f: self.batch_handler.gather_with_timeout([f], timeout=timeout_seconds),
             batch_future,
             error_message=error_message,
         )
