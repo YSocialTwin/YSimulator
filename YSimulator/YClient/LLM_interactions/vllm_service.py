@@ -1502,10 +1502,6 @@ class VLLMService:
                 f"\n\nUse these continuity cues only if they fit naturally:\n"
                 f"{memory_blocks['reply_cues']}"
             )
-        user_msg += (
-            "\n\nReturn only the final comment text. Do not add explanations, "
-            "examples, quotations, labels, or formatting."
-        )
 
         # Log the prompt for debugging
         self._log_prompt("generate_comment", system_msg, user_msg, agent_attrs)
@@ -1620,10 +1616,6 @@ class VLLMService:
                         user_msg += opinion_instruction
                     if system_messages_block:
                         user_msg += f"\n\n{system_messages_block}"
-                    user_msg += (
-                        "\n\nReturn only the final comment text. Do not add explanations, "
-                        "examples, quotations, labels, or formatting."
-                    )
 
                     # Create formatted prompt
                     prompt = self._format_prompt(system_msg, user_msg)
@@ -1763,10 +1755,6 @@ class VLLMService:
                 f"\n\nUse these continuity cues only if they fit naturally:\n"
                 f"{memory_blocks['reply_cues']}"
             )
-        user_msg += (
-            "\n\nReturn only the final share commentary text. Do not add explanations, "
-            "examples, quotations, labels, or formatting."
-        )
 
         prompt = self._format_prompt(system_msg, user_msg)
 

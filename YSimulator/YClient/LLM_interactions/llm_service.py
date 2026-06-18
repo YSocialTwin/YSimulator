@@ -95,7 +95,7 @@ class LLMService:
                 },
                 "generate_comment": {
                     "system_template": "{persona} You engage in discussions by commenting on posts. Generate {toxicity} confrontational language contents.",
-                    "user_template": '{author_name} posted this:\n\n"{post_content}"\n\n{thread_context_instruction}Write a single natural comment that directly responds to the post and thread context. Return only the comment text. Do not explain, summarize, quote the prompt, add preambles, or wrap it in markdown.',
+                    "user_template": '{author_name} posted this:\n\n"{post_content}"\n\n{thread_context_instruction}Write a brief, thoughtful comment. You can tag the author with @{author_name} to continue the discussion. under 100 characters. Be authentic to your persona.',
                 },
                 "generate_read_reaction": {
                     "system_template": "{persona} You're deciding how to react to content you discovered.",
@@ -649,10 +649,6 @@ class LLMService:
                 f"\n\nUse these continuity cues only if they fit naturally:\n"
                 f"{memory_blocks['reply_cues']}"
             )
-        user_msg += (
-            "\n\nReturn only the final comment text. Do not add explanations, "
-            "examples, quotations, labels, or formatting."
-        )
 
         # Log the prompt for debugging
         self._log_prompt("generate_comment", system_msg, user_msg, agent_attrs)
@@ -744,10 +740,6 @@ class LLMService:
                 f"\n\nUse these continuity cues only if they fit naturally:\n"
                 f"{memory_blocks['reply_cues']}"
             )
-        user_msg += (
-            "\n\nReturn only the final share commentary text. Do not add explanations, "
-            "examples, quotations, labels, or formatting."
-        )
 
         prompt = ChatPromptTemplate.from_messages([("system", system_msg), ("user", user_msg)])
 

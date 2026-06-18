@@ -1,21 +1,22 @@
-import inspect
+import json
+from pathlib import Path
 
 
-def test_llm_prompt_contracts_require_content_only_output():
-    from YSimulator.YClient.LLM_interactions import llm_service, vllm_service
-
-    llm_source = inspect.getsource(llm_service)
-    vllm_source = inspect.getsource(vllm_service)
-
-    assert "Return only the final comment text." in llm_source
-    assert "Return only the final share commentary text." in llm_source
-    assert "Write a single natural comment" in llm_source
-    assert (
-        "Do not explain, summarize, quote the prompt, add preambles, or wrap it in markdown."
-        in llm_source
+def test_prompt_jsons_include_output_contracts():
+    prompts_path = Path(
+        "external/YSimulator/example/llm_population_100_vllm/prompts.json"
     )
+    data = json.loads(prompts_path.read_text())
 
-    assert "Return only the final comment text." in vllm_source
-    assert "Return only the final share commentary text." in vllm_source
-    assert "Do not add explanations, " in vllm_source
-    assert "examples, quotations, labels, or formatting." in vllm_source
+    comment_prompt = data["generate_comment"]["user_template"]
+    share_prompt = data["generate_share_commentary"]["user_template"]
+    news_prompt = data["generate_news_commentary"]["user_template"]
+
+    assert "Return only the comment text." in comment_prompt
+    assert "Do not explain, summarize, quote the prompt, add preambles, or wrap it in markdown." in comment_prompt
+
+    assert "Return only the commentary text." in share_prompt
+    assert "Do not explain, summarize, quote the prompt, add preambles, or wrap it in markdown." in share_prompt
+
+    assert "Return only the tweet text." in news_prompt
+    assert "Do not explain, summarize, quote the prompt, add preambles, or wrap it in markdown." in news_prompt
