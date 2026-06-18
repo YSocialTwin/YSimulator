@@ -41,6 +41,7 @@ PROMPT_TOKENS_COMMENT = 120  # Estimated prompt tokens for comment/reaction gene
 PROMPT_TOKENS_FOLLOW = 60  # Estimated prompt tokens for follow decision
 REACTION_OUTPUT_TOKENS = 5  # Simple reaction outputs (LIKE, LOVE, etc.)
 LLM_BATCH_TIMEOUT_SECONDS = 45.0
+LLM_BATCH_TIMEOUT_SECONDS_MAX = 180.0
 
 
 class BatchProcessor:
@@ -121,18 +122,23 @@ class BatchProcessor:
         # Direct actor handle (including Ray actors)
         return self.llm
 
-    def _resolve_batch_future(self, batch_future, error_message: str):
+    def _resolve_batch_future(
+        self,
+        batch_future,
+        error_message: str,
+        timeout_seconds: float = LLM_BATCH_TIMEOUT_SECONDS,
+    ):
         """Resolve a batched Ray future with a bounded wait."""
         batch_results = self.retry_handler.retry_with_backoff(
             lambda f: self.batch_handler.gather_with_timeout(
-                [f], timeout=LLM_BATCH_TIMEOUT_SECONDS
+                [f], timeout=timeout_seconds
             ),
             batch_future,
             error_message=error_message,
         )
         result = batch_results[0] if batch_results else None
         if result is None:
-            raise TimeoutError(f"{error_message} timed out after {LLM_BATCH_TIMEOUT_SECONDS:.0f}s")
+            raise TimeoutError(f"{error_message} timed out after {timeout_seconds:.0f}s")
         return result
 
     def _is_vllm_backend(self) -> bool:
@@ -1318,15 +1324,24 @@ class BatchProcessor:
 
         # Get LLM actor for batch call (using YClient pattern)
         llm_actor = self._get_llm_actor()
+        timeout_seconds = min(
+            LLM_BATCH_TIMEOUT_SECONDS_MAX,
+            max(LLM_BATCH_TIMEOUT_SECONDS, float(len(batch_requests)) * 6.0),
+        )
 
         # Call generate_read_reaction_batch (supports agent_attrs including opinions)
         self.logger.info(
             f"Calling generate_read_reaction_batch for {len(batch_requests)} read requests"
         )
+        self.logger.info(
+            f"Waiting up to {timeout_seconds:.0f}s for vLLM batch read reaction generation"
+        )
         try:
             batch_future = llm_actor.generate_read_reaction_batch.remote(batch_requests)
             results = self._resolve_batch_future(
-                batch_future, "vLLM batch read reaction generation"
+                batch_future,
+                "vLLM batch read reaction generation",
+                timeout_seconds=timeout_seconds,
             )
         except Exception as e:
             self.logger.error(
