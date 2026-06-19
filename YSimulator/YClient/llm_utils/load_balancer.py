@@ -17,6 +17,7 @@ Usage:
 
 import hashlib
 import logging
+import time
 from enum import Enum
 from typing import Any, List, Optional
 
@@ -33,6 +34,7 @@ class LoadBalancingStrategy(Enum):
 
 LEASE_REGISTRY_ACTOR_NAME = "ysim_llm_lease_registry"
 DEFAULT_VLLM_SHARED_NAMESPACE = "ysim_vllm_shared"
+DEFAULT_VLLM_SHARED_POOL_CAPACITY = 5
 DEFAULT_BATCHING_POLICY = "auto"
 
 
@@ -53,6 +55,52 @@ def _resolve_actor_namespace(backend: str, llm_config: Optional[dict] = None) ->
     if backend.lower() == "vllm":
         return DEFAULT_VLLM_SHARED_NAMESPACE
     return None
+
+
+def _resolve_vllm_shared_pool_capacity(llm_config: Optional[dict]) -> Optional[int]:
+    """Return the configured shared vLLM pool capacity, or None when disabled."""
+    llm_config = llm_config or {}
+    shared_pool = llm_config.get("shared_pool") or {}
+    if not shared_pool.get("enabled"):
+        return None
+
+    raw_capacity = shared_pool.get("max_clients_per_worker")
+    if raw_capacity is None:
+        raw_capacity = shared_pool.get("max_clients")
+    if raw_capacity is None:
+        return DEFAULT_VLLM_SHARED_POOL_CAPACITY
+
+    try:
+        capacity = int(raw_capacity)
+    except (TypeError, ValueError):
+        return DEFAULT_VLLM_SHARED_POOL_CAPACITY
+    return capacity if capacity > 0 else DEFAULT_VLLM_SHARED_POOL_CAPACITY
+
+
+def _build_vllm_shared_group_key(
+    llm_config: Optional[dict],
+    actor_namespace: Optional[str],
+    actor_name_prefix: str,
+    num_actors: int,
+    actor_backend: str,
+) -> str:
+    """Build a stable allocation key for shared vLLM pool sharding."""
+    llm_config = llm_config or {}
+    model_name = str(llm_config.get("model", "unknown-model")).strip().lower()
+    tensor_parallel_size = llm_config.get("tensor_parallel_size", 1)
+    gpu_per_actor = llm_config.get("gpu_per_actor", 1.0)
+    namespace = actor_namespace or DEFAULT_VLLM_SHARED_NAMESPACE
+    return ":".join(
+        [
+            actor_backend.lower(),
+            namespace,
+            actor_name_prefix,
+            str(num_actors),
+            str(tensor_parallel_size),
+            str(gpu_per_actor),
+            model_name,
+        ]
+    )
 
 
 def _resolve_lease_client_id(llm_config: Optional[dict]) -> Optional[str]:
@@ -213,6 +261,19 @@ class LLMLeaseRegistry:
     def __init__(self):
         self.pool_clients = {}  # pool_key -> set(client_id)
         self.pool_actor_names = {}  # pool_key -> list[str]
+        self.shared_vllm_groups = {}  # group_key -> list[pool_key]
+        self.shared_vllm_pool_meta = {}  # pool_key -> metadata dict
+
+    def _get_shared_pool_meta(self, pool_key: str) -> dict:
+        return self.shared_vllm_pool_meta.setdefault(
+            pool_key,
+            {
+                "group_key": None,
+                "pool_prefix": None,
+                "capacity": None,
+                "status": "ready",
+            },
+        )
 
     def acquire(self, pool_key: str, client_id: str, actor_names: List[str]) -> int:
         clients = self.pool_clients.setdefault(pool_key, set())
@@ -230,7 +291,108 @@ class LLMLeaseRegistry:
 
         self.pool_clients.pop(pool_key, None)
         actor_names = self.pool_actor_names.pop(pool_key, [])
+        meta = self.shared_vllm_pool_meta.pop(pool_key, None)
+        if meta and meta.get("group_key"):
+            pools = self.shared_vllm_groups.get(meta["group_key"], [])
+            self.shared_vllm_groups[meta["group_key"]] = [
+                existing_pool_key
+                for existing_pool_key in pools
+                if existing_pool_key != pool_key
+            ]
+            if not self.shared_vllm_groups[meta["group_key"]]:
+                self.shared_vllm_groups.pop(meta["group_key"], None)
         return 0, actor_names
+
+    def reserve_shared_vllm_pool(
+        self,
+        group_key: str,
+        client_id: str,
+        actor_name_prefix: str,
+        actor_backend: str,
+        num_actors: int,
+        capacity: int,
+    ) -> dict:
+        """
+        Reserve a shared vLLM pool slot for a client.
+
+        Returns metadata describing the selected pool. Existing ready pools are reused
+        until they reach capacity; otherwise a new bootstrapping pool is created.
+        """
+        pools = self.shared_vllm_groups.setdefault(group_key, [])
+        for pool_key in pools:
+            clients = self.pool_clients.get(pool_key, set())
+            if client_id in clients:
+                meta = self._get_shared_pool_meta(pool_key)
+                return {
+                    "pool_key": pool_key,
+                    "pool_prefix": meta.get("pool_prefix"),
+                    "actor_names": self.pool_actor_names.get(pool_key, []),
+                    "is_creator": False,
+                    "status": meta.get("status", "ready"),
+                    "active_clients": len(clients),
+                    "capacity": meta.get("capacity", capacity),
+                }
+
+            meta = self._get_shared_pool_meta(pool_key)
+            if len(clients) < int(meta.get("capacity") or capacity):
+                clients.add(client_id)
+                self.pool_clients[pool_key] = clients
+                return {
+                    "pool_key": pool_key,
+                    "pool_prefix": meta.get("pool_prefix"),
+                    "actor_names": self.pool_actor_names.get(pool_key, []),
+                    "is_creator": False,
+                    "status": meta.get("status", "ready"),
+                    "active_clients": len(clients),
+                    "capacity": meta.get("capacity", capacity),
+                }
+
+        pool_index = len(pools)
+        pool_prefix = f"{actor_name_prefix}_pool{pool_index}"
+        pool_key = _build_pool_key(actor_backend, pool_prefix, num_actors)
+        pools.append(pool_key)
+        self.shared_vllm_groups[group_key] = pools
+        self.pool_clients[pool_key] = {client_id}
+        self.pool_actor_names[pool_key] = []
+        meta = self._get_shared_pool_meta(pool_key)
+        meta.update(
+            {
+                "group_key": group_key,
+                "pool_prefix": pool_prefix,
+                "capacity": int(capacity),
+                "status": "bootstrapping",
+            }
+        )
+        return {
+            "pool_key": pool_key,
+            "pool_prefix": pool_prefix,
+            "actor_names": [],
+            "is_creator": True,
+            "status": "bootstrapping",
+            "active_clients": 1,
+            "capacity": int(capacity),
+        }
+
+    def register_shared_vllm_pool_actors(
+        self, pool_key: str, actor_names: List[str]
+    ) -> dict:
+        meta = self._get_shared_pool_meta(pool_key)
+        meta["status"] = "ready"
+        self.pool_actor_names[pool_key] = actor_names
+        return {
+            "pool_key": pool_key,
+            "actor_names": actor_names,
+            "status": meta["status"],
+        }
+
+    def get_shared_vllm_pool_state(self, pool_key: str) -> dict:
+        meta = self._get_shared_pool_meta(pool_key)
+        return {
+            "pool_key": pool_key,
+            "actor_names": self.pool_actor_names.get(pool_key, []),
+            "status": meta.get("status", "ready"),
+            "capacity": meta.get("capacity"),
+        }
 
 
 def _build_pool_key(backend: str, actor_name_prefix: str, num_actors: int) -> str:
@@ -775,8 +937,182 @@ def create_llm_actors(
     llm_config["_resolved_service_backend"] = service_backend
     llm_config["_resolved_pool_backend"] = actor_backend
 
+    actor_namespace = _resolve_actor_namespace(backend_lower, llm_config)
+    shared_pool_capacity = _resolve_vllm_shared_pool_capacity(llm_config)
+
+    if backend_lower == "vllm" and shared_pool_capacity is not None:
+        shared_pool_prefix = _build_vllm_pool_prefix(llm_config.get("model", "unknown-model"))
+        if actor_name_prefix == "ysim_llm":
+            actor_name_prefix = shared_pool_prefix
+
+        registry = _get_or_create_lease_registry(actor_namespace)
+        shared_pool_group_key = _build_vllm_shared_group_key(
+            llm_config=llm_config,
+            actor_namespace=actor_namespace,
+            actor_name_prefix=actor_name_prefix,
+            num_actors=num_actors,
+            actor_backend=actor_backend,
+        )
+        reservation = ray.get(
+            registry.reserve_shared_vllm_pool.remote(
+                shared_pool_group_key,
+                _resolve_lease_client_id(llm_config) or llm_config.get("client_name", "unknown"),
+                actor_name_prefix,
+                actor_backend,
+                num_actors,
+                shared_pool_capacity,
+            )
+        )
+
+        actor_name_prefix = reservation["pool_prefix"] or actor_name_prefix
+        shared_pool_key = reservation["pool_key"]
+        shared_pool_actor_names = list(reservation.get("actor_names") or [])
+        shared_pool_is_creator = bool(reservation.get("is_creator"))
+
+        if not shared_pool_is_creator and not shared_pool_actor_names:
+            deadline = time.time() + 60
+            while time.time() < deadline:
+                state = ray.get(
+                    registry.get_shared_vllm_pool_state.remote(shared_pool_key)
+                )
+                shared_pool_actor_names = list(state.get("actor_names") or [])
+                if shared_pool_actor_names:
+                    break
+                time.sleep(0.25)
+
+        if not shared_pool_is_creator and not shared_pool_actor_names:
+            try:
+                release_llm_pool_lease(
+                    backend=actor_backend,
+                    actor_name_prefix=actor_name_prefix,
+                    num_actors=num_actors,
+                    client_id=_resolve_lease_client_id(llm_config)
+                    or llm_config.get("client_name", "unknown"),
+                    actor_namespace=actor_namespace,
+                    logger=logger,
+                )
+            finally:
+                raise RuntimeError(
+                    "Timed out waiting for shared vLLM pool initialization"
+                )
+
+        if shared_pool_actor_names:
+            if len(shared_pool_actor_names) != num_actors and logger:
+                logger.warning(
+                    f"Shared vLLM pool actor count mismatch for prefix={actor_name_prefix}: "
+                    f"expected {num_actors}, found {len(shared_pool_actor_names)}"
+                )
+            num_actors = len(shared_pool_actor_names)
+            reuse_actors = True
+            llm_config["_reused_existing_pool"] = not shared_pool_is_creator
+        else:
+            llm_config["_reused_existing_pool"] = False
+
+        llm_config["_resolved_actor_name_prefix"] = actor_name_prefix
+        llm_config["_resolved_num_actors"] = num_actors
+        llm_config["_resolved_actor_namespace"] = actor_namespace
+        llm_config["_resolved_shared_pool_key"] = shared_pool_key
+        llm_config["_resolved_shared_pool_capacity"] = shared_pool_capacity
+
+        try:
+            if num_actors == 1:
+                if reuse_actors:
+                    actor_name = f"{actor_name_prefix}_{actor_backend}_0"
+                    actor = ray.get_actor(actor_name, namespace=actor_namespace)
+                else:
+                    ServiceClass = _get_service_class(service_backend)
+                    actor_name = f"{actor_name_prefix}_{actor_backend}_0"
+                    options = {"num_gpus": llm_config.get("gpu_per_actor", 1.0), "lifetime": "detached"}
+                    options["name"] = actor_name
+                    if actor_namespace:
+                        options["namespace"] = actor_namespace
+                    actor = ServiceClass.options(**options).remote(
+                        llm_config=llm_config,
+                        prompts_config=prompts_config,
+                        llm_v_config=llm_v_config,
+                        logging_config=logging_config,
+                    )
+                    if not shared_pool_actor_names:
+                        ray.get(
+                            registry.register_shared_vllm_pool_actors.remote(
+                                shared_pool_key, [actor_name]
+                            )
+                        )
+                return actor
+
+            if enable_monitoring:
+                pool = LLMActorPool(
+                    llm_config=llm_config,
+                    prompts_config=prompts_config,
+                    num_actors=num_actors,
+                    strategy=strategy,
+                    backend=service_backend,
+                    enable_monitoring=True,
+                    llm_v_config=llm_v_config,
+                    logger=logger,
+                    reuse_actors=reuse_actors,
+                    actor_name_prefix=actor_name_prefix,
+                )
+                if not shared_pool_actor_names:
+                    actor_names = [
+                        f"{actor_name_prefix}_{actor_backend}_{i}"
+                        for i in range(num_actors)
+                    ]
+                    ray.get(
+                        registry.register_shared_vllm_pool_actors.remote(
+                            shared_pool_key, actor_names
+                        )
+                    )
+                return pool
+
+            balancer = LLMLoadBalancer(
+                llm_config=llm_config,
+                prompts_config=prompts_config,
+                num_actors=num_actors,
+                strategy=strategy,
+                backend=service_backend,
+                llm_v_config=llm_v_config,
+                logger=logger,
+                reuse_actors=reuse_actors,
+                actor_name_prefix=actor_name_prefix,
+            )
+            if not shared_pool_actor_names:
+                actor_names = [
+                    f"{actor_name_prefix}_{actor_backend}_{i}" for i in range(num_actors)
+                ]
+                ray.get(
+                    registry.register_shared_vllm_pool_actors.remote(
+                        shared_pool_key, actor_names
+                    )
+                )
+            return balancer
+        except Exception:
+            try:
+                actor_names = [
+                    f"{actor_name_prefix}_{actor_backend}_{i}" for i in range(num_actors)
+                ]
+                ray.get(
+                    registry.register_shared_vllm_pool_actors.remote(
+                        shared_pool_key, actor_names
+                    )
+                )
+            except Exception:
+                pass
+            try:
+                release_llm_pool_lease(
+                    backend=actor_backend,
+                    actor_name_prefix=actor_name_prefix,
+                    num_actors=num_actors,
+                    client_id=_resolve_lease_client_id(llm_config)
+                    or llm_config.get("client_name", "unknown"),
+                    actor_namespace=actor_namespace,
+                    logger=logger,
+                )
+            except Exception:
+                pass
+            raise
+
     if backend_lower == "vllm":
-        actor_namespace = _resolve_actor_namespace(backend_lower, llm_config)
         resolved_prefix, existing_count = _discover_existing_vllm_pool(
             llm_config.get("model", "unknown-model"), actor_namespace, logger
         )
@@ -798,7 +1134,6 @@ def create_llm_actors(
         llm_config["_resolved_num_actors"] = num_actors
         llm_config["_resolved_actor_namespace"] = actor_namespace
     else:
-        actor_namespace = _resolve_actor_namespace(backend_lower, llm_config)
         if actor_namespace:
             llm_config["_resolved_actor_namespace"] = actor_namespace
 
