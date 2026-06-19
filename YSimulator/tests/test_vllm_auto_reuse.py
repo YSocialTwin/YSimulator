@@ -205,6 +205,47 @@ def test_create_llm_actors_uses_unique_lease_client_id(monkeypatch):
     assert acquired["client_id"] == "client-a:pid:run42"
 
 
+def test_get_or_create_lease_registry_retries_on_name_collision(monkeypatch):
+    from YSimulator.YClient.llm_utils import load_balancer
+
+    registry = Mock(name="registry")
+    create_calls = {"count": 0}
+
+    def fake_get_actor(name, namespace=None):
+        if create_calls["count"] == 0:
+            raise ValueError(name)
+        return registry
+
+    class _OptionsProxy:
+        def remote(self):
+            create_calls["count"] += 1
+            raise RuntimeError("Actor with name 'ysim_llm_lease_registry' already exists")
+
+    monkeypatch.setattr(load_balancer.ray, "get_actor", fake_get_actor)
+    monkeypatch.setattr(
+        load_balancer.LLMLeaseRegistry,
+        "options",
+        lambda **kwargs: _OptionsProxy(),
+    )
+    monkeypatch.setattr(load_balancer.time, "sleep", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(load_balancer.time, "time", lambda: 0)
+
+    # Second get_actor call should succeed after the collision retry path.
+    call_count = {"count": 0}
+
+    def fake_get_actor_retry(name, namespace=None):
+        call_count["count"] += 1
+        if call_count["count"] < 2:
+            raise ValueError(name)
+        return registry
+
+    monkeypatch.setattr(load_balancer.ray, "get_actor", fake_get_actor_retry)
+
+    result = load_balancer._get_or_create_lease_registry("shared_vllm")
+
+    assert result is registry
+
+
 def test_create_llm_actors_shared_pool_respects_capacity_and_reuses_pool(monkeypatch):
     class _RemoteCall:
         def __init__(self, fn):

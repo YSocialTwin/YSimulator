@@ -451,7 +451,18 @@ def _get_or_create_lease_registry(actor_namespace: Optional[str] = None):
         options = {"name": LEASE_REGISTRY_ACTOR_NAME, "lifetime": "detached"}
         if actor_namespace:
             options["namespace"] = actor_namespace
-        return LLMLeaseRegistry.options(**options).remote()
+        try:
+            return LLMLeaseRegistry.options(**options).remote()
+        except Exception as exc:
+            if "already exists" not in str(exc).lower():
+                raise
+            deadline = time.time() + 10
+            while time.time() < deadline:
+                try:
+                    return ray.get_actor(LEASE_REGISTRY_ACTOR_NAME, namespace=actor_namespace)
+                except ValueError:
+                    time.sleep(0.1)
+            raise
 
 
 def acquire_llm_pool_lease(
