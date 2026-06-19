@@ -278,6 +278,7 @@ if __name__ == "__main__":
 
     # Extract client name from config (not argparse)
     client_name = sim_config.get("client_name", "client_1")
+    runtime_client_id = f"{config_dir.name}:{client_name}"
 
     # Helper function to find client-specific or generic config file
     def find_config_file(base_name: str, override_file: Path = None) -> Path:
@@ -575,7 +576,7 @@ if __name__ == "__main__":
     # Create client with all configurations
     client_start = time.time()
     client = SimulationClient.remote(
-        client_name,
+        runtime_client_id,
         llm_service,
         agent_config,
         sim_config,
