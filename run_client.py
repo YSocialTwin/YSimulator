@@ -575,7 +575,7 @@ if __name__ == "__main__":
 
     # Create client with all configurations
     client_start = time.time()
-    client = SimulationClient.remote(
+    client = SimulationClient.options(name=runtime_client_id).remote(
         runtime_client_id,
         llm_service,
         agent_config,
