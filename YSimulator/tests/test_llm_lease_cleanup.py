@@ -2,6 +2,7 @@ from unittest.mock import ANY, Mock
 
 from YSimulator.YClient.llm_utils.load_balancer import (
     acquire_llm_pool_lease,
+    cleanup_expired_shared_vllm_pools,
     release_llm_pool_lease,
 )
 
@@ -19,8 +20,10 @@ class _FakeRegistry:
         self._release_result = release_result
         self.acquire = _RemoteCall(self._acquire)
         self.release = _RemoteCall(self._release)
+        self.reap_expired_shared_vllm_pools = _RemoteCall(self._reap)
         self.acquire_calls = []
         self.release_calls = []
+        self.reap_calls = []
 
     def _acquire(self, pool_key, client_id, actor_names):
         self.acquire_calls.append((pool_key, client_id, actor_names))
@@ -29,6 +32,10 @@ class _FakeRegistry:
     def _release(self, pool_key, client_id):
         self.release_calls.append((pool_key, client_id))
         return self._release_result
+
+    def _reap(self, now):
+        self.reap_calls.append(now)
+        return []
 
 
 class _FakeActor:
@@ -168,3 +175,37 @@ def test_release_lease_kills_even_if_shutdown_fails(monkeypatch):
     assert failing_actor.shutdown_calls == 1
     kill_mock.assert_called_once()
     force_kill_mock.assert_called_once_with([], ANY)
+
+
+def test_cleanup_expired_shared_vllm_pools_terminates_expired_actors(monkeypatch):
+    fake_registry = _FakeRegistry(release_result=(1, []))
+    fake_registry._reap = lambda now: ["ysim_llm_vllm_0", "ysim_llm_vllm_1"]
+    fake_registry.reap_expired_shared_vllm_pools = _RemoteCall(fake_registry._reap)
+
+    monkeypatch.setattr(
+        "YSimulator.YClient.llm_utils.load_balancer._get_or_create_lease_registry",
+        lambda actor_namespace=None: fake_registry,
+    )
+    monkeypatch.setattr("YSimulator.YClient.llm_utils.load_balancer.ray.get", lambda x: x)
+
+    actors = {
+        "ysim_llm_vllm_0": _FakeActor("ysim_llm_vllm_0"),
+        "ysim_llm_vllm_1": _FakeActor("ysim_llm_vllm_1"),
+    }
+    monkeypatch.setattr(
+        "YSimulator.YClient.llm_utils.load_balancer.ray.get_actor",
+        lambda name, namespace=None: actors[name],
+    )
+    kill_mock = Mock()
+    monkeypatch.setattr("YSimulator.YClient.llm_utils.load_balancer.ray.kill", kill_mock)
+    force_kill_mock = Mock(return_value=2)
+    monkeypatch.setattr(
+        "YSimulator.YClient.llm_utils.load_balancer._force_kill_local_processes",
+        force_kill_mock,
+    )
+
+    expired = cleanup_expired_shared_vllm_pools(logger=Mock())
+
+    assert expired == ["ysim_llm_vllm_0", "ysim_llm_vllm_1"]
+    assert [actors[name].shutdown_calls for name in actors] == [1, 1]
+    assert kill_mock.call_count == 2

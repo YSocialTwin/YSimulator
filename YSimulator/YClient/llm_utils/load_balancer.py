@@ -17,6 +17,7 @@ Usage:
 
 import hashlib
 import logging
+import threading
 import time
 from enum import Enum
 from typing import Any, List, Optional
@@ -35,6 +36,8 @@ class LoadBalancingStrategy(Enum):
 LEASE_REGISTRY_ACTOR_NAME = "ysim_llm_lease_registry"
 DEFAULT_VLLM_SHARED_NAMESPACE = "ysim_vllm_shared"
 DEFAULT_VLLM_SHARED_POOL_CAPACITY = 5
+DEFAULT_VLLM_SHARED_POOL_TTL_SECONDS = 5 * 60
+DEFAULT_VLLM_SHARED_POOL_REAPER_INTERVAL_SECONDS = 60
 DEFAULT_BATCHING_POLICY = "auto"
 
 
@@ -259,10 +262,20 @@ class LLMLeaseRegistry:
     """Tracks active clients per LLM pool to support safe shared-actor cleanup."""
 
     def __init__(self):
+        self._lock = threading.RLock()
+        self._stop_reaper = threading.Event()
         self.pool_clients = {}  # pool_key -> set(client_id)
         self.pool_actor_names = {}  # pool_key -> list[str]
         self.shared_vllm_groups = {}  # group_key -> list[pool_key]
         self.shared_vllm_pool_meta = {}  # pool_key -> metadata dict
+        self._reaper_thread = threading.Thread(target=self._reaper_loop, daemon=True)
+        self._reaper_thread.start()
+
+    def _now(self) -> float:
+        return time.time()
+
+    def _is_shared_vllm_pool(self, pool_key: str) -> bool:
+        return pool_key in self.shared_vllm_pool_meta
 
     def _get_shared_pool_meta(self, pool_key: str) -> dict:
         return self.shared_vllm_pool_meta.setdefault(
@@ -272,36 +285,100 @@ class LLMLeaseRegistry:
                 "pool_prefix": None,
                 "capacity": None,
                 "status": "ready",
+                "created_at": self._now(),
+                "last_activity_at": self._now(),
+                "idle_since": None,
             },
         )
 
+    def _reap_expired_shared_vllm_pools_locked(self, now: Optional[float] = None) -> List[str]:
+        now = self._now() if now is None else now
+        expired_actor_names: List[str] = []
+        expired_pool_keys: List[str] = []
+
+        for pool_key, meta in list(self.shared_vllm_pool_meta.items()):
+            idle_since = meta.get("idle_since")
+            if meta.get("status") != "idle" or idle_since is None:
+                continue
+            if now - float(idle_since) < DEFAULT_VLLM_SHARED_POOL_TTL_SECONDS:
+                continue
+            expired_pool_keys.append(pool_key)
+
+        for pool_key in expired_pool_keys:
+            meta = self.shared_vllm_pool_meta.pop(pool_key, None)
+            self.pool_clients.pop(pool_key, None)
+            actor_names = self.pool_actor_names.pop(pool_key, [])
+            if meta and meta.get("group_key"):
+                pools = self.shared_vllm_groups.get(meta["group_key"], [])
+                self.shared_vllm_groups[meta["group_key"]] = [
+                    existing_pool_key
+                    for existing_pool_key in pools
+                    if existing_pool_key != pool_key
+                ]
+                if not self.shared_vllm_groups[meta["group_key"]]:
+                    self.shared_vllm_groups.pop(meta["group_key"], None)
+            if actor_names:
+                expired_actor_names.extend(actor_names)
+
+        return expired_actor_names
+
+    def _reaper_loop(self) -> None:
+        while not self._stop_reaper.wait(DEFAULT_VLLM_SHARED_POOL_REAPER_INTERVAL_SECONDS):
+            try:
+                with self._lock:
+                    expired_actor_names = self._reap_expired_shared_vllm_pools_locked()
+                if expired_actor_names:
+                    _terminate_llm_actors(expired_actor_names)
+            except Exception:
+                continue
+
     def acquire(self, pool_key: str, client_id: str, actor_names: List[str]) -> int:
-        clients = self.pool_clients.setdefault(pool_key, set())
-        clients.add(client_id)
-        if actor_names:
-            self.pool_actor_names[pool_key] = actor_names
-        return len(clients)
+        with self._lock:
+            clients = self.pool_clients.setdefault(pool_key, set())
+            clients.add(client_id)
+            if actor_names:
+                self.pool_actor_names[pool_key] = actor_names
+            if self._is_shared_vllm_pool(pool_key):
+                meta = self._get_shared_pool_meta(pool_key)
+                meta["last_activity_at"] = self._now()
+                meta["idle_since"] = None
+                meta["status"] = "ready"
+            return len(clients)
 
     def release(self, pool_key: str, client_id: str) -> tuple[int, List[str]]:
-        clients = self.pool_clients.get(pool_key, set())
-        clients.discard(client_id)
-        if clients:
-            self.pool_clients[pool_key] = clients
-            return len(clients), []
+        with self._lock:
+            clients = self.pool_clients.get(pool_key, set())
+            clients.discard(client_id)
+            if clients:
+                self.pool_clients[pool_key] = clients
+                if self._is_shared_vllm_pool(pool_key):
+                    meta = self._get_shared_pool_meta(pool_key)
+                    meta["last_activity_at"] = self._now()
+                    meta["idle_since"] = None
+                    meta["status"] = "ready"
+                return len(clients), []
 
-        self.pool_clients.pop(pool_key, None)
-        actor_names = self.pool_actor_names.pop(pool_key, [])
-        meta = self.shared_vllm_pool_meta.pop(pool_key, None)
-        if meta and meta.get("group_key"):
-            pools = self.shared_vllm_groups.get(meta["group_key"], [])
-            self.shared_vllm_groups[meta["group_key"]] = [
-                existing_pool_key
-                for existing_pool_key in pools
-                if existing_pool_key != pool_key
-            ]
-            if not self.shared_vllm_groups[meta["group_key"]]:
-                self.shared_vllm_groups.pop(meta["group_key"], None)
-        return 0, actor_names
+            if self._is_shared_vllm_pool(pool_key):
+                meta = self._get_shared_pool_meta(pool_key)
+                meta["last_activity_at"] = self._now()
+                meta["idle_since"] = self._now()
+                meta["status"] = "idle"
+                self.pool_clients[pool_key] = set()
+                return 0, []
+
+            self.pool_clients.pop(pool_key, None)
+            actor_names = self.pool_actor_names.pop(pool_key, [])
+            meta = self.shared_vllm_pool_meta.pop(pool_key, None)
+            if meta and meta.get("group_key"):
+                pools = self.shared_vllm_groups.get(meta["group_key"], [])
+                self.shared_vllm_groups[meta["group_key"]] = [
+                    existing_pool_key
+                    for existing_pool_key in pools
+                    if existing_pool_key != pool_key
+                ]
+                if not self.shared_vllm_groups[meta["group_key"]]:
+                    self.shared_vllm_groups.pop(meta["group_key"], None)
+            return 0, actor_names
 
     def reserve_shared_vllm_pool(
         self,
@@ -318,81 +395,101 @@ class LLMLeaseRegistry:
         Returns metadata describing the selected pool. Existing ready pools are reused
         until they reach capacity; otherwise a new bootstrapping pool is created.
         """
-        pools = self.shared_vllm_groups.setdefault(group_key, [])
-        for pool_key in pools:
-            clients = self.pool_clients.get(pool_key, set())
-            if client_id in clients:
+        with self._lock:
+            self._reap_expired_shared_vllm_pools_locked()
+            pools = self.shared_vllm_groups.setdefault(group_key, [])
+            for pool_key in pools:
+                clients = self.pool_clients.setdefault(pool_key, set())
                 meta = self._get_shared_pool_meta(pool_key)
-                return {
-                    "pool_key": pool_key,
-                    "pool_prefix": meta.get("pool_prefix"),
-                    "actor_names": self.pool_actor_names.get(pool_key, []),
-                    "is_creator": False,
-                    "status": meta.get("status", "ready"),
-                    "active_clients": len(clients),
-                    "capacity": meta.get("capacity", capacity),
-                }
+                if client_id in clients:
+                    meta["last_activity_at"] = self._now()
+                    meta["idle_since"] = None
+                    meta["status"] = "ready"
+                    return {
+                        "pool_key": pool_key,
+                        "pool_prefix": meta.get("pool_prefix"),
+                        "actor_names": self.pool_actor_names.get(pool_key, []),
+                        "is_creator": False,
+                        "status": meta.get("status", "ready"),
+                        "active_clients": len(clients),
+                        "capacity": meta.get("capacity", capacity),
+                    }
 
+                if len(clients) < int(meta.get("capacity") or capacity):
+                    clients.add(client_id)
+                    self.pool_clients[pool_key] = clients
+                    meta["last_activity_at"] = self._now()
+                    meta["idle_since"] = None
+                    meta["status"] = "ready"
+                    return {
+                        "pool_key": pool_key,
+                        "pool_prefix": meta.get("pool_prefix"),
+                        "actor_names": self.pool_actor_names.get(pool_key, []),
+                        "is_creator": False,
+                        "status": meta.get("status", "ready"),
+                        "active_clients": len(clients),
+                        "capacity": meta.get("capacity", capacity),
+                    }
+
+            pool_index = len(pools)
+            pool_prefix = f"{actor_name_prefix}_pool{pool_index}"
+            pool_key = _build_pool_key(actor_backend, pool_prefix, num_actors)
+            pools.append(pool_key)
+            self.shared_vllm_groups[group_key] = pools
+            self.pool_clients[pool_key] = {client_id}
+            self.pool_actor_names[pool_key] = []
             meta = self._get_shared_pool_meta(pool_key)
-            if len(clients) < int(meta.get("capacity") or capacity):
-                clients.add(client_id)
-                self.pool_clients[pool_key] = clients
-                return {
-                    "pool_key": pool_key,
-                    "pool_prefix": meta.get("pool_prefix"),
-                    "actor_names": self.pool_actor_names.get(pool_key, []),
-                    "is_creator": False,
-                    "status": meta.get("status", "ready"),
-                    "active_clients": len(clients),
-                    "capacity": meta.get("capacity", capacity),
+            meta.update(
+                {
+                    "group_key": group_key,
+                    "pool_prefix": pool_prefix,
+                    "capacity": int(capacity),
+                    "status": "bootstrapping",
+                    "created_at": self._now(),
+                    "last_activity_at": self._now(),
+                    "idle_since": None,
                 }
-
-        pool_index = len(pools)
-        pool_prefix = f"{actor_name_prefix}_pool{pool_index}"
-        pool_key = _build_pool_key(actor_backend, pool_prefix, num_actors)
-        pools.append(pool_key)
-        self.shared_vllm_groups[group_key] = pools
-        self.pool_clients[pool_key] = {client_id}
-        self.pool_actor_names[pool_key] = []
-        meta = self._get_shared_pool_meta(pool_key)
-        meta.update(
-            {
-                "group_key": group_key,
+            )
+            return {
+                "pool_key": pool_key,
                 "pool_prefix": pool_prefix,
-                "capacity": int(capacity),
+                "actor_names": [],
+                "is_creator": True,
                 "status": "bootstrapping",
+                "active_clients": 1,
+                "capacity": int(capacity),
             }
-        )
-        return {
-            "pool_key": pool_key,
-            "pool_prefix": pool_prefix,
-            "actor_names": [],
-            "is_creator": True,
-            "status": "bootstrapping",
-            "active_clients": 1,
-            "capacity": int(capacity),
-        }
 
     def register_shared_vllm_pool_actors(
         self, pool_key: str, actor_names: List[str]
     ) -> dict:
-        meta = self._get_shared_pool_meta(pool_key)
-        meta["status"] = "ready"
-        self.pool_actor_names[pool_key] = actor_names
-        return {
-            "pool_key": pool_key,
-            "actor_names": actor_names,
-            "status": meta["status"],
-        }
+        with self._lock:
+            meta = self._get_shared_pool_meta(pool_key)
+            meta["status"] = "ready"
+            meta["last_activity_at"] = self._now()
+            meta["idle_since"] = None
+            self.pool_actor_names[pool_key] = actor_names
+            return {
+                "pool_key": pool_key,
+                "actor_names": actor_names,
+                "status": meta["status"],
+            }
 
     def get_shared_vllm_pool_state(self, pool_key: str) -> dict:
-        meta = self._get_shared_pool_meta(pool_key)
-        return {
-            "pool_key": pool_key,
-            "actor_names": self.pool_actor_names.get(pool_key, []),
-            "status": meta.get("status", "ready"),
-            "capacity": meta.get("capacity"),
-        }
+        with self._lock:
+            meta = self._get_shared_pool_meta(pool_key)
+            return {
+                "pool_key": pool_key,
+                "actor_names": self.pool_actor_names.get(pool_key, []),
+                "status": meta.get("status", "ready"),
+                "capacity": meta.get("capacity"),
+                "idle_since": meta.get("idle_since"),
+                "last_activity_at": meta.get("last_activity_at"),
+            }
+
+    def reap_expired_shared_vllm_pools(self, now: Optional[float] = None) -> List[str]:
+        with self._lock:
+            return self._reap_expired_shared_vllm_pools_locked(now)
 
 
 def _build_pool_key(backend: str, actor_name_prefix: str, num_actors: int) -> str:
@@ -441,6 +538,59 @@ def _force_kill_local_processes(
                 logger.warning(f"Failed to force-kill leaked process pid={pid}: {exc}")
 
     return killed
+
+
+def _terminate_llm_actor(
+    actor_name: str,
+    actor_namespace: Optional[str] = None,
+    logger: Optional[logging.Logger] = None,
+) -> None:
+    """Best-effort terminate a single detached LLM actor and its leaked processes."""
+    shutdown_result = {}
+    try:
+        actor = ray.get_actor(actor_name, namespace=actor_namespace)
+        try:
+            if hasattr(actor, "shutdown"):
+                shutdown_result = ray.get(actor.shutdown.remote()) or {}
+                if logger:
+                    logger.info(
+                        f"Shutdown idle LLM actor before termination: {actor_name} "
+                        f"(details={shutdown_result})"
+                    )
+        except Exception as shutdown_exc:
+            if logger:
+                logger.warning(
+                    f"Best-effort shutdown failed for LLM actor {actor_name}: {shutdown_exc}"
+                )
+        ray.kill(actor, no_restart=True)
+        if logger:
+            logger.info(f"Terminated idle LLM actor: {actor_name}")
+        leaked_pids = []
+        actor_pid = shutdown_result.get("actor_pid")
+        if actor_pid:
+            leaked_pids.append(actor_pid)
+        leaked_pids.extend(shutdown_result.get("child_pids", []))
+        force_killed = _force_kill_local_processes(leaked_pids, logger)
+        if force_killed and logger:
+            logger.info(
+                f"Force-killed {force_killed} leaked process(es) after terminating {actor_name}"
+            )
+    except ValueError:
+        # Actor already gone, ignore.
+        return
+    except Exception as exc:
+        if logger:
+            logger.warning(f"Failed to terminate LLM actor {actor_name}: {exc}")
+
+
+def _terminate_llm_actors(
+    actor_names: List[str],
+    actor_namespace: Optional[str] = None,
+    logger: Optional[logging.Logger] = None,
+) -> None:
+    """Terminate a list of detached LLM actors."""
+    for actor_name in actor_names:
+        _terminate_llm_actor(actor_name, actor_namespace=actor_namespace, logger=logger)
 
 
 def _get_or_create_lease_registry(actor_namespace: Optional[str] = None):
@@ -506,45 +656,43 @@ def release_llm_pool_lease(
             f"Released LLM pool lease: key={pool_key}, client={client_id}, active_clients={active}"
         )
 
+    if backend.lower() == "vllm":
+        try:
+            cleanup_expired_shared_vllm_pools(actor_namespace=actor_namespace, logger=logger)
+        except Exception as exc:
+            if logger:
+                logger.warning(f"Shared vLLM cleanup pass failed after lease release: {exc}")
+
     if active == 0 and actor_names:
-        for actor_name in actor_names:
-            shutdown_result = {}
-            try:
-                actor = ray.get_actor(actor_name, namespace=actor_namespace)
-                try:
-                    if hasattr(actor, "shutdown"):
-                        shutdown_result = ray.get(actor.shutdown.remote()) or {}
-                        if logger:
-                            logger.info(
-                                f"Shutdown idle LLM actor before termination: {actor_name} "
-                                f"(details={shutdown_result})"
-                            )
-                except Exception as shutdown_exc:
-                    if logger:
-                        logger.warning(
-                            f"Best-effort shutdown failed for LLM actor {actor_name}: {shutdown_exc}"
-                        )
-                ray.kill(actor, no_restart=True)
-                if logger:
-                    logger.info(f"Terminated idle LLM actor: {actor_name}")
-                leaked_pids = []
-                actor_pid = shutdown_result.get("actor_pid")
-                if actor_pid:
-                    leaked_pids.append(actor_pid)
-                leaked_pids.extend(shutdown_result.get("child_pids", []))
-                force_killed = _force_kill_local_processes(leaked_pids, logger)
-                if force_killed and logger:
-                    logger.info(
-                        f"Force-killed {force_killed} leaked process(es) after terminating {actor_name}"
-                    )
-            except ValueError:
-                # Actor already gone, ignore.
-                continue
-            except Exception as exc:
-                if logger:
-                    logger.warning(f"Failed to terminate LLM actor {actor_name}: {exc}")
+        _terminate_llm_actors(actor_names, actor_namespace=actor_namespace, logger=logger)
 
     return active
+
+
+def cleanup_expired_shared_vllm_pools(
+    actor_namespace: Optional[str] = None,
+    logger: Optional[logging.Logger] = None,
+) -> List[str]:
+    """
+    Sweep idle shared vLLM pools whose TTL has elapsed and terminate their actors.
+    """
+    try:
+        registry = _get_or_create_lease_registry(actor_namespace)
+        expired_actor_names = ray.get(
+            registry.reap_expired_shared_vllm_pools.remote(time.time())
+        )
+    except Exception as exc:
+        if logger:
+            logger.warning(f"Unable to sweep expired shared vLLM pools: {exc}")
+        return []
+
+    if expired_actor_names:
+        _terminate_llm_actors(expired_actor_names, actor_namespace=actor_namespace, logger=logger)
+        if logger:
+            logger.info(
+                f"Reaped {len(expired_actor_names)} expired shared vLLM actor(s)"
+            )
+    return expired_actor_names
 
 
 class LLMLoadBalancer:
@@ -956,6 +1104,7 @@ def create_llm_actors(
         if actor_name_prefix == "ysim_llm":
             actor_name_prefix = shared_pool_prefix
 
+        cleanup_expired_shared_vllm_pools(actor_namespace=actor_namespace, logger=logger)
         registry = _get_or_create_lease_registry(actor_namespace)
         shared_pool_group_key = _build_vllm_shared_group_key(
             llm_config=llm_config,

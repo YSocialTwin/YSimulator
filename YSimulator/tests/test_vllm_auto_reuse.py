@@ -261,6 +261,7 @@ def test_create_llm_actors_shared_pool_respects_capacity_and_reuses_pool(monkeyp
             self.reserve_shared_vllm_pool = _RemoteCall(self._reserve)
             self.register_shared_vllm_pool_actors = _RemoteCall(self._register)
             self.get_shared_vllm_pool_state = _RemoteCall(self._state)
+            self.reap_expired_shared_vllm_pools = _RemoteCall(self._reap)
 
         def _reserve(
             self,
@@ -332,6 +333,9 @@ def test_create_llm_actors_shared_pool_respects_capacity_and_reuses_pool(monkeyp
                 "status": meta["status"],
                 "capacity": meta["capacity"],
             }
+
+        def _reap(self, now):
+            return []
 
     registry = _FakeRegistry()
     actor_handles = {}
