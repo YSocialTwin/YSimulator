@@ -44,14 +44,9 @@ DEFAULT_BATCHING_POLICY = "auto"
 def _build_vllm_pool_prefix(
     model_name: str, experiment_identity: Optional[str] = None
 ) -> str:
-    """Create a stable actor-name prefix for a vLLM model and experiment."""
+    """Create a stable actor-name prefix for a vLLM model."""
     normalized = (model_name or "unknown-model").strip().lower()
     model_hash = hashlib.sha256(normalized.encode()).hexdigest()[:12]
-    if experiment_identity:
-        experiment_digest = hashlib.sha256(
-            str(experiment_identity).strip().encode()
-        ).hexdigest()[:12]
-        return f"ysim_vllm_{model_hash}_{experiment_digest}"
     return f"ysim_vllm_{model_hash}"
 
 
@@ -101,7 +96,6 @@ def _build_vllm_shared_group_key(
     tensor_parallel_size = llm_config.get("tensor_parallel_size", 1)
     gpu_per_actor = llm_config.get("gpu_per_actor", 1.0)
     namespace = actor_namespace or DEFAULT_VLLM_SHARED_NAMESPACE
-    experiment_identity = experiment_identity or _resolve_experiment_identity(llm_config)
     key_parts = [
         actor_backend.lower(),
         namespace,
@@ -111,9 +105,6 @@ def _build_vllm_shared_group_key(
         str(gpu_per_actor),
         model_name,
     ]
-    if experiment_identity:
-        experiment_digest = hashlib.sha256(experiment_identity.encode()).hexdigest()[:16]
-        key_parts.extend(["exp", experiment_digest])
     return ":".join(key_parts)
 
 
@@ -207,7 +198,7 @@ def _discover_named_actor_count(
         try:
             ray.get_actor(actor_name, namespace=actor_namespace)
             count += 1
-        except ValueError:
+        except (ValueError, KeyError):
             break
     return count
 
@@ -226,7 +217,7 @@ def _discover_existing_vllm_pool(
     """
     preferred_prefix = _build_vllm_pool_prefix(model_name, experiment_identity)
     preferred_count = _discover_named_actor_count(preferred_prefix, "vllm", actor_namespace)
-    if preferred_count > 0 and experiment_identity is None:
+    if preferred_count > 0:
         return preferred_prefix, preferred_count
 
     try:
@@ -262,11 +253,6 @@ def _discover_existing_vllm_pool(
             continue
 
         if metadata.get("backend") != "vllm" or metadata.get("model") != model_name:
-            continue
-        if (
-            experiment_identity is not None
-            and metadata.get("experiment_identity") != experiment_identity
-        ):
             continue
 
         pool_prefix = metadata.get("pool_prefix") or actor_name.rsplit("_vllm_", 1)[0]
@@ -651,10 +637,11 @@ def acquire_llm_pool_lease(
     client_id: str,
     actor_names: List[str],
     actor_namespace: Optional[str] = None,
+    pool_key: Optional[str] = None,
     logger: Optional[logging.Logger] = None,
 ) -> int:
     """Register client usage of an LLM actor pool."""
-    pool_key = _build_pool_key(backend, actor_name_prefix, num_actors)
+    pool_key = pool_key or _build_pool_key(backend, actor_name_prefix, num_actors)
     registry = _get_or_create_lease_registry(actor_namespace)
     active = ray.get(registry.acquire.remote(pool_key, client_id, actor_names))
     if logger:
@@ -670,6 +657,7 @@ def release_llm_pool_lease(
     num_actors: int,
     client_id: str,
     actor_namespace: Optional[str] = None,
+    pool_key: Optional[str] = None,
     logger: Optional[logging.Logger] = None,
 ) -> int:
     """
@@ -677,7 +665,7 @@ def release_llm_pool_lease(
 
     If this is the last client, all detached actors in the pool are terminated.
     """
-    pool_key = _build_pool_key(backend, actor_name_prefix, num_actors)
+    pool_key = pool_key or _build_pool_key(backend, actor_name_prefix, num_actors)
     registry = _get_or_create_lease_registry(actor_namespace)
     active, actor_names = ray.get(registry.release.remote(pool_key, client_id))
     if logger:
@@ -1175,6 +1163,31 @@ def create_llm_actors(
                     break
                 time.sleep(0.25)
 
+        if not shared_pool_actor_names:
+            discovered_prefix, discovered_count = _discover_existing_vllm_pool(
+                llm_config.get("model", "unknown-model"),
+                actor_namespace,
+                experiment_identity,
+                logger,
+            )
+            if discovered_count > 0:
+                shared_pool_actor_names = [
+                    f"{discovered_prefix}_{actor_backend}_{i}"
+                    for i in range(discovered_count)
+                ]
+                actor_name_prefix = discovered_prefix
+                num_actors = discovered_count
+                shared_pool_is_creator = False
+                llm_config["_reused_existing_pool"] = True
+                try:
+                    ray.get(
+                        registry.register_shared_vllm_pool_actors.remote(
+                            shared_pool_key, shared_pool_actor_names
+                        )
+                    )
+                except Exception:
+                    pass
+
         if not shared_pool_is_creator and not shared_pool_actor_names:
             try:
                 release_llm_pool_lease(
@@ -1184,6 +1197,7 @@ def create_llm_actors(
                     client_id=_resolve_lease_client_id(llm_config)
                     or llm_config.get("client_name", "unknown"),
                     actor_namespace=actor_namespace,
+                    pool_key=shared_pool_key,
                     logger=logger,
                 )
             finally:
@@ -1301,6 +1315,7 @@ def create_llm_actors(
                     client_id=_resolve_lease_client_id(llm_config)
                     or llm_config.get("client_name", "unknown"),
                     actor_namespace=actor_namespace,
+                    pool_key=shared_pool_key,
                     logger=logger,
                 )
             except Exception:

@@ -80,6 +80,37 @@ def test_acquire_lease_calls_registry(monkeypatch):
     ]
 
 
+def test_release_lease_can_use_explicit_pool_key(monkeypatch):
+    fake_registry = _FakeRegistry(release_result=(0, ["legacy_vllm_0"]))
+    monkeypatch.setattr(
+        "YSimulator.YClient.llm_utils.load_balancer._get_or_create_lease_registry",
+        lambda actor_namespace=None: fake_registry,
+    )
+    monkeypatch.setattr("YSimulator.YClient.llm_utils.load_balancer.ray.get", lambda x: x)
+
+    kill_mock = Mock()
+    monkeypatch.setattr("YSimulator.YClient.llm_utils.load_balancer.ray.kill", kill_mock)
+    monkeypatch.setattr(
+        "YSimulator.YClient.llm_utils.load_balancer.ray.get_actor",
+        lambda name, namespace=None: Mock(name=f"actor-{name}"),
+    )
+    monkeypatch.setattr(
+        "YSimulator.YClient.llm_utils.load_balancer._force_kill_local_processes",
+        lambda *args, **kwargs: 0,
+    )
+
+    active = release_llm_pool_lease(
+        backend="vllm",
+        actor_name_prefix="ysim_vllm_newprefix",
+        num_actors=1,
+        client_id="client1",
+        pool_key="vllm:legacy_pool:1",
+    )
+
+    assert active == 0
+    assert fake_registry.release_calls == [("vllm:legacy_pool:1", "client1")]
+
+
 def test_release_lease_no_kill_when_clients_still_active(monkeypatch):
     fake_registry = _FakeRegistry(release_result=(1, ["ysim_llm_vllm_0"]))
     monkeypatch.setattr(

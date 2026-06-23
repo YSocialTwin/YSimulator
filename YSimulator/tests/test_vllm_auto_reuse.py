@@ -99,7 +99,7 @@ def test_discover_existing_vllm_pool_can_use_actor_metadata(monkeypatch):
     assert count == 2
 
 
-def test_discover_existing_vllm_pool_filters_by_experiment_identity(monkeypatch):
+def test_discover_existing_vllm_pool_reuses_any_live_matching_model_pool(monkeypatch):
     model_name = "AMead10/Llama-3.2-3B-Instruct-AWQ"
     states = [
         {"name": "exp_a_pool_vllm_0", "class_name": "VLLMService", "state": "ALIVE"},
@@ -137,13 +137,9 @@ def test_discover_existing_vllm_pool_filters_by_experiment_identity(monkeypatch)
         lambda name, namespace=None: actors[name],
     )
 
-    prefix, count = _discover_existing_vllm_pool(
-        model_name,
-        actor_namespace="shared_vllm",
-        experiment_identity="/tmp/experiment-a",
-    )
+    prefix, count = _discover_existing_vllm_pool(model_name, actor_namespace="shared_vllm")
 
-    assert prefix == "exp_a_pool"
+    assert prefix in {"exp_a_pool", "exp_b_pool"}
     assert count == 1
 
 
@@ -165,7 +161,7 @@ def test_discover_existing_vllm_pool_ignores_state_api_failures(monkeypatch):
     assert count == 0
 
 
-def test_build_vllm_shared_group_key_includes_experiment_identity():
+def test_build_vllm_shared_group_key_is_stable_across_experiments():
     llm_config = {
         "model": "AMead10/Llama-3.2-3B-Instruct-AWQ",
         "tensor_parallel_size": 1,
@@ -189,18 +185,18 @@ def test_build_vllm_shared_group_key_includes_experiment_identity():
         experiment_identity="/tmp/experiment-b",
     )
 
-    assert key_a != key_b
-    assert "exp" in key_a
-    assert "exp" in key_b
+    assert key_a == key_b
+    assert "exp" not in key_a
+    assert "exp" not in key_b
 
 
-def test_build_vllm_pool_prefix_includes_experiment_identity():
+def test_build_vllm_pool_prefix_is_stable_across_experiments():
     model_name = "AMead10/Llama-3.2-3B-Instruct-AWQ"
 
     prefix_a = _build_vllm_pool_prefix(model_name, experiment_identity="/tmp/experiment-a")
     prefix_b = _build_vllm_pool_prefix(model_name, experiment_identity="/tmp/experiment-b")
 
-    assert prefix_a != prefix_b
+    assert prefix_a == prefix_b
     assert prefix_a.startswith("ysim_vllm_")
     assert prefix_b.startswith("ysim_vllm_")
 

@@ -6,6 +6,7 @@ Ray orchestration server and executes agent behaviors.
 """
 
 import argparse
+import atexit
 import gzip
 import json
 import logging
@@ -15,6 +16,7 @@ import sys
 import time
 import traceback
 import uuid
+import signal
 from datetime import datetime
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
@@ -197,6 +199,38 @@ def _llm_models_configured(sim_config: dict) -> bool:
     llm_cfg = sim_config.get("llm") or {}
     llm_v_cfg = sim_config.get("llm_v") or {}
     return bool(llm_cfg.get("model") or llm_v_cfg.get("model"))
+
+
+def _release_llm_pool_lease_once(lease_state: dict, logger: logging.Logger) -> None:
+    """Best-effort release of the shared LLM lease exactly once."""
+    if not lease_state or lease_state.get("released"):
+        return
+
+    lease_state["released"] = True
+    backend = lease_state.get("backend")
+    actor_name_prefix = lease_state.get("actor_name_prefix")
+    num_actors = lease_state.get("num_actors")
+    client_id = lease_state.get("client_id")
+    actor_namespace = lease_state.get("actor_namespace")
+    pool_key = lease_state.get("pool_key")
+
+    if not backend:
+        return
+
+    try:
+        from YSimulator.YClient.llm_utils import release_llm_pool_lease
+
+        release_llm_pool_lease(
+            backend=backend,
+            actor_name_prefix=actor_name_prefix,
+            num_actors=num_actors,
+            client_id=client_id,
+            actor_namespace=actor_namespace,
+            pool_key=pool_key,
+            logger=logger,
+        )
+    except Exception as cleanup_error:
+        logger.warning(f"Failed to release LLM pool lease cleanly: {cleanup_error}")
 
 
 if __name__ == "__main__":
@@ -445,6 +479,16 @@ if __name__ == "__main__":
     # Get actor name prefix (default: ysim_llm)
     actor_name_prefix = llm_config.get("actor_name_prefix", "ysim_llm")
 
+    lease_state = {
+        "released": False,
+        "backend": None,
+        "actor_name_prefix": None,
+        "num_actors": None,
+        "client_id": None,
+        "actor_namespace": None,
+        "pool_key": None,
+    }
+
     llm_service = None
 
     if not _llm_models_configured(sim_config):
@@ -552,6 +596,17 @@ if __name__ == "__main__":
     resolved_service_backend = llm_config.get("_resolved_service_backend", llm_backend)
     resolved_pool_backend = llm_config.get("_resolved_pool_backend", llm_backend)
 
+    lease_state.update(
+        {
+            "backend": resolved_pool_backend,
+            "actor_name_prefix": resolved_actor_name_prefix,
+            "num_actors": resolved_num_llm_actors,
+            "client_id": llm_config.get("_lease_client_id", client_name),
+            "actor_namespace": resolved_actor_namespace,
+            "pool_key": llm_config.get("_resolved_shared_pool_key"),
+        }
+    )
+
     if llm_service is not None and resolved_service_backend != llm_backend:
         logger.info(
             f"Upgraded non-vLLM backend to batch-capable service backend: {resolved_service_backend}"
@@ -573,6 +628,19 @@ if __name__ == "__main__":
     else:
         logger.info("News feed service enabled for page agents (no static feeds)")
     news_time = (time.time() - news_start) * 1000
+
+    def _handle_shutdown_signal(signum, frame):
+        logger.info(f"Received signal {signum}; releasing shared LLM lease")
+        _release_llm_pool_lease_once(lease_state, logger)
+        raise SystemExit(0)
+
+    for _sig in (signal.SIGTERM, signal.SIGINT):
+        try:
+            signal.signal(_sig, _handle_shutdown_signal)
+        except Exception:
+            pass
+
+    atexit.register(_release_llm_pool_lease_once, lease_state, logger)
 
     # Create client with all configurations
     client_start = time.time()
@@ -624,18 +692,5 @@ if __name__ == "__main__":
         )
         raise
     finally:
-        try:
-            if resolved_pool_backend:
-                from YSimulator.YClient.llm_utils import release_llm_pool_lease
-
-                release_llm_pool_lease(
-                    backend=resolved_pool_backend,
-                    actor_name_prefix=resolved_actor_name_prefix,
-                    num_actors=resolved_num_llm_actors,
-                    client_id=llm_config.get("_lease_client_id", client_name),
-                    actor_namespace=resolved_actor_namespace,
-                    logger=logger,
-                )
-        except Exception as cleanup_error:
-            logger.warning(f"Failed to release LLM pool lease cleanly: {cleanup_error}")
+        _release_llm_pool_lease_once(lease_state, logger)
         logger.info("Client shutdown complete")
