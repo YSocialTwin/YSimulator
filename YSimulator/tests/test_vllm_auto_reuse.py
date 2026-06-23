@@ -194,6 +194,17 @@ def test_build_vllm_shared_group_key_includes_experiment_identity():
     assert "exp" in key_b
 
 
+def test_build_vllm_pool_prefix_includes_experiment_identity():
+    model_name = "AMead10/Llama-3.2-3B-Instruct-AWQ"
+
+    prefix_a = _build_vllm_pool_prefix(model_name, experiment_identity="/tmp/experiment-a")
+    prefix_b = _build_vllm_pool_prefix(model_name, experiment_identity="/tmp/experiment-b")
+
+    assert prefix_a != prefix_b
+    assert prefix_a.startswith("ysim_vllm_")
+    assert prefix_b.startswith("ysim_vllm_")
+
+
 def test_create_llm_actors_creates_vllm_in_shared_namespace(monkeypatch):
     llm_config = {
         "model": "AMead10/Llama-3.2-3B-Instruct-AWQ",

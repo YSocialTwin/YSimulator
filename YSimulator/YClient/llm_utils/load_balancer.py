@@ -41,10 +41,17 @@ DEFAULT_VLLM_SHARED_POOL_REAPER_INTERVAL_SECONDS = 60
 DEFAULT_BATCHING_POLICY = "auto"
 
 
-def _build_vllm_pool_prefix(model_name: str) -> str:
-    """Create a stable actor-name prefix for a vLLM model."""
+def _build_vllm_pool_prefix(
+    model_name: str, experiment_identity: Optional[str] = None
+) -> str:
+    """Create a stable actor-name prefix for a vLLM model and experiment."""
     normalized = (model_name or "unknown-model").strip().lower()
     model_hash = hashlib.sha256(normalized.encode()).hexdigest()[:12]
+    if experiment_identity:
+        experiment_digest = hashlib.sha256(
+            str(experiment_identity).strip().encode()
+        ).hexdigest()[:12]
+        return f"ysim_vllm_{model_hash}_{experiment_digest}"
     return f"ysim_vllm_{model_hash}"
 
 
@@ -217,7 +224,7 @@ def _discover_existing_vllm_pool(
     First check the deterministic model-derived prefix. If nothing is found, scan
     named VLLMService actors and ask them for metadata so we can attach to older pools too.
     """
-    preferred_prefix = _build_vllm_pool_prefix(model_name)
+    preferred_prefix = _build_vllm_pool_prefix(model_name, experiment_identity)
     preferred_count = _discover_named_actor_count(preferred_prefix, "vllm", actor_namespace)
     if preferred_count > 0 and experiment_identity is None:
         return preferred_prefix, preferred_count
@@ -1125,7 +1132,9 @@ def create_llm_actors(
     shared_pool_capacity = _resolve_vllm_shared_pool_capacity(llm_config)
 
     if backend_lower == "vllm" and shared_pool_capacity is not None:
-        shared_pool_prefix = _build_vllm_pool_prefix(llm_config.get("model", "unknown-model"))
+        shared_pool_prefix = _build_vllm_pool_prefix(
+            llm_config.get("model", "unknown-model"), experiment_identity
+        )
         if actor_name_prefix == "ysim_llm":
             actor_name_prefix = shared_pool_prefix
 
