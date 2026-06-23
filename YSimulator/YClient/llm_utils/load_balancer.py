@@ -86,6 +86,7 @@ def _build_vllm_shared_group_key(
     actor_name_prefix: str,
     num_actors: int,
     actor_backend: str,
+    experiment_identity: Optional[str] = None,
 ) -> str:
     """Build a stable allocation key for shared vLLM pool sharding."""
     llm_config = llm_config or {}
@@ -93,23 +94,38 @@ def _build_vllm_shared_group_key(
     tensor_parallel_size = llm_config.get("tensor_parallel_size", 1)
     gpu_per_actor = llm_config.get("gpu_per_actor", 1.0)
     namespace = actor_namespace or DEFAULT_VLLM_SHARED_NAMESPACE
-    return ":".join(
-        [
-            actor_backend.lower(),
-            namespace,
-            actor_name_prefix,
-            str(num_actors),
-            str(tensor_parallel_size),
-            str(gpu_per_actor),
-            model_name,
-        ]
-    )
+    experiment_identity = experiment_identity or _resolve_experiment_identity(llm_config)
+    key_parts = [
+        actor_backend.lower(),
+        namespace,
+        actor_name_prefix,
+        str(num_actors),
+        str(tensor_parallel_size),
+        str(gpu_per_actor),
+        model_name,
+    ]
+    if experiment_identity:
+        experiment_digest = hashlib.sha256(experiment_identity.encode()).hexdigest()[:16]
+        key_parts.extend(["exp", experiment_digest])
+    return ":".join(key_parts)
 
 
 def _resolve_lease_client_id(llm_config: Optional[dict]) -> Optional[str]:
     """Return a stable per-run lease holder id for shared LLM pools."""
     llm_config = llm_config or {}
     return llm_config.get("_lease_client_id") or llm_config.get("client_name")
+
+
+def _resolve_experiment_identity(llm_config: Optional[dict]) -> Optional[str]:
+    """Return a stable experiment identity if one was provided by the caller."""
+    llm_config = llm_config or {}
+    experiment_identity = llm_config.get("_experiment_identity") or llm_config.get(
+        "experiment_identity"
+    )
+    if experiment_identity is None:
+        return None
+    experiment_identity = str(experiment_identity).strip()
+    return experiment_identity or None
 
 
 def _resolve_batching_policy(llm_config: Optional[dict]) -> str:
@@ -192,6 +208,7 @@ def _discover_named_actor_count(
 def _discover_existing_vllm_pool(
     model_name: str,
     actor_namespace: Optional[str] = None,
+    experiment_identity: Optional[str] = None,
     logger: Optional[logging.Logger] = None,
 ) -> tuple[str, int]:
     """
@@ -202,7 +219,7 @@ def _discover_existing_vllm_pool(
     """
     preferred_prefix = _build_vllm_pool_prefix(model_name)
     preferred_count = _discover_named_actor_count(preferred_prefix, "vllm", actor_namespace)
-    if preferred_count > 0:
+    if preferred_count > 0 and experiment_identity is None:
         return preferred_prefix, preferred_count
 
     try:
@@ -238,6 +255,11 @@ def _discover_existing_vllm_pool(
             continue
 
         if metadata.get("backend") != "vllm" or metadata.get("model") != model_name:
+            continue
+        if (
+            experiment_identity is not None
+            and metadata.get("experiment_identity") != experiment_identity
+        ):
             continue
 
         pool_prefix = metadata.get("pool_prefix") or actor_name.rsplit("_vllm_", 1)[0]
@@ -1097,6 +1119,9 @@ def create_llm_actors(
     llm_config["_resolved_pool_backend"] = actor_backend
 
     actor_namespace = _resolve_actor_namespace(backend_lower, llm_config)
+    experiment_identity = _resolve_experiment_identity(llm_config)
+    if experiment_identity:
+        llm_config["_resolved_experiment_identity"] = experiment_identity
     shared_pool_capacity = _resolve_vllm_shared_pool_capacity(llm_config)
 
     if backend_lower == "vllm" and shared_pool_capacity is not None:
@@ -1112,6 +1137,7 @@ def create_llm_actors(
             actor_name_prefix=actor_name_prefix,
             num_actors=num_actors,
             actor_backend=actor_backend,
+            experiment_identity=experiment_identity,
         )
         reservation = ray.get(
             registry.reserve_shared_vllm_pool.remote(
@@ -1274,7 +1300,10 @@ def create_llm_actors(
 
     if backend_lower == "vllm":
         resolved_prefix, existing_count = _discover_existing_vllm_pool(
-            llm_config.get("model", "unknown-model"), actor_namespace, logger
+            llm_config.get("model", "unknown-model"),
+            actor_namespace,
+            experiment_identity,
+            logger,
         )
         if existing_count > 0:
             if logger:

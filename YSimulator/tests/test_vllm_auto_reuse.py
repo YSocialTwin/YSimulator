@@ -3,6 +3,7 @@ from unittest.mock import Mock
 from YSimulator.YClient.llm_utils.load_balancer import (
     DEFAULT_VLLM_SHARED_NAMESPACE,
     _build_vllm_pool_prefix,
+    _build_vllm_shared_group_key,
     _discover_existing_vllm_pool,
     create_llm_actors,
 )
@@ -98,6 +99,54 @@ def test_discover_existing_vllm_pool_can_use_actor_metadata(monkeypatch):
     assert count == 2
 
 
+def test_discover_existing_vllm_pool_filters_by_experiment_identity(monkeypatch):
+    model_name = "AMead10/Llama-3.2-3B-Instruct-AWQ"
+    states = [
+        {"name": "exp_a_pool_vllm_0", "class_name": "VLLMService", "state": "ALIVE"},
+        {"name": "exp_b_pool_vllm_0", "class_name": "VLLMService", "state": "ALIVE"},
+    ]
+
+    actor_a = Mock()
+    actor_a.get_service_metadata = _RemoteCall(
+        lambda: {
+            "backend": "vllm",
+            "model": model_name,
+            "pool_prefix": "exp_a_pool",
+            "experiment_identity": "/tmp/experiment-a",
+        }
+    )
+    actor_b = Mock()
+    actor_b.get_service_metadata = _RemoteCall(
+        lambda: {
+            "backend": "vllm",
+            "model": model_name,
+            "pool_prefix": "exp_b_pool",
+            "experiment_identity": "/tmp/experiment-b",
+        }
+    )
+    actors = {"exp_a_pool_vllm_0": actor_a, "exp_b_pool_vllm_0": actor_b}
+
+    monkeypatch.setattr(
+        "YSimulator.YClient.llm_utils.load_balancer._discover_named_actor_count",
+        lambda prefix, backend, actor_namespace=None: 0,
+    )
+    monkeypatch.setattr("ray.util.state.list_actors", lambda: states)
+    monkeypatch.setattr("YSimulator.YClient.llm_utils.load_balancer.ray.get", lambda x: x)
+    monkeypatch.setattr(
+        "YSimulator.YClient.llm_utils.load_balancer.ray.get_actor",
+        lambda name, namespace=None: actors[name],
+    )
+
+    prefix, count = _discover_existing_vllm_pool(
+        model_name,
+        actor_namespace="shared_vllm",
+        experiment_identity="/tmp/experiment-a",
+    )
+
+    assert prefix == "exp_a_pool"
+    assert count == 1
+
+
 def test_discover_existing_vllm_pool_ignores_state_api_failures(monkeypatch):
     model_name = "AMead10/Llama-3.2-3B-Instruct-AWQ"
     resolved_prefix = _build_vllm_pool_prefix(model_name)
@@ -116,6 +165,35 @@ def test_discover_existing_vllm_pool_ignores_state_api_failures(monkeypatch):
     assert count == 0
 
 
+def test_build_vllm_shared_group_key_includes_experiment_identity():
+    llm_config = {
+        "model": "AMead10/Llama-3.2-3B-Instruct-AWQ",
+        "tensor_parallel_size": 1,
+        "gpu_per_actor": 1.0,
+    }
+
+    key_a = _build_vllm_shared_group_key(
+        llm_config=llm_config,
+        actor_namespace="shared_vllm",
+        actor_name_prefix="ysim_vllm",
+        num_actors=2,
+        actor_backend="vllm",
+        experiment_identity="/tmp/experiment-a",
+    )
+    key_b = _build_vllm_shared_group_key(
+        llm_config=llm_config,
+        actor_namespace="shared_vllm",
+        actor_name_prefix="ysim_vllm",
+        num_actors=2,
+        actor_backend="vllm",
+        experiment_identity="/tmp/experiment-b",
+    )
+
+    assert key_a != key_b
+    assert "exp" in key_a
+    assert "exp" in key_b
+
+
 def test_create_llm_actors_creates_vllm_in_shared_namespace(monkeypatch):
     llm_config = {
         "model": "AMead10/Llama-3.2-3B-Instruct-AWQ",
@@ -129,7 +207,7 @@ def test_create_llm_actors_creates_vllm_in_shared_namespace(monkeypatch):
 
     monkeypatch.setattr(
         "YSimulator.YClient.llm_utils.load_balancer._discover_existing_vllm_pool",
-        lambda model_name, actor_namespace=None, logger=None: (
+        lambda model_name, actor_namespace=None, experiment_identity=None, logger=None: (
             _build_vllm_pool_prefix(model_name),
             0,
         ),
@@ -177,7 +255,7 @@ def test_create_llm_actors_uses_unique_lease_client_id(monkeypatch):
 
     monkeypatch.setattr(
         "YSimulator.YClient.llm_utils.load_balancer._discover_existing_vllm_pool",
-        lambda model_name, actor_namespace=None, logger=None: (
+        lambda model_name, actor_namespace=None, experiment_identity=None, logger=None: (
             _build_vllm_pool_prefix(model_name),
             1,
         ),

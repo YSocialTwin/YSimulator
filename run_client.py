@@ -429,6 +429,7 @@ if __name__ == "__main__":
     # Attach client identity for shared actor lease tracking.
     llm_config["client_name"] = client_name
     llm_config["_lease_client_id"] = f"{client_name}:{os.getpid()}:{uuid.uuid4().hex}"
+    llm_config["_experiment_identity"] = str(config_dir.resolve())
     llm_v_config = sim_config.get("llm_v")  # Get vision LLM config if available
 
     # Determine which LLM backend to use
