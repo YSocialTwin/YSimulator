@@ -80,6 +80,10 @@ class _FakeOpinionManager:
 
 def test_batch_opinion_updates_uses_vllm_batch(monkeypatch):
     monkeypatch.setattr("YSimulator.YClient.simulation.batch_processor.ray.get", lambda x: x)
+    monkeypatch.setattr(
+        "YSimulator.YClient.simulation.batch_processor.ray.wait",
+        lambda futures, num_returns=1, timeout=None: (futures, []),
+    )
 
     fake_server = _FakeServer()
     fake_llm = _FakeLLMActor(["AGREE"])
@@ -158,6 +162,10 @@ def test_batch_opinion_updates_falls_back_for_non_llm_model(monkeypatch):
 def test_process_vllm_batch_accepts_image_post_tuple(monkeypatch):
     monkeypatch.setattr("YSimulator.YClient.simulation.batch_processor.ray.get", lambda x: x)
     monkeypatch.setattr(
+        "YSimulator.YClient.simulation.batch_processor.ray.wait",
+        lambda futures, num_returns=1, timeout=None: (futures, []),
+    )
+    monkeypatch.setattr(
         "YSimulator.YClient.simulation.batch_processor.annotate_text",
         lambda *args, **kwargs: {"hashtags": [], "mentions": []},
     )
@@ -217,7 +225,7 @@ def test_process_vllm_batch_falls_back_when_batch_call_times_out(monkeypatch):
         fallback_called["value"] = True
 
     processor._gather_posts_standard = _fake_standard_gather
-    processor.batch_handler.gather_with_timeout = Mock(return_value=[None])
+    processor._resolve_batch_future = Mock(side_effect=TimeoutError("slow"))
 
     processor._process_vllm_batch(
         [
@@ -235,3 +243,49 @@ def test_process_vllm_batch_falls_back_when_batch_call_times_out(monkeypatch):
     )
 
     assert fallback_called["value"] is True
+
+
+def test_vllm_batch_request_helper_splits_on_timeout(monkeypatch):
+    processor = BatchProcessor(
+        server=Mock(),
+        client_id="client-1",
+        llm=Mock(),
+        enable_sentiment=False,
+        enable_toxicity=False,
+        enable_emotions=False,
+        perspective_api_key=None,
+        logger=Mock(),
+    )
+
+    calls = []
+
+    def batch_call_fn(requests):
+        calls.append(("batch", [req["id"] for req in requests]))
+        raise TimeoutError("slow batch")
+
+    def single_call_fn(request):
+        calls.append(("single", request["id"]))
+        return ("single", request["id"])
+
+    def fake_resolve_batch_future(future, error_message, timeout_seconds=45):
+        kind, value = future
+        return [f"resolved-{value}"]
+
+    monkeypatch.setattr(processor, "_resolve_batch_future", fake_resolve_batch_future)
+
+    results = processor._resolve_vllm_request_batches(
+        batch_requests=[{"id": 1}, {"id": 2}],
+        batch_call_fn=batch_call_fn,
+        single_call_fn=single_call_fn,
+        error_message="test batch",
+        timeout_seconds=45,
+    )
+
+    assert results == ["resolved-1", "resolved-2"]
+    assert calls == [
+        ("batch", [1, 2]),
+        ("batch", [1]),
+        ("single", 1),
+        ("batch", [2]),
+        ("single", 2),
+    ]
