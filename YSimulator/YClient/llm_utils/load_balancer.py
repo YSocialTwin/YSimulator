@@ -41,9 +41,7 @@ DEFAULT_VLLM_SHARED_POOL_REAPER_INTERVAL_SECONDS = 60
 DEFAULT_BATCHING_POLICY = "auto"
 
 
-def _build_vllm_pool_prefix(
-    model_name: str, experiment_identity: Optional[str] = None
-) -> str:
+def _build_vllm_pool_prefix(model_name: str, experiment_identity: Optional[str] = None) -> str:
     """Create a stable actor-name prefix for a vLLM model."""
     normalized = (model_name or "unknown-model").strip().lower()
     model_hash = hashlib.sha256(normalized.encode()).hexdigest()[:12]
@@ -475,9 +473,7 @@ class LLMLeaseRegistry:
                 "capacity": int(capacity),
             }
 
-    def register_shared_vllm_pool_actors(
-        self, pool_key: str, actor_names: List[str]
-    ) -> dict:
+    def register_shared_vllm_pool_actors(self, pool_key: str, actor_names: List[str]) -> dict:
         with self._lock:
             meta = self._get_shared_pool_meta(pool_key)
             meta["status"] = "ready"
@@ -695,9 +691,7 @@ def cleanup_expired_shared_vllm_pools(
     """
     try:
         registry = _get_or_create_lease_registry(actor_namespace)
-        expired_actor_names = ray.get(
-            registry.reap_expired_shared_vllm_pools.remote(time.time())
-        )
+        expired_actor_names = ray.get(registry.reap_expired_shared_vllm_pools.remote(time.time()))
     except Exception as exc:
         if logger:
             logger.warning(f"Unable to sweep expired shared vLLM pools: {exc}")
@@ -706,9 +700,7 @@ def cleanup_expired_shared_vllm_pools(
     if expired_actor_names:
         _terminate_llm_actors(expired_actor_names, actor_namespace=actor_namespace, logger=logger)
         if logger:
-            logger.info(
-                f"Reaped {len(expired_actor_names)} expired shared vLLM actor(s)"
-            )
+            logger.info(f"Reaped {len(expired_actor_names)} expired shared vLLM actor(s)")
     return expired_actor_names
 
 
@@ -1155,9 +1147,7 @@ def create_llm_actors(
         if not shared_pool_is_creator and not shared_pool_actor_names:
             deadline = time.time() + 60
             while time.time() < deadline:
-                state = ray.get(
-                    registry.get_shared_vllm_pool_state.remote(shared_pool_key)
-                )
+                state = ray.get(registry.get_shared_vllm_pool_state.remote(shared_pool_key))
                 shared_pool_actor_names = list(state.get("actor_names") or [])
                 if shared_pool_actor_names:
                     break
@@ -1172,8 +1162,7 @@ def create_llm_actors(
             )
             if discovered_count > 0:
                 shared_pool_actor_names = [
-                    f"{discovered_prefix}_{actor_backend}_{i}"
-                    for i in range(discovered_count)
+                    f"{discovered_prefix}_{actor_backend}_{i}" for i in range(discovered_count)
                 ]
                 actor_name_prefix = discovered_prefix
                 num_actors = discovered_count
@@ -1201,9 +1190,7 @@ def create_llm_actors(
                     logger=logger,
                 )
             finally:
-                raise RuntimeError(
-                    "Timed out waiting for shared vLLM pool initialization"
-                )
+                raise RuntimeError("Timed out waiting for shared vLLM pool initialization")
 
         if shared_pool_actor_names:
             if len(shared_pool_actor_names) != num_actors and logger:
@@ -1231,7 +1218,10 @@ def create_llm_actors(
                 else:
                     ServiceClass = _get_service_class(service_backend)
                     actor_name = f"{actor_name_prefix}_{actor_backend}_0"
-                    options = {"num_gpus": llm_config.get("gpu_per_actor", 1.0), "lifetime": "detached"}
+                    options = {
+                        "num_gpus": llm_config.get("gpu_per_actor", 1.0),
+                        "lifetime": "detached",
+                    }
                     options["name"] = actor_name
                     if actor_namespace:
                         options["namespace"] = actor_namespace
@@ -1264,8 +1254,7 @@ def create_llm_actors(
                 )
                 if not shared_pool_actor_names:
                     actor_names = [
-                        f"{actor_name_prefix}_{actor_backend}_{i}"
-                        for i in range(num_actors)
+                        f"{actor_name_prefix}_{actor_backend}_{i}" for i in range(num_actors)
                     ]
                     ray.get(
                         registry.register_shared_vllm_pool_actors.remote(
@@ -1290,9 +1279,7 @@ def create_llm_actors(
                     f"{actor_name_prefix}_{actor_backend}_{i}" for i in range(num_actors)
                 ]
                 ray.get(
-                    registry.register_shared_vllm_pool_actors.remote(
-                        shared_pool_key, actor_names
-                    )
+                    registry.register_shared_vllm_pool_actors.remote(shared_pool_key, actor_names)
                 )
             return balancer
         except Exception:
@@ -1301,9 +1288,7 @@ def create_llm_actors(
                     f"{actor_name_prefix}_{actor_backend}_{i}" for i in range(num_actors)
                 ]
                 ray.get(
-                    registry.register_shared_vllm_pool_actors.remote(
-                        shared_pool_key, actor_names
-                    )
+                    registry.register_shared_vllm_pool_actors.remote(shared_pool_key, actor_names)
                 )
             except Exception:
                 pass

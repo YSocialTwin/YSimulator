@@ -30,8 +30,8 @@ try:
         LLMActorPool,
         LLMLoadBalancer,
         LoadBalancingStrategy,
-        cleanup_expired_shared_vllm_pools,
         acquire_llm_pool_lease,
+        cleanup_expired_shared_vllm_pools,
         create_llm_actors,
         release_llm_pool_lease,
     )
