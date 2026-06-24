@@ -30,6 +30,7 @@ try:
         LLMActorPool,
         LLMLoadBalancer,
         LoadBalancingStrategy,
+        cleanup_expired_shared_vllm_pools,
         acquire_llm_pool_lease,
         create_llm_actors,
         release_llm_pool_lease,
@@ -43,6 +44,7 @@ except ImportError:
     LLMLoadBalancer = None
     LLMActorPool = None
     LoadBalancingStrategy = None
+    cleanup_expired_shared_vllm_pools = None
     acquire_llm_pool_lease = None
     create_llm_actors = None
     release_llm_pool_lease = None
@@ -56,6 +58,7 @@ __all__ = [
     "LLMLoadBalancer",
     "LLMActorPool",
     "LoadBalancingStrategy",
+    "cleanup_expired_shared_vllm_pools",
     "acquire_llm_pool_lease",
     "create_llm_actors",
     "release_llm_pool_lease",

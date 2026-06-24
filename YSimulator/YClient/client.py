@@ -1222,9 +1222,6 @@ class SimulationClient:
             day: Simulation day that just ended
             slot: Simulation slot (hour) that just ended
         """
-        if not self.hourly_actions:
-            return
-
         total_time = sum(a["execution_time_seconds"] for a in self.hourly_actions)
         total_actions = len(self.hourly_actions)
         successful_actions = sum(1 for a in self.hourly_actions if a["success"])
@@ -1262,9 +1259,6 @@ class SimulationClient:
         Args:
             day: Simulation day that just ended
         """
-        if not self.daily_actions:
-            return
-
         total_time = sum(a["execution_time_seconds"] for a in self.daily_actions)
         total_actions = len(self.daily_actions)
         successful_actions = sum(1 for a in self.daily_actions if a["success"])

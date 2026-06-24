@@ -111,6 +111,9 @@ class VLLMService:
         self.model_name = (llm_config or {}).get("model", "meta-llama/Llama-3.2-3B")
         self.pool_prefix = (llm_config or {}).get("_resolved_actor_name_prefix")
         self.pool_namespace = (llm_config or {}).get("_resolved_actor_namespace")
+        self.experiment_identity = (llm_config or {}).get("_resolved_experiment_identity") or (
+            llm_config or {}
+        ).get("_experiment_identity")
 
         # Initialize optional attributes to None (will be set properly in _initialize if successful)
         self.llm = None
@@ -197,6 +200,7 @@ class VLLMService:
             "model": self.model_name,
             "pool_prefix": self.pool_prefix,
             "pool_namespace": self.pool_namespace,
+            "experiment_identity": self.experiment_identity,
         }
 
     def _cleanup_model_instance(self, model_instance, label: str) -> List[str]:

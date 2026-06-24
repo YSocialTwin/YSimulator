@@ -297,6 +297,7 @@ class Simulator:
             if completed_successfully:
                 # Notify server that this client has completed all planned activities
                 try:
+                    self.logger.info("Client natural completion reached")
                     ray.get(self.server.complete_client.remote(self.client_id))
                     self.logger.info("Notified server of completion")
                     self.logger.info(" Simulation complete. Server notified.")

@@ -15,7 +15,8 @@ Updated in Phase 3 to use LLM service layer.
 import logging
 import uuid
 from collections import Counter
-from typing import Dict, List, Optional, Tuple, Union
+import time
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 import ray
 
@@ -122,22 +123,97 @@ class BatchProcessor:
         # Direct actor handle (including Ray actors)
         return self.llm
 
+    def _resolve_vllm_batch_timeout(self, batch_size: int) -> float:
+        """Scale the wait budget with batch size while keeping a hard upper bound."""
+        if batch_size <= 0:
+            return LLM_BATCH_TIMEOUT_SECONDS
+        return min(
+            LLM_BATCH_TIMEOUT_SECONDS_MAX,
+            max(LLM_BATCH_TIMEOUT_SECONDS, float(batch_size) * 6.0),
+        )
+
     def _resolve_batch_future(
         self,
         batch_future,
         error_message: str,
         timeout_seconds: float = LLM_BATCH_TIMEOUT_SECONDS,
     ):
-        """Resolve a batched Ray future with a bounded wait."""
-        batch_results = self.retry_handler.retry_with_backoff(
-            lambda f: self.batch_handler.gather_with_timeout([f], timeout=timeout_seconds),
-            batch_future,
-            error_message=error_message,
-        )
-        result = batch_results[0] if batch_results else None
-        if result is None:
-            raise TimeoutError(f"{error_message} timed out after {timeout_seconds:.0f}s")
-        return result
+        """Resolve a batched Ray future with a bounded wait and no noisy retries."""
+        deadline = time.monotonic() + float(timeout_seconds)
+        poll_interval = min(5.0, max(1.0, float(timeout_seconds) / 10.0))
+
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise TimeoutError(f"{error_message} timed out after {timeout_seconds:.0f}s")
+
+            ready, _ = ray.wait(
+                [batch_future],
+                num_returns=1,
+                timeout=min(poll_interval, remaining),
+            )
+            if ready:
+                return ray.get(ready[0])
+
+    def _resolve_vllm_request_batches(
+        self,
+        batch_requests: List[Dict[str, Any]],
+        batch_call_fn: Callable[[List[Dict[str, Any]]], Any],
+        single_call_fn: Optional[Callable[[Dict[str, Any]], Any]],
+        error_message: str,
+        timeout_seconds: float,
+    ) -> List[Any]:
+        """Resolve a vLLM batch, splitting it recursively if the batch is slow or unstable."""
+        if not batch_requests:
+            return []
+
+        try:
+            batch_future = batch_call_fn(batch_requests)
+            results = self._resolve_batch_future(
+                batch_future, error_message, timeout_seconds=timeout_seconds
+            )
+            if isinstance(results, list):
+                return results
+            return [results]
+        except Exception as exc:
+            if len(batch_requests) == 1:
+                if single_call_fn is None:
+                    raise
+
+                self.logger.warning(
+                    f"{error_message} failed for a single request: {exc}. "
+                    "Retrying with the direct single-request path."
+                )
+                single_future = single_call_fn(batch_requests[0])
+                single_result = self._resolve_batch_future(
+                    single_future,
+                    f"{error_message} single-request fallback",
+                    timeout_seconds=LLM_BATCH_TIMEOUT_SECONDS_MAX,
+                )
+                if isinstance(single_result, list):
+                    return single_result
+                return [single_result]
+
+            midpoint = max(1, len(batch_requests) // 2)
+            self.logger.warning(
+                f"{error_message} failed for {len(batch_requests)} requests: {exc}. "
+                f"Retrying as two smaller batches ({midpoint} and {len(batch_requests) - midpoint})."
+            )
+            left = self._resolve_vllm_request_batches(
+                batch_requests[:midpoint],
+                batch_call_fn=batch_call_fn,
+                single_call_fn=single_call_fn,
+                error_message=error_message,
+                timeout_seconds=timeout_seconds,
+            )
+            right = self._resolve_vllm_request_batches(
+                batch_requests[midpoint:],
+                batch_call_fn=batch_call_fn,
+                single_call_fn=single_call_fn,
+                error_message=error_message,
+                timeout_seconds=timeout_seconds,
+            )
+            return left + right
 
     def _is_vllm_backend(self) -> bool:
         """
@@ -1018,19 +1094,25 @@ class BatchProcessor:
 
         # Get LLM actor for batch call (using YClient pattern)
         llm_actor = self._get_llm_actor()
+        timeout_seconds = self._resolve_vllm_batch_timeout(len(batch_requests))
 
-        # Call generate_comment_batch with retry logic
         self.logger.info(f"Calling generate_comment_batch for {len(batch_requests)} requests")
-        try:
-            batch_future = llm_actor.generate_comment_batch.remote(batch_requests)
-            results = self._resolve_batch_future(batch_future, "vLLM batch comment generation")
-        except Exception as e:
-            self.logger.error(
-                f"vLLM batch comment generation failed: {e}, falling back to standard gather"
-            )
-            return self._gather_reactions_standard(
-                batchable_comments, actions, calculate_opinion_updates_fn
-            )
+        self.logger.info(
+            f"Waiting up to {timeout_seconds:.0f}s for vLLM batch comment generation"
+        )
+        results = self._resolve_vllm_request_batches(
+            batch_requests=batch_requests,
+            batch_call_fn=lambda requests: llm_actor.generate_comment_batch.remote(requests),
+            single_call_fn=lambda request: llm_actor.generate_comment.remote(
+                request["cluster_id"],
+                request.get("post_content", ""),
+                request.get("agent_attrs"),
+                request.get("author_name", "Someone"),
+                request.get("thread_context"),
+            ),
+            error_message="vLLM batch comment generation",
+            timeout_seconds=timeout_seconds,
+        )
 
         # Process results
         # Collect texts for batch emotion extraction
@@ -1173,23 +1255,24 @@ class BatchProcessor:
 
         # Get LLM actor for batch call (using YClient pattern)
         llm_actor = self._get_llm_actor()
+        timeout_seconds = self._resolve_vllm_batch_timeout(len(batch_requests))
 
-        # For shares, we can use generate_comment_batch since the format is similar
-        # Or call a dedicated generate_share_commentary_batch if it exists
-        # For now, let's use comment batch as they have similar structure
         self.logger.info(f"Calling generate_comment_batch for {len(batch_requests)} share requests")
-        try:
-            batch_future = llm_actor.generate_comment_batch.remote(batch_requests)
-            results = self._resolve_batch_future(
-                batch_future, "vLLM batch share commentary generation"
-            )
-        except Exception as e:
-            self.logger.error(
-                f"vLLM batch share generation failed: {e}, falling back to standard gather"
-            )
-            return self._gather_reactions_standard(
-                batchable_shares, actions, calculate_opinion_updates_fn
-            )
+        self.logger.info(
+            f"Waiting up to {timeout_seconds:.0f}s for vLLM batch share commentary generation"
+        )
+        results = self._resolve_vllm_request_batches(
+            batch_requests=batch_requests,
+            batch_call_fn=lambda requests: llm_actor.generate_comment_batch.remote(requests),
+            single_call_fn=lambda request: llm_actor.generate_share_commentary.remote(
+                request["cluster_id"],
+                request.get("post_content", ""),
+                request.get("agent_attrs"),
+                request.get("author_name", "Someone"),
+            ),
+            error_message="vLLM batch share commentary generation",
+            timeout_seconds=timeout_seconds,
+        )
 
         # Process results
         # Collect texts for batch emotion extraction
@@ -1322,32 +1405,27 @@ class BatchProcessor:
 
         # Get LLM actor for batch call (using YClient pattern)
         llm_actor = self._get_llm_actor()
-        timeout_seconds = min(
-            LLM_BATCH_TIMEOUT_SECONDS_MAX,
-            max(LLM_BATCH_TIMEOUT_SECONDS, float(len(batch_requests)) * 6.0),
-        )
+        timeout_seconds = self._resolve_vllm_batch_timeout(len(batch_requests))
 
-        # Call generate_read_reaction_batch (supports agent_attrs including opinions)
         self.logger.info(
             f"Calling generate_read_reaction_batch for {len(batch_requests)} read requests"
         )
         self.logger.info(
             f"Waiting up to {timeout_seconds:.0f}s for vLLM batch read reaction generation"
         )
-        try:
-            batch_future = llm_actor.generate_read_reaction_batch.remote(batch_requests)
-            results = self._resolve_batch_future(
-                batch_future,
-                "vLLM batch read reaction generation",
-                timeout_seconds=timeout_seconds,
-            )
-        except Exception as e:
-            self.logger.error(
-                f"vLLM batch read generation failed: {e}, falling back to standard gather"
-            )
-            return self._gather_reactions_standard(
-                batchable_reads, actions, calculate_opinion_updates_fn
-            )
+        results = self._resolve_vllm_request_batches(
+            batch_requests=batch_requests,
+            batch_call_fn=lambda requests: llm_actor.generate_read_reaction_batch.remote(
+                requests
+            ),
+            single_call_fn=lambda request: llm_actor.generate_read_reaction.remote(
+                request["cluster_id"],
+                request.get("post_content", ""),
+                request.get("agent_attrs"),
+            ),
+            error_message="vLLM batch read reaction generation",
+            timeout_seconds=timeout_seconds,
+        )
 
         # Process results
         # Collect texts for batch emotion extraction (only for comments generated by reads)
@@ -1595,21 +1673,26 @@ class BatchProcessor:
 
         # Get LLM actor for batch call
         llm_actor = self._get_llm_actor()
+        timeout_seconds = self._resolve_vllm_batch_timeout(len(batch_requests))
 
         # Call generate_search_action_batch
         self.logger.info(
             f"Calling generate_search_action_batch for {len(batch_requests)} search requests"
         )
-        try:
-            batch_future = llm_actor.generate_search_action_batch.remote(batch_requests)
-            results = self._resolve_batch_future(batch_future, "vLLM batch search action decision")
-        except Exception as e:
-            self.logger.error(
-                f"vLLM batch search action failed: {e}, falling back to standard gather"
-            )
-            return self._gather_reactions_standard(
-                batchable_searches, actions, calculate_opinion_updates_fn
-            )
+        self.logger.info(
+            f"Waiting up to {timeout_seconds:.0f}s for vLLM batch search action decision"
+        )
+        results = self._resolve_vllm_request_batches(
+            batch_requests=batch_requests,
+            batch_call_fn=lambda requests: llm_actor.generate_search_action_batch.remote(
+                requests
+            ),
+            single_call_fn=lambda request: llm_actor.generate_search_action_batch.remote(
+                [request]
+            ),
+            error_message="vLLM batch search action decision",
+            timeout_seconds=timeout_seconds,
+        )
 
         # Process results - convert action decisions to ActionDTOs
         # Collect texts for batch emotion extraction (only for comments/shares)
