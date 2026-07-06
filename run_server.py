@@ -90,6 +90,34 @@ def build_server_simulation_config(config: dict) -> dict:
     return simulation_config
 
 
+def wait_for_orchestrator_ready(server_handle, logger=None, timeout_seconds: int = 180):
+    """Wait until the orchestrator actor responds to a ping before exposing readiness."""
+    deadline = time.monotonic() + max(1, timeout_seconds)
+    attempt = 0
+    last_error = None
+
+    while time.monotonic() < deadline:
+        attempt += 1
+        try:
+            ray.get(server_handle.is_ready.remote())
+            return True
+        except Exception as exc:
+            last_error = exc
+            if logger:
+                logger.debug(
+                    "Waiting for orchestrator readiness "
+                    f"(attempt {attempt}, remaining={max(0, deadline - time.monotonic()):.1f}s): {exc}"
+                )
+            time.sleep(1)
+
+    if logger:
+        logger.error(
+            "Orchestrator actor did not become ready before timeout",
+            extra={"extra_data": {"timeout_seconds": timeout_seconds, "error": str(last_error)}},
+        )
+    return False
+
+
 def setup_logging(
     config_path: Path, server_name: str, logging_config: dict = None
 ) -> logging.Logger:
@@ -432,6 +460,13 @@ if __name__ == "__main__":
         simulation_config=simulation_config,
     )
     actor_time = (time.time() - actor_start) * 1000
+
+    if not wait_for_orchestrator_ready(server, logger=logger, timeout_seconds=180):
+        logger.error(
+            "Orchestrator readiness probe failed; shutting down server startup",
+            extra={"extra_data": {"namespace": namespace, "config_dir": str(config_dir)}},
+        )
+        raise RuntimeError("Orchestrator failed readiness check")
 
     logger.info(
         "Orchestrator actor started", extra={"extra_data": {"execution_time_ms": actor_time}}

@@ -2203,7 +2203,12 @@ class OrchestratorServer:
                 )
         except Exception:
             pass
+
         return result
+
+    def is_ready(self) -> bool:
+        """Return True once the orchestrator has finished initializing."""
+        return True
 
     @log_server_request
     def memory_item_upsert(self, payload: Dict[str, Any], client_id: str = None) -> Dict[str, Any]:

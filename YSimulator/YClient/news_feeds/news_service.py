@@ -113,7 +113,7 @@ class NewsFeedService:
             "Orchestrator",
             namespace=self.ray_namespace,
             logger=self.logger,
-            wait_seconds=30.0,
+            wait_seconds=120.0,
             poll_interval=2.0,
             raise_on_timeout=False,
         )

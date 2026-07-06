@@ -298,7 +298,7 @@ class SimulationClient:
             "Orchestrator",
             namespace=self.ray_namespace,
             logger=self.logger,
-            wait_seconds=60.0,
+            wait_seconds=180.0,
             poll_interval=2.0,
             raise_on_timeout=True,
         )

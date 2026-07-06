@@ -1,5 +1,6 @@
 from pathlib import Path
 
+import run_server
 from YSimulator.YClient import ray_utils
 from run_client import resolve_client_namespace
 from run_server import build_isolated_namespace
@@ -59,3 +60,33 @@ def test_resolve_named_actor_retries_with_namespace(monkeypatch):
 
     assert resolved is actor
     assert calls[0] == ("Orchestrator", "social_sim_exp")
+
+
+def test_wait_for_orchestrator_ready_retries_until_ping(monkeypatch):
+    class ReadyProbe:
+        def __init__(self):
+            self.calls = 0
+
+        def remote(self):
+            self.calls += 1
+            return f"probe-{self.calls}"
+
+    class FakeServerHandle:
+        def __init__(self):
+            self.is_ready = ReadyProbe()
+
+    probe_calls = []
+
+    def fake_ray_get(value):
+        probe_calls.append(value)
+        if len(probe_calls) < 3:
+            raise ValueError("actor not ready yet")
+        return True
+
+    monkeypatch.setattr(run_server.ray, "get", fake_ray_get)
+    monkeypatch.setattr(run_server.time, "sleep", lambda *_: None)
+
+    assert run_server.wait_for_orchestrator_ready(
+        FakeServerHandle(), timeout_seconds=1
+    ) is True
+    assert len(probe_calls) == 3
