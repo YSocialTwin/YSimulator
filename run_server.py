@@ -246,7 +246,7 @@ if __name__ == "__main__":
     # Extract configuration
     server_name = config.get("server_name", "orchestrator_server")
     configured_namespace = config.get("namespace", "social_sim")
-    namespace = configured_namespace
+    namespace = build_isolated_namespace(configured_namespace, config_dir)
     address = config.get("address", "auto")
     port = config.get("port")
     min_to_start = config.get("min_to_start", 1)  # Minimum clients before simulation starts
@@ -383,30 +383,6 @@ if __name__ == "__main__":
     else:
         context = ray.init(**init_kwargs)
 
-    # If the target namespace already contains an Orchestrator actor, isolate this experiment
-    # into a stable config-dir-derived namespace while staying on the same Ray cluster.
-    connected_to_existing_cluster = reused_existing_cluster or (explicit_ray_url is not None)
-
-    if connected_to_existing_cluster:
-        try:
-            ray.get_actor("Orchestrator", namespace=namespace)
-            isolated_namespace = build_isolated_namespace(configured_namespace, config_dir)
-            if isolated_namespace != namespace:
-                logger.info(
-                    f"Namespace collision detected for '{namespace}'. "
-                    f"Switching this experiment to isolated namespace '{isolated_namespace}'."
-                )
-                ray.shutdown()
-                namespace = isolated_namespace
-                reconnect_kwargs = {"include_dashboard": False, "namespace": namespace}
-                if explicit_ray_url:
-                    reconnect_kwargs["address"] = explicit_ray_url
-                else:
-                    reconnect_kwargs["address"] = "auto"
-                context = ray.init(**reconnect_kwargs)
-        except ValueError:
-            pass
-
     ray_address = context.address_info["address"]
     init_time = (time.time() - init_start) * 1000
 
@@ -440,7 +416,12 @@ if __name__ == "__main__":
 
     # Start orchestrator actor
     actor_start = time.time()
-    server = OrchestratorServer.options(name="Orchestrator").remote(
+    try:
+        old_actor = ray.get_actor("Orchestrator", namespace=namespace)
+        ray.kill(old_actor, no_restart=True)
+    except ValueError:
+        pass
+    server = OrchestratorServer.options(name="Orchestrator", namespace=namespace).remote(
         db_config=db_config,
         config_path=str(config_dir),
         min_to_start=min_to_start,
