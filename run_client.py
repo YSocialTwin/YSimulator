@@ -195,6 +195,21 @@ def resolve_client_namespace(config_dir: Path, sim_config: dict) -> str:
     return sim_config.get("namespace", "social_sim")
 
 
+def wait_for_server_ready(config_dir: Path, timeout_seconds: int = 180) -> None:
+    """Wait until the server writes its readiness marker after the orchestrator actor starts."""
+    ready_file = config_dir / "ray_ready.temp"
+    deadline = time.monotonic() + max(1, timeout_seconds)
+    while time.monotonic() < deadline:
+        if ready_file.exists():
+            return
+        time.sleep(1)
+
+    raise FileNotFoundError(
+        f"ray_ready.temp file not found after {timeout_seconds} seconds: {ready_file}\n"
+        "The HPC server may not have fully initialized its Ray actor yet."
+    )
+
+
 def _llm_models_configured(sim_config: dict) -> bool:
     llm_cfg = sim_config.get("llm") or {}
     llm_v_cfg = sim_config.get("llm_v") or {}
@@ -429,6 +444,7 @@ if __name__ == "__main__":
 
     # Initialize with namespace from config, unless server provided an override for this experiment.
     namespace = resolve_client_namespace(config_dir, sim_config)
+    wait_for_server_ready(config_dir, timeout_seconds=180)
     connect_start = time.time()
     ray.init(address=ray_address, namespace=namespace, ignore_reinit_error=True)
     connect_time = (time.time() - connect_start) * 1000

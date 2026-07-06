@@ -406,6 +406,7 @@ if __name__ == "__main__":
     namespace_config_file = config_dir / "ray_namespace.temp"
     with open(namespace_config_file, "w") as f:
         f.write(namespace)
+    ready_file = config_dir / "ray_ready.temp"
 
     print(f"--- 🚀 Server Running on {ray_address} ---")
     print(f"--- 📝 Server Name: {server_name} ---")
@@ -435,6 +436,8 @@ if __name__ == "__main__":
     logger.info(
         "Orchestrator actor started", extra={"extra_data": {"execution_time_ms": actor_time}}
     )
+    with open(ready_file, "w") as f:
+        f.write(f"{namespace}\n")
 
     try:
         while True:
@@ -446,5 +449,7 @@ if __name__ == "__main__":
             ray_config_file.unlink()
         if namespace_config_file.exists():
             namespace_config_file.unlink()
+        if ready_file.exists():
+            ready_file.unlink()
         ray.shutdown()
         logger.info("Server shutdown complete")
