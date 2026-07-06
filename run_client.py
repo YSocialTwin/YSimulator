@@ -210,6 +210,33 @@ def wait_for_server_ready(config_dir: Path, timeout_seconds: int = 180) -> None:
     )
 
 
+def cleanup_stale_client_actor(runtime_client_id: str, namespace: str, logger: logging.Logger) -> None:
+    """Best-effort cleanup of an already-registered named client actor."""
+    try:
+        old_client = ray.get_actor(runtime_client_id, namespace=namespace)
+    except ValueError:
+        return
+    except Exception as exc:
+        logger.debug(f"Unable to inspect existing client actor '{runtime_client_id}': {exc}")
+        return
+
+    try:
+        ray.kill(old_client, no_restart=True)
+        logger.info(
+            "Killed stale client actor before startup",
+            extra={
+                "extra_data": {
+                    "client_actor_name": runtime_client_id,
+                    "namespace": namespace,
+                }
+            },
+        )
+    except Exception as exc:
+        logger.warning(
+            f"Failed to kill stale client actor '{runtime_client_id}' in namespace '{namespace}': {exc}"
+        )
+
+
 def _llm_models_configured(sim_config: dict) -> bool:
     llm_cfg = sim_config.get("llm") or {}
     llm_v_cfg = sim_config.get("llm_v") or {}
@@ -471,6 +498,8 @@ if __name__ == "__main__":
         "Creating LLM service and client actors",
         extra={"extra_data": {"num_agents": total_agents, "llm_model": sim_config["llm"]["model"]}},
     )
+
+    cleanup_stale_client_actor(runtime_client_id, namespace, logger)
 
     # Create LLM service with configuration
     # Support both Ollama (default) and vLLM backends

@@ -1,6 +1,7 @@
 from pathlib import Path
 
 import run_server
+import run_client
 from YSimulator.YClient import ray_utils
 from run_client import resolve_client_namespace
 from run_server import build_isolated_namespace
@@ -90,3 +91,27 @@ def test_wait_for_orchestrator_ready_retries_until_ping(monkeypatch):
         FakeServerHandle(), timeout_seconds=1
     ) is True
     assert len(probe_calls) == 3
+
+
+def test_cleanup_stale_client_actor_kills_existing_named_actor(monkeypatch):
+    class FakeActor:
+        pass
+
+    killed = []
+
+    def fake_get_actor(name, namespace=None):
+        assert name == "exp_1:client_1"
+        assert namespace == "social_sim_exp"
+        return FakeActor()
+
+    def fake_kill(actor, no_restart=True):
+        killed.append((actor, no_restart))
+
+    monkeypatch.setattr(run_client.ray, "get_actor", fake_get_actor)
+    monkeypatch.setattr(run_client.ray, "kill", fake_kill)
+
+    run_client.cleanup_stale_client_actor(
+        "exp_1:client_1", "social_sim_exp", run_client.logging.getLogger("test")
+    )
+
+    assert killed and killed[0][1] is True
