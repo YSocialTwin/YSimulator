@@ -24,6 +24,7 @@ from YSimulator.YClient.action_generators import ActionContext, ActionGeneratorF
 from YSimulator.YClient.classes.ray_models import ActionDTO, AgentProfile
 from YSimulator.YClient.llm_utils.llm_manager import _get_llm_actor_for_manager
 from YSimulator.YClient.memory_runtime import YSimulatorMemoryManager
+from YSimulator.YClient.ray_utils import resolve_named_actor
 from YSimulator.YClient.recsys import (
     CommonInterests,
     CommonUserInterests,
@@ -160,6 +161,7 @@ class SimulationClient:
         parent_logger=None,
         news_service_handle=None,
         agent_config_file_path: str = None,
+        ray_namespace: str = None,
     ):
         """
         Initialize the simulation client.
@@ -182,6 +184,7 @@ class SimulationClient:
         self.agent_config_file_path = (
             Path(agent_config_file_path) if agent_config_file_path else None
         )
+        self.ray_namespace = ray_namespace
 
         # Phase 3: Initialize LLM Manager for consistent LLM interface
         # Import here to avoid circular dependencies during initial setup
@@ -288,8 +291,17 @@ class SimulationClient:
         self._churned_agents_cache = set()
         self._churned_agents_cache_valid = False
 
-        # Connect to the Named Server Actor
-        self.server = ray.get_actor("Orchestrator")
+        # Connect to the named server actor.
+        # Batch startup can race with server registration, so retry before
+        # failing the whole client actor creation.
+        self.server = resolve_named_actor(
+            "Orchestrator",
+            namespace=self.ray_namespace,
+            logger=self.logger,
+            wait_seconds=60.0,
+            poll_interval=2.0,
+            raise_on_timeout=True,
+        )
 
         # Memory prompt construction stays client-side; persisted memory state is
         # owned by the server and accessed through remote methods only.

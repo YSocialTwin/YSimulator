@@ -1,5 +1,6 @@
 from pathlib import Path
 
+from YSimulator.YClient import ray_utils
 from run_client import resolve_client_namespace
 from run_server import build_isolated_namespace
 
@@ -34,3 +35,27 @@ def test_resolve_client_namespace_falls_back_to_simulation_config(tmp_path):
     namespace = resolve_client_namespace(config_dir, {"namespace": "social_sim"})
 
     assert namespace == "social_sim"
+
+
+def test_resolve_named_actor_retries_with_namespace(monkeypatch):
+    actor = object()
+    calls = []
+
+    def fake_get_actor(name, namespace=None):
+        calls.append((name, namespace))
+        if len(calls) < 3:
+            raise ValueError("Orchestrator not ready")
+        return actor
+
+    monkeypatch.setattr(ray_utils.ray, "get_actor", fake_get_actor)
+    monkeypatch.setattr(ray_utils.time, "sleep", lambda *_: None)
+
+    resolved = ray_utils.resolve_named_actor(
+        "Orchestrator",
+        namespace="social_sim_exp",
+        wait_seconds=1.0,
+        poll_interval=0.1,
+    )
+
+    assert resolved is actor
+    assert calls[0] == ("Orchestrator", "social_sim_exp")

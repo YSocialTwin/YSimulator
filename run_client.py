@@ -618,7 +618,7 @@ if __name__ == "__main__":
     # Always create the service - page agents will register their feeds dynamically
     news_start = time.time()
     news_feeds_config = sim_config.get("news_feeds", {"feeds": []})
-    news_service = NewsFeedService.remote(news_feeds_config, llm_service)
+    news_service = NewsFeedService.remote(news_feeds_config, llm_service, namespace)
     feed_count = len(news_feeds_config.get("feeds", []))
     if feed_count > 0:
         logger.info(
@@ -653,6 +653,7 @@ if __name__ == "__main__":
         logger,
         news_service,
         str(agent_config_file),
+        namespace,
     )
     client_time = (time.time() - client_start) * 1000
 

@@ -19,6 +19,8 @@ from typing import Any, Dict, List, Optional
 import feedparser
 import ray
 
+from YSimulator.YClient.ray_utils import resolve_named_actor
+
 
 def _get_llm_actor(llm_handle: Any) -> Any:
     """
@@ -59,7 +61,12 @@ class NewsFeedService:
         logger: Logger instance for this service
     """
 
-    def __init__(self, feeds_config: Optional[Dict] = None, llm_service=None):
+    def __init__(
+        self,
+        feeds_config: Optional[Dict] = None,
+        llm_service=None,
+        ray_namespace: Optional[str] = None,
+    ):
         """
         Initialize the NewsFeedService actor.
 
@@ -96,17 +103,20 @@ class NewsFeedService:
         self.feeds_config = feeds_config.get("feeds", [])
         self.cache_duration = feeds_config.get("cache_duration", 3600)
         self.llm_service = llm_service  # Store LLM service reference for image descriptions
+        self.ray_namespace = ray_namespace
 
         # Configuration for image processing
         self.max_images_per_article = 3  # Limit images per article for performance
 
         # Get server actor reference
-        try:
-            self.server = ray.get_actor("Orchestrator")
-        except ValueError:
-            # Orchestrator actor not found - this is expected if news service starts before server
-            self.logger.warning("Orchestrator actor not yet available, will retry later")
-            self.server = None
+        self.server = resolve_named_actor(
+            "Orchestrator",
+            namespace=self.ray_namespace,
+            logger=self.logger,
+            wait_seconds=30.0,
+            poll_interval=2.0,
+            raise_on_timeout=False,
+        )
 
         # Cache structure: {feed_url: {"articles": [...], "timestamp": int, "website_id": str}}
         self.cached_news = {}
