@@ -38,7 +38,6 @@ def _configure_model_cache_env():
 
     os.environ.setdefault("YSOCIAL_MODEL_CACHE_DIR", str(root))
     os.environ.setdefault("HF_HOME", str(hf_home))
-    os.environ.setdefault("TRANSFORMERS_CACHE", str(transformers_cache))
     os.environ.setdefault("HUGGINGFACE_HUB_CACHE", str(hub_cache))
     os.environ.setdefault("TORCH_HOME", str(torch_home))
 
