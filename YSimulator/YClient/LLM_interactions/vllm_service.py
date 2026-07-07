@@ -1227,9 +1227,7 @@ class VLLMService:
             logger.error(
                 f"[vLLM] cluster_id={cluster_id}, post_content_len={len(post_content) if post_content else 0}"
             )
-            # Return default fallback to maintain YClient pattern
-            logger.warning(f"[vLLM] Returning fallback reaction: IGNORE")
-            return "IGNORE"
+            raise RuntimeError(f"vLLM reaction decision failed: {e}") from e
 
     def decide_reaction_batch(self, requests: List[Dict[str, Any]]) -> List[str]:
         """
@@ -1529,8 +1527,7 @@ class VLLMService:
             logger.error(
                 f"[vLLM] cluster_id={cluster_id}, author={author_name}, post_content_len={len(post_content) if post_content else 0}"
             )
-            logger.warning("[vLLM] Returning fallback comment")
-            return "Interesting perspective!"
+            raise RuntimeError(f"vLLM comment generation failed: {e}") from e
 
     def generate_comment_batch(self, requests: List[Dict[str, Any]]) -> List[str]:
         """
@@ -1702,12 +1699,11 @@ class VLLMService:
             return commentary
         except KeyError as e:
             logger.error(f"[vLLM] Missing configuration key in generate_news_commentary: {e}")
-            return f"Check out this article: {article_title}"
+            raise RuntimeError(f"vLLM news commentary configuration error: {e}") from e
         except Exception as e:
             logger.error(f"[vLLM] Failed to generate news commentary: {e}")
             logger.error(f"[vLLM] Article title: {article.get('title', 'Unknown')[:50]}")
-            logger.warning("[vLLM] Returning fallback commentary")
-            return f"Check out this article: {article_title}"
+            raise RuntimeError(f"vLLM news commentary generation failed: {e}") from e
 
     def generate_share_commentary(
         self,
@@ -1737,8 +1733,7 @@ class VLLMService:
                     opinion_instruction = f" Your opinions on the discussed topics: {opinion_str}. Reflect your viewpoint in your commentary."
 
         if "generate_share_commentary" not in self.prompts_config:
-            logger.warning("generate_share_commentary prompt not found in config, using fallback")
-            return "Sharing this!"
+            raise KeyError("generate_share_commentary prompt not found in config")
 
         system_template = self.prompts_config["generate_share_commentary"]["system_template"]
         user_template = self.prompts_config["generate_share_commentary"]["user_template"]
@@ -1770,8 +1765,8 @@ class VLLMService:
                 commentary = commentary[:197] + "..."
 
             return commentary
-        except Exception:
-            return "Sharing this!"
+        except Exception as exc:
+            raise RuntimeError(f"vLLM share commentary generation failed: {exc}") from exc
 
     def annotate_stress_reward_text(
         self,
@@ -1861,8 +1856,8 @@ class VLLMService:
                 return "IGNORE"
 
             return "LIKE"  # Default fallback
-        except Exception:
-            return "LIKE"
+        except Exception as exc:
+            raise RuntimeError(f"vLLM read reaction generation failed: {exc}") from exc
 
     def generate_follow_decision(self, cluster_id: int, candidate_users: list) -> str:
         """Decide whether to follow one of the suggested users."""
@@ -1905,10 +1900,7 @@ class VLLMService:
         user_template = search_action_config.get("user_template")
 
         if system_template is None or user_template is None:
-            logger.warning(
-                "decide_search_action prompts not configured in llm_prompts.json, using default fallback"
-            )
-            return "LIKE"
+            raise KeyError("decide_search_action prompts not configured in llm_prompts.json")
 
         system_msg = system_template.format(persona=persona)
         user_msg = user_template.format(post_content=post_content)
@@ -1940,8 +1932,8 @@ class VLLMService:
                 return "IGNORE"
 
             return "LIKE"
-        except Exception:
-            return "LIKE"
+        except Exception as exc:
+            raise RuntimeError(f"vLLM search action generation failed: {exc}") from exc
 
     def generate_secondary_follow_decision(
         self, cluster_id: int, post_content: str, is_currently_following: bool

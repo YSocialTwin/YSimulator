@@ -45,6 +45,7 @@ from YSimulator.YClient.recsys.FollowRecSysRay import (
     RandomFollowRecSys,
 )
 from YSimulator.YClient.stress_reward import StressRewardSystem, deep_update
+from YSimulator.YClient.text_support.cleaning import strip_invalid_mentions
 from YSimulator.YClient.text_support.text_annotator import annotate_text
 
 # Constants
@@ -302,6 +303,7 @@ class SimulationClient:
             poll_interval=2.0,
             raise_on_timeout=True,
         )
+        self._username_validity_cache = {}
 
         # Memory prompt construction stays client-side; persisted memory state is
         # owned by the server and accessed through remote methods only.
@@ -1311,6 +1313,7 @@ class SimulationClient:
             action: ActionDTO instance with content to annotate
         """
         if action.content:
+            action.content = self._strip_invalid_mentions(action.content)
             annotations = annotate_text(
                 action.content,
                 enable_sentiment=self.enable_sentiment,
@@ -1323,6 +1326,26 @@ class SimulationClient:
             self.logger.info(
                 f"Annotated action content: has_sentiment={bool( annotations.get('sentiment'))}, has_toxicity={bool( annotations.get('toxicity'))}, has_emotions={bool( annotations.get('emotions'))}, hashtags={len( annotations.get( 'hashtags', []))}, mentions={len( annotations.get( 'mentions', []))}"
             )
+
+    def _is_valid_username(self, username: str) -> bool:
+        """Check username validity through the server and cache the result."""
+        if not username:
+            return False
+        cache_key = username.lower()
+        if cache_key in self._username_validity_cache:
+            return self._username_validity_cache[cache_key]
+        try:
+            user = ray.get(self.server.get_user_by_username.remote(username, client_id=self.client_id))
+            is_valid = bool(user)
+        except Exception as exc:
+            self.logger.warning(f"Username validation failed for @{username}: {exc}")
+            is_valid = False
+        self._username_validity_cache[cache_key] = is_valid
+        return is_valid
+
+    def _strip_invalid_mentions(self, text: str) -> str:
+        """Remove mentions that do not resolve to a real user."""
+        return strip_invalid_mentions(text, self._is_valid_username)
 
     def _dispatch_action_with_generator(
         self, action_type: str, agent: AgentProfile, agent_type: str, target=None

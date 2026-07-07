@@ -68,7 +68,7 @@ class BatchHandler:
                     f"Ray actor error gathering futures: {type(e).__name__}: {str(e)}"
                 )
                 self.logger.error(f"Full traceback:\n{traceback.format_exc()}")
-                raise
+                return [None] * len(futures)
             if e.__class__.__name__ == "GetTimeoutError":
                 # Timeout (shouldn't happen in this method but handle it)
                 self.logger.error(f"Timeout gathering futures: {type(e).__name__}: {str(e)}")
@@ -216,7 +216,7 @@ class BatchHandler:
                     f"Ray actor error gathering futures with timeout: {type(e).__name__}: {str(e)}"
                 )
                 self.logger.error(f"Full traceback:\n{traceback.format_exc()}")
-                raise
+                return [None] * len(futures)
             if e.__class__.__name__ == "GetTimeoutError":
                 self.logger.warning(f"Timeout gathering futures after {timeout}s: {str(e)}")
                 # Try to get what we can

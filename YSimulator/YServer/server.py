@@ -2176,6 +2176,22 @@ class OrchestratorServer:
         return self.user_service.get_user(user_id)
 
     @log_server_request
+    def get_user_by_username(
+        self, username: str, client_id: str = None
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Get a user by username.
+
+        Args:
+            username: Username to look up
+            client_id: Optional client identifier for logging purposes
+
+        Returns:
+            Dictionary with user data or None if not found
+        """
+        return self.user_service.get_user_by_username(username)
+
+    @log_server_request
     def memory_reset(self, run_id: str, client_id: str = None) -> Dict[str, Any]:
         """Clear server-owned memory state for a run_id."""
         return self.memory_service.reset(run_id)

@@ -45,3 +45,37 @@ def extract_components(text: str, c_type: str = "hashtags") -> list:
     # Find all matches in the input text
     components = pattern.findall(text)
     return components
+
+
+def strip_invalid_mentions(text: str, is_valid_username_fn) -> str:
+    """
+    Remove @mentions that do not resolve to a real user.
+
+    Args:
+        text: Input text containing mentions
+        is_valid_username_fn: Callable that returns True when a username exists
+
+    Returns:
+        Text with invalid mentions removed and spacing normalized
+    """
+    if not text:
+        return text
+
+    mention_pattern = re.compile(r"(?<!\w)@(\w+)")
+
+    def _replace(match: re.Match) -> str:
+        username = match.group(1)
+        try:
+            if is_valid_username_fn(username):
+                return match.group(0)
+        except Exception:
+            # If validation fails, keep the mention to avoid destroying content.
+            return match.group(0)
+        return ""
+
+    cleaned = mention_pattern.sub(_replace, text)
+    cleaned = re.sub(r"\s{2,}", " ", cleaned)
+    cleaned = re.sub(r"\s+([,.;:!?])", r"\1", cleaned)
+    cleaned = re.sub(r"\s+\)", ")", cleaned)
+    cleaned = re.sub(r"\(\s+", "(", cleaned)
+    return cleaned.strip()

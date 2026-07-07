@@ -29,6 +29,7 @@ from YSimulator.YClient.llm_utils import (
     RetryHandler,
 )
 from YSimulator.YClient.text_support.text_annotator import annotate_text
+from YSimulator.YClient.text_support.cleaning import strip_invalid_mentions
 
 # Constants
 REACTION_TYPES = ["LIKE", "LOVE", "LAUGH", "ANGRY", "SAD", "IGNORE"]
@@ -41,8 +42,12 @@ PROMPT_TOKENS_POST = 100  # Estimated prompt tokens for post generation
 PROMPT_TOKENS_COMMENT = 120  # Estimated prompt tokens for comment/reaction generation
 PROMPT_TOKENS_FOLLOW = 60  # Estimated prompt tokens for follow decision
 REACTION_OUTPUT_TOKENS = 5  # Simple reaction outputs (LIKE, LOVE, etc.)
-LLM_BATCH_TIMEOUT_SECONDS = 45.0
-LLM_BATCH_TIMEOUT_SECONDS_MAX = 180.0
+LLM_BATCH_TIMEOUT_SECONDS = 60.0
+LLM_BATCH_TIMEOUT_SECONDS_MAX = 300.0
+VLLM_BATCH_MAX_CHUNK_SIZE = 8
+VLLM_BATCH_RETRY_ATTEMPTS = 3
+VLLM_BATCH_RETRY_INITIAL_DELAY = 1.5
+VLLM_BATCH_RETRY_MAX_DELAY = 12.0
 
 
 class BatchProcessor:
@@ -100,6 +105,7 @@ class BatchProcessor:
         )  # Add retry logic
         self.response_parser = ResponseParser(logger=logger)
         self.cost_tracker = cost_tracker  # Optional cost tracking
+        self._username_validity_cache = {}
 
     def _get_llm_actor(self, agent_id: Optional[str] = None):
         """
@@ -116,6 +122,10 @@ class BatchProcessor:
         """
         # Check class name to avoid issues with Mock objects (YClient pattern)
         if self.llm.__class__.__name__ in ("LLMLoadBalancer", "LLMActorPool"):
+            if hasattr(self.llm, "get_live_actor_for_agent"):
+                if agent_id is None:
+                    return self.llm.get_live_actor_for_agent("batch")
+                return self.llm.get_live_actor_for_agent(agent_id)
             if agent_id is None:
                 # Fallback to first actor if no agent_id provided
                 return self.llm.get_all_actors()[0]
@@ -123,14 +133,43 @@ class BatchProcessor:
         # Direct actor handle (including Ray actors)
         return self.llm
 
+    def _is_valid_username(self, username: str) -> bool:
+        """Check username validity through the server and cache the result."""
+        if not username:
+            return False
+        cache_key = username.lower()
+        if cache_key in self._username_validity_cache:
+            return self._username_validity_cache[cache_key]
+        try:
+            user = ray.get(self.server.get_user_by_username.remote(username, client_id=self.client_id))
+            is_valid = bool(user)
+        except Exception as exc:
+            self.logger.warning(f"Username validation failed for @{username}: {exc}")
+            is_valid = False
+        self._username_validity_cache[cache_key] = is_valid
+        return is_valid
+
+    def _strip_invalid_mentions(self, text: str) -> str:
+        """Remove mentions that do not resolve to a real user."""
+        return strip_invalid_mentions(text, self._is_valid_username)
+
     def _resolve_vllm_batch_timeout(self, batch_size: int) -> float:
         """Scale the wait budget with batch size while keeping a hard upper bound."""
         if batch_size <= 0:
             return LLM_BATCH_TIMEOUT_SECONDS
         return min(
             LLM_BATCH_TIMEOUT_SECONDS_MAX,
-            max(LLM_BATCH_TIMEOUT_SECONDS, float(batch_size) * 6.0),
+            max(LLM_BATCH_TIMEOUT_SECONDS, float(batch_size) * 8.0),
         )
+
+    @staticmethod
+    def _chunk_requests(
+        requests: List[Dict[str, Any]], max_chunk_size: int
+    ) -> List[List[Dict[str, Any]]]:
+        """Split requests into smaller chunks to avoid oversized vLLM batches."""
+        if max_chunk_size <= 0 or len(requests) <= max_chunk_size:
+            return [requests]
+        return [requests[i : i + max_chunk_size] for i in range(0, len(requests), max_chunk_size)]
 
     def _resolve_batch_future(
         self,
@@ -162,58 +201,68 @@ class BatchProcessor:
         single_call_fn: Optional[Callable[[Dict[str, Any]], Any]],
         error_message: str,
         timeout_seconds: float,
+        max_chunk_size: int = VLLM_BATCH_MAX_CHUNK_SIZE,
     ) -> List[Any]:
-        """Resolve a vLLM batch, splitting it recursively if the batch is slow or unstable."""
+        """Resolve vLLM requests in bounded chunks with retry and backoff."""
         if not batch_requests:
             return []
 
-        try:
-            batch_future = batch_call_fn(batch_requests)
-            results = self._resolve_batch_future(
-                batch_future, error_message, timeout_seconds=timeout_seconds
-            )
-            if isinstance(results, list):
-                return results
-            return [results]
-        except Exception as exc:
-            if len(batch_requests) == 1:
-                if single_call_fn is None:
+        chunks = self._chunk_requests(batch_requests, max_chunk_size)
+        results: List[Any] = []
+        total_chunks = len(chunks)
+        for chunk_index, chunk in enumerate(chunks, 1):
+            chunk_timeout = self._resolve_vllm_batch_timeout(len(chunk))
+            delay = VLLM_BATCH_RETRY_INITIAL_DELAY
+
+            for attempt in range(1, VLLM_BATCH_RETRY_ATTEMPTS + 1):
+                try:
+                    self.logger.info(
+                        f"{error_message}: processing chunk {chunk_index}/{total_chunks} "
+                        f"with {len(chunk)} request(s), attempt {attempt}/{VLLM_BATCH_RETRY_ATTEMPTS}, "
+                        f"timeout={chunk_timeout:.0f}s"
+                    )
+                    batch_future = batch_call_fn(chunk)
+                    chunk_results = self._resolve_batch_future(
+                        batch_future, error_message, timeout_seconds=chunk_timeout
+                    )
+                    if not isinstance(chunk_results, list):
+                        chunk_results = [chunk_results]
+                    results.extend(chunk_results)
+                    break
+                except Exception as exc:
+                    if len(chunk) == 1 and single_call_fn is not None:
+                        self.logger.warning(
+                            f"{error_message} failed for a single request: {exc}. "
+                            "Retrying with the direct single-request path."
+                        )
+                        single_future = single_call_fn(chunk[0])
+                        single_result = self._resolve_batch_future(
+                            single_future,
+                            f"{error_message} single-request fallback",
+                            timeout_seconds=LLM_BATCH_TIMEOUT_SECONDS_MAX,
+                        )
+                        if isinstance(single_result, list):
+                            results.extend(single_result)
+                        else:
+                            results.append(single_result)
+                        break
+
+                    if attempt < VLLM_BATCH_RETRY_ATTEMPTS:
+                        self.logger.warning(
+                            f"{error_message} failed for chunk {chunk_index}/{total_chunks} "
+                            f"on attempt {attempt}: {exc}. Retrying in {delay:.1f}s"
+                        )
+                        time.sleep(delay)
+                        delay = min(delay * 2.0, VLLM_BATCH_RETRY_MAX_DELAY)
+                        continue
+
+                    self.logger.error(
+                        f"{error_message} failed for chunk {chunk_index}/{total_chunks} "
+                        f"after {VLLM_BATCH_RETRY_ATTEMPTS} attempts: {exc}"
+                    )
                     raise
 
-                self.logger.warning(
-                    f"{error_message} failed for a single request: {exc}. "
-                    "Retrying with the direct single-request path."
-                )
-                single_future = single_call_fn(batch_requests[0])
-                single_result = self._resolve_batch_future(
-                    single_future,
-                    f"{error_message} single-request fallback",
-                    timeout_seconds=LLM_BATCH_TIMEOUT_SECONDS_MAX,
-                )
-                if isinstance(single_result, list):
-                    return single_result
-                return [single_result]
-
-            midpoint = max(1, len(batch_requests) // 2)
-            self.logger.warning(
-                f"{error_message} failed for {len(batch_requests)} requests: {exc}. "
-                f"Retrying as two smaller batches ({midpoint} and {len(batch_requests) - midpoint})."
-            )
-            left = self._resolve_vllm_request_batches(
-                batch_requests[:midpoint],
-                batch_call_fn=batch_call_fn,
-                single_call_fn=single_call_fn,
-                error_message=error_message,
-                timeout_seconds=timeout_seconds,
-            )
-            right = self._resolve_vllm_request_batches(
-                batch_requests[midpoint:],
-                batch_call_fn=batch_call_fn,
-                single_call_fn=single_call_fn,
-                error_message=error_message,
-                timeout_seconds=timeout_seconds,
-            )
-            return left + right
+        return results
 
     def _is_vllm_backend(self) -> bool:
         """
@@ -321,6 +370,7 @@ class BatchProcessor:
                 output_tokens = len(res_txt) // CHARS_PER_TOKEN
                 self.cost_tracker.record_call("generate_post", PROMPT_TOKENS_POST, output_tokens)
 
+            res_txt = self._strip_invalid_mentions(res_txt)
             # Check if this is an image post (has 8 elements with image_id at position 7)
             if len(pending_item) == 8:
                 # Image post: (agent_id, cluster_id, future, None, day, slot, agent_attrs, image_id)
@@ -552,6 +602,7 @@ class BatchProcessor:
 
             batch_requests.append(
                 {
+                    "agent_id": agent_id,
                     "cluster_id": cluster_id,
                     "day": item_day,
                     "slot": item_slot,
@@ -560,18 +611,24 @@ class BatchProcessor:
                 }
             )
 
-        # Get LLM actor for batch call (using YClient pattern)
-        llm_actor = self._get_llm_actor()
-
         # Call generate_post_batch with retry logic
         self.logger.info(f"Calling generate_post_batch for {len(batch_requests)} requests")
-        try:
-            batch_future = llm_actor.generate_post_batch.remote(batch_requests)
-            results = self._resolve_batch_future(batch_future, "vLLM batch post generation")
-        except Exception as e:
-            self.logger.error(f"vLLM batch generation failed: {e}, falling back to standard gather")
-            self._gather_posts_standard(batchable_posts, actions)
-            return
+        results = self._resolve_vllm_request_batches(
+            batch_requests=batch_requests,
+            batch_call_fn=lambda requests: self._get_llm_actor(
+                requests[0].get("agent_id")
+            ).generate_post_batch.remote(requests),
+            single_call_fn=lambda request: self._get_llm_actor(
+                request.get("agent_id")
+            ).generate_post.remote(
+                request["cluster_id"],
+                request["day"],
+                request["slot"],
+                request.get("agent_attrs"),
+            ),
+            error_message="vLLM batch post generation",
+            timeout_seconds=self._resolve_vllm_batch_timeout(len(batch_requests)),
+        )
 
         # Process results
         # Collect texts for batch emotion extraction
@@ -604,6 +661,7 @@ class BatchProcessor:
                 output_tokens = len(res_txt) // CHARS_PER_TOKEN
                 self.cost_tracker.record_call("generate_post", PROMPT_TOKENS_POST, output_tokens)
 
+            res_txt = self._strip_invalid_mentions(res_txt)
             # Create action (same logic as standard gather)
             action = ActionDTO(agent_id, cluster_id, "POST", content=res_txt)
             if image_id:
@@ -809,6 +867,8 @@ class BatchProcessor:
                     )
                     continue
 
+                res_act = self._strip_invalid_mentions(res_act)
+
                 # This is comment/share commentary text from LLM
                 # Determine action type: SHARE (with commentary) or COMMENT
                 determined_action_type = action_type_override if action_type_override else "COMMENT"
@@ -898,6 +958,7 @@ class BatchProcessor:
                                 cid, post_content, agent_attrs, author_name
                             )
                         )
+                        share_content = self._strip_invalid_mentions(share_content)
                     except Exception as e:
                         # Fallback to generic content if LLM call fails
                         self.logger.warning(
@@ -1093,7 +1154,6 @@ class BatchProcessor:
             )
 
         # Get LLM actor for batch call (using YClient pattern)
-        llm_actor = self._get_llm_actor()
         timeout_seconds = self._resolve_vllm_batch_timeout(len(batch_requests))
 
         self.logger.info(f"Calling generate_comment_batch for {len(batch_requests)} requests")
@@ -1102,8 +1162,12 @@ class BatchProcessor:
         )
         results = self._resolve_vllm_request_batches(
             batch_requests=batch_requests,
-            batch_call_fn=lambda requests: llm_actor.generate_comment_batch.remote(requests),
-            single_call_fn=lambda request: llm_actor.generate_comment.remote(
+            batch_call_fn=lambda requests: self._get_llm_actor(
+                batchable_comments[0][0]
+            ).generate_comment_batch.remote(requests),
+            single_call_fn=lambda request: self._get_llm_actor(
+                batchable_comments[0][0]
+            ).generate_comment.remote(
                 request["cluster_id"],
                 request.get("post_content", ""),
                 request.get("agent_attrs"),
@@ -1142,6 +1206,7 @@ class BatchProcessor:
                     "generate_comment", PROMPT_TOKENS_COMMENT, output_tokens
                 )
 
+            comment_text = self._strip_invalid_mentions(comment_text)
             # Annotate the comment text (without emotions for now if vLLM)
             annotations = annotate_text(
                 comment_text,
@@ -1254,7 +1319,6 @@ class BatchProcessor:
             )
 
         # Get LLM actor for batch call (using YClient pattern)
-        llm_actor = self._get_llm_actor()
         timeout_seconds = self._resolve_vllm_batch_timeout(len(batch_requests))
 
         self.logger.info(f"Calling generate_comment_batch for {len(batch_requests)} share requests")
@@ -1263,8 +1327,12 @@ class BatchProcessor:
         )
         results = self._resolve_vllm_request_batches(
             batch_requests=batch_requests,
-            batch_call_fn=lambda requests: llm_actor.generate_comment_batch.remote(requests),
-            single_call_fn=lambda request: llm_actor.generate_share_commentary.remote(
+            batch_call_fn=lambda requests: self._get_llm_actor(
+                batchable_shares[0][0]
+            ).generate_comment_batch.remote(requests),
+            single_call_fn=lambda request: self._get_llm_actor(
+                batchable_shares[0][0]
+            ).generate_share_commentary.remote(
                 request["cluster_id"],
                 request.get("post_content", ""),
                 request.get("agent_attrs"),
@@ -1302,6 +1370,7 @@ class BatchProcessor:
                     "generate_share_commentary", PROMPT_TOKENS_COMMENT, output_tokens
                 )
 
+            share_text = self._strip_invalid_mentions(share_text)
             # Annotate the share commentary text (without emotions for now if vLLM)
             annotations = annotate_text(
                 share_text,
@@ -1404,7 +1473,6 @@ class BatchProcessor:
             )
 
         # Get LLM actor for batch call (using YClient pattern)
-        llm_actor = self._get_llm_actor()
         timeout_seconds = self._resolve_vllm_batch_timeout(len(batch_requests))
 
         self.logger.info(
@@ -1415,10 +1483,12 @@ class BatchProcessor:
         )
         results = self._resolve_vllm_request_batches(
             batch_requests=batch_requests,
-            batch_call_fn=lambda requests: llm_actor.generate_read_reaction_batch.remote(
-                requests
-            ),
-            single_call_fn=lambda request: llm_actor.generate_read_reaction.remote(
+            batch_call_fn=lambda requests: self._get_llm_actor(
+                batchable_reads[0][0]
+            ).generate_read_reaction_batch.remote(requests),
+            single_call_fn=lambda request: self._get_llm_actor(
+                batchable_reads[0][0]
+            ).generate_read_reaction.remote(
                 request["cluster_id"],
                 request.get("post_content", ""),
                 request.get("agent_attrs"),
@@ -1460,6 +1530,8 @@ class BatchProcessor:
             reaction_type = self.response_parser.parse_text_response(
                 reaction_type, default="IGNORE"
             )
+            if reaction_type and reaction_type.upper() not in REACTION_TYPES and reaction_type.upper() not in REPORT_TYPES and reaction_type.upper() != "SHARE":
+                reaction_type = self._strip_invalid_mentions(reaction_type)
 
             # Handle different reaction types
             if reaction_type.upper() in REPORT_TYPES:
@@ -1480,6 +1552,8 @@ class BatchProcessor:
                 self.logger.debug(
                     f"[READ] LLM generated comment for agent {agent_id}: '{reaction_type[:50]}...'"
                 )
+
+                reaction_type = self._strip_invalid_mentions(reaction_type)
 
                 # Annotate the comment text (without emotions for now if vLLM)
                 annotations = annotate_text(
@@ -1672,7 +1746,6 @@ class BatchProcessor:
             )
 
         # Get LLM actor for batch call
-        llm_actor = self._get_llm_actor()
         timeout_seconds = self._resolve_vllm_batch_timeout(len(batch_requests))
 
         # Call generate_search_action_batch
@@ -1684,12 +1757,12 @@ class BatchProcessor:
         )
         results = self._resolve_vllm_request_batches(
             batch_requests=batch_requests,
-            batch_call_fn=lambda requests: llm_actor.generate_search_action_batch.remote(
-                requests
-            ),
-            single_call_fn=lambda request: llm_actor.generate_search_action_batch.remote(
-                [request]
-            ),
+            batch_call_fn=lambda requests: self._get_llm_actor(
+                batchable_searches[0][0]
+            ).generate_search_action_batch.remote(requests),
+            single_call_fn=lambda request: self._get_llm_actor(
+                batchable_searches[0][0]
+            ).generate_search_action_batch.remote([request]),
             error_message="vLLM batch search action decision",
             timeout_seconds=timeout_seconds,
         )
@@ -1716,6 +1789,7 @@ class BatchProcessor:
                 # Generate comment using rule-based or simple approach
                 # For search, we can use a simple comment template
                 comment_text = f"Interesting post about {metadata.get('agent_attrs', {}).get('topic', 'this topic')}."
+                comment_text = self._strip_invalid_mentions(comment_text)
 
                 # Annotate the comment
                 annotations = annotate_text(
@@ -1733,6 +1807,8 @@ class BatchProcessor:
                     action_indices_for_emotions.append(len(actions))
                 else:
                     annotations["emotions"] = None
+
+                comment_text = self._strip_invalid_mentions(comment_text)
 
                 # Store for batch opinion processing
                 if post_data:
@@ -1771,6 +1847,7 @@ class BatchProcessor:
             elif action_decision == "SHARE":
                 # Generate share with simple commentary
                 share_text = f"Check out this post about {metadata.get('agent_attrs', {}).get('topic', 'this')}!"
+                share_text = self._strip_invalid_mentions(share_text)
 
                 # Annotate the share commentary
                 annotations = annotate_text(
@@ -1788,6 +1865,8 @@ class BatchProcessor:
                     action_indices_for_emotions.append(len(actions))
                 else:
                     annotations["emotions"] = None
+
+                share_text = self._strip_invalid_mentions(share_text)
 
                 # Store for batch opinion processing
                 if post_data:
