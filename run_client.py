@@ -274,6 +274,14 @@ def _release_llm_pool_lease_once(lease_state: dict, logger: logging.Logger) -> N
         logger.warning(f"Failed to release LLM pool lease cleanly: {cleanup_error}")
 
 
+def _is_intentional_actor_termination(error: Exception) -> bool:
+    """Return True when Ray reports a deliberate actor kill rather than a crash."""
+    actor_error_type = getattr(ray.exceptions, "ActorDiedError", None)
+    if isinstance(actor_error_type, type) and isinstance(error, actor_error_type):
+        return "killed by `ray.kill`" in str(error)
+    return error.__class__.__name__ == "ActorDiedError" and "killed by `ray.kill`" in str(error)
+
+
 if __name__ == "__main__":
     _configure_model_cache_env()
     # Parse command line arguments
@@ -719,23 +727,28 @@ if __name__ == "__main__":
         logger.info("Client stopping by user request")
         print("Client stopping...")
     except Exception as e:
-        # Capture full exception details including traceback
-        error_type = type(e).__name__
-        error_msg = str(e)
-        full_traceback = traceback.format_exc()
-        
-        # Log complete error message (console handler will truncate if needed)
-        logger.error(
-            f"Client error: {error_type}: {error_msg}",
-            extra={
-                "extra_data": {
-                    "error_type": error_type,
-                    "error_message": error_msg,
-                    "traceback": full_traceback,
-                }
-            },
-        )
-        raise
+        if _is_intentional_actor_termination(e):
+            logger.info(
+                "Client actor terminated cleanly after explicit Ray kill; skipping traceback"
+            )
+        else:
+            # Capture full exception details including traceback
+            error_type = type(e).__name__
+            error_msg = str(e)
+            full_traceback = traceback.format_exc()
+
+            # Log complete error message (console handler will truncate if needed)
+            logger.error(
+                f"Client error: {error_type}: {error_msg}",
+                extra={
+                    "extra_data": {
+                        "error_type": error_type,
+                        "error_message": error_msg,
+                        "traceback": full_traceback,
+                    }
+                },
+            )
+            raise
     finally:
         _release_llm_pool_lease_once(lease_state, logger)
         logger.info("Client shutdown complete")

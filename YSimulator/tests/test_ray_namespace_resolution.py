@@ -115,3 +115,17 @@ def test_cleanup_stale_client_actor_kills_existing_named_actor(monkeypatch):
     )
 
     assert killed and killed[0][1] is True
+
+
+def test_intentional_actor_termination_detection(monkeypatch):
+    class FakeActorDiedError(Exception):
+        pass
+
+    monkeypatch.setattr(run_client.ray.exceptions, "ActorDiedError", FakeActorDiedError, raising=False)
+
+    assert run_client._is_intentional_actor_termination(
+        FakeActorDiedError("The actor is dead because it was killed by `ray.kill`.")
+    )
+    assert not run_client._is_intentional_actor_termination(
+        FakeActorDiedError("The actor died unexpectedly before finishing this task.")
+    )

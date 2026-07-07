@@ -240,12 +240,14 @@ class TestFollowRecSysRayClient:
         assert recsys.n_neighbors == 15
         assert recsys.leaning_bias == 2
 
-    @patch("YSimulator.YClient.recsys.FollowRecSysRay.ray.get")
-    def test_follow_recsys_get_suggestions_success(self, mock_ray_get):
+    def test_follow_recsys_get_suggestions_success(self, monkeypatch):
         """Test successful follow suggestions fetching."""
-        from YSimulator.YClient.recsys.FollowRecSysRay import FollowRecSysRay
+        import importlib
 
-        mock_ray_get.return_value = ["user-1", "user-2", "user-3"]
+        recsys_module = importlib.import_module("YSimulator.YClient.recsys.FollowRecSysRay")
+        FollowRecSysRay = recsys_module.FollowRecSysRay
+
+        monkeypatch.setattr(recsys_module.ray, "get", Mock(return_value=["user-1", "user-2", "user-3"]))
 
         mock_server = Mock()
         mock_server.get_follow_suggestions = Mock()
@@ -257,12 +259,14 @@ class TestFollowRecSysRayClient:
         assert result == ["user-1", "user-2", "user-3"]
         mock_server.get_follow_suggestions.remote.assert_called_once()
 
-    @patch("YSimulator.YClient.recsys.FollowRecSysRay.ray.get")
-    def test_follow_recsys_get_suggestions_empty(self, mock_ray_get):
+    def test_follow_recsys_get_suggestions_empty(self, monkeypatch):
         """Test follow suggestions when server returns None."""
-        from YSimulator.YClient.recsys.FollowRecSysRay import FollowRecSysRay
+        import importlib
 
-        mock_ray_get.return_value = None
+        recsys_module = importlib.import_module("YSimulator.YClient.recsys.FollowRecSysRay")
+        FollowRecSysRay = recsys_module.FollowRecSysRay
+
+        monkeypatch.setattr(recsys_module.ray, "get", Mock(return_value=None))
         mock_server = Mock()
         mock_server.get_follow_suggestions = Mock()
         mock_server.get_follow_suggestions.remote = Mock()
@@ -272,12 +276,14 @@ class TestFollowRecSysRayClient:
 
         assert result == []
 
-    @patch("YSimulator.YClient.recsys.FollowRecSysRay.ray.get")
-    def test_follow_recsys_get_suggestions_error(self, mock_ray_get):
+    def test_follow_recsys_get_suggestions_error(self, monkeypatch):
         """Test error handling in follow suggestions fetching."""
-        from YSimulator.YClient.recsys.FollowRecSysRay import FollowRecSysRay
+        import importlib
 
-        mock_ray_get.side_effect = Exception("Database error")
+        recsys_module = importlib.import_module("YSimulator.YClient.recsys.FollowRecSysRay")
+        FollowRecSysRay = recsys_module.FollowRecSysRay
+
+        monkeypatch.setattr(recsys_module.ray, "get", Mock(side_effect=Exception("Database error")))
         mock_server = Mock()
         mock_server.get_follow_suggestions = Mock()
         mock_server.get_follow_suggestions.remote = Mock()
@@ -286,6 +292,48 @@ class TestFollowRecSysRayClient:
         result = recsys.get_follow_suggestions(mock_server, "agent-1")
 
         assert result == []
+
+    def test_follow_recsys_suppresses_dead_orchestrator_noise(self, monkeypatch):
+        """Dead orchestrator errors should only log once and then stay quiet."""
+        import importlib
+
+        recsys_module = importlib.import_module("YSimulator.YClient.recsys.FollowRecSysRay")
+        FollowRecSysRay = recsys_module.FollowRecSysRay
+
+        class FakeActorDiedError(Exception):
+            pass
+
+        recsys_module._ORCHESTRATOR_UNAVAILABLE_LOGGED = False
+        monkeypatch.setattr(recsys_module.ray.exceptions, "ActorDiedError", FakeActorDiedError, raising=False)
+        monkeypatch.setattr(
+            recsys_module.ray,
+            "get",
+            Mock(
+                side_effect=FakeActorDiedError(
+                    "The actor is dead because its owner has died."
+                )
+            ),
+        )
+        mock_server = Mock()
+        mock_server.get_follow_suggestions = Mock()
+        mock_server.get_follow_suggestions.remote = Mock()
+
+        warning_calls = []
+        error_calls = []
+        original_warning = recsys_module.logger.warning
+        original_error = recsys_module.logger.error
+        recsys_module.logger.warning = lambda *args, **kwargs: warning_calls.append(args)
+        recsys_module.logger.error = lambda *args, **kwargs: error_calls.append(args)
+        try:
+            recsys = FollowRecSysRay()
+            assert recsys.get_follow_suggestions(mock_server, "agent-1") == []
+            assert recsys.get_follow_suggestions(mock_server, "agent-2") == []
+        finally:
+            recsys_module.logger.warning = original_warning
+            recsys_module.logger.error = original_error
+
+        assert len(warning_calls) == 1
+        assert error_calls == []
 
     def test_random_follow_recsys(self):
         """Test RandomFollowRecSys initialization."""
