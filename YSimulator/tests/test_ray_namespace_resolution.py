@@ -39,6 +39,18 @@ def test_resolve_client_namespace_falls_back_to_simulation_config(tmp_path):
     assert namespace == "social_sim"
 
 
+def test_llm_agents_disabled_config_is_detected():
+    assert run_client._llm_agents_enabled_from_config(
+        {"agents": {"llm_agents": [None]}}
+    ) is False
+    assert run_client._llm_agents_enabled_from_config(
+        {"agents": {"llm_agents": []}}
+    ) is True
+    assert run_client._llm_agents_enabled_from_config(
+        {"agents": {"llm_agents": ["llama3.2"]}}
+    ) is True
+
+
 def test_resolve_named_actor_retries_with_namespace(monkeypatch):
     actor = object()
     calls = []

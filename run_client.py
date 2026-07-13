@@ -242,6 +242,16 @@ def _llm_models_configured(sim_config: dict) -> bool:
     return bool(llm_cfg.get("model") or llm_v_cfg.get("model"))
 
 
+def _llm_agents_enabled_from_config(agent_config: dict) -> bool:
+    """Return whether the population config actually needs LLM-backed agents."""
+    llm_agents = (agent_config or {}).get("agents", {}).get("llm_agents")
+    return not (
+        isinstance(llm_agents, list)
+        and len(llm_agents) == 1
+        and llm_agents[0] is None
+    )
+
+
 def _release_llm_pool_lease_once(lease_state: dict, logger: logging.Logger) -> None:
     """Best-effort release of the shared LLM lease exactly once."""
     if not lease_state or lease_state.get("released"):
@@ -508,7 +518,7 @@ if __name__ == "__main__":
 
     cleanup_stale_client_actor(runtime_client_id, namespace, logger)
 
-    # Create LLM service with configuration
+    # Create LLM service with configuration when the population actually uses LLM agents.
     # Support both Ollama (default) and vLLM backends
     llm_start = time.time()
     llm_config = sim_config["llm"]
@@ -543,9 +553,17 @@ if __name__ == "__main__":
 
     llm_service = None
 
-    if not _llm_models_configured(sim_config):
-        logger.info("No LLM models configured; running client without LLM actors")
-        print("--- No LLM model configured; skipping LLM actor startup ---")
+    llm_agents_enabled = _llm_agents_enabled_from_config(agent_config)
+
+    if not _llm_models_configured(sim_config) or not llm_agents_enabled:
+        logger.info(
+            "Skipping LLM actor startup because no LLM model is configured "
+            "or the experiment is rule-based"
+        )
+        print(
+            "--- No LLM model configured or LLM agents disabled; "
+            "skipping LLM actor startup ---"
+        )
     elif llm_backend == "vllm":
         logger.info(f"Using vLLM backend with {num_llm_actors} actor(s) for LLM inference")
         reuse_msg = " (reusing existing if available)" if reuse_actors else ""
@@ -648,16 +666,17 @@ if __name__ == "__main__":
     resolved_service_backend = llm_config.get("_resolved_service_backend", llm_backend)
     resolved_pool_backend = llm_config.get("_resolved_pool_backend", llm_backend)
 
-    lease_state.update(
-        {
-            "backend": resolved_pool_backend,
-            "actor_name_prefix": resolved_actor_name_prefix,
-            "num_actors": resolved_num_llm_actors,
-            "client_id": llm_config.get("_lease_client_id", client_name),
-            "actor_namespace": resolved_actor_namespace,
-            "pool_key": llm_config.get("_resolved_shared_pool_key"),
-        }
-    )
+    if llm_service is not None:
+        lease_state.update(
+            {
+                "backend": resolved_pool_backend,
+                "actor_name_prefix": resolved_actor_name_prefix,
+                "num_actors": resolved_num_llm_actors,
+                "client_id": llm_config.get("_lease_client_id", client_name),
+                "actor_namespace": resolved_actor_namespace,
+                "pool_key": llm_config.get("_resolved_shared_pool_key"),
+            }
+        )
 
     if llm_service is not None and resolved_service_backend != llm_backend:
         logger.info(
