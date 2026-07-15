@@ -2,9 +2,7 @@ import logging
 import os
 from pathlib import Path
 
-from detoxify import Detoxify
 from nltk.sentiment import SentimentIntensityAnalyzer
-from perspective import PerspectiveAPI
 
 logger = logging.getLogger(__name__)
 
@@ -27,10 +25,12 @@ def _configure_model_cache_env():
     os.environ.setdefault("TORCH_HOME", str(torch_home))
 
 
-def _get_detoxify_model() -> Detoxify:
+def _get_detoxify_model() -> object:
     """Return a cached Detoxify model instance, creating it on first use."""
     global _detoxify_model
     if _detoxify_model is None:
+        from detoxify import Detoxify
+
         _configure_model_cache_env()
         logger.info("Initializing Detoxify model (first use)")
         _detoxify_model = Detoxify("original")
@@ -91,6 +91,8 @@ def toxicity(text, api_key: str) -> dict:
 
     if api_key:
         try:
+            from perspective import PerspectiveAPI
+
             p = PerspectiveAPI(api_key)
             toxicity_score = p.score(
                 text,
