@@ -242,14 +242,28 @@ def _llm_models_configured(sim_config: dict) -> bool:
     return bool(llm_cfg.get("model") or llm_v_cfg.get("model"))
 
 
-def _llm_agents_enabled_from_config(agent_config: dict) -> bool:
+def _llm_agents_enabled_from_config(agent_config) -> bool:
     """Return whether the population config actually needs LLM-backed agents."""
-    llm_agents = (agent_config or {}).get("agents", {}).get("llm_agents")
-    return not (
-        isinstance(llm_agents, list)
-        and len(llm_agents) == 1
-        and llm_agents[0] is None
-    )
+    agents = None
+
+    if isinstance(agent_config, dict):
+        raw_agents = agent_config.get("agents")
+        if isinstance(raw_agents, dict):
+            llm_agents = raw_agents.get("llm_agents")
+            return not (
+                isinstance(llm_agents, list)
+                and len(llm_agents) == 1
+                and llm_agents[0] is None
+            )
+        if isinstance(raw_agents, list):
+            agents = raw_agents
+    elif isinstance(agent_config, list):
+        agents = agent_config
+
+    if agents is not None:
+        return any(isinstance(agent, dict) and bool(agent.get("llm")) for agent in agents)
+
+    return True
 
 
 def _release_llm_pool_lease_once(lease_state: dict, logger: logging.Logger) -> None:

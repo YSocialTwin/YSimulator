@@ -51,6 +51,16 @@ def test_llm_agents_disabled_config_is_detected():
     ) is True
 
 
+def test_llm_agents_enabled_accepts_bare_agent_lists():
+    assert run_client._llm_agents_enabled_from_config(
+        [{"username": "alice", "llm": False}, {"username": "bob", "llm": True}]
+    ) is True
+    assert run_client._llm_agents_enabled_from_config(
+        [{"username": "alice", "llm": False}, {"username": "bob", "llm": False}]
+    ) is False
+    assert run_client._llm_agents_enabled_from_config([]) is False
+
+
 def test_resolve_named_actor_retries_with_namespace(monkeypatch):
     actor = object()
     calls = []
