@@ -1610,11 +1610,17 @@ class OrchestratorServer:
             )
             self.logger.error(f"DB Error: {e}")
 
-        # Mark this specific client as done
-        self.client_manager.mark_client_submitted(client_id)
+        try:
+            # Mark this specific client as done
+            self.client_manager.mark_client_submitted(client_id)
 
-        # Check if EVERYONE is done
-        self._check_barrier_and_advance()
+            # Check if EVERYONE is done
+            self._check_barrier_and_advance()
+        except Exception as e:
+            self.logger.error(
+                f"Error finalizing action submission for client {client_id}: {e}",
+                extra={"extra_data": {"client_id": client_id, "error": str(e)}},
+            )
 
     def get_stress_reward(self, agent_id: str, round_id: str, backward_rounds: int = 24) -> dict:
         """
