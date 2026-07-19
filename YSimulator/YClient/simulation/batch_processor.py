@@ -13,9 +13,9 @@ Updated in Phase 3 to use LLM service layer.
 """
 
 import logging
+import time
 import uuid
 from collections import Counter
-import time
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 import ray
@@ -1157,9 +1157,7 @@ class BatchProcessor:
         timeout_seconds = self._resolve_vllm_batch_timeout(len(batch_requests))
 
         self.logger.info(f"Calling generate_comment_batch for {len(batch_requests)} requests")
-        self.logger.info(
-            f"Waiting up to {timeout_seconds:.0f}s for vLLM batch comment generation"
-        )
+        self.logger.info(f"Waiting up to {timeout_seconds:.0f}s for vLLM batch comment generation")
         results = self._resolve_vllm_request_batches(
             batch_requests=batch_requests,
             batch_call_fn=lambda requests: self._get_llm_actor(

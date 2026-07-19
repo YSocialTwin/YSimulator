@@ -445,9 +445,7 @@ def test_create_llm_actors_shared_pool_respects_capacity_and_reuses_pool(monkeyp
         lambda actor_namespace=None: registry,
     )
     monkeypatch.setattr("YSimulator.YClient.llm_utils.load_balancer.ray.get", lambda x: x)
-    monkeypatch.setattr(
-        "YSimulator.YClient.llm_utils.load_balancer.ray.get_actor", fake_get_actor
-    )
+    monkeypatch.setattr("YSimulator.YClient.llm_utils.load_balancer.ray.get_actor", fake_get_actor)
     monkeypatch.setattr(
         "YSimulator.YClient.LLM_interactions.vllm_service.VLLMService.options",
         lambda **kwargs: _OptionsProxy(kwargs),
@@ -469,7 +467,10 @@ def test_create_llm_actors_shared_pool_respects_capacity_and_reuses_pool(monkeyp
         logger=Mock(),
     )
 
-    assert first.get_all_actors() == [actor_handles[created_actor_names[0]], actor_handles[created_actor_names[1]]]
+    assert first.get_all_actors() == [
+        actor_handles[created_actor_names[0]],
+        actor_handles[created_actor_names[1]],
+    ]
     assert created_actor_names[:2] == [
         f"{_build_vllm_pool_prefix(base_config['model'])}_pool0_vllm_0",
         f"{_build_vllm_pool_prefix(base_config['model'])}_pool0_vllm_1",
@@ -501,4 +502,7 @@ def test_create_llm_actors_shared_pool_respects_capacity_and_reuses_pool(monkeyp
         f"{_build_vllm_pool_prefix(base_config['model'])}_pool1_vllm_0",
         f"{_build_vllm_pool_prefix(base_config['model'])}_pool1_vllm_1",
     ]
-    assert third.get_all_actors() == [actor_handles[created_actor_names[2]], actor_handles[created_actor_names[3]]]
+    assert third.get_all_actors() == [
+        actor_handles[created_actor_names[2]],
+        actor_handles[created_actor_names[3]],
+    ]
