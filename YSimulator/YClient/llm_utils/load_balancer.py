@@ -747,6 +747,9 @@ class LLMLoadBalancer:
             actor_name_prefix: Prefix for named actors (for discovery)
         """
         self.logger = logger or logging.getLogger(__name__)
+        self.llm_config = dict(llm_config or {})
+        self.prompts_config = dict(prompts_config or {})
+        self.llm_v_config = dict(llm_v_config or {}) if llm_v_config else None
         self.num_actors = num_actors
         self.strategy = LoadBalancingStrategy(strategy)
         self.current_idx = 0  # For round-robin
@@ -846,6 +849,44 @@ class LLMLoadBalancer:
             f"backend={self.service_backend}"
         )
 
+    def _actor_name_for_index(self, idx: int) -> str:
+        return f"{self.actor_name_prefix}_{self.actor_backend}_{idx}"
+
+    def _is_actor_alive(self, actor: Any) -> bool:
+        """Best-effort health check for a Ray actor handle."""
+        try:
+            if hasattr(actor, "__ray_ready__"):
+                ray.get(actor.__ray_ready__.remote())
+            return True
+        except Exception:
+            return False
+
+    def _create_actor_at_index(self, idx: int) -> Any:
+        """Create or replace the actor at the given index."""
+        ServiceClass = _get_service_class(self.service_backend)
+        actor_name = self._actor_name_for_index(idx)
+
+        if self.service_backend == "vllm":
+            options = {
+                "name": actor_name,
+                "num_gpus": self.llm_config.get("gpu_per_actor", 1.0),
+                "lifetime": "detached",
+            }
+        else:
+            options = {"name": actor_name, "lifetime": "detached"}
+
+        if self.actor_namespace:
+            options["namespace"] = self.actor_namespace
+
+        actor = ServiceClass.options(**options).remote(
+            llm_config=self.llm_config,
+            prompts_config=self.prompts_config,
+            llm_v_config=self.llm_v_config,
+        )
+        self.actors[idx] = actor
+        self.logger.warning(f"Recreated LLM actor at index {idx}: {actor_name}")
+        return actor
+
     def get_actor_for_agent(self, agent_id: str) -> Any:
         """
         Get the LLM actor for a specific agent.
@@ -858,6 +899,14 @@ class LLMLoadBalancer:
         Returns:
             Ray actor handle for LLM service
         """
+        return self.get_live_actor_for_agent(agent_id)
+
+    def get_live_actor_for_agent(self, agent_id: str) -> Any:
+        """
+        Get a live LLM actor for a specific agent.
+
+        If the selected actor has died, recreate it in place and return the replacement.
+        """
         if self.strategy == LoadBalancingStrategy.HASH:
             # Hash-based: same agent always goes to same actor (affinity)
             idx = self._hash_agent_id(agent_id) % self.num_actors
@@ -869,7 +918,28 @@ class LLMLoadBalancer:
             # Default to first actor
             idx = 0
 
-        return self.actors[idx]
+        actor = self.actors[idx]
+        if self._is_actor_alive(actor):
+            return actor
+
+        self.logger.warning(
+            f"Detected dead LLM actor at index {idx} for agent {agent_id}; recreating actor"
+        )
+        try:
+            return self._create_actor_at_index(idx)
+        except Exception as exc:
+            self.logger.error(
+                f"Failed to recreate dead LLM actor at index {idx} for agent {agent_id}: {exc}"
+            )
+            for offset in range(1, self.num_actors):
+                candidate_idx = (idx + offset) % self.num_actors
+                candidate_actor = self.actors[candidate_idx]
+                if self._is_actor_alive(candidate_actor):
+                    self.logger.warning(
+                        f"Falling back to live LLM actor at index {candidate_idx} for agent {agent_id}"
+                    )
+                    return candidate_actor
+            raise
 
     def get_all_actors(self) -> List[Any]:
         """
@@ -968,6 +1038,9 @@ class LLMActorPool:
             actor_name_prefix=actor_name_prefix,
         )
         self.enable_monitoring = enable_monitoring
+        self.llm_config = dict(llm_config or {})
+        self.prompts_config = dict(prompts_config or {})
+        self.llm_v_config = dict(llm_v_config or {}) if llm_v_config else None
 
         # Initialize monitoring counters
         if enable_monitoring:
@@ -984,7 +1057,7 @@ class LLMActorPool:
         Returns:
             Ray actor handle for LLM service
         """
-        actor = self.load_balancer.get_actor_for_agent(agent_id)
+        actor = self.get_live_actor_for_agent(agent_id)
 
         # Track request count
         if self.enable_monitoring:
@@ -992,6 +1065,10 @@ class LLMActorPool:
             self.request_counts[actor_idx] += 1
 
         return actor
+
+    def get_live_actor_for_agent(self, agent_id: str) -> Any:
+        """Return a live actor, replacing a dead one if necessary."""
+        return self.load_balancer.get_live_actor_for_agent(agent_id)
 
     def record_error(self, actor: Any):
         """

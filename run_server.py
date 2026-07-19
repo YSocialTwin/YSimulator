@@ -38,7 +38,6 @@ def _configure_model_cache_env():
 
     os.environ.setdefault("YSOCIAL_MODEL_CACHE_DIR", str(root))
     os.environ.setdefault("HF_HOME", str(hf_home))
-    os.environ.setdefault("TRANSFORMERS_CACHE", str(transformers_cache))
     os.environ.setdefault("HUGGINGFACE_HUB_CACHE", str(hub_cache))
     os.environ.setdefault("TORCH_HOME", str(torch_home))
 
@@ -88,6 +87,34 @@ def build_server_simulation_config(config: dict) -> dict:
             }
 
     return simulation_config
+
+
+def wait_for_orchestrator_ready(server_handle, logger=None, timeout_seconds: int = 180):
+    """Wait until the orchestrator actor responds to a ping before exposing readiness."""
+    deadline = time.monotonic() + max(1, timeout_seconds)
+    attempt = 0
+    last_error = None
+
+    while time.monotonic() < deadline:
+        attempt += 1
+        try:
+            ray.get(server_handle.is_ready.remote())
+            return True
+        except Exception as exc:
+            last_error = exc
+            if logger:
+                logger.debug(
+                    "Waiting for orchestrator readiness "
+                    f"(attempt {attempt}, remaining={max(0, deadline - time.monotonic()):.1f}s): {exc}"
+                )
+            time.sleep(1)
+
+    if logger:
+        logger.error(
+            "Orchestrator actor did not become ready before timeout",
+            extra={"extra_data": {"timeout_seconds": timeout_seconds, "error": str(last_error)}},
+        )
+    return False
 
 
 def setup_logging(
@@ -246,7 +273,7 @@ if __name__ == "__main__":
     # Extract configuration
     server_name = config.get("server_name", "orchestrator_server")
     configured_namespace = config.get("namespace", "social_sim")
-    namespace = configured_namespace
+    namespace = build_isolated_namespace(configured_namespace, config_dir)
     address = config.get("address", "auto")
     port = config.get("port")
     min_to_start = config.get("min_to_start", 1)  # Minimum clients before simulation starts
@@ -383,30 +410,6 @@ if __name__ == "__main__":
     else:
         context = ray.init(**init_kwargs)
 
-    # If the target namespace already contains an Orchestrator actor, isolate this experiment
-    # into a stable config-dir-derived namespace while staying on the same Ray cluster.
-    connected_to_existing_cluster = reused_existing_cluster or (explicit_ray_url is not None)
-
-    if connected_to_existing_cluster:
-        try:
-            ray.get_actor("Orchestrator", namespace=namespace)
-            isolated_namespace = build_isolated_namespace(configured_namespace, config_dir)
-            if isolated_namespace != namespace:
-                logger.info(
-                    f"Namespace collision detected for '{namespace}'. "
-                    f"Switching this experiment to isolated namespace '{isolated_namespace}'."
-                )
-                ray.shutdown()
-                namespace = isolated_namespace
-                reconnect_kwargs = {"include_dashboard": False, "namespace": namespace}
-                if explicit_ray_url:
-                    reconnect_kwargs["address"] = explicit_ray_url
-                else:
-                    reconnect_kwargs["address"] = "auto"
-                context = ray.init(**reconnect_kwargs)
-        except ValueError:
-            pass
-
     ray_address = context.address_info["address"]
     init_time = (time.time() - init_start) * 1000
 
@@ -430,6 +433,7 @@ if __name__ == "__main__":
     namespace_config_file = config_dir / "ray_namespace.temp"
     with open(namespace_config_file, "w") as f:
         f.write(namespace)
+    ready_file = config_dir / "ray_ready.temp"
 
     print(f"--- 🚀 Server Running on {ray_address} ---")
     print(f"--- 📝 Server Name: {server_name} ---")
@@ -440,7 +444,12 @@ if __name__ == "__main__":
 
     # Start orchestrator actor
     actor_start = time.time()
-    server = OrchestratorServer.options(name="Orchestrator").remote(
+    try:
+        old_actor = ray.get_actor("Orchestrator", namespace=namespace)
+        ray.kill(old_actor, no_restart=True)
+    except ValueError:
+        pass
+    server = OrchestratorServer.options(name="Orchestrator", namespace=namespace).remote(
         db_config=db_config,
         config_path=str(config_dir),
         min_to_start=min_to_start,
@@ -451,9 +460,18 @@ if __name__ == "__main__":
     )
     actor_time = (time.time() - actor_start) * 1000
 
+    if not wait_for_orchestrator_ready(server, logger=logger, timeout_seconds=180):
+        logger.error(
+            "Orchestrator readiness probe failed; shutting down server startup",
+            extra={"extra_data": {"namespace": namespace, "config_dir": str(config_dir)}},
+        )
+        raise RuntimeError("Orchestrator failed readiness check")
+
     logger.info(
         "Orchestrator actor started", extra={"extra_data": {"execution_time_ms": actor_time}}
     )
+    with open(ready_file, "w") as f:
+        f.write(f"{namespace}\n")
 
     try:
         while True:
@@ -465,5 +483,7 @@ if __name__ == "__main__":
             ray_config_file.unlink()
         if namespace_config_file.exists():
             namespace_config_file.unlink()
+        if ready_file.exists():
+            ready_file.unlink()
         ray.shutdown()
         logger.info("Server shutdown complete")

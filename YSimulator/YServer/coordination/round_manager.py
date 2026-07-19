@@ -146,7 +146,13 @@ class RoundManager:
 
             # Recompute all agent interests based on sliding attention window
             if recompute_interests_callback:
-                recompute_interests_callback()
+                try:
+                    recompute_interests_callback()
+                except Exception as exc:
+                    self.logger.error(
+                        f"Day-end interest recomputation failed: {exc}",
+                        extra={"extra_data": {"error": str(exc), "day": completed_day}},
+                    )
 
             # Clean up old posts from Redis based on visibility_rounds
             cleanup_result = self.db.cleanup_old_posts_from_redis(self.day, self.slot)

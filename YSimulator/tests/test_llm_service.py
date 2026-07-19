@@ -154,6 +154,54 @@ class TestBatchHandler(unittest.TestCase):
             # Should return None for each future on error
             self.assertEqual(results, [None, None])
 
+    def test_gather_futures_actor_died_error_raises(self):
+        """Ray actor deaths must fail fast instead of being converted to None."""
+
+        class FakeRayActorError(Exception):
+            pass
+
+        with patch(
+            "YSimulator.YClient.llm_utils.batch_handler.ray.get",
+            side_effect=FakeRayActorError("actor died"),
+        ):
+            from YSimulator.YClient.llm_utils import batch_handler as batch_handler_module
+
+            with patch.object(
+                batch_handler_module.ray.exceptions,
+                "RayActorError",
+                FakeRayActorError,
+                create=True,
+            ):
+                handler = BatchHandler(logger=self.mock_logger)
+                futures = [Mock(), Mock()]
+
+                with self.assertRaises(FakeRayActorError):
+                    handler.gather_futures(futures)
+
+    def test_gather_with_timeout_actor_died_error_raises(self):
+        """Timeout-aware gather must also fail fast on actor death."""
+
+        class FakeRayActorError(Exception):
+            pass
+
+        with patch(
+            "YSimulator.YClient.llm_utils.batch_handler.ray.get",
+            side_effect=FakeRayActorError("actor died"),
+        ):
+            from YSimulator.YClient.llm_utils import batch_handler as batch_handler_module
+
+            with patch.object(
+                batch_handler_module.ray.exceptions,
+                "RayActorError",
+                FakeRayActorError,
+                create=True,
+            ):
+                handler = BatchHandler(logger=self.mock_logger)
+                futures = [Mock(), Mock()]
+
+                with self.assertRaises(FakeRayActorError):
+                    handler.gather_with_timeout(futures)
+
     def test_gather_with_metadata(self):
         """Test gathering with metadata preservation."""
         with patch(
@@ -213,6 +261,29 @@ class TestRetryHandler(unittest.TestCase):
 
         self.assertEqual(result, "success")
         self.assertEqual(mock_func.call_count, 3)
+
+    def test_retry_with_backoff_actor_died_error_raises_immediately(self):
+        """Ray actor deaths must not be retried."""
+
+        class FakeRayActorError(Exception):
+            pass
+
+        handler = RetryHandler(max_retries=3, initial_delay=0.01, logger=self.mock_logger)
+        mock_func = Mock(side_effect=FakeRayActorError("actor died"))
+
+        from YSimulator.YClient.llm_utils import retry_handler as retry_handler_module
+
+        with patch.object(
+            retry_handler_module.ray.exceptions,
+            "RayActorError",
+            FakeRayActorError,
+            create=True,
+        ), patch("YSimulator.YClient.llm_utils.retry_handler.time.sleep") as mock_sleep:
+            with self.assertRaises(FakeRayActorError):
+                handler.retry_with_backoff(mock_func, error_message="test")
+
+        mock_func.assert_called_once()
+        mock_sleep.assert_not_called()
 
     def test_is_retryable_error(self):
         """Test retryable error detection."""

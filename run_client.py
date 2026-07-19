@@ -40,7 +40,6 @@ def _configure_model_cache_env():
 
     os.environ.setdefault("YSOCIAL_MODEL_CACHE_DIR", str(root))
     os.environ.setdefault("HF_HOME", str(hf_home))
-    os.environ.setdefault("TRANSFORMERS_CACHE", str(transformers_cache))
     os.environ.setdefault("HUGGINGFACE_HUB_CACHE", str(hub_cache))
     os.environ.setdefault("TORCH_HOME", str(torch_home))
 
@@ -195,10 +194,76 @@ def resolve_client_namespace(config_dir: Path, sim_config: dict) -> str:
     return sim_config.get("namespace", "social_sim")
 
 
+def wait_for_server_ready(config_dir: Path, timeout_seconds: int = 180) -> None:
+    """Wait until the server writes its readiness marker after the orchestrator actor starts."""
+    ready_file = config_dir / "ray_ready.temp"
+    deadline = time.monotonic() + max(1, timeout_seconds)
+    while time.monotonic() < deadline:
+        if ready_file.exists():
+            return
+        time.sleep(1)
+
+    raise FileNotFoundError(
+        f"ray_ready.temp file not found after {timeout_seconds} seconds: {ready_file}\n"
+        "The HPC server may not have fully initialized its Ray actor yet."
+    )
+
+
+def cleanup_stale_client_actor(runtime_client_id: str, namespace: str, logger: logging.Logger) -> None:
+    """Best-effort cleanup of an already-registered named client actor."""
+    try:
+        old_client = ray.get_actor(runtime_client_id, namespace=namespace)
+    except ValueError:
+        return
+    except Exception as exc:
+        logger.debug(f"Unable to inspect existing client actor '{runtime_client_id}': {exc}")
+        return
+
+    try:
+        ray.kill(old_client, no_restart=True)
+        logger.info(
+            "Killed stale client actor before startup",
+            extra={
+                "extra_data": {
+                    "client_actor_name": runtime_client_id,
+                    "namespace": namespace,
+                }
+            },
+        )
+    except Exception as exc:
+        logger.warning(
+            f"Failed to kill stale client actor '{runtime_client_id}' in namespace '{namespace}': {exc}"
+        )
+
+
 def _llm_models_configured(sim_config: dict) -> bool:
     llm_cfg = sim_config.get("llm") or {}
     llm_v_cfg = sim_config.get("llm_v") or {}
     return bool(llm_cfg.get("model") or llm_v_cfg.get("model"))
+
+
+def _llm_agents_enabled_from_config(agent_config) -> bool:
+    """Return whether the population config actually needs LLM-backed agents."""
+    agents = None
+
+    if isinstance(agent_config, dict):
+        raw_agents = agent_config.get("agents")
+        if isinstance(raw_agents, dict):
+            llm_agents = raw_agents.get("llm_agents")
+            return not (
+                isinstance(llm_agents, list)
+                and len(llm_agents) == 1
+                and llm_agents[0] is None
+            )
+        if isinstance(raw_agents, list):
+            agents = raw_agents
+    elif isinstance(agent_config, list):
+        agents = agent_config
+
+    if agents is not None:
+        return any(isinstance(agent, dict) and bool(agent.get("llm")) for agent in agents)
+
+    return True
 
 
 def _release_llm_pool_lease_once(lease_state: dict, logger: logging.Logger) -> None:
@@ -231,6 +296,14 @@ def _release_llm_pool_lease_once(lease_state: dict, logger: logging.Logger) -> N
         )
     except Exception as cleanup_error:
         logger.warning(f"Failed to release LLM pool lease cleanly: {cleanup_error}")
+
+
+def _is_intentional_actor_termination(error: Exception) -> bool:
+    """Return True when Ray reports a deliberate actor kill rather than a crash."""
+    actor_error_type = getattr(ray.exceptions, "ActorDiedError", None)
+    if isinstance(actor_error_type, type) and isinstance(error, actor_error_type):
+        return "killed by `ray.kill`" in str(error)
+    return error.__class__.__name__ == "ActorDiedError" and "killed by `ray.kill`" in str(error)
 
 
 if __name__ == "__main__":
@@ -429,6 +502,7 @@ if __name__ == "__main__":
 
     # Initialize with namespace from config, unless server provided an override for this experiment.
     namespace = resolve_client_namespace(config_dir, sim_config)
+    wait_for_server_ready(config_dir, timeout_seconds=180)
     connect_start = time.time()
     ray.init(address=ray_address, namespace=namespace, ignore_reinit_error=True)
     connect_time = (time.time() - connect_start) * 1000
@@ -456,7 +530,9 @@ if __name__ == "__main__":
         extra={"extra_data": {"num_agents": total_agents, "llm_model": sim_config["llm"]["model"]}},
     )
 
-    # Create LLM service with configuration
+    cleanup_stale_client_actor(runtime_client_id, namespace, logger)
+
+    # Create LLM service with configuration when the population actually uses LLM agents.
     # Support both Ollama (default) and vLLM backends
     llm_start = time.time()
     llm_config = sim_config["llm"]
@@ -491,9 +567,17 @@ if __name__ == "__main__":
 
     llm_service = None
 
-    if not _llm_models_configured(sim_config):
-        logger.info("No LLM models configured; running client without LLM actors")
-        print("--- No LLM model configured; skipping LLM actor startup ---")
+    llm_agents_enabled = _llm_agents_enabled_from_config(agent_config)
+
+    if not _llm_models_configured(sim_config) or not llm_agents_enabled:
+        logger.info(
+            "Skipping LLM actor startup because no LLM model is configured "
+            "or the experiment is rule-based"
+        )
+        print(
+            "--- No LLM model configured or LLM agents disabled; "
+            "skipping LLM actor startup ---"
+        )
     elif llm_backend == "vllm":
         logger.info(f"Using vLLM backend with {num_llm_actors} actor(s) for LLM inference")
         reuse_msg = " (reusing existing if available)" if reuse_actors else ""
@@ -596,16 +680,17 @@ if __name__ == "__main__":
     resolved_service_backend = llm_config.get("_resolved_service_backend", llm_backend)
     resolved_pool_backend = llm_config.get("_resolved_pool_backend", llm_backend)
 
-    lease_state.update(
-        {
-            "backend": resolved_pool_backend,
-            "actor_name_prefix": resolved_actor_name_prefix,
-            "num_actors": resolved_num_llm_actors,
-            "client_id": llm_config.get("_lease_client_id", client_name),
-            "actor_namespace": resolved_actor_namespace,
-            "pool_key": llm_config.get("_resolved_shared_pool_key"),
-        }
-    )
+    if llm_service is not None:
+        lease_state.update(
+            {
+                "backend": resolved_pool_backend,
+                "actor_name_prefix": resolved_actor_name_prefix,
+                "num_actors": resolved_num_llm_actors,
+                "client_id": llm_config.get("_lease_client_id", client_name),
+                "actor_namespace": resolved_actor_namespace,
+                "pool_key": llm_config.get("_resolved_shared_pool_key"),
+            }
+        )
 
     if llm_service is not None and resolved_service_backend != llm_backend:
         logger.info(
@@ -618,7 +703,7 @@ if __name__ == "__main__":
     # Always create the service - page agents will register their feeds dynamically
     news_start = time.time()
     news_feeds_config = sim_config.get("news_feeds", {"feeds": []})
-    news_service = NewsFeedService.remote(news_feeds_config, llm_service)
+    news_service = NewsFeedService.remote(news_feeds_config, llm_service, namespace)
     feed_count = len(news_feeds_config.get("feeds", []))
     if feed_count > 0:
         logger.info(
@@ -653,6 +738,7 @@ if __name__ == "__main__":
         logger,
         news_service,
         str(agent_config_file),
+        namespace,
     )
     client_time = (time.time() - client_start) * 1000
 
@@ -674,23 +760,28 @@ if __name__ == "__main__":
         logger.info("Client stopping by user request")
         print("Client stopping...")
     except Exception as e:
-        # Capture full exception details including traceback
-        error_type = type(e).__name__
-        error_msg = str(e)
-        full_traceback = traceback.format_exc()
-        
-        # Log complete error message (console handler will truncate if needed)
-        logger.error(
-            f"Client error: {error_type}: {error_msg}",
-            extra={
-                "extra_data": {
-                    "error_type": error_type,
-                    "error_message": error_msg,
-                    "traceback": full_traceback,
-                }
-            },
-        )
-        raise
+        if _is_intentional_actor_termination(e):
+            logger.info(
+                "Client actor terminated cleanly after explicit Ray kill; skipping traceback"
+            )
+        else:
+            # Capture full exception details including traceback
+            error_type = type(e).__name__
+            error_msg = str(e)
+            full_traceback = traceback.format_exc()
+
+            # Log complete error message (console handler will truncate if needed)
+            logger.error(
+                f"Client error: {error_type}: {error_msg}",
+                extra={
+                    "extra_data": {
+                        "error_type": error_type,
+                        "error_message": error_msg,
+                        "traceback": full_traceback,
+                    }
+                },
+            )
+            raise
     finally:
         _release_llm_pool_lease_once(lease_state, logger)
         logger.info("Client shutdown complete")

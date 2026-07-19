@@ -26,6 +26,10 @@ def _get_llm_actor_for_manager(llm_handle: Any, agent_id: Optional[str] = None) 
     # Check if llm_handle is a load balancer by checking its class name
     # This avoids issues with Mock objects that auto-create attributes
     if llm_handle.__class__.__name__ in ("LLMLoadBalancer", "LLMActorPool"):
+        if hasattr(llm_handle, "get_live_actor_for_agent"):
+            if agent_id is None:
+                return llm_handle.get_live_actor_for_agent("batch")
+            return llm_handle.get_live_actor_for_agent(agent_id)
         if agent_id is None:
             # Fallback to first actor if no agent_id provided
             return llm_handle.get_all_actors()[0]

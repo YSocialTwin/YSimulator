@@ -1610,11 +1610,17 @@ class OrchestratorServer:
             )
             self.logger.error(f"DB Error: {e}")
 
-        # Mark this specific client as done
-        self.client_manager.mark_client_submitted(client_id)
+        try:
+            # Mark this specific client as done
+            self.client_manager.mark_client_submitted(client_id)
 
-        # Check if EVERYONE is done
-        self._check_barrier_and_advance()
+            # Check if EVERYONE is done
+            self._check_barrier_and_advance()
+        except Exception as e:
+            self.logger.error(
+                f"Error finalizing action submission for client {client_id}: {e}",
+                extra={"extra_data": {"client_id": client_id, "error": str(e)}},
+            )
 
     def get_stress_reward(self, agent_id: str, round_id: str, backward_rounds: int = 24) -> dict:
         """
@@ -2176,6 +2182,22 @@ class OrchestratorServer:
         return self.user_service.get_user(user_id)
 
     @log_server_request
+    def get_user_by_username(
+        self, username: str, client_id: str = None
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Get a user by username.
+
+        Args:
+            username: Username to look up
+            client_id: Optional client identifier for logging purposes
+
+        Returns:
+            Dictionary with user data or None if not found
+        """
+        return self.user_service.get_user_by_username(username)
+
+    @log_server_request
     def memory_reset(self, run_id: str, client_id: str = None) -> Dict[str, Any]:
         """Clear server-owned memory state for a run_id."""
         return self.memory_service.reset(run_id)
@@ -2203,7 +2225,12 @@ class OrchestratorServer:
                 )
         except Exception:
             pass
+
         return result
+
+    def is_ready(self) -> bool:
+        """Return True once the orchestrator has finished initializing."""
+        return True
 
     @log_server_request
     def memory_item_upsert(self, payload: Dict[str, Any], client_id: str = None) -> Dict[str, Any]:

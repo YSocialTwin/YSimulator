@@ -12,6 +12,14 @@ from typing import Any, Callable, Optional
 import ray
 
 
+def _is_actor_died_error(error: Exception) -> bool:
+    """Return True when Ray has lost an actor and the call should fail fast."""
+    actor_error_type = getattr(ray.exceptions, "RayActorError", None)
+    if isinstance(actor_error_type, type) and isinstance(error, actor_error_type):
+        return True
+    return error.__class__.__name__ in {"RayActorError", "ActorDiedError"}
+
+
 class RetryHandler:
     """
     Handles retry logic for LLM service calls.
@@ -72,6 +80,11 @@ class RetryHandler:
             try:
                 return func(*args, **kwargs)
             except Exception as e:
+                if _is_actor_died_error(e):
+                    self.logger.error(
+                        f"{error_message} failed because a Ray actor died: {type(e).__name__}: {e}"
+                    )
+                    raise
                 last_exception = e
 
                 if attempt < self.max_retries:

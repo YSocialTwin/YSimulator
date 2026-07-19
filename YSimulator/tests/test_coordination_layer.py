@@ -294,6 +294,26 @@ class TestRoundManager:
         assert result["day_completed"] is True
         mock_db.consolidate_redis_to_sqlite.assert_called_once()
 
+    def test_day_end_recompute_callback_failure_is_non_fatal(self, round_manager, mock_db):
+        """A failing day-end recompute callback should not crash round advancement."""
+        round_manager.day = 1
+        round_manager.slot = 24
+        mock_db.consolidate_redis_to_sqlite.return_value = {}
+        mock_db.cleanup_old_posts_from_redis.return_value = {}
+        mock_db.add_round.return_value = "round_2_1"
+
+        def failing_callback():
+            raise RuntimeError("boom")
+
+        result = round_manager.advance_simulation(
+            recompute_interests_callback=failing_callback
+        )
+
+        assert result["day_completed"] is True
+        assert round_manager.day == 2
+        assert round_manager.slot == 1
+        mock_db.get_or_create_round.assert_called_once_with(2, 1)
+
 
 class TestResumeRoundDelegation:
     """Tests for the service path used when restarting a stopped server."""

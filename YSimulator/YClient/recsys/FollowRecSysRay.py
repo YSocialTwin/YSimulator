@@ -24,6 +24,19 @@ import logging
 import ray
 
 logger = logging.getLogger(__name__)
+_ORCHESTRATOR_UNAVAILABLE_LOGGED = False
+
+
+def _is_dead_orchestrator_error(error: Exception) -> bool:
+    """Return True when the follow suggestion request can no longer reach the orchestrator."""
+    actor_error_type = getattr(ray.exceptions, "ActorDiedError", None)
+    if isinstance(actor_error_type, type) and isinstance(error, actor_error_type):
+        message = str(error).lower()
+        return "owner has died" in message or "killed by `ray.kill`" in message
+    message = str(error).lower()
+    return error.__class__.__name__ == "ActorDiedError" and (
+        "owner has died" in message or "killed by `ray.kill`" in message
+    )
 
 
 class FollowRecSysRay:
@@ -93,6 +106,15 @@ class FollowRecSysRay:
             )
             return user_ids if user_ids else []
         except Exception as e:
+            global _ORCHESTRATOR_UNAVAILABLE_LOGGED
+            if _is_dead_orchestrator_error(e):
+                if not _ORCHESTRATOR_UNAVAILABLE_LOGGED:
+                    logger.warning(
+                        "Follow suggestions unavailable because the orchestrator server is no longer reachable: %s",
+                        e,
+                    )
+                    _ORCHESTRATOR_UNAVAILABLE_LOGGED = True
+                return []
             logger.error(f"Error fetching follow suggestions for agent {agent_id}: {e}")
             return []
 
