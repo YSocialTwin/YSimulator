@@ -305,9 +305,7 @@ class TestRoundManager:
         def failing_callback():
             raise RuntimeError("boom")
 
-        result = round_manager.advance_simulation(
-            recompute_interests_callback=failing_callback
-        )
+        result = round_manager.advance_simulation(recompute_interests_callback=failing_callback)
 
         assert result["day_completed"] is True
         assert round_manager.day == 2

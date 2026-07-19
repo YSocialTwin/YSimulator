@@ -28,8 +28,8 @@ from YSimulator.YClient.llm_utils import (
     ResponseParser,
     RetryHandler,
 )
-from YSimulator.YClient.text_support.text_annotator import annotate_text
 from YSimulator.YClient.text_support.cleaning import strip_invalid_mentions
+from YSimulator.YClient.text_support.text_annotator import annotate_text
 
 # Constants
 REACTION_TYPES = ["LIKE", "LOVE", "LAUGH", "ANGRY", "SAD", "IGNORE"]
@@ -141,7 +141,9 @@ class BatchProcessor:
         if cache_key in self._username_validity_cache:
             return self._username_validity_cache[cache_key]
         try:
-            user = ray.get(self.server.get_user_by_username.remote(username, client_id=self.client_id))
+            user = ray.get(
+                self.server.get_user_by_username.remote(username, client_id=self.client_id)
+            )
             is_valid = bool(user)
         except Exception as exc:
             self.logger.warning(f"Username validation failed for @{username}: {exc}")
@@ -1528,7 +1530,12 @@ class BatchProcessor:
             reaction_type = self.response_parser.parse_text_response(
                 reaction_type, default="IGNORE"
             )
-            if reaction_type and reaction_type.upper() not in REACTION_TYPES and reaction_type.upper() not in REPORT_TYPES and reaction_type.upper() != "SHARE":
+            if (
+                reaction_type
+                and reaction_type.upper() not in REACTION_TYPES
+                and reaction_type.upper() not in REPORT_TYPES
+                and reaction_type.upper() != "SHARE"
+            ):
                 reaction_type = self._strip_invalid_mentions(reaction_type)
 
             # Handle different reaction types

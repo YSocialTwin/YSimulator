@@ -247,7 +247,9 @@ class TestFollowRecSysRayClient:
         recsys_module = importlib.import_module("YSimulator.YClient.recsys.FollowRecSysRay")
         FollowRecSysRay = recsys_module.FollowRecSysRay
 
-        monkeypatch.setattr(recsys_module.ray, "get", Mock(return_value=["user-1", "user-2", "user-3"]))
+        monkeypatch.setattr(
+            recsys_module.ray, "get", Mock(return_value=["user-1", "user-2", "user-3"])
+        )
 
         mock_server = Mock()
         mock_server.get_follow_suggestions = Mock()
@@ -304,15 +306,13 @@ class TestFollowRecSysRayClient:
             pass
 
         recsys_module._ORCHESTRATOR_UNAVAILABLE_LOGGED = False
-        monkeypatch.setattr(recsys_module.ray.exceptions, "ActorDiedError", FakeActorDiedError, raising=False)
+        monkeypatch.setattr(
+            recsys_module.ray.exceptions, "ActorDiedError", FakeActorDiedError, raising=False
+        )
         monkeypatch.setattr(
             recsys_module.ray,
             "get",
-            Mock(
-                side_effect=FakeActorDiedError(
-                    "The actor is dead because its owner has died."
-                )
-            ),
+            Mock(side_effect=FakeActorDiedError("The actor is dead because its owner has died.")),
         )
         mock_server = Mock()
         mock_server.get_follow_suggestions = Mock()

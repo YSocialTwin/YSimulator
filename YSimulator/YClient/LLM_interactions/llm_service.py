@@ -120,9 +120,7 @@ class LLMService:
         llm_model = str((llm_config or {}).get("model") or "llama3.2")
         llm_temperature = (llm_config or {}).get("temperature", 0.7)
 
-        if llm_address.startswith("http://") or llm_address.startswith(
-            "https://"
-        ):
+        if llm_address.startswith("http://") or llm_address.startswith("https://"):
             logger.warning(
                 f"LLM config address should not include protocol (http://). Removing it from {llm_address}"
             )
@@ -140,9 +138,7 @@ class LLMService:
         llm_config["temperature"] = llm_temperature
 
         # Initialize LLM with configuration
-        self.llm = ChatOllama(
-            model=llm_model, temperature=llm_temperature, base_url=base_url
-        )
+        self.llm = ChatOllama(model=llm_model, temperature=llm_temperature, base_url=base_url)
 
         # Initialize vision LLM if config provided
         self.llm_v = None
@@ -153,9 +149,7 @@ class LLMService:
             llm_v_model = str(llm_v_config.get("model") or "llama3.2")
             llm_v_temperature = llm_v_config.get("temperature", 0.5)
 
-            if llm_v_address.startswith("http://") or llm_v_address.startswith(
-                "https://"
-            ):
+            if llm_v_address.startswith("http://") or llm_v_address.startswith("https://"):
                 logger.warning(
                     f"LLM config address should not include protocol (http://). Removing it from {llm_v_address}"
                 )

@@ -1,10 +1,10 @@
 from pathlib import Path
 
-import run_server
 import run_client
-from YSimulator.YClient import ray_utils
+import run_server
 from run_client import resolve_client_namespace
 from run_server import build_isolated_namespace
+from YSimulator.YClient import ray_utils
 
 
 def test_build_isolated_namespace_is_stable(tmp_path):
@@ -40,24 +40,26 @@ def test_resolve_client_namespace_falls_back_to_simulation_config(tmp_path):
 
 
 def test_llm_agents_disabled_config_is_detected():
-    assert run_client._llm_agents_enabled_from_config(
-        {"agents": {"llm_agents": [None]}}
-    ) is False
-    assert run_client._llm_agents_enabled_from_config(
-        {"agents": {"llm_agents": []}}
-    ) is True
-    assert run_client._llm_agents_enabled_from_config(
-        {"agents": {"llm_agents": ["llama3.2"]}}
-    ) is True
+    assert run_client._llm_agents_enabled_from_config({"agents": {"llm_agents": [None]}}) is False
+    assert run_client._llm_agents_enabled_from_config({"agents": {"llm_agents": []}}) is True
+    assert (
+        run_client._llm_agents_enabled_from_config({"agents": {"llm_agents": ["llama3.2"]}}) is True
+    )
 
 
 def test_llm_agents_enabled_accepts_bare_agent_lists():
-    assert run_client._llm_agents_enabled_from_config(
-        [{"username": "alice", "llm": False}, {"username": "bob", "llm": True}]
-    ) is True
-    assert run_client._llm_agents_enabled_from_config(
-        [{"username": "alice", "llm": False}, {"username": "bob", "llm": False}]
-    ) is False
+    assert (
+        run_client._llm_agents_enabled_from_config(
+            [{"username": "alice", "llm": False}, {"username": "bob", "llm": True}]
+        )
+        is True
+    )
+    assert (
+        run_client._llm_agents_enabled_from_config(
+            [{"username": "alice", "llm": False}, {"username": "bob", "llm": False}]
+        )
+        is False
+    )
     assert run_client._llm_agents_enabled_from_config([]) is False
 
 
@@ -109,9 +111,7 @@ def test_wait_for_orchestrator_ready_retries_until_ping(monkeypatch):
     monkeypatch.setattr(run_server.ray, "get", fake_ray_get)
     monkeypatch.setattr(run_server.time, "sleep", lambda *_: None)
 
-    assert run_server.wait_for_orchestrator_ready(
-        FakeServerHandle(), timeout_seconds=1
-    ) is True
+    assert run_server.wait_for_orchestrator_ready(FakeServerHandle(), timeout_seconds=1) is True
     assert len(probe_calls) == 3
 
 
@@ -143,7 +143,9 @@ def test_intentional_actor_termination_detection(monkeypatch):
     class FakeActorDiedError(Exception):
         pass
 
-    monkeypatch.setattr(run_client.ray.exceptions, "ActorDiedError", FakeActorDiedError, raising=False)
+    monkeypatch.setattr(
+        run_client.ray.exceptions, "ActorDiedError", FakeActorDiedError, raising=False
+    )
 
     assert run_client._is_intentional_actor_termination(
         FakeActorDiedError("The actor is dead because it was killed by `ray.kill`.")

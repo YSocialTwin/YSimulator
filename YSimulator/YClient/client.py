@@ -1335,7 +1335,9 @@ class SimulationClient:
         if cache_key in self._username_validity_cache:
             return self._username_validity_cache[cache_key]
         try:
-            user = ray.get(self.server.get_user_by_username.remote(username, client_id=self.client_id))
+            user = ray.get(
+                self.server.get_user_by_username.remote(username, client_id=self.client_id)
+            )
             is_valid = bool(user)
         except Exception as exc:
             self.logger.warning(f"Username validation failed for @{username}: {exc}")

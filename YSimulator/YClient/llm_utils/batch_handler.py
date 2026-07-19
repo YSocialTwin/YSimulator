@@ -75,9 +75,7 @@ class BatchHandler:
                 return [None] * len(futures)
             if e.__class__.__name__ == "RayTaskError":
                 # Ray task execution error - log full details
-                self.logger.error(
-                    f"Ray task error gathering futures: {type(e).__name__}: {str(e)}"
-                )
+                self.logger.error(f"Ray task error gathering futures: {type(e).__name__}: {str(e)}")
                 self.logger.error(f"Full traceback:\n{traceback.format_exc()}")
 
                 # Try to get individual results to identify which future failed
