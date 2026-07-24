@@ -210,18 +210,39 @@ def load_and_create_social_network(
         logger.warning("No edges to create")
         return 0
 
+    initial_round_id = None
+    try:
+        if hasattr(server, "get_first_round_id"):
+            initial_round_id = ray.get(server.get_first_round_id.remote())
+    except Exception as e:
+        logger.warning(
+            f"Unable to resolve initial round ID for network loading: {e}",
+            extra={"extra_data": {"error": str(e)}},
+        )
+
+    batch_method = None
+    if hasattr(server, "add_follow_relationships_batch"):
+        batch_method = server.add_follow_relationships_batch
+    elif hasattr(server, "create_follow_relationships_batch"):
+        batch_method = server.create_follow_relationships_batch
+
+    if batch_method is None:
+        logger.error("Server does not expose a batch follow creation method")
+        return 0
+
     # Create follow relationships in batches
     success_count = 0
     failed_count = 0
 
     for i in range(0, len(edges), batch_size):
         batch = edges[i : i + batch_size]
+        batched_edges = [
+            (source_id, target_id, initial_round_id) for source_id, target_id in batch
+        ]
 
         try:
             # Send batch to server
-            result = ray.get(
-                server.create_follow_relationships_batch.remote(batch, client_id=client_id)
-            )
+            result = ray.get(batch_method.remote(batched_edges, client_id=client_id))
 
             if result:
                 success_count += len(batch)

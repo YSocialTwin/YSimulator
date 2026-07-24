@@ -119,6 +119,8 @@ class NetworkLoader:
             self.logger.warning("No edges to create")
             return 0
 
+        initial_round_id = self._resolve_initial_round_id()
+
         # Create follow relationships in batches
         success_count = 0
         failed_count = 0
@@ -127,12 +129,16 @@ class NetworkLoader:
             batch = edges[i : i + batch_size]
             batch_num = i // batch_size + 1
             total_batches = (len(edges) + batch_size - 1) // batch_size
+            batched_edges = [
+                (follower_id, user_id, initial_round_id)
+                for follower_id, user_id in batch
+            ]
 
             try:
                 # Send batch to server using the correct method name
                 batch_count = ray.get(
                     self.server.add_follow_relationships_batch.remote(
-                        batch, client_id=self.client_id
+                        batched_edges, client_id=self.client_id
                     )
                 )
 
@@ -168,3 +174,23 @@ class NetworkLoader:
         )
 
         return success_count
+
+    def _resolve_initial_round_id(self):
+        """
+        Resolve the first simulation round used to anchor initial network edges.
+
+        Returns:
+            The first round UUID when available, otherwise None.
+        """
+        try:
+            if hasattr(self.server, "get_first_round_id"):
+                round_id = ray.get(self.server.get_first_round_id.remote())
+                if round_id:
+                    return round_id
+        except Exception as e:
+            self.logger.warning(
+                f"Unable to resolve initial round ID for network loading: {e}",
+                extra={"extra_data": {"error": str(e)}},
+            )
+
+        return None

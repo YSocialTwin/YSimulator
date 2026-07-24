@@ -42,6 +42,8 @@ def mock_server():
     server = Mock()
     server.add_follow_relationships_batch = Mock()
     server.add_follow_relationships_batch.remote = Mock(return_value=Mock())
+    server.get_first_round_id = Mock()
+    server.get_first_round_id.remote = Mock(return_value="round-uuid-1")
     return server
 
 
@@ -538,13 +540,17 @@ class TestNetworkLoader:
 
         # Mock ray.get to return batch count
         with patch("YSimulator.YClient.agent_management.network_loader.ray.get") as mock_ray_get:
-            mock_ray_get.return_value = 2  # 2 edges created successfully
+            mock_ray_get.side_effect = ["round-uuid-1", 2]  # initial round + 2 edges created
 
             network_file = temp_config_dir / "network.csv"
             loader.load_and_create_social_network(network_file, sample_agents)
 
             # Verify server method was called
             mock_server.add_follow_relationships_batch.remote.assert_called()
+            called_batch = mock_server.add_follow_relationships_batch.remote.call_args.args[0]
+            assert all(len(edge) == 3 for edge in called_batch)
+            assert {edge[2] for edge in called_batch} == {"round-uuid-1"}
+            mock_server.get_first_round_id.remote.assert_called_once()
             mock_logger.info.assert_called()
 
     def test_load_and_create_social_network_empty_file(
