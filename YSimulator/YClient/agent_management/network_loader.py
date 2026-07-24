@@ -130,8 +130,7 @@ class NetworkLoader:
             batch_num = i // batch_size + 1
             total_batches = (len(edges) + batch_size - 1) // batch_size
             batched_edges = [
-                (follower_id, user_id, initial_round_id)
-                for follower_id, user_id in batch
+                (follower_id, user_id, initial_round_id) for follower_id, user_id in batch
             ]
 
             try:

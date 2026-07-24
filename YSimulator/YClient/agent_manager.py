@@ -236,9 +236,7 @@ def load_and_create_social_network(
 
     for i in range(0, len(edges), batch_size):
         batch = edges[i : i + batch_size]
-        batched_edges = [
-            (source_id, target_id, initial_round_id) for source_id, target_id in batch
-        ]
+        batched_edges = [(source_id, target_id, initial_round_id) for source_id, target_id in batch]
 
         try:
             # Send batch to server
