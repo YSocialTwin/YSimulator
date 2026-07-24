@@ -99,4 +99,3 @@ def test_namespaced_client_prefers_runtime_specific_network_file(monkeypatch, si
 
         simulator_deps["parse_network_edges_fn"].assert_called_once_with(runtime_network)
         simulator_deps["load_and_create_social_network_fn"].assert_called_once_with(runtime_network)
-
