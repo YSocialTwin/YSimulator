@@ -15,6 +15,7 @@ The Simulator coordinates:
 
 import logging
 import time
+from pathlib import Path
 
 import ray
 
@@ -315,12 +316,7 @@ class Simulator:
         """
         Load social network topology from network.csv if available.
         """
-        # Check if we should load the social network topology from network.csv
-        # This works regardless of when the client joins (multi-client scenarios)
-        # Try client-specific network file first, then fall back to generic
-        network_csv_path = self.config_path / f"{self.client_id}_network.csv"
-        if not network_csv_path.exists():
-            network_csv_path = self.config_path / "network.csv"
+        network_csv_path = self._resolve_network_csv_path()
 
         if network_csv_path.exists():
             # First, parse the network edges from CSV
@@ -345,6 +341,35 @@ class Simulator:
                 self.logger.warning(f"No valid edges found in {network_csv_path.name}")
         else:
             self.logger.info("No network.csv found, skipping social network creation")
+
+    def _resolve_network_csv_path(self) -> Path:
+        """
+        Resolve the best network CSV for this client.
+
+        Supports:
+        - runtime-namespaced client IDs: {config_dir.name}:{client_name}_network.csv
+        - legacy client-name files: {client_name}_network.csv
+        - generic experiment-level fallback: network.csv
+        """
+        candidates = []
+
+        def add_candidate(filename: str) -> None:
+            candidate = self.config_path / filename
+            if candidate not in candidates:
+                candidates.append(candidate)
+
+        add_candidate(f"{self.client_id}_network.csv")
+
+        if ":" in self.client_id:
+            add_candidate(f"{self.client_id.rsplit(':', 1)[-1]}_network.csv")
+
+        add_candidate("network.csv")
+
+        for candidate in candidates:
+            if candidate.exists():
+                return candidate
+
+        return candidates[-1]
 
     def _simulate_round(
         self, day: int, slot: int, recent_posts: list, calculate_opinion_updates_fn
