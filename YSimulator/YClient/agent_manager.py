@@ -266,8 +266,8 @@ def load_and_create_social_network(
 
             # Periodic and terminal ETA progress reporting
             now = time.time()
-            is_first = (batch_num == 1)
-            is_last = (batch_num == total_batches)
+            is_first = batch_num == 1
+            is_last = batch_num == total_batches
             is_periodic = (batch_num % log_interval == 0) or (now - last_log_time >= 2.0)
 
             if is_first or is_last or is_periodic:
