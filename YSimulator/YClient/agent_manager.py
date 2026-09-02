@@ -9,6 +9,7 @@ import csv
 import json
 import logging
 import random
+import time
 import uuid
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
@@ -189,7 +190,7 @@ def parse_network_edges(network_csv_path: Path, logger: logging.Logger) -> List[
 
 
 def load_and_create_social_network(
-    network_csv_path: Path, server, client_id: str, logger: logging.Logger, batch_size: int = 100
+    network_csv_path: Path, server, client_id: str, logger: logging.Logger, batch_size: int = 20000
 ) -> int:
     """
     Load network edges from CSV and create follow relationships on server.
@@ -199,7 +200,7 @@ def load_and_create_social_network(
         server: Ray server actor handle
         client_id: Client identifier
         logger: Logger instance
-        batch_size: Number of edges to process in each batch (default: 100)
+        batch_size: Number of edges to process in each batch (default: 20000)
 
     Returns:
         int: Number of follow relationships successfully created
@@ -233,9 +234,21 @@ def load_and_create_social_network(
     # Create follow relationships in batches
     success_count = 0
     failed_count = 0
+    total_edges = len(edges)
+    total_batches = (total_edges + batch_size - 1) // batch_size
+    start_time = time.time()
+    log_interval = max(1, total_batches // 50) if total_batches > 50 else 1
+    last_log_time = start_time
+    tag = f"[{client_id}]" if client_id else "[AgentManager]"
 
-    for i in range(0, len(edges), batch_size):
+    print(
+        f"{tag} [Network Setup] Starting bulk insertion of {total_edges:,} edges in {total_batches:,} batch(es) (batch_size={batch_size:,})...",
+        flush=True,
+    )
+
+    for i in range(0, total_edges, batch_size):
         batch = edges[i : i + batch_size]
+        batch_num = i // batch_size + 1
         batched_edges = [(source_id, target_id, initial_round_id) for source_id, target_id in batch]
 
         try:
@@ -244,16 +257,45 @@ def load_and_create_social_network(
 
             if result:
                 success_count += len(batch)
-                logger.info(
-                    f"Successfully created {len(batch)} follow relationships "
-                    f"(batch {i // batch_size + 1}/{(len(edges) + batch_size - 1) // batch_size})"
-                )
             else:
                 failed_count += len(batch)
                 logger.warning(
                     f"Failed to create batch of {len(batch)} follow relationships "
-                    f"(batch {i // batch_size + 1}/{(len(edges) + batch_size - 1) // batch_size})"
+                    f"(batch {batch_num}/{total_batches})"
                 )
+
+            # Periodic and terminal ETA progress reporting
+            now = time.time()
+            is_first = (batch_num == 1)
+            is_last = (batch_num == total_batches)
+            is_periodic = (batch_num % log_interval == 0) or (now - last_log_time >= 2.0)
+
+            if is_first or is_last or is_periodic:
+                last_log_time = now
+                elapsed = max(0.001, now - start_time)
+                processed = min(i + len(batch), total_edges)
+                percent = (processed / total_edges) * 100
+                rate_edges = processed / elapsed
+                rate_batches = batch_num / elapsed
+                remaining_batches = total_batches - batch_num
+                eta_seconds = remaining_batches / rate_batches if rate_batches > 0 else 0
+
+                eta_str = time.strftime(
+                    "%H:%M:%S" if eta_seconds >= 3600 else "%M:%S",
+                    time.gmtime(eta_seconds),
+                )
+                elapsed_str = time.strftime(
+                    "%H:%M:%S" if elapsed >= 3600 else "%M:%S",
+                    time.gmtime(elapsed),
+                )
+
+                progress_msg = (
+                    f"{tag} [Network Setup] Batch {batch_num}/{total_batches} ({percent:5.1f}%) | "
+                    f"{processed:,}/{total_edges:,} edges ({rate_edges:,.0f} edges/s) | "
+                    f"Elapsed: {elapsed_str} | ETA: {eta_str}"
+                )
+                print(progress_msg, flush=True)
+                logger.info(progress_msg)
 
         except Exception as e:
             failed_count += len(batch)
@@ -262,9 +304,14 @@ def load_and_create_social_network(
                 extra={"extra_data": {"batch_size": len(batch), "error": str(e)}},
             )
 
-    logger.info(
-        f"Network creation complete: {success_count}successful, {failed_count}failed out of {len(edges)}total edges"
+    total_elapsed = max(0.001, time.time() - start_time)
+    completion_msg = (
+        f"{tag} [Network Setup] Completed in {total_elapsed:.1f}s: "
+        f"{success_count:,} successful, {failed_count:,} failed out of {total_edges:,} total edges "
+        f"({(success_count / total_elapsed):,.0f} edges/s)"
     )
+    print(completion_msg, flush=True)
+    logger.info(completion_msg)
 
     return success_count
 

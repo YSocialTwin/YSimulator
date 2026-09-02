@@ -111,6 +111,23 @@ def create_database_engine(
     # Create engine with connection pooling
     engine = create_engine(connection_string, **engine_kwargs)
 
+    if db_type == "sqlite":
+        from sqlalchemy import event
+
+        @event.listens_for(engine, "connect")
+        def set_sqlite_pragma(dbapi_connection, connection_record):
+            cursor = dbapi_connection.cursor()
+            try:
+                cursor.execute("PRAGMA journal_mode = WAL")
+                cursor.execute("PRAGMA synchronous = NORMAL")
+                cursor.execute("PRAGMA busy_timeout = 30000")
+                cursor.execute("PRAGMA cache_size = -64000")
+                cursor.execute("PRAGMA temp_store = MEMORY")
+            except Exception:
+                pass
+            finally:
+                cursor.close()
+
     # Create all tables if they don't exist
     try:
         from YSimulator.YServer.classes.models import Base

@@ -128,6 +128,24 @@ class Simulator:
         Args:
             calculate_opinion_updates_fn: Function to calculate opinion updates
         """
+        # Register client first so the server can keep us alive while the
+        # long startup database work runs.
+        client_reg = ray.get(self.server.register_client.remote(self.client_id, self.num_days))
+
+        # Validate registration response has all required fields
+        required_fields = ["registered", "start_day", "start_slot"]
+        if not isinstance(client_reg, dict):
+            raise RuntimeError(f"Client registration failed: expected dict, got {type(client_reg)}")
+
+        missing_fields = [f for f in required_fields if f not in client_reg]
+        if missing_fields:
+            raise RuntimeError(f"Client registration response missing fields: {missing_fields}")
+
+        if not client_reg["registered"]:
+            raise RuntimeError(f"Client registration failed: {client_reg}")
+
+        self._send_startup_heartbeat()
+
         # Register agents with the server
         start_time = time.time()
         self.logger.info(f" Registering {len(self.agent_profiles)} agents with server...")
@@ -143,27 +161,13 @@ class Simulator:
         )
         self.logger.info(f" Agent registration complete: {registration_result}")
 
-        # Register client with the server, passing num_days for informational purposes
-        client_reg = ray.get(self.server.register_client.remote(self.client_id, self.num_days))
-
-        # Validate registration response has all required fields
-        required_fields = ["registered", "start_day", "start_slot"]
-        if not isinstance(client_reg, dict):
-            raise RuntimeError(f"Client registration failed: expected dict, got {type(client_reg)}")
-
-        missing_fields = [f for f in required_fields if f not in client_reg]
-        if missing_fields:
-            raise RuntimeError(f"Client registration response missing fields: {missing_fields}")
-
-        if not client_reg["registered"]:
-            raise RuntimeError(f"Client registration failed: {client_reg}")
-
         # Server tells us where to start - we count from here
         start_day = client_reg["start_day"]
         start_slot = client_reg["start_slot"]
 
         # Load social network if available
         self._load_network_if_available()
+        self._send_startup_heartbeat()
 
         # Calculate our personal max_day for local tracking
         # num_days=0 means infinite simulation
@@ -316,6 +320,7 @@ class Simulator:
         """
         Load social network topology from network.csv if available.
         """
+        self._send_startup_heartbeat()
         network_csv_path = self._resolve_network_csv_path()
 
         if network_csv_path.exists():
@@ -324,16 +329,19 @@ class Simulator:
                 f"[{self.client_id}] Checking if social network needs to be loaded from {network_csv_path.name}..."
             )
             edges = self.parse_network_edges_fn(network_csv_path)
+            self._send_startup_heartbeat()
 
             if edges:
-                # Ask server if any of these edges already exist in the database
-                edges_exist = ray.get(self.server.check_network_edges_exist.remote(edges))
+                # Ask server if any of these edges already exist in the database (pass sample to avoid heavy RPC serialization)
+                edges_exist = ray.get(self.server.check_network_edges_exist.remote(edges[:10]))
+                self._send_startup_heartbeat()
 
                 if not edges_exist:
                     self.logger.info(
                         f"[{self.client_id}] Loading social network topology from {network_csv_path.name}..."
                     )
                     self.load_and_create_social_network_fn(network_csv_path)
+                    self._send_startup_heartbeat()
                 else:
                     self.logger.info("Network already loaded (edges exist in database)")
                     self.logger.info(" Social network already loaded, skipping")
@@ -341,6 +349,13 @@ class Simulator:
                 self.logger.warning(f"No valid edges found in {network_csv_path.name}")
         else:
             self.logger.info("No network.csv found, skipping social network creation")
+
+    def _send_startup_heartbeat(self) -> None:
+        """Keep the client registered as alive during long startup operations."""
+        try:
+            ray.get(self.server.heartbeat.remote(self.client_id))
+        except Exception as e:
+            self.logger.debug(f"Startup heartbeat skipped: {e}")
 
     def _resolve_network_csv_path(self) -> Path:
         """

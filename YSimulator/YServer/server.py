@@ -936,6 +936,18 @@ class OrchestratorServer:
         """
         start_time = time.time()
 
+        def _touch_client_heartbeat() -> None:
+            if not client_id:
+                return
+            try:
+                self.client_manager.heartbeat(client_id)
+            except Exception as hb_exc:
+                self.logger.debug(
+                    f"Skipping startup heartbeat during agent registration for {client_id}: {hb_exc}"
+                )
+
+        _touch_client_heartbeat()
+
         # Prepare all user data for batch insertion
         users_data = []
         websites_data = []
@@ -996,10 +1008,19 @@ class OrchestratorServer:
                 websites_data.append(website_data)
 
         try:
-            # Batch register users - returns (count, set of newly registered IDs)
-            registered_count, newly_registered_ids = self.user_service.register_users_batch(
-                users_data
-            )
+            # Batch register users in smaller chunks so long database work can
+            # keep the client alive between commits.
+            registered_count = 0
+            newly_registered_ids = set()
+            registration_batch_size = 5000
+            for i in range(0, len(users_data), registration_batch_size):
+                user_batch = users_data[i : i + registration_batch_size]
+                batch_registered_count, batch_new_ids = self.user_service.register_users_batch(
+                    user_batch
+                )
+                registered_count += batch_registered_count
+                newly_registered_ids.update(batch_new_ids)
+                _touch_client_heartbeat()
 
             # All agents (new and existing) should be in registered_agents dict
             # Also cache agent profiles for opinion lookups (when opinion dynamics enabled)
@@ -1053,6 +1074,7 @@ class OrchestratorServer:
                     f"Batch initialized interests for {success_count}/"
                     f"{len(agents_with_interests)} agents"
                 )
+                _touch_client_heartbeat()
 
             # Batch initialize opinions for all agents
             if agents_with_opinions:
@@ -1092,6 +1114,7 @@ class OrchestratorServer:
                         f"Batch initialized {opinions_added} opinions for "
                         f"{len(agents_with_opinions)} agents"
                     )
+                _touch_client_heartbeat()
 
             custom_feature_rows = []
             for agent_id in newly_registered_ids:
@@ -1118,18 +1141,13 @@ class OrchestratorServer:
 
                 from YSimulator.YServer.classes.models import Agent_Custom_Feature
 
+                for row in custom_feature_rows:
+                    if "id" not in row or not row["id"]:
+                        row["id"] = str(uuid.uuid4())
+
                 session = Session(self.db.engine)
                 try:
-                    for row in custom_feature_rows:
-                        session.add(
-                            Agent_Custom_Feature(
-                                id=str(uuid.uuid4()),
-                                agent_id=row["agent_id"],
-                                feature_type=row["feature_type"],
-                                key=row["key"],
-                                value=row["value"],
-                            )
-                        )
+                    session.bulk_insert_mappings(Agent_Custom_Feature, custom_feature_rows)
                     session.commit()
                 except Exception:
                     session.rollback()
@@ -1137,10 +1155,13 @@ class OrchestratorServer:
                 finally:
                     session.close()
 
+            _touch_client_heartbeat()
+
             # Batch register websites for page agents
             pages_registered = 0
             if websites_data:
                 pages_registered = self.content_service.add_websites_batch(websites_data)
+                _touch_client_heartbeat()
 
             execution_time = (time.time() - start_time) * 1000
 

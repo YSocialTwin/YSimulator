@@ -1613,7 +1613,7 @@ class SQLInterestRepository(InterestRepository):
             return False
 
     def add_user_interests_batch(
-        self, user_interests_data: List[Dict[str, str]], batch_size: int = 1000
+        self, user_interests_data: List[Dict[str, str]], batch_size: int = 10000
     ) -> int:
         """
         Add multiple user interests in batch.
@@ -1628,7 +1628,7 @@ class SQLInterestRepository(InterestRepository):
                 - user_id: UUID of user
                 - interest_id: UUID of interest/topic
                 - round_id: UUID of round
-            batch_size: Number of records to insert per transaction (default: 1000)
+            batch_size: Number of records to insert per transaction (default: 10000)
 
         Returns:
             int: Number of user interests successfully added
@@ -1675,7 +1675,7 @@ class SQLInterestRepository(InterestRepository):
             return total_added
 
     def add_agent_opinions_batch(
-        self, agent_opinions_data: List[Dict[str, Any]], batch_size: int = 1000
+        self, agent_opinions_data: List[Dict[str, Any]], batch_size: int = 10000
     ) -> int:
         """
         Add multiple agent opinions in batch.
@@ -1693,7 +1693,7 @@ class SQLInterestRepository(InterestRepository):
                 - opinion: Opinion value (float)
                 - id_interacted_with: Optional UUID of agent interacted with
                 - id_post: Optional UUID of post
-            batch_size: Number of records to insert per transaction (default: 1000)
+            batch_size: Number of records to insert per transaction (default: 10000)
 
         Returns:
             int: Number of agent opinions successfully added

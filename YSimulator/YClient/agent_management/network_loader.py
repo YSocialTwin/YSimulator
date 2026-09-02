@@ -6,6 +6,7 @@ Handles social network topology loading and follow relationship creation.
 
 import csv
 import logging
+import time
 from pathlib import Path
 from typing import List, Tuple
 
@@ -100,7 +101,7 @@ class NetworkLoader:
         return edges
 
     def load_and_create_social_network(
-        self, network_csv_path: Path, agent_profiles: List[AgentProfile], batch_size: int = 100
+        self, network_csv_path: Path, agent_profiles: List[AgentProfile], batch_size: int = 20000
     ) -> int:
         """
         Load network edges from CSV and create follow relationships on server.
@@ -108,7 +109,7 @@ class NetworkLoader:
         Args:
             network_csv_path: Path to network edges CSV file
             agent_profiles: List of agent profiles for username-to-ID mapping
-            batch_size: Number of edges to process in each batch (default: 100)
+            batch_size: Number of edges to process in each batch (default: 20000)
 
         Returns:
             Number of follow relationships successfully created
@@ -120,15 +121,27 @@ class NetworkLoader:
             return 0
 
         initial_round_id = self._resolve_initial_round_id()
+        self._send_startup_heartbeat()
 
         # Create follow relationships in batches
         success_count = 0
         failed_count = 0
+        total_edges = len(edges)
+        total_batches = (total_edges + batch_size - 1) // batch_size
+        start_time = time.time()
+        log_interval = max(1, total_batches // 50) if total_batches > 50 else 1
+        last_log_time = start_time
+        tag = f"[{self.client_id}]" if self.client_id else "[NetworkLoader]"
 
-        for i in range(0, len(edges), batch_size):
+        print(
+            f"{tag} [Network Setup] Starting bulk insertion of {total_edges:,} edges in {total_batches:,} batch(es) (batch_size={batch_size:,})...",
+            flush=True,
+        )
+
+        for i in range(0, total_edges, batch_size):
+            self._send_startup_heartbeat()
             batch = edges[i : i + batch_size]
             batch_num = i // batch_size + 1
-            total_batches = (len(edges) + batch_size - 1) // batch_size
             batched_edges = [
                 (follower_id, user_id, initial_round_id) for follower_id, user_id in batch
             ]
@@ -143,23 +156,52 @@ class NetworkLoader:
 
                 success_count += batch_count
 
-                if batch_count == len(batch):
-                    self.logger.info(
-                        f"Successfully created {batch_count} follow relationships "
-                        f"(batch {batch_num}/{total_batches})"
+                if batch_count != len(batch):
+                    if batch_count > 0:
+                        failed_count += len(batch) - batch_count
+                        self.logger.warning(
+                            f"Partial batch success: {batch_count}/{len(batch)} follow relationships created "
+                            f"(batch {batch_num}/{total_batches})"
+                        )
+                    else:
+                        failed_count += len(batch)
+                        self.logger.warning(
+                            f"Failed to create batch of {len(batch)} follow relationships "
+                            f"(batch {batch_num}/{total_batches})"
+                        )
+
+                # Periodic and terminal ETA progress reporting
+                now = time.time()
+                is_first = (batch_num == 1)
+                is_last = (batch_num == total_batches)
+                is_periodic = (batch_num % log_interval == 0) or (now - last_log_time >= 2.0)
+
+                if is_first or is_last or is_periodic:
+                    last_log_time = now
+                    elapsed = max(0.001, now - start_time)
+                    processed = min(i + len(batch), total_edges)
+                    percent = (processed / total_edges) * 100
+                    rate_edges = processed / elapsed
+                    rate_batches = batch_num / elapsed
+                    remaining_batches = total_batches - batch_num
+                    eta_seconds = remaining_batches / rate_batches if rate_batches > 0 else 0
+
+                    eta_str = time.strftime(
+                        "%H:%M:%S" if eta_seconds >= 3600 else "%M:%S",
+                        time.gmtime(eta_seconds),
                     )
-                elif batch_count > 0:
-                    failed_count += len(batch) - batch_count
-                    self.logger.warning(
-                        f"Partial batch success: {batch_count}/{len(batch)} follow relationships created "
-                        f"(batch {batch_num}/{total_batches})"
+                    elapsed_str = time.strftime(
+                        "%H:%M:%S" if elapsed >= 3600 else "%M:%S",
+                        time.gmtime(elapsed),
                     )
-                else:
-                    failed_count += len(batch)
-                    self.logger.warning(
-                        f"Failed to create batch of {len(batch)} follow relationships "
-                        f"(batch {batch_num}/{total_batches})"
+
+                    progress_msg = (
+                        f"{tag} [Network Setup] Batch {batch_num}/{total_batches} ({percent:5.1f}%) | "
+                        f"{processed:,}/{total_edges:,} edges ({rate_edges:,.0f} edges/s) | "
+                        f"Elapsed: {elapsed_str} | ETA: {eta_str}"
                     )
+                    print(progress_msg, flush=True)
+                    self.logger.info(progress_msg)
 
             except Exception as e:
                 failed_count += len(batch)
@@ -167,12 +209,27 @@ class NetworkLoader:
                     f"Error creating follow relationships batch: {e}",
                     extra={"extra_data": {"batch_size": len(batch), "error": str(e)}},
                 )
+            finally:
+                self._send_startup_heartbeat()
 
-        self.logger.info(
-            f"Network creation complete: {success_count}successful, {failed_count}failed out of {len(edges)}total edges"
+        total_elapsed = max(0.001, time.time() - start_time)
+        completion_msg = (
+            f"{tag} [Network Setup] Completed in {total_elapsed:.1f}s: "
+            f"{success_count:,} successful, {failed_count:,} failed out of {total_edges:,} total edges "
+            f"({(success_count / total_elapsed):,.0f} edges/s)"
         )
+        print(completion_msg, flush=True)
+        self.logger.info(completion_msg)
 
         return success_count
+
+    def _send_startup_heartbeat(self) -> None:
+        """Keep the registered client alive while startup network loading runs."""
+        try:
+            if hasattr(self.server, "heartbeat"):
+                ray.get(self.server.heartbeat.remote(self.client_id))
+        except Exception as e:
+            self.logger.debug(f"Startup heartbeat skipped during network loading: {e}")
 
     def _resolve_initial_round_id(self):
         """
