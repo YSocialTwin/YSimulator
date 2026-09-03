@@ -1,8 +1,8 @@
-SQLAlchemy>=1.4.31,<2.0.0
+SQLAlchemy>=2.0
 ray>=2.0.0,<3.0.0
 redis>=4.0.0,<6.0.0
-langchain>=0.1.0,<1.0.0
-langchain-core>=0.1.0,<1.0.0
+langchain>=0.3
+langchain-core>=0.3
 langchain-ollama>=0.1.0,<1.0.0
 yclient-memory>=0.1.0
 feedparser>=6.0.0,<7.0.0
