@@ -1046,9 +1046,7 @@ class TestRecommendHybridLinearRanker(unittest.TestCase):
         """Test user-author affinity calculation helper."""
         import math
 
-        from YSimulator.YServer.recsys.content_recsys_db import (
-            _calculate_user_author_affinity_sql,
-        )
+        from YSimulator.YServer.recsys.content_recsys_db import _calculate_user_author_affinity_sql
 
         mock_session = Mock(spec=Session)
         mock_query = Mock()

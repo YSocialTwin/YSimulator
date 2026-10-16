@@ -2,9 +2,7 @@ from unittest.mock import MagicMock
 
 from YSimulator.YClient.classes.ray_models import ActionDTO, AgentProfile
 from YSimulator.YClient.simulation import secondary_follow_processor as processor_module
-from YSimulator.YClient.simulation.secondary_follow_processor import (
-    SecondaryFollowProcessor,
-)
+from YSimulator.YClient.simulation.secondary_follow_processor import SecondaryFollowProcessor
 
 
 class _RemoteMethod:
