@@ -15,7 +15,8 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 # Mock dependencies before importing
-sys.modules["ray"] = MagicMock()
+if "ray" not in sys.modules:  # keep the real Ray (loaded by conftest) so other test modules can use it
+    sys.modules["ray"] = MagicMock()
 sys.modules["vllm"] = MagicMock()
 
 

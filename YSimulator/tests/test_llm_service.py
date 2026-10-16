@@ -15,7 +15,8 @@ import unittest
 from unittest.mock import MagicMock, Mock, patch
 
 # Mock ray before importing llm_utils components
-sys.modules["ray"] = MagicMock()
+if "ray" not in sys.modules:  # keep the real Ray (loaded by conftest) so other test modules can use it
+    sys.modules["ray"] = MagicMock()
 
 from YSimulator.YClient.llm_utils.batch_handler import BatchHandler
 from YSimulator.YClient.llm_utils.cost_tracker import CostTracker
