@@ -625,6 +625,18 @@ class VLLMService:
             logger.info("[vLLM] Vision LLM config (llm_v_config) not provided in configuration")
             logger.info(f"[vLLM] Vision service unavailable: {self.vision_init_status}")
 
+        # Store prompts and metadata
+        self.prompts_config = prompts_config or {}
+        self.gpu_selection_info = {
+            "cuda_visible_devices": os.environ.get("CUDA_VISIBLE_DEVICES"),
+            "backend": vllm_params.get("distributed_executor_backend"),
+            "vision_gpu_id": self.vision_gpu_id,
+            "has_dedicated_vision_gpu": self.vision_gpu_id is not None,
+        }
+
+        # Configure logger to write to file if logging_config provided
+        self._setup_logger(logging_config)
+
     def _initialize_vision_llm_shared_gpu(self, llm_v_config: Dict[str, Any]):
         """
         Initialize vision LLM on shared GPU (fallback for single GPU systems).
@@ -634,6 +646,8 @@ class VLLMService:
         Args:
             llm_v_config: Vision LLM configuration dictionary
         """
+        from vllm import LLM, SamplingParams
+
         try:
             logger.info("[vLLM] Initializing vision LLM on shared GPU (fallback)...")
             v_model_name = llm_v_config.get("model", "meta-llama/Llama-3.2-11B-Vision")
@@ -679,18 +693,6 @@ class VLLMService:
             self.llm_v = None
             self.sampling_params_v = None
 
-        # Store prompts and metadata
-        self.prompts_config = prompts_config or {}
-        self.gpu_selection_info = {
-            "cuda_visible_devices": os.environ.get("CUDA_VISIBLE_DEVICES"),
-            "backend": vllm_params.get("distributed_executor_backend"),
-            "vision_gpu_id": self.vision_gpu_id,
-            "has_dedicated_vision_gpu": self.vision_gpu_id is not None,
-        }
-
-        # Configure logger to write to file if logging_config provided
-        self._setup_logger(logging_config)
-
     def _setup_logger(self, logging_config: Optional[Dict[str, Any]] = None):
         """
         Configure the module-level logger to write to {client_id}_actor.log file.
@@ -701,8 +703,6 @@ class VLLMService:
                 - client_id: Client identifier for log filename (default: "vllm")
                 - enable_actor_log: Whether to enable file logging (default: True)
         """
-        global logger
-
         if logging_config is None:
             logging_config = {}
 

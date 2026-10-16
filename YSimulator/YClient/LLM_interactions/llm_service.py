@@ -234,8 +234,6 @@ class LLMService:
                 - client_id: Client identifier for log filename (default: "llm")
                 - enable_actor_log: Whether to enable file logging (default: True)
         """
-        global logger
-
         if logging_config is None:
             logging_config = {}
 
