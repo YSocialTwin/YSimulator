@@ -1,6 +1,8 @@
 from types import SimpleNamespace
 from unittest.mock import Mock
 
+import pytest
+
 from YSimulator.YClient.simulation.batch_processor import BatchProcessor
 
 
@@ -52,6 +54,7 @@ class _FakeVLLMActor:
         self.outputs = outputs
         self.last_requests = None
         self.generate_post_batch = _RemoteFn(self._generate_post_batch)
+        self.generate_post = _RemoteFn(lambda cluster_id, day, slot, attrs=None: "single text")
 
     def _generate_post_batch(self, requests):
         self.last_requests = requests
@@ -205,8 +208,12 @@ def test_process_vllm_batch_accepts_image_post_tuple(monkeypatch):
     assert actions[0].content == "caption text"
 
 
-def test_process_vllm_batch_falls_back_when_batch_call_times_out(monkeypatch):
+def test_process_vllm_batch_falls_back_to_single_request_when_batch_call_times_out(monkeypatch):
     monkeypatch.setattr("YSimulator.YClient.simulation.batch_processor.ray.get", lambda x: x)
+    monkeypatch.setattr(
+        "YSimulator.YClient.simulation.batch_processor.ray.wait",
+        lambda futures, num_returns=1, timeout=None: (list(futures), []),
+    )
 
     processor = BatchProcessor(
         server=Mock(),
@@ -219,33 +226,29 @@ def test_process_vllm_batch_falls_back_when_batch_call_times_out(monkeypatch):
         logger=Mock(),
     )
 
-    fallback_called = {"value": False}
+    resolved = []
 
-    def _fake_standard_gather(pending_posts, actions):
-        fallback_called["value"] = True
+    def fake_resolve_batch_future(future, error_message, timeout_seconds=45):
+        resolved.append(error_message)
+        if len(resolved) == 1:  # the batch call times out ...
+            raise TimeoutError("slow")
+        return future  # ... and the single-request fallback answers
 
-    processor._gather_posts_standard = _fake_standard_gather
-    processor._resolve_batch_future = Mock(side_effect=TimeoutError("slow"))
+    processor._resolve_batch_future = fake_resolve_batch_future
+    actions = []
 
     processor._process_vllm_batch(
-        [
-            (
-                "agent-1",
-                3,
-                "future-1",
-                None,
-                1,
-                2,
-                {"name": "Agent One"},
-            )
-        ],
-        [],
+        [("agent-1", 3, "future-1", None, 1, 2, {"name": "Agent One"})],
+        actions,
     )
 
-    assert fallback_called["value"] is True
+    assert resolved[1].endswith("single-request fallback")
+    assert len(actions) == 1
+    assert actions[0].action_type == "POST"
+    assert actions[0].content == "single text"
 
 
-def test_vllm_batch_request_helper_splits_on_timeout(monkeypatch):
+def _processor_with_failing_batches():
     processor = BatchProcessor(
         server=Mock(),
         client_id="client-1",
@@ -256,7 +259,6 @@ def test_vllm_batch_request_helper_splits_on_timeout(monkeypatch):
         perspective_api_key=None,
         logger=Mock(),
     )
-
     calls = []
 
     def batch_call_fn(requests):
@@ -271,7 +273,31 @@ def test_vllm_batch_request_helper_splits_on_timeout(monkeypatch):
         kind, value = future
         return [f"resolved-{value}"]
 
-    monkeypatch.setattr(processor, "_resolve_batch_future", fake_resolve_batch_future)
+    processor._resolve_batch_future = fake_resolve_batch_future
+    return processor, calls, batch_call_fn, single_call_fn
+
+
+def test_vllm_batch_request_helper_retries_a_failing_chunk_with_backoff_then_raises(monkeypatch):
+    sleeps = []
+    monkeypatch.setattr("YSimulator.YClient.simulation.batch_processor.time.sleep", sleeps.append)
+    processor, calls, batch_call_fn, single_call_fn = _processor_with_failing_batches()
+
+    with pytest.raises(TimeoutError):
+        processor._resolve_vllm_request_batches(
+            batch_requests=[{"id": 1}, {"id": 2}],
+            batch_call_fn=batch_call_fn,
+            single_call_fn=single_call_fn,
+            error_message="test batch",
+            timeout_seconds=45,
+        )
+
+    assert calls == [("batch", [1, 2])] * 3  # a multi-request chunk is retried, never split
+    assert sleeps == [1.5, 3.0]  # exponential backoff between the attempts
+
+
+def test_vllm_batch_request_helper_uses_the_single_path_for_a_one_request_chunk(monkeypatch):
+    monkeypatch.setattr("YSimulator.YClient.simulation.batch_processor.time.sleep", lambda s: None)
+    processor, calls, batch_call_fn, single_call_fn = _processor_with_failing_batches()
 
     results = processor._resolve_vllm_request_batches(
         batch_requests=[{"id": 1}, {"id": 2}],
@@ -279,13 +305,8 @@ def test_vllm_batch_request_helper_splits_on_timeout(monkeypatch):
         single_call_fn=single_call_fn,
         error_message="test batch",
         timeout_seconds=45,
+        max_chunk_size=1,
     )
 
     assert results == ["resolved-1", "resolved-2"]
-    assert calls == [
-        ("batch", [1, 2]),
-        ("batch", [1]),
-        ("single", 1),
-        ("batch", [2]),
-        ("single", 2),
-    ]
+    assert calls == [("batch", [1]), ("single", 1), ("batch", [2]), ("single", 2)]

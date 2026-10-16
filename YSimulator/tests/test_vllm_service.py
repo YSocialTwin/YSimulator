@@ -13,7 +13,11 @@ Full integration tests require a GPU-enabled environment with vLLM installed.
 
 import sys
 import unittest
+from pathlib import Path
 from unittest.mock import MagicMock, patch
+
+# Root of the YSimulator repository (the folder that holds run_client.py and example/)
+REPO_ROOT = Path(__file__).resolve().parents[2]
 
 # Mock dependencies before importing vllm_service
 # Keep the real Ray (loaded by conftest) so other test modules can use it
@@ -125,19 +129,21 @@ class TestRunClientIntegration(unittest.TestCase):
     """Test run_client.py integration with vLLM."""
 
     def test_run_client_imports_vllm_service(self):
-        """Test that run_client.py imports VLLMService."""
-        with open("/home/runner/work/YSimulator/YSimulator/run_client.py", "r") as f:
+        """Test that run_client.py creates vLLM actors through the load balancer."""
+        with open(str(REPO_ROOT / "run_client.py"), "r") as f:
             content = f.read()
 
+        # The actors are created through the load balancer, which owns the VLLMService reference
         self.assertIn(
-            "VLLMService",
+            "create_llm_actors",
             content,
-            "run_client.py does not import VLLMService",
+            "run_client.py does not create the LLM actors through the load balancer",
         )
+        self.assertIn('backend="vllm"', content, "run_client.py does not request the vLLM backend")
 
     def test_run_client_checks_backend_config(self):
         """Test that run_client.py checks for backend configuration."""
-        with open("/home/runner/work/YSimulator/YSimulator/run_client.py", "r") as f:
+        with open(str(REPO_ROOT / "run_client.py"), "r") as f:
             content = f.read()
 
         self.assertIn(
@@ -160,7 +166,7 @@ class TestConfigurationExample(unittest.TestCase):
         """Test that vLLM example configuration exists."""
         import os
 
-        example_dir = "/home/runner/work/YSimulator/YSimulator/example/llm_population_100_vllm"
+        example_dir = str(REPO_ROOT / "example" / "llm_population_100_vllm")
         self.assertTrue(os.path.isdir(example_dir), "vLLM example directory does not exist")
 
         config_file = os.path.join(example_dir, "simulation_config.json")
@@ -171,7 +177,9 @@ class TestConfigurationExample(unittest.TestCase):
         import json
         import os
 
-        config_file = "/home/runner/work/YSimulator/YSimulator/example/llm_population_100_vllm/simulation_config.json"
+        config_file = str(
+            REPO_ROOT / "example" / "llm_population_100_vllm" / "simulation_config.json"
+        )
 
         if os.path.isfile(config_file):
             with open(config_file, "r") as f:

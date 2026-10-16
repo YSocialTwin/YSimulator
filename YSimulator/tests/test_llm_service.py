@@ -156,8 +156,8 @@ class TestBatchHandler(unittest.TestCase):
             # Should return None for each future on error
             self.assertEqual(results, [None, None])
 
-    def test_gather_futures_actor_died_error_raises(self):
-        """Ray actor deaths must fail fast instead of being converted to None."""
+    def test_gather_futures_actor_died_error_returns_none_placeholders(self):
+        """A dead Ray actor yields None placeholders so the rest of the batch loop can continue."""
 
         class FakeRayActorError(Exception):
             pass
@@ -177,11 +177,10 @@ class TestBatchHandler(unittest.TestCase):
                 handler = BatchHandler(logger=self.mock_logger)
                 futures = [Mock(), Mock()]
 
-                with self.assertRaises(FakeRayActorError):
-                    handler.gather_futures(futures)
+                self.assertEqual(handler.gather_futures(futures), [None, None])
 
-    def test_gather_with_timeout_actor_died_error_raises(self):
-        """Timeout-aware gather must also fail fast on actor death."""
+    def test_gather_with_timeout_actor_died_error_returns_none_placeholders(self):
+        """The timeout-aware gather also returns None placeholders when an actor is dead."""
 
         class FakeRayActorError(Exception):
             pass
@@ -201,8 +200,7 @@ class TestBatchHandler(unittest.TestCase):
                 handler = BatchHandler(logger=self.mock_logger)
                 futures = [Mock(), Mock()]
 
-                with self.assertRaises(FakeRayActorError):
-                    handler.gather_with_timeout(futures)
+                self.assertEqual(handler.gather_with_timeout(futures), [None, None])
 
     def test_gather_with_metadata(self):
         """Test gathering with metadata preservation."""

@@ -18,6 +18,10 @@ class _FakeLLM:
 
 def test_process_vllm_read_batch_creates_report_action(monkeypatch):
     monkeypatch.setattr("YSimulator.YClient.simulation.batch_processor.ray.get", lambda x: x)
+    monkeypatch.setattr(
+        "YSimulator.YClient.simulation.batch_processor.ray.wait",
+        lambda futures, num_returns=1, timeout=None: (list(futures), []),
+    )
 
     processor = BatchProcessor(
         server=Mock(),

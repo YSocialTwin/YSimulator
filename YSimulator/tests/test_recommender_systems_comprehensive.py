@@ -37,7 +37,7 @@ class TestContentRecSysClient:
         assert recsys.n_posts == 10
         assert recsys.followers_ratio == 0.8
 
-    @patch("YSimulator.YClient.recsys.ContentRecSys.ray.get")
+    @patch("ray.get")
     def test_content_recsys_get_recommendations_success(self, mock_ray_get):
         """Test successful recommendation fetching."""
         from YSimulator.YClient.recsys.ContentRecSys import ContentRecSys
@@ -56,7 +56,7 @@ class TestContentRecSysClient:
         assert result == ["post-1", "post-2", "post-3"]
         mock_server.get_recommended_posts.remote.assert_called_once()
 
-    @patch("YSimulator.YClient.recsys.ContentRecSys.ray.get")
+    @patch("ray.get")
     def test_content_recsys_allows_server_default_limit(self, mock_ray_get):
         """Test that n_posts=None forwards limit=None to server."""
         from YSimulator.YClient.recsys.ContentRecSys import ContentRecSys
@@ -72,7 +72,7 @@ class TestContentRecSysClient:
         kwargs = mock_server.get_recommended_posts.remote.call_args.kwargs
         assert kwargs["limit"] is None
 
-    @patch("YSimulator.YClient.recsys.ContentRecSys.ray.get")
+    @patch("ray.get")
     def test_content_recsys_get_recommendations_empty(self, mock_ray_get):
         """Test recommendations when server returns None."""
         from YSimulator.YClient.recsys.ContentRecSys import ContentRecSys
@@ -87,7 +87,7 @@ class TestContentRecSysClient:
 
         assert result == []
 
-    @patch("YSimulator.YClient.recsys.ContentRecSys.ray.get")
+    @patch("ray.get")
     def test_content_recsys_get_recommendations_error(self, mock_ray_get):
         """Test error handling in recommendation fetching."""
         from YSimulator.YClient.recsys.ContentRecSys import ContentRecSys
@@ -455,7 +455,7 @@ class TestServerFollowRecommenders:
 class TestRecommenderIntegration:
     """Test integration scenarios for recommender systems."""
 
-    @patch("YSimulator.YClient.recsys.ContentRecSys.ray.get")
+    @patch("ray.get")
     def test_content_recsys_with_client_id(self, mock_ray_get):
         """Test recommendation with client_id for logging."""
         from YSimulator.YClient.recsys.ContentRecSys import ContentRecSys
@@ -472,7 +472,7 @@ class TestRecommenderIntegration:
         call_args = mock_server.get_recommended_posts.remote.call_args
         assert call_args[1]["client_id"] == "client-123"
 
-    @patch("YSimulator.YClient.recsys.FollowRecSysRay.ray.get")
+    @patch("ray.get")
     def test_follow_recsys_with_client_id(self, mock_ray_get):
         """Test follow suggestions with client_id for logging."""
         from YSimulator.YClient.recsys.FollowRecSysRay import FollowRecSysRay
@@ -489,7 +489,7 @@ class TestRecommenderIntegration:
         call_args = mock_server.get_follow_suggestions.remote.call_args
         assert call_args[1]["client_id"] == "client-456"
 
-    @patch("YSimulator.YClient.recsys.ContentRecSys.ray.get")
+    @patch("ray.get")
     def test_content_recsys_with_all_parameters(self, mock_ray_get):
         """Test recommendation with all parameters specified."""
         from YSimulator.YClient.recsys.ContentRecSys import ContentRecSys
@@ -510,7 +510,7 @@ class TestRecommenderIntegration:
         assert call_args[1]["limit"] == 15
         assert call_args[1]["followers_ratio"] == 0.75
 
-    @patch("YSimulator.YClient.recsys.FollowRecSysRay.ray.get")
+    @patch("ray.get")
     def test_follow_recsys_with_all_parameters(self, mock_ray_get):
         """Test follow suggestions with all parameters specified."""
         from YSimulator.YClient.recsys.FollowRecSysRay import FollowRecSysRay
@@ -581,7 +581,7 @@ class TestRecommenderEdgeCases:
         recsys_max = FollowRecSysRay(leaning_bias=100)
         assert recsys_max.leaning_bias == 100
 
-    @patch("YSimulator.YClient.recsys.ContentRecSys.ray.get")
+    @patch("ray.get")
     def test_content_recsys_large_response(self, mock_ray_get):
         """Test handling large recommendation response."""
         from YSimulator.YClient.recsys.ContentRecSys import ContentRecSys
@@ -601,7 +601,7 @@ class TestRecommenderEdgeCases:
         assert result[0] == "post-0"
         assert result[99] == "post-99"
 
-    @patch("YSimulator.YClient.recsys.FollowRecSysRay.ray.get")
+    @patch("ray.get")
     def test_follow_recsys_large_response(self, mock_ray_get):
         """Test handling large follow suggestions response."""
         from YSimulator.YClient.recsys.FollowRecSysRay import FollowRecSysRay

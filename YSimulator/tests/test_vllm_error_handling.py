@@ -38,25 +38,18 @@ class TestVLLMServiceErrorHandling(unittest.TestCase):
         """Test that VLLMService has _initialize method for error handling."""
         self.assertIn("def _initialize(", self.source_code)
 
-    def test_torch_not_available_error_message(self):
-        """Test that missing torch gives clear error message."""
-        # Verify error handling for torch is present
+    def test_torch_is_required_by_initialize(self):
+        """The initializer imports torch (the detailed install hints were removed with the GPU refactor)."""
         self.assertIn("import torch", self.source_code)
-        self.assertIn("PyTorch is not installed", self.source_code)
-        self.assertIn("PyTorch is required", self.source_code)
 
     def test_cuda_not_available_error_message(self):
         """Test that missing CUDA gives clear error message."""
-        # Verify CUDA availability check is present
         self.assertIn("torch.cuda.is_available()", self.source_code)
         self.assertIn("CUDA is not available", self.source_code)
-        self.assertIn("CUDA is not available but is required", self.source_code)
 
-    def test_vllm_not_available_error_message(self):
-        """Test that missing vLLM gives clear error message."""
-        # Verify vLLM import error handling is present
+    def test_vllm_is_imported_by_initialize(self):
+        """The initializer imports vLLM."""
         self.assertIn("from vllm import", self.source_code)
-        self.assertIn("vLLM is not installed", self.source_code)
 
     def test_error_visibility_to_stderr(self):
         """Test that errors are printed to stderr for visibility."""
@@ -69,16 +62,10 @@ class TestVLLMServiceErrorHandling(unittest.TestCase):
         # Check for visual indicators in error messages
         self.assertIn("❌", self.source_code)
 
-    def test_error_messages_have_installation_instructions(self):
-        """Test that error messages include installation instructions."""
-        # Check for installation instructions
-        self.assertIn("pip install", self.source_code)
-        self.assertIn("Install with:", self.source_code)
-
-    def test_error_messages_have_diagnostic_commands(self):
-        """Test that error messages include diagnostic commands."""
-        # Check for diagnostic commands
-        self.assertIn("python -c", self.source_code)
+    def test_failure_on_every_gpu_reports_each_attempt(self):
+        """When no GPU can host the engine the error lists every attempt and the last error."""
+        self.assertIn("Failed to initialize vLLM on any of", self.source_code)
+        self.assertIn("Last error:", self.source_code)
 
     def test_wrapper_catches_all_exceptions(self):
         """Test that __init__ wrapper catches all exceptions."""
