@@ -146,3 +146,17 @@ def nltk_data_available() -> bool:
         return True
     except LookupError:
         return False
+
+
+def pytest_collection_modifyitems(config, items):
+    """Skip tests marked ``requires_vader`` when the NLTK VADER lexicon is unavailable
+    (e.g. offline machines or CI runners that cannot download it)."""
+    try:
+        nltk.data.find("sentiment/vader_lexicon")
+        return
+    except LookupError:
+        pass
+    skip = pytest.mark.skip(reason="NLTK vader_lexicon is not available")
+    for item in items:
+        if "requires_vader" in item.keywords:
+            item.add_marker(skip)

@@ -7,6 +7,8 @@ without errors. Full integration testing would require a running database.
 
 import sys
 
+import pytest
+
 
 def test_db_method_signatures():
     """
@@ -81,6 +83,7 @@ def test_action_dto_with_annotations():
         print("\n✗ ActionDTO annotations are None")
 
 
+@pytest.mark.requires_vader
 def test_text_annotation_flow():
     """
     Test the complete text annotation flow.

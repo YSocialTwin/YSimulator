@@ -8,6 +8,8 @@ This test verifies that:
 4. Database methods for annotations work correctly
 """
 
+import pytest
+
 from YSimulator.YClient.text_support.cleaning import extract_components
 from YSimulator.YClient.text_support.text_annotator import annotate_text
 
@@ -33,6 +35,7 @@ def test_extract_mentions():
     assert "@user2" in mentions
 
 
+@pytest.mark.requires_vader
 def test_annotate_text_basic():
     """Test basic text annotation with hashtags and mentions."""
     text = "Great post about #AI by @researcher! #machinelearning"
@@ -61,6 +64,7 @@ def test_annotate_text_basic():
     assert "neu" in annotations["sentiment"]
 
 
+@pytest.mark.requires_vader
 def test_sentiment_scores():
     """Test sentiment analysis on different types of text."""
     # Positive text
@@ -93,6 +97,7 @@ def test_annotate_text_no_sentiment():
     assert len(annotations["mentions"]) == 1
 
 
+@pytest.mark.requires_vader
 def test_annotate_text_empty():
     """Test annotation of empty or simple text."""
     text = "Simple post without any special content"
@@ -137,6 +142,7 @@ def test_annotate_text_toxicity_empty_api_key_uses_detoxify(monkeypatch):
     assert "TOXICITY" in annotations["toxicity"]
 
 
+@pytest.mark.requires_vader
 def test_multiple_hashtags_and_mentions():
     """Test text with many hashtags and mentions."""
     text = "#first #second #third post mentioning @user1 @user2 @user3 and more #tags"
