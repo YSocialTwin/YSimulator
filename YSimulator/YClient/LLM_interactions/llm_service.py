@@ -1051,7 +1051,7 @@ class LLMService:
             return "no_change"
 
         desired_reply = "FOLLOW" if normalized_action == "follow" else "UNFOLLOW"
-        action_text = "followed" if normalized_action == "follow" else "unfollowed"
+        action_text = prompt_store.get("reciprocal_action_follow" if normalized_action == "follow" else "reciprocal_action_unfollow")
         prompt = (
             prompt_store.prompt(
                 "llm_service__generate_reciprocal_follow_decision__1",

@@ -1990,7 +1990,7 @@ class VLLMService:
             return "no_change"
 
         desired_reply = "FOLLOW" if normalized_action == "follow" else "UNFOLLOW"
-        action_text = "followed" if normalized_action == "follow" else "unfollowed"
+        action_text = prompt_store.get("reciprocal_action_follow" if normalized_action == "follow" else "reciprocal_action_unfollow")
         system_msg = (
             prompt_store.prompt(
                 "vllm_service__generate_reciprocal_follow_decision__1",

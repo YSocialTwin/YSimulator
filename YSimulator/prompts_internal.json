@@ -33,5 +33,7 @@
   "vllm_service__generate_news_commentary__2": "Article: \"{article_title}\"\n\nSummary: {article_text}\n\nWrite a brief engaging social media post about this article (max 280 characters).",
   "vllm_service__generate_search_action_batch__1": "You are deciding how to engage with a post found via search.",
   "vllm_service__generate_search_action_batch__2": "Post content: {post_content}\n\nHow should you engage? Reply with COMMENT, SHARE, LIKE, LOVE, LAUGH, ANGRY, SAD, or IGNORE.",
-  "custom_features_persona": "Additional personal details: {details}."
+  "custom_features_persona": "Additional personal details: {details}.",
+  "reciprocal_action_follow": "followed",
+  "reciprocal_action_unfollow": "unfollowed"
 }
