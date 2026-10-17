@@ -11,6 +11,7 @@ import os
 from typing import Any, Dict, List, Optional, Tuple
 
 import ray
+from YSimulator import prompt_store
 
 # Initialize logger
 logger = logging.getLogger(__name__)
@@ -43,9 +44,11 @@ def _stress_prompt_block(agent_attrs: Optional[Dict[str, Any]]) -> str:
     if not label or scale is None:
         return ""
     return (
-        "Current stress level: "
-        f"{label} ({scale}/5 on a five-point scale where 1 means none and 5 means extremely stressed). "
-        "Use this only as internal emotional context while writing."
+        prompt_store.prompt(
+            "llm_service__stress_prompt_block__1",
+            label=label,
+            scale=scale,
+        )
     )
 
 
@@ -862,7 +865,7 @@ class VLLMService:
 
         lines = ["Active system messages addressed to you for this round."]
         lines.append(
-            "These are mandatory platform or moderator instructions for the content you are about to write. Follow them exactly."
+            prompt_store.get("llm_service__system_messages_block__1")
         )
         for item in messages:
             if not isinstance(item, dict):
@@ -927,15 +930,21 @@ class VLLMService:
 
             # Build topic instruction with opinion if available
             if topic and topic_opinion:
-                topic_instruction = f" You MUST write about the topic: {topic}. Your stance is: {topic_opinion}. Express this viewpoint clearly."
+                topic_instruction = prompt_store.prompt(
+                                        "llm_service__generate_post__1",
+                                        topic=topic,
+                                        topic_opinion=topic_opinion,
+                                    )
             elif topic:
                 topic_instruction = f" You MUST write about the topic: {topic}."
             else:
                 topic_instruction = ""
             if memory_blocks["post_style"]:
                 topic_instruction += (
-                    f" Use this only as a style/tone memory, not as a topic list:\n"
-                    f"{memory_blocks['post_style']}\n"
+                    prompt_store.prompt(
+                        "llm_service__generate_post__2",
+                        post_style=memory_blocks['post_style'],
+                    )
                 )
 
             # Format user message with all placeholders
@@ -1095,11 +1104,11 @@ class VLLMService:
                         )
                         system_template = news_commentary_config.get(
                             "system_template",
-                            "You are a social media content creator for {website_name}. Create engaging posts about news articles.",
+                            prompt_store.get("vllm_service__generate_news_commentary__1"),
                         )
                         user_template = news_commentary_config.get(
                             "user_template",
-                            'Article: "{article_title}"\n\nSummary: {article_text}\n\nWrite a brief engaging social media post about this article (max 280 characters).',
+                            prompt_store.get("vllm_service__generate_news_commentary__2"),
                         )
 
                         # Safely format templates - only replace placeholders that exist
@@ -1150,7 +1159,11 @@ class VLLMService:
 
                         # Build topic instruction
                         if topic and topic_opinion:
-                            topic_instruction = f" You MUST write about the topic: {topic}. Your stance is: {topic_opinion}. Express this viewpoint clearly."
+                            topic_instruction = prompt_store.prompt(
+                                                    "llm_service__generate_post__1",
+                                                    topic=topic,
+                                                    topic_opinion=topic_opinion,
+                                                )
                         elif topic:
                             topic_instruction = f" You MUST write about the topic: {topic}."
                         else:
@@ -1474,8 +1487,11 @@ class VLLMService:
                 thread_context_lines.append(f"{username}: {tweet}")
             thread_context_str = "\n".join(thread_context_lines)
             thread_context_instruction = (
-                f"Previous discussion in this thread (for context only):\n{thread_context_str}\n\n"
-                f"Now respond specifically to {author_name}'s post above. "
+                prompt_store.prompt(
+                    "llm_service__generate_comment__1",
+                    thread_context_str=thread_context_str,
+                    author_name=author_name,
+                )
             )
 
         # Format templates
@@ -1501,8 +1517,10 @@ class VLLMService:
             user_msg += f"\n\nMemory context:\n{memory_blocks['reply_context']}"
         if memory_blocks["reply_cues"]:
             user_msg += (
-                f"\n\nUse these continuity cues only if they fit naturally:\n"
-                f"{memory_blocks['reply_cues']}"
+                prompt_store.prompt(
+                    "llm_service__generate_comment__2",
+                    reply_cues=memory_blocks['reply_cues'],
+                )
             )
 
         # Log the prompt for debugging
@@ -1594,8 +1612,11 @@ class VLLMService:
                             thread_context_lines.append(f"{username}: {tweet}")
                         thread_context_str = "\n".join(thread_context_lines)
                         thread_context_instruction = (
-                            f"Previous discussion in this thread (for context only):\n{thread_context_str}\n\n"
-                            f"Now respond specifically to {author_name}'s post above. "
+                            prompt_store.prompt(
+                                "llm_service__generate_comment__1",
+                                thread_context_str=thread_context_str,
+                                author_name=author_name,
+                            )
                         )
 
                     # Format templates
@@ -1661,11 +1682,11 @@ class VLLMService:
             news_commentary_config = self.prompts_config.get("generate_news_commentary", {})
             system_template = news_commentary_config.get(
                 "system_template",
-                "You are a social media content creator for {website_name}. Create engaging posts about news articles.",
+                prompt_store.get("vllm_service__generate_news_commentary__1"),
             )
             user_template = news_commentary_config.get(
                 "user_template",
-                'Article: "{article_title}"\n\nSummary: {article_text}\n\nWrite a brief engaging social media post about this article (max 280 characters).',
+                prompt_store.get("vllm_service__generate_news_commentary__2"),
             )
 
             # Safe template formatting - handle missing placeholders
@@ -1751,8 +1772,10 @@ class VLLMService:
             user_msg += f"\n\nMemory context:\n{memory_blocks['reply_context']}"
         if memory_blocks["reply_cues"]:
             user_msg += (
-                f"\n\nUse these continuity cues only if they fit naturally:\n"
-                f"{memory_blocks['reply_cues']}"
+                prompt_store.prompt(
+                    "llm_service__generate_comment__2",
+                    reply_cues=memory_blocks['reply_cues'],
+                )
             )
 
         prompt = self._format_prompt(system_msg, user_msg)
@@ -1782,11 +1805,12 @@ class VLLMService:
             return "{}"
 
         user_msg = (
-            "Annotate the interaction for stress/reward scoring.\n"
-            f"Actor user id: {actor_user_id}\n"
-            f"Recipient user id: {recipient_user_id}\n"
-            f"Text:\n{text}\n"
-            "Return JSON only."
+            prompt_store.prompt(
+                "llm_service__annotate_stress_reward_text__1",
+                actor_user_id=actor_user_id,
+                recipient_user_id=recipient_user_id,
+                text=text,
+            )
         )
         prompt = self._format_prompt(system_prompt, user_msg)
 
@@ -1967,12 +1991,18 @@ class VLLMService:
         desired_reply = "FOLLOW" if normalized_action == "follow" else "UNFOLLOW"
         action_text = "followed" if normalized_action == "follow" else "unfollowed"
         system_msg = (
-            f"{persona}\n" "You are deciding whether to reciprocate a direct social-link change."
+            prompt_store.prompt(
+                "vllm_service__generate_reciprocal_follow_decision__1",
+                persona=persona,
+            )
         )
         user_msg = (
-            f"Another user has just {action_text} you.\n"
-            f"Their profile:\n{source_summary}\n\n"
-            f"Reply with ONLY '{desired_reply}' or 'NOCHANGE'."
+            prompt_store.prompt(
+                "vllm_service__generate_reciprocal_follow_decision__2",
+                action_text=action_text,
+                source_summary=source_summary,
+                desired_reply=desired_reply,
+            )
         )
         prompt = self._format_prompt(system_msg, user_msg)
         try:
@@ -2127,11 +2157,11 @@ class VLLMService:
         """Extract emotions from text using LLM based on GoEmotions taxonomy."""
         system_template = self.prompts_config.get("extract_emotions", {}).get(
             "system_template",
-            "You are an emotion classification assistant. Identify which emotions from the GoEmotions taxonomy the given text elicits.",
+            prompt_store.get("llm_service__extract_emotions__1"),
         )
         user_template = self.prompts_config.get("extract_emotions", {}).get(
             "user_template",
-            'Identify emotions from this text. Choose ONLY from: {emotion_list}\n\nText: "{text}"\n\nReturn emotions as comma-separated list:',
+            prompt_store.get("llm_service__extract_emotions__2"),
         )
 
         emotion_list = "admiration, amusement, anger, annoyance, approval, caring, confusion, curiosity, desire, disappointment, disapproval, disgust, embarrassment, excitement, fear, gratitude, grief, joy, love, nervousness, optimism, pride, realization, relief, remorse, sadness, surprise, trust"
@@ -2165,11 +2195,11 @@ class VLLMService:
 
             system_template = self.prompts_config.get("extract_emotions", {}).get(
                 "system_template",
-                "You are an emotion classification assistant. Identify which emotions from the GoEmotions taxonomy the given text elicits.",
+                prompt_store.get("llm_service__extract_emotions__1"),
             )
             user_template = self.prompts_config.get("extract_emotions", {}).get(
                 "user_template",
-                'Identify emotions from this text. Choose ONLY from: {emotion_list}\n\nText: "{text}"\n\nReturn emotions as comma-separated list:',
+                prompt_store.get("llm_service__extract_emotions__2"),
             )
 
             emotion_list = "admiration, amusement, anger, annoyance, approval, caring, confusion, curiosity, desire, disappointment, disapproval, disgust, embarrassment, excitement, fear, gratitude, grief, joy, love, nervousness, optimism, pride, realization, relief, remorse, sadness, surprise, trust"
@@ -2233,16 +2263,16 @@ class VLLMService:
             describe_image_config = self.prompts_config.get(
                 "describe_image",
                 {
-                    "system_template": "You are an image description assistant. Describe images accurately and concisely in English.",
-                    "user_template": "Describe the following image. Write in english. <img {url}>",
+                    "system_template": prompt_store.get("llm_service__module__1"),
+                    "user_template": prompt_store.get("llm_service__module__2"),
                 },
             )
             system_template = describe_image_config.get(
                 "system_template",
-                "You are an image description assistant. Describe images accurately and concisely in English.",
+                prompt_store.get("llm_service__module__1"),
             )
             user_template = describe_image_config.get(
-                "user_template", "Describe the following image. Write in english. <img {url}>"
+                "user_template", prompt_store.get("llm_service__module__2")
             )
 
             # Format templates
@@ -2306,16 +2336,16 @@ class VLLMService:
             describe_image_config = self.prompts_config.get(
                 "describe_image",
                 {
-                    "system_template": "You are an image description assistant. Describe images accurately and concisely in English.",
-                    "user_template": "Describe the following image. Write in english. <img {url}>",
+                    "system_template": prompt_store.get("llm_service__module__1"),
+                    "user_template": prompt_store.get("llm_service__module__2"),
                 },
             )
             system_template = describe_image_config.get(
                 "system_template",
-                "You are an image description assistant. Describe images accurately and concisely in English.",
+                prompt_store.get("llm_service__module__1"),
             )
             user_template = describe_image_config.get(
-                "user_template", "Describe the following image. Write in english. <img {url}>"
+                "user_template", prompt_store.get("llm_service__module__2")
             )
 
             # Build prompts for all images
@@ -2374,13 +2404,13 @@ class VLLMService:
             config = self.prompts_config.get("infer_article_opinion", {})
             system_template = config.get(
                 "system_template",
-                "You are an opinion classification assistant. Analyze articles and determine their stance on topics.",
+                prompt_store.get("llm_service__infer_article_opinion__1"),
             )
             user_template = config.get(
                 "user_template",
                 "Analyze this article and determine its stance on the topic '{topic}'.\n\n"
                 + "Article excerpt:\n{article_text}\n\n"
-                + "What is the article's stance? Choose ONLY ONE from these options:\n{opinion_options}\n\n"
+                + prompt_store.get("llm_service__infer_article_opinion__2")
                 + "Your choice (ONE WORD ONLY):",
             )
 
@@ -2443,11 +2473,11 @@ class VLLMService:
 
         config = self.prompts_config.get("generate_image_commentary", {})
         system_template = config.get(
-            "system_template", "{persona} You are sharing an image on social media."
+            "system_template", prompt_store.get("llm_service__generate_image_commentary__1")
         )
         user_template = config.get(
             "user_template",
-            'You are sharing an image described as: "{image_description}"\n\n{topics_instruction}Write a brief, engaging post to share this image (max 280 characters).',
+            prompt_store.get("llm_service__generate_image_commentary__2"),
         )
 
         system_msg = system_template.format(persona=persona, toxicity=toxicity)
@@ -2486,13 +2516,12 @@ class VLLMService:
                 prompt_text += f"Opinion: '{op}' ({count})\n"
 
         prompt_text += (
-            "\nWhat do you think about the expressed opinion? "
-            "Answer with a single word among the options: AGREE|DISAGREE|NEUTRAL."
+            prompt_store.get("llm_service__evaluate_opinion__1")
         )
 
         system_template = self.prompts_config.get("evaluate_opinion", {}).get(
             "system_template",
-            "You are evaluating opinions on various topics. Consider the content and opinions presented.",
+            prompt_store.get("llm_service__evaluate_opinion__2"),
         )
 
         prompt = self._format_prompt(system_template, prompt_text)
@@ -2533,7 +2562,7 @@ class VLLMService:
 
             system_template = self.prompts_config.get("evaluate_opinion", {}).get(
                 "system_template",
-                "You are evaluating opinions on various topics. Consider the content and opinions presented.",
+                prompt_store.get("llm_service__evaluate_opinion__2"),
             )
 
             # Build prompts for all evaluations
@@ -2572,8 +2601,7 @@ class VLLMService:
                             prompt_text += f"Opinion: '{op}' ({count})\n"
 
                     prompt_text += (
-                        "\nWhat do you think about the expressed opinion? "
-                        "Answer with a single word among the options: AGREE|DISAGREE|NEUTRAL."
+                        prompt_store.get("llm_service__evaluate_opinion__1")
                     )
 
                     prompt = self._format_prompt(system_template, prompt_text)
@@ -2636,7 +2664,7 @@ class VLLMService:
 
             system_template = self.prompts_config.get("generate_search_action", {}).get(
                 "system_template",
-                "You are deciding how to engage with a post found via search.",
+                prompt_store.get("vllm_service__generate_search_action_batch__1"),
             )
 
             # Build prompts for all search decisions
@@ -2656,7 +2684,7 @@ class VLLMService:
                     # Get user template
                     user_template = self.prompts_config.get("generate_search_action", {}).get(
                         "user_template",
-                        "Post content: {post_content}\n\nHow should you engage? Reply with COMMENT, SHARE, LIKE, LOVE, LAUGH, ANGRY, SAD, or IGNORE.",
+                        prompt_store.get("vllm_service__generate_search_action_batch__2"),
                     )
 
                     # Format the user message
