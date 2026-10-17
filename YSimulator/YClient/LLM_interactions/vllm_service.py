@@ -821,6 +821,7 @@ class VLLMService:
             str: Formatted persona string
         """
         # If agent attributes are provided, use the persona template
+        agent_attrs = prompt_store.localize_attrs(agent_attrs)  # profile values in the prompt language
         if agent_attrs and self.prompts_config.get("persona_template"):
             template = self.prompts_config["persona_template"]
             try:
