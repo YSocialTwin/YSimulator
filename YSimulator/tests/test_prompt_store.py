@@ -98,3 +98,26 @@ def test_reaction_words_are_read_as_whole_words():
     assert not pt.has_token("DISLIKE", pt.LIKE)
     assert not pt.has_token("UNFOLLOW", pt.FOLLOW)
     assert pt.has_token("REPORT_TOXIC", pt.REPORT_TOXIC)
+
+
+def test_other_languages_use_their_file_and_fall_back_per_key(tmp_path, monkeypatch, caplog):
+    import json
+
+    en = {"a": "Hello {who}", "b": "Only English"}
+    (tmp_path / "prompts_internal.json").write_text(json.dumps(en))
+    (tmp_path / "prompts_internal.xx.json").write_text(json.dumps({"a": "Ciao {who}"}))
+    monkeypatch.setattr(ps, "PACK_FILE", tmp_path / "prompts_internal.json")
+    monkeypatch.setattr(ps, "_cache", {})
+    monkeypatch.setattr(ps, "_warned", set())
+    assert ps.prompt("a", "xx", who="Ann") == "Ciao Ann"
+    with caplog.at_level("WARNING"):
+        assert ps.get("b", "xx") == "Only English"
+        assert ps.get("b", "xx") == "Only English"
+    assert len([r for r in caplog.records if "no 'xx' text" in r.getMessage()]) == 1
+    assert ps.get("a", "yy") == "Hello {who}"  # language without a file
+    assert ps.get("a", "../etc") == "Hello {who}"  # never used as a path
+    ps.set_language("xx")
+    try:
+        assert ps.prompt("a", who="Ann") == "Ciao Ann"
+    finally:
+        ps.set_language("en")
