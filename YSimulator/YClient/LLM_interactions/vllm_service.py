@@ -1226,9 +1226,9 @@ class VLLMService:
             outputs = self.llm.generate([prompt], self.sampling_params)
             result = outputs[0].outputs[0].text.strip().upper()
 
-            if "LIKE" in result:
+            if protocol_tokens.has_token(result, protocol_tokens.LIKE):
                 return "LIKE"
-            if "COMMENT" in result:
+            if protocol_tokens.has_token(result, protocol_tokens.COMMENT):
                 return "COMMENT"
             return "IGNORE"
         except KeyError as e:
@@ -1298,9 +1298,9 @@ class VLLMService:
             results = []
             for output in outputs:
                 result = output.outputs[0].text.strip().upper()
-                if "LIKE" in result:
+                if protocol_tokens.has_token(result, protocol_tokens.LIKE):
                     results.append("LIKE")
-                elif "COMMENT" in result:
+                elif protocol_tokens.has_token(result, protocol_tokens.COMMENT):
                     results.append("COMMENT")
                 else:
                     results.append("IGNORE")
@@ -1401,19 +1401,19 @@ class VLLMService:
             for output in outputs:
                 result = output.outputs[0].text.strip().upper()
                 # Parse reaction type from result
-                if "LIKE" in result:
+                if protocol_tokens.has_token(result, protocol_tokens.LIKE):
                     results.append("LIKE")
-                elif "LOVE" in result:
+                elif protocol_tokens.has_token(result, protocol_tokens.LOVE):
                     results.append("LOVE")
-                elif "LAUGH" in result:
+                elif protocol_tokens.has_token(result, protocol_tokens.LAUGH):
                     results.append("LAUGH")
-                elif "ANGRY" in result:
+                elif protocol_tokens.has_token(result, protocol_tokens.ANGRY):
                     results.append("ANGRY")
-                elif "SAD" in result:
+                elif protocol_tokens.has_token(result, protocol_tokens.SAD):
                     results.append("SAD")
-                elif "COMMENT" in result:
+                elif protocol_tokens.has_token(result, protocol_tokens.COMMENT):
                     results.append("COMMENT")
-                elif "SHARE" in result:
+                elif protocol_tokens.has_token(result, protocol_tokens.SHARE):
                     results.append("SHARE")
                 else:
                     results.append("IGNORE")
@@ -1862,21 +1862,21 @@ class VLLMService:
             outputs = self.llm.generate([prompt], self.sampling_params)
             result = outputs[0].outputs[0].text.strip().upper()
 
-            if "REPORT_TOXIC" in result or ("REPORT" in result and "TOXIC" in result):
+            if protocol_tokens.has_token(result, protocol_tokens.REPORT_TOXIC) or (protocol_tokens.has_token(result, protocol_tokens.REPORT) and protocol_tokens.has_token(result, protocol_tokens.TOXIC)):
                 return "REPORT_TOXIC"
-            if "REPORT_OFFENSIVE" in result or ("REPORT" in result and "OFFENSIVE" in result):
+            if protocol_tokens.has_token(result, protocol_tokens.REPORT_OFFENSIVE) or (protocol_tokens.has_token(result, protocol_tokens.REPORT) and protocol_tokens.has_token(result, protocol_tokens.OFFENSIVE)):
                 return "REPORT_OFFENSIVE"
-            if "LOVE" in result:
+            if protocol_tokens.has_token(result, protocol_tokens.LOVE):
                 return "LOVE"
-            if "LIKE" in result:
+            if protocol_tokens.has_token(result, protocol_tokens.LIKE):
                 return "LIKE"
-            if "LAUGH" in result:
+            if protocol_tokens.has_token(result, protocol_tokens.LAUGH):
                 return "LAUGH"
-            if "ANGRY" in result or "DISLIKE" in result:
+            if protocol_tokens.has_token(result, protocol_tokens.ANGRY) or protocol_tokens.has_token(result, protocol_tokens.DISLIKE):
                 return "ANGRY"
-            if "SAD" in result:
+            if protocol_tokens.has_token(result, protocol_tokens.SAD):
                 return "SAD"
-            if "IGNORE" in result:
+            if protocol_tokens.has_token(result, protocol_tokens.IGNORE):
                 return "IGNORE"
 
             return "LIKE"  # Default fallback
@@ -1938,21 +1938,21 @@ class VLLMService:
             outputs = self.llm.generate([prompt], self.sampling_params)
             result = outputs[0].outputs[0].text.strip().upper()
 
-            if "COMMENT" in result:
+            if protocol_tokens.has_token(result, protocol_tokens.COMMENT):
                 return "COMMENT"
-            if "SHARE" in result:
+            if protocol_tokens.has_token(result, protocol_tokens.SHARE):
                 return "SHARE"
-            if "LOVE" in result:
+            if protocol_tokens.has_token(result, protocol_tokens.LOVE):
                 return "LOVE"
-            if "LIKE" in result:
+            if protocol_tokens.has_token(result, protocol_tokens.LIKE):
                 return "LIKE"
-            if "LAUGH" in result:
+            if protocol_tokens.has_token(result, protocol_tokens.LAUGH):
                 return "LAUGH"
-            if "ANGRY" in result:
+            if protocol_tokens.has_token(result, protocol_tokens.ANGRY):
                 return "ANGRY"
-            if "SAD" in result:
+            if protocol_tokens.has_token(result, protocol_tokens.SAD):
                 return "SAD"
-            if "IGNORE" in result:
+            if protocol_tokens.has_token(result, protocol_tokens.IGNORE):
                 return "IGNORE"
 
             return "LIKE"
@@ -2011,7 +2011,7 @@ class VLLMService:
         except Exception:
             return "no_change"
 
-        if desired_reply in result:
+        if protocol_tokens.has_token(result, desired_reply):
             return normalized_action
         return "no_change"
 

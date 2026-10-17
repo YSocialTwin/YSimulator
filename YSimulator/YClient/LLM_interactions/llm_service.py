@@ -509,9 +509,9 @@ class LLMService:
         try:
             result = chain.invoke({}).strip().upper()
 
-            if "LIKE" in result:
+            if protocol_tokens.has_token(result, protocol_tokens.LIKE):
                 return "LIKE"
-            if "COMMENT" in result:
+            if protocol_tokens.has_token(result, protocol_tokens.COMMENT):
                 return "COMMENT"
             return "IGNORE"
         except Exception as e:
@@ -863,22 +863,22 @@ class LLMService:
             chain = prompt | self.llm | StrOutputParser()
             result = chain.invoke({}).strip().upper()
 
-            if "REPORT_TOXIC" in result or ("REPORT" in result and "TOXIC" in result):
+            if protocol_tokens.has_token(result, protocol_tokens.REPORT_TOXIC) or (protocol_tokens.has_token(result, protocol_tokens.REPORT) and protocol_tokens.has_token(result, protocol_tokens.TOXIC)):
                 return "REPORT_TOXIC"
-            if "REPORT_OFFENSIVE" in result or ("REPORT" in result and "OFFENSIVE" in result):
+            if protocol_tokens.has_token(result, protocol_tokens.REPORT_OFFENSIVE) or (protocol_tokens.has_token(result, protocol_tokens.REPORT) and protocol_tokens.has_token(result, protocol_tokens.OFFENSIVE)):
                 return "REPORT_OFFENSIVE"
             # Parse LLM response - look for valid reactions
-            if "LOVE" in result:
+            if protocol_tokens.has_token(result, protocol_tokens.LOVE):
                 return "LOVE"
-            if "LIKE" in result:
+            if protocol_tokens.has_token(result, protocol_tokens.LIKE):
                 return "LIKE"
-            if "LAUGH" in result:
+            if protocol_tokens.has_token(result, protocol_tokens.LAUGH):
                 return "LAUGH"
-            if "ANGRY" in result or "DISLIKE" in result:
+            if protocol_tokens.has_token(result, protocol_tokens.ANGRY) or protocol_tokens.has_token(result, protocol_tokens.DISLIKE):
                 return "ANGRY"  # Map DISLIKE to ANGRY
-            if "SAD" in result:
+            if protocol_tokens.has_token(result, protocol_tokens.SAD):
                 return "SAD"
-            if "IGNORE" in result:
+            if protocol_tokens.has_token(result, protocol_tokens.IGNORE):
                 return "IGNORE"
 
             # Default to fallback reaction if unclear
@@ -981,21 +981,21 @@ class LLMService:
             result = chain.invoke({}).strip().upper()
 
             # Parse LLM response - look for valid actions
-            if "COMMENT" in result:
+            if protocol_tokens.has_token(result, protocol_tokens.COMMENT):
                 return "COMMENT"
-            if "SHARE" in result:
+            if protocol_tokens.has_token(result, protocol_tokens.SHARE):
                 return "SHARE"
-            if "LOVE" in result:
+            if protocol_tokens.has_token(result, protocol_tokens.LOVE):
                 return "LOVE"
-            if "LIKE" in result:
+            if protocol_tokens.has_token(result, protocol_tokens.LIKE):
                 return "LIKE"
-            if "LAUGH" in result:
+            if protocol_tokens.has_token(result, protocol_tokens.LAUGH):
                 return "LAUGH"
-            if "ANGRY" in result:
+            if protocol_tokens.has_token(result, protocol_tokens.ANGRY):
                 return "ANGRY"
-            if "SAD" in result:
+            if protocol_tokens.has_token(result, protocol_tokens.SAD):
                 return "SAD"
-            if "IGNORE" in result:
+            if protocol_tokens.has_token(result, protocol_tokens.IGNORE):
                 return "IGNORE"
 
             # Default to fallback reaction if unclear
@@ -1065,7 +1065,7 @@ class LLMService:
         except Exception:
             return "no_change"
 
-        if desired_reply in result:
+        if protocol_tokens.has_token(result, desired_reply):
             return normalized_action
         return "no_change"
 

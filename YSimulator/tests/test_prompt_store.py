@@ -89,3 +89,12 @@ def test_disagree_is_not_read_as_agree():
     assert pt.has_token("Agree.", pt.AGREE)
     assert not pt.has_token("DISAGREE", pt.AGREE)
     assert pt.has_token("DISAGREE", pt.DISAGREE)
+
+
+def test_reaction_words_are_read_as_whole_words():
+    from YSimulator import protocol_tokens as pt
+
+    assert pt.has_token("like", pt.LIKE)
+    assert not pt.has_token("DISLIKE", pt.LIKE)
+    assert not pt.has_token("UNFOLLOW", pt.FOLLOW)
+    assert pt.has_token("REPORT_TOXIC", pt.REPORT_TOXIC)
