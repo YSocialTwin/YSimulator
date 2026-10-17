@@ -13,6 +13,8 @@ from typing import Any, Dict, List, Optional
 
 import ray
 
+from YSimulator import prompt_store
+
 
 def _load_memory_package():
     try:
@@ -399,6 +401,8 @@ class YSimulatorMemoryManager:
         if agent_id in self._engines:
             return self._engines[agent_id]
         raw = {
+            # Language of the simulation prompts: the memory package renders its texts in it.
+            "memory_language": prompt_store.current_language(),
             "memory_enabled": bool(self.agent_memory_config.get("memory_enabled", False)),
             "memory_backend": self.agent_memory_config.get("memory_backend", "hybrid_semantic"),
             "memory_prompt_mode": self.agent_memory_config.get(
