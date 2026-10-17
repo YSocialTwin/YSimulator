@@ -43,7 +43,7 @@ def _append_custom_features_to_persona(persona: str, agent_attrs: Optional[Dict[
     if not parts:
         return persona
 
-    return f"{persona.rstrip()} Additional personal details: {'; '.join(parts)}."
+    return f"{persona.rstrip()} " + prompt_store.prompt("custom_features_persona", details="; ".join(parts))
 
 
 def _stress_prompt_block(agent_attrs: Optional[Dict[str, Any]]) -> str:

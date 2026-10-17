@@ -32,5 +32,6 @@
   "vllm_service__generate_news_commentary__1": "Sei un creatore di contenuti social per {website_name}. Crea post coinvolgenti sugli articoli di notizie.",
   "vllm_service__generate_news_commentary__2": "Articolo: \"{article_title}\"\n\nRiassunto: {article_text}\n\nScrivi un breve post coinvolgente sui social media su questo articolo (massimo 280 caratteri).",
   "vllm_service__generate_search_action_batch__1": "Stai decidendo come interagire con un post trovato tramite ricerca.",
-  "vllm_service__generate_search_action_batch__2": "Contenuto del post: {post_content}\n\nCome dovresti interagire? Rispondi con COMMENT, SHARE, LIKE, LOVE, LAUGH, ANGRY, SAD oppure IGNORE."
+  "vllm_service__generate_search_action_batch__2": "Contenuto del post: {post_content}\n\nCome dovresti interagire? Rispondi con COMMENT, SHARE, LIKE, LOVE, LAUGH, ANGRY, SAD oppure IGNORE.",
+  "custom_features_persona": "Ulteriori dettagli personali: {details}."
 }
