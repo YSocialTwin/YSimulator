@@ -12,6 +12,7 @@ Extracted from client.py as part of Phase 2 refactoring.
 Updated in Phase 3 to use LLM service layer.
 """
 
+from YSimulator import protocol_tokens
 import logging
 import time
 import uuid
@@ -2229,9 +2230,9 @@ class BatchProcessor:
 
                 decision = (response or "").upper()
                 new_value = x_value
-                if "AGREE" in decision:
+                if protocol_tokens.has_token(decision, protocol_tokens.AGREE):
                     _, new_value = shift_class(x_label, y_label, Direction.AGREE, opinion_groups)
-                elif "DISAGREE" in decision:
+                elif protocol_tokens.has_token(decision, protocol_tokens.DISAGREE):
                     _, new_value = shift_class(x_label, y_label, Direction.DISAGREE, opinion_groups)
 
                 action_topic_updates[action_idx][topic_id] = new_value

@@ -1,3 +1,4 @@
+from YSimulator import protocol_tokens
 from enum import Enum
 
 from YSimulator.YClient.opinion_dynamics.utils import get_opinion_group
@@ -127,9 +128,9 @@ def llm_evaluation(
     response = ray.get(future)
 
     # Shift opinion class based on LLM response
-    if "AGREE" in response.upper():
+    if protocol_tokens.has_token(response, protocol_tokens.AGREE):
         new_class, x = shift_class(x_op, y_op, Direction.AGREE, group_classes)
-    elif "DISAGREE" in response.upper():
+    elif protocol_tokens.has_token(response, protocol_tokens.DISAGREE):
         new_class, x = shift_class(x_op, y_op, Direction.DISAGREE, group_classes)
     # NEUTRAL means no change, keep current opinion x
 

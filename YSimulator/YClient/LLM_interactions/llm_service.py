@@ -11,7 +11,7 @@ import ray
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_ollama import ChatOllama
-from YSimulator import prompt_store
+from YSimulator import prompt_store, protocol_tokens
 
 # Initialize logger
 logger = logging.getLogger(__name__)
@@ -1460,11 +1460,11 @@ class LLMService:
             response = chain.invoke({}).strip().upper()
 
             # Parse response - look for valid reactions
-            if "AGREE" in response:
+            if protocol_tokens.has_token(response, protocol_tokens.AGREE):
                 return "AGREE"
-            elif "DISAGREE" in response:
+            elif protocol_tokens.has_token(response, protocol_tokens.DISAGREE):
                 return "DISAGREE"
-            elif "NEUTRAL" in response:
+            elif protocol_tokens.has_token(response, protocol_tokens.NEUTRAL):
                 return "NEUTRAL"
 
             # Default to neutral if unclear

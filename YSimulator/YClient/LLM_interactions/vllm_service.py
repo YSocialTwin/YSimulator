@@ -11,7 +11,7 @@ import os
 from typing import Any, Dict, List, Optional, Tuple
 
 import ray
-from YSimulator import prompt_store
+from YSimulator import prompt_store, protocol_tokens
 
 # Initialize logger
 logger = logging.getLogger(__name__)
@@ -2530,11 +2530,11 @@ class VLLMService:
             outputs = self.llm.generate([prompt], self.sampling_params)
             response = outputs[0].outputs[0].text.strip().upper()
 
-            if "AGREE" in response:
+            if protocol_tokens.has_token(response, protocol_tokens.AGREE):
                 return "AGREE"
-            elif "DISAGREE" in response:
+            elif protocol_tokens.has_token(response, protocol_tokens.DISAGREE):
                 return "DISAGREE"
-            elif "NEUTRAL" in response:
+            elif protocol_tokens.has_token(response, protocol_tokens.NEUTRAL):
                 return "NEUTRAL"
 
             return "NEUTRAL"
@@ -2621,11 +2621,11 @@ class VLLMService:
             results = []
             for output in outputs:
                 response = output.outputs[0].text.strip().upper()
-                if "AGREE" in response:
+                if protocol_tokens.has_token(response, protocol_tokens.AGREE):
                     results.append("AGREE")
-                elif "DISAGREE" in response:
+                elif protocol_tokens.has_token(response, protocol_tokens.DISAGREE):
                     results.append("DISAGREE")
-                elif "NEUTRAL" in response:
+                elif protocol_tokens.has_token(response, protocol_tokens.NEUTRAL):
                     results.append("NEUTRAL")
                 else:
                     results.append("NEUTRAL")
