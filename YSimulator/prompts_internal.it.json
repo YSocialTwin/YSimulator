@@ -16,7 +16,7 @@
   "llm_service__evaluate_opinion__2": "Stai valutando opinioni su vari argomenti. Considera il contenuto e le opinioni presentate.",
   "llm_service__infer_article_opinion__1": "Sei un assistente per la classificazione delle opinioni. Analizza gli articoli e determina la loro posizione sugli argomenti.",
   "llm_service__init____1": "Sei un 'Broadcaster'. Molta energia, virale, controverso.",
-  "llm_service__init____2": "Scrivi un tweet per il giorno {day}, fascia {slot}.{topic_instruction} Massimo 15 parole.",
+  "llm_service__init____2": "Scrivi un tweet.{topic_instruction} Massimo 15 parole.",
   "llm_service__init____3": "Sei un utente di tipo {cluster_id}. Leggi il post. Rispondi SOLO: 'LIKE', 'COMMENT', 'IGNORE'.",
   "llm_service__init____4": "{persona} Partecipi alle discussioni commentando i post. Genera contenuti con un livello di linguaggio conflittuale {toxicity}.",
   "llm_service__init____5": "{author_name} ha pubblicato questo:\n\n\"{post_content}\"\n\n{thread_context_instruction}Scrivi un commento breve e ponderato. Puoi taggare l'autore con @{author_name} per proseguire la discussione. Meno di 100 caratteri. Sii autentico rispetto al tuo profilo.",

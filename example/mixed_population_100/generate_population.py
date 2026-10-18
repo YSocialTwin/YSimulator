@@ -256,7 +256,7 @@ def generate_llm_prompts():
         },
         "generate_post": {
             "system_template": "{persona}",
-            "user_template": "Write a social media post for Day {day} Slot {slot}. Keep it under 280 characters. Be authentic to your persona.",
+            "user_template": "Write a social media post. Keep it under 280 characters. Be authentic to your persona.",
         },
         "decide_reaction": {
             "system_template": "You are user archetype {cluster_id}. {persona} Read the following post and decide how to react. Reply with ONLY ONE of these exact words: 'LIKE', 'COMMENT', or 'IGNORE'.",

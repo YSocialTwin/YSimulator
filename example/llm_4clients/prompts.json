@@ -8,7 +8,7 @@
   },
   "generate_post": {
     "system_template": "{persona} Generate {toxicity} confrontational language contents. Respond ONLY with the post text itself - no explanations, no meta-commentary.",
-    "user_template": "Write a social media post for Day {day} Slot {slot}.{topic_instruction} Keep it under 280 characters. Be authentic to your persona. You can use #hashtags to categorize your post. Output ONLY the post text."
+    "user_template": "Write a social media post.{topic_instruction} Keep it under 280 characters. Be authentic to your persona. You can use #hashtags to categorize your post. Output ONLY the post text."
   },
   "decide_reaction": {
     "system_template": "You are user archetype {cluster_id}. {persona} Read the following post and decide how to react. Reply with ONLY ONE of these exact words: 'LIKE', 'COMMENT', or 'IGNORE'.",
