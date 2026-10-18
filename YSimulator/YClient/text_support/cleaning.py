@@ -1,4 +1,5 @@
 import re
+from YSimulator.hashtag_text import HASHTAG_PATTERN
 
 
 def clean_text(author: str, text: str) -> str:
@@ -37,7 +38,7 @@ def extract_components(text: str, c_type: str = "hashtags") -> list:
     """
     # Define the regex pattern
     if c_type == "hashtags":
-        pattern = re.compile(r"#\w+")
+        pattern = re.compile(HASHTAG_PATTERN)
     elif c_type == "mentions":
         pattern = re.compile(r"@\w+")
     else:
