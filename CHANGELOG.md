@@ -6,6 +6,7 @@ All notable changes to this project are documented here. The format follows [Kee
 
 Changes made since the last published state of `main`, newest first:
 
+- Docs: README citation updated to the published YSocial reference (Big Data & Society, 2026)
 - Topic sampling: weight = count, only topics with count > 0 in the moving window
 - Topic sampling: weight = count + 1 over the moving window
 - Hashtags: canonical form without '#', apostrophes and accents kept in the tag, case-insensitive identity
