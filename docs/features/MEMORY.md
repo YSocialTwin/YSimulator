@@ -10,7 +10,7 @@ architecture:
 
 ## Architecture
 
-Memory is integrated through `/Users/rossetti/PycharmProjects/YWeb/external/YSimulator/YSimulator/YClient/memory_runtime.py`.
+Memory is integrated through `YSimulator/YClient/memory_runtime.py`.
 
 The memory manager:
 

@@ -46,8 +46,8 @@ A distributed social media simulation system using Ray for orchestration and LLM
 **System & Performance:**
 - **[vLLM Integration Guide](docs/configuration/VLLM_INTEGRATION_GUIDE.md)** - High-performance LLM backend with batch inference (8x-30x speedup)
 - **[vLLM Batch Inference](docs/features/VLLM_BATCH_INFERENCE.md)** - Comprehensive batch inference implementation (10x-50x speedup)
-- **[Database & Storage](docs/data-storage/REDIS_DATABASE_ANALYSIS.md)** - Redis/SQL hybrid architecture, 89% Redis coverage (480 lines)
-- **[Redis Integration](docs/data-storage/RECSYS_REDIS_SUPPORT.md)** - Caching strategies and implementation (870 lines)
+- **[Database & Storage](docs/data-storage/REDIS_COVERAGE_ANALYSIS.md)** - Redis/SQL hybrid architecture and Redis coverage
+- **[Redis Integration](docs/data-storage/REDIS_RECOMMENDATION_SYSTEMS.md)** - Caching strategies for the recommendation systems
 - **[Performance Optimization](docs/analysis/BOTTLENECK_ANALYSIS_SUMMARY.md)** - Bottleneck analysis and optimization strategies
 
 **Development:**
@@ -240,3 +240,7 @@ Code contributions should follow the formatting guidelines in [docs/development/
    ```
 
 The pre-commit hooks will automatically run `black`, `isort`, and `flake8` on every commit to ensure code quality and consistency.
+
+## License
+
+Released under the GNU General Public License v3.0, see [LICENSE](LICENSE).

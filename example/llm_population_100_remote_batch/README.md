@@ -25,7 +25,7 @@ This keeps the deployment remote and GPU ownership external to YSimulator, while
 
 ## Key configuration
 
-From [simulation_config.json](/Users/rossetti/PycharmProjects/YSimulator/example/llm_population_100_remote_batch/simulation_config.json):
+From [simulation_config.json](simulation_config.json):
 
 ```json
 {
