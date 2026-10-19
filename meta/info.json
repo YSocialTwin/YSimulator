@@ -6,5 +6,6 @@
   "authors": [
     "YSocialTwin"
   ],
-  "repository_url": "https://github.com/YSocialTwin/YSimulator"
+  "repository_url": "https://github.com/YSocialTwin/YSimulator",
+  "license": "GPL-3.0-only"
 }
