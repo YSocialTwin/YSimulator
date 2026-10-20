@@ -10,6 +10,13 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 
+def _unwrap(cls):
+    """Return the plain class behind a real Ray ``ActorClass`` (no-op for mocks)."""
+    meta = getattr(cls, "__ray_metadata__", None)
+    inner = getattr(meta, "modified_class", None)
+    return inner if isinstance(inner, type) else cls
+
+
 class TestNewsFeedServiceInit:
     """Test NewsFeedService initialization."""
 
@@ -17,6 +24,8 @@ class TestNewsFeedServiceInit:
         """Test initialization with no configuration."""
         with patch("ray.remote", lambda x: x):
             from YSimulator.YClient.news_feeds.news_service import NewsFeedService
+
+            NewsFeedService = _unwrap(NewsFeedService)
 
             with patch.object(NewsFeedService, "__init__", return_value=None):
                 service = NewsFeedService.__new__(NewsFeedService)
@@ -36,6 +45,8 @@ class TestNewsFeedServiceInit:
         """Test initialization with feeds configuration."""
         with patch("ray.remote", lambda x: x):
             from YSimulator.YClient.news_feeds.news_service import NewsFeedService
+
+            NewsFeedService = _unwrap(NewsFeedService)
 
             feeds_config = {
                 "feeds": [
@@ -75,6 +86,8 @@ class TestRegisterPageFeed:
         with patch("ray.remote", lambda x: x):
             from YSimulator.YClient.news_feeds.news_service import NewsFeedService
 
+            NewsFeedService = _unwrap(NewsFeedService)
+
             with patch.object(NewsFeedService, "__init__", return_value=None):
                 service = NewsFeedService.__new__(NewsFeedService)
                 service.feeds_config = []
@@ -99,6 +112,8 @@ class TestRegisterPageFeed:
         """Test registering with empty URL returns False."""
         with patch("ray.remote", lambda x: x):
             from YSimulator.YClient.news_feeds.news_service import NewsFeedService
+
+            NewsFeedService = _unwrap(NewsFeedService)
 
             with patch.object(NewsFeedService, "__init__", return_value=None):
                 service = NewsFeedService.__new__(NewsFeedService)
@@ -176,6 +191,8 @@ class TestCaching:
         with patch("ray.remote", lambda x: x):
             from YSimulator.YClient.news_feeds.news_service import NewsFeedService
 
+            NewsFeedService = _unwrap(NewsFeedService)
+
             with patch.object(NewsFeedService, "__init__", return_value=None):
                 service = NewsFeedService.__new__(NewsFeedService)
                 service.cached_news = {}
@@ -200,6 +217,8 @@ class TestCaching:
         with patch("ray.remote", lambda x: x):
             from YSimulator.YClient.news_feeds.news_service import NewsFeedService
 
+            NewsFeedService = _unwrap(NewsFeedService)
+
             with patch.object(NewsFeedService, "__init__", return_value=None):
                 service = NewsFeedService.__new__(NewsFeedService)
                 service.cached_news = {}
@@ -222,6 +241,8 @@ class TestCaching:
         """Test that cache is fresh within cache_duration."""
         with patch("ray.remote", lambda x: x):
             from YSimulator.YClient.news_feeds.news_service import NewsFeedService
+
+            NewsFeedService = _unwrap(NewsFeedService)
 
             with patch.object(NewsFeedService, "__init__", return_value=None):
                 service = NewsFeedService.__new__(NewsFeedService)
@@ -249,6 +270,8 @@ class TestGetRandomArticle:
         """Test retrieving a random article from cached articles."""
         with patch("ray.remote", lambda x: x):
             from YSimulator.YClient.news_feeds.news_service import NewsFeedService
+
+            NewsFeedService = _unwrap(NewsFeedService)
 
             with patch.object(NewsFeedService, "__init__", return_value=None):
                 service = NewsFeedService.__new__(NewsFeedService)
@@ -280,6 +303,8 @@ class TestGetRandomArticle:
         """Test behavior when cache is empty."""
         with patch("ray.remote", lambda x: x):
             from YSimulator.YClient.news_feeds.news_service import NewsFeedService
+
+            NewsFeedService = _unwrap(NewsFeedService)
 
             with patch.object(NewsFeedService, "__init__", return_value=None):
                 service = NewsFeedService.__new__(NewsFeedService)

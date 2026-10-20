@@ -18,8 +18,10 @@ except ImportError:
     REDIS_AVAILABLE = False
     redis = None
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, func
 from sqlalchemy.orm import Session
+
+from YSimulator.hashtag_text import normalize_hashtag
 
 from YSimulator.YServer.classes.models import (
     Agent_Opinion,
@@ -2803,17 +2805,20 @@ class DatabaseMiddleware:
         Add a hashtag to the database or get its UUID if it already exists.
 
         Args:
-            hashtag_text: Hashtag text (without # prefix)
+            hashtag_text: Hashtag text (a leading # is dropped; case-insensitive identity)
 
         Returns:
             str: Hashtag UUID, or None if error
         """
         import uuid
 
+        hashtag_text = normalize_hashtag(hashtag_text)
+        if not hashtag_text:
+            return None
         try:
             if self.use_redis:
                 # Check if hashtag exists in Redis
-                hashtag_lookup_key = self._redis_key("hashtags", f"lookup:{hashtag_text}")
+                hashtag_lookup_key = self._redis_key("hashtags", f"lookup:{hashtag_text.casefold()}")
                 existing_id = self.redis_client.get(hashtag_lookup_key)
 
                 if existing_id:
@@ -2839,7 +2844,9 @@ class DatabaseMiddleware:
                 try:
                     # Check if hashtag already exists
                     existing = (
-                        session.query(Hashtag).filter(Hashtag.hashtag == hashtag_text).first()
+                        session.query(Hashtag)
+                        .filter(func.lower(Hashtag.hashtag) == hashtag_text.lower())
+                        .first()
                     )
 
                     if existing:

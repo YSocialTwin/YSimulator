@@ -158,7 +158,7 @@ class AgentSelector:
                 f"This is expected behavior per INTERESTS.md - posts will be generic without topics."
             )
         elif topics and counts:
-            # Weight topics by their interaction counts
+            # Weight topics by interaction counts over the moving window (same rule as the Flask stack)
             selected_topic = random.choices(topics, weights=counts, k=1)[0]
             self.logger.debug(
                 f"Sampled topic '{selected_topic}' for agent {agent.username} from interests: {topics}"

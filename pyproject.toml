@@ -42,6 +42,7 @@ markers = [
     "integration: marks tests as integration tests",
     "unit: marks tests as unit tests",
     "serial: marks tests that must run serially (not in parallel)",
+    "requires_vader: skipped when the NLTK vader_lexicon data is not installed",
     "xdist_group: marks tests to run in the same group when using pytest-xdist",
 ]
 

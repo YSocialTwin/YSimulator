@@ -8,7 +8,11 @@ Tests cover:
 - Text annotator integration (text_annotator.py)
 """
 
+import sys
+import types
 from unittest.mock import MagicMock, patch
+
+import pytest
 
 from YSimulator.YClient.text_support.annotations import toxicity, vader_sentiment
 from YSimulator.YClient.text_support.cleaning import clean_text, extract_components
@@ -17,6 +21,25 @@ from YSimulator.YClient.text_support.text_annotator import (
     prepare_sentiment_data,
     prepare_toxicity_data,
 )
+
+
+def _fake_perspective(func):
+    """Provide a mocked ``PerspectiveAPI`` class.
+
+    annotations imports it lazily (``from perspective import PerspectiveAPI``), so a fake
+    ``perspective`` module is injected in ``sys.modules`` instead of patching an attribute.
+    """
+
+    def wrapper(self, *args, **kwargs):
+        mock_cls = MagicMock()
+        fake = types.ModuleType("perspective")
+        fake.PerspectiveAPI = mock_cls
+        with patch.dict(sys.modules, {"perspective": fake}):
+            return func(self, mock_cls, *args, **kwargs)
+
+    wrapper.__name__ = func.__name__
+    wrapper.__doc__ = func.__doc__
+    return wrapper
 
 
 class TestTextCleaning:
@@ -170,6 +193,7 @@ class TestExtractComponents:
         assert mentions == ["@john", "@jane"]
 
 
+@pytest.mark.requires_vader
 class TestVaderSentiment:
     """Test suite for VADER sentiment analysis."""
 
@@ -264,7 +288,7 @@ class TestToxicity:
             assert "SEXUALLY_EXPLICIT" in result
             assert "FLIRTATION" in result
 
-    @patch("YSimulator.YClient.text_support.annotations.PerspectiveAPI")
+    @_fake_perspective
     def test_toxicity_with_api_key_success(self, mock_perspective):
         """Test successful toxicity analysis."""
         mock_api = MagicMock()
@@ -291,14 +315,14 @@ class TestToxicity:
         assert "SEXUALLY_EXPLICIT" in result
         assert "FLIRTATION" in result
 
-    @patch("YSimulator.YClient.text_support.annotations.PerspectiveAPI")
+    @_fake_perspective
     def test_toxicity_exception_handling(self, mock_perspective):
         """Test toxicity exception handling."""
         mock_perspective.side_effect = Exception("API error")
         result = toxicity("Test text", api_key="test_key")
         assert result == {}
 
-    @patch("YSimulator.YClient.text_support.annotations.PerspectiveAPI")
+    @_fake_perspective
     def test_toxicity_empty_text(self, mock_perspective):
         """Test toxicity with empty text."""
         mock_api = MagicMock()
@@ -342,7 +366,7 @@ class TestToxicity:
                 debug_msg = mock_logger.debug.call_args[0][0]
                 assert "detoxify" in debug_msg.lower()
 
-    @patch("YSimulator.YClient.text_support.annotations.PerspectiveAPI")
+    @_fake_perspective
     def test_toxicity_perspective_failure_logs_warning(self, mock_perspective):
         """Test that a Perspective API failure emits a WARNING log message."""
         mock_perspective.side_effect = Exception("network error")
@@ -371,6 +395,7 @@ class TestToxicity:
                 assert "model load error" in warning_msg
 
 
+@pytest.mark.requires_vader
 class TestAnnotateText:
     """Test suite for text annotation integration."""
 
@@ -410,7 +435,7 @@ class TestAnnotateText:
         result = annotate_text("I love this!", enable_sentiment=False)
         assert result["sentiment"] is None
 
-    @patch("YSimulator.YClient.text_support.annotations.PerspectiveAPI")
+    @_fake_perspective
     def test_annotate_text_toxicity_enabled(self, mock_perspective):
         """Test annotation with toxicity enabled."""
         mock_api = MagicMock()

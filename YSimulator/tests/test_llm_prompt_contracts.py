@@ -3,7 +3,9 @@ from pathlib import Path
 
 
 def test_prompt_jsons_include_output_contracts():
-    prompts_path = Path("external/YSimulator/example/llm_population_100_vllm/prompts.json")
+    prompts_path = (
+        Path(__file__).resolve().parents[2] / "example" / "llm_population_100_vllm" / "prompts.json"
+    )
     data = json.loads(prompts_path.read_text())
 
     comment_prompt = data["generate_comment"]["user_template"]

@@ -338,7 +338,7 @@ def extract_agent_attrs(
     selected_topic = None
     topics, counts = validate_and_extract_interests_func(agent.interests)
     if topics and counts:
-        # Weight topics by their interaction counts
+        # Weight topics by interaction counts over the moving window (same rule as the Flask stack)
         selected_topic = random.choices(topics, weights=counts, k=1)[0]
 
     # Get opinion on the selected topic if available (only if opinion dynamics is enabled)

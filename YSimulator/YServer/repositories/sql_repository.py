@@ -35,6 +35,8 @@ from sqlalchemy.engine import Engine
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
+from YSimulator.hashtag_text import normalize_hashtag
+
 from YSimulator.YServer.classes.models import (
     Agent_Opinion,
     Article,
@@ -981,12 +983,19 @@ class SQLPostRepository(PostRepository):
             return False
 
     def add_or_get_hashtag(self, hashtag: str) -> Optional[str]:
-        """Add or get hashtag ID."""
+        """Add or get hashtag ID (canonical text: no '#', case-insensitive identity)."""
+        hashtag = normalize_hashtag(hashtag)
+        if not hashtag:
+            return None
         try:
             session = Session(self.engine)
             try:
                 # Try to get existing hashtag
-                existing = session.query(Hashtag).filter_by(hashtag=hashtag).first()
+                existing = (
+                    session.query(Hashtag)
+                    .filter(func.lower(Hashtag.hashtag) == hashtag.lower())
+                    .first()
+                )
                 if existing:
                     return existing.id
 

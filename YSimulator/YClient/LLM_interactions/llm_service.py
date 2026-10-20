@@ -11,6 +11,7 @@ import ray
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_ollama import ChatOllama
+from YSimulator import prompt_store, protocol_tokens
 
 # Initialize logger
 logger = logging.getLogger(__name__)
@@ -20,8 +21,8 @@ DEFAULT_FALLBACK_REACTION = "LIKE"
 
 # Default prompt templates for image description
 DEFAULT_IMAGE_DESCRIPTION_PROMPTS = {
-    "system_template": "You are an image description assistant. Describe images accurately and concisely in English.",
-    "user_template": "Describe the following image. Write in english. <img {url}>",
+    "system_template": prompt_store.get("llm_service__module__1"),
+    "user_template": prompt_store.get("llm_service__module__2"),
 }
 
 
@@ -42,7 +43,7 @@ def _append_custom_features_to_persona(persona: str, agent_attrs: Optional[Dict[
     if not parts:
         return persona
 
-    return f"{persona.rstrip()} Additional personal details: {'; '.join(parts)}."
+    return f"{persona.rstrip()} " + prompt_store.prompt("custom_features_persona", details="; ".join(parts))
 
 
 def _stress_prompt_block(agent_attrs: Optional[Dict[str, Any]]) -> str:
@@ -52,9 +53,11 @@ def _stress_prompt_block(agent_attrs: Optional[Dict[str, Any]]) -> str:
     if not label or scale is None:
         return ""
     return (
-        "Current stress level: "
-        f"{label} ({scale}/5 on a five-point scale where 1 means none and 5 means extremely stressed). "
-        "Use this only as internal emotional context while writing."
+        prompt_store.prompt(
+            "llm_service__stress_prompt_block__1",
+            label=label,
+            scale=scale,
+        )
     )
 
 
@@ -82,32 +85,32 @@ class LLMService:
             prompts_config = {
                 "personas": {
                     "0": "You are a 'Validator'. Skeptical, brief, authentic.",
-                    "1": "You are a 'Broadcaster'. High energy, viral, controversial.",
+                    "1": prompt_store.get("llm_service__init____1"),
                     "2": "You are an 'Explorer'. Curious, asking questions.",
                 },
                 "generate_post": {
                     "system_template": "{persona}",
-                    "user_template": "Write a tweet for Day {day} Slot {slot}.{topic_instruction} Max 15 words.",
+                    "user_template": prompt_store.get("llm_service__init____2"),
                 },
                 "decide_reaction": {
-                    "system_template": "You are user type {cluster_id}. Read post. Reply ONLY: 'LIKE', 'COMMENT', 'IGNORE'.",
+                    "system_template": prompt_store.get("llm_service__init____3"),
                     "user_template": "{post_content}",
                 },
                 "generate_comment": {
-                    "system_template": "{persona} You engage in discussions by commenting on posts. Generate {toxicity} confrontational language contents.",
-                    "user_template": '{author_name} posted this:\n\n"{post_content}"\n\n{thread_context_instruction}Write a brief, thoughtful comment. You can tag the author with @{author_name} to continue the discussion. under 100 characters. Be authentic to your persona.',
+                    "system_template": prompt_store.get("llm_service__init____4"),
+                    "user_template": prompt_store.get("llm_service__init____5"),
                 },
                 "generate_read_reaction": {
                     "system_template": "{persona} You're deciding how to react to content you discovered.",
-                    "user_template": 'You found this post:\n\n"{post_content}"\n\nHow do you react? Reply with ONLY ONE LABEL: LIKE, LOVE, LAUGH, ANGRY, SAD, REPORT_TOXIC, REPORT_OFFENSIVE, or IGNORE.',
+                    "user_template": prompt_store.get("llm_service__init____6"),
                 },
                 "decide_search_action": {
-                    "system_template": "{persona} You searched for posts on a topic you're interested in and found relevant content. Decide how to engage with it.",
-                    "user_template": 'You found this post on your topic of interest:\n\n"{post_content}"\n\nHow do you want to engage? Reply with ONLY ONE WORD from these options:\n- COMMENT (engage in discussion, share your thoughts)\n- SHARE (reshare with your followers)\n- LIKE (positive, agree)\n- LOVE (strongly positive)\n- LAUGH (funny, humorous)\n- ANGRY (negative, disagree)\n- SAD (disappointing, concerning)\n- IGNORE (not interested, skip)\n\nYour choice:',
+                    "system_template": prompt_store.get("llm_service__init____7"),
+                    "user_template": prompt_store.get("llm_service__init____8"),
                 },
                 "generate_share_commentary": {
-                    "system_template": "{persona} You are resharing someone's post with your own perspective. Generate {toxicity} confrontational language contents.",
-                    "user_template": '{author_name} posted this:\n\n"{post_content}"\n\nWrite a brief commentary explaining why you\'re resharing this (max 200 characters). Add your perspective based on your persona and opinions. Be authentic.',
+                    "system_template": prompt_store.get("llm_service__init____9"),
+                    "user_template": prompt_store.get("llm_service__init____10"),
                 },
             }
 
@@ -234,8 +237,6 @@ class LLMService:
                 - client_id: Client identifier for log filename (default: "llm")
                 - enable_actor_log: Whether to enable file logging (default: True)
         """
-        global logger
-
         if logging_config is None:
             logging_config = {}
 
@@ -338,6 +339,7 @@ class LLMService:
             str: Formatted persona string
         """
         # If agent attributes are provided, use the persona template
+        agent_attrs = prompt_store.localize_attrs(agent_attrs)  # profile values in the prompt language
         if agent_attrs and self.prompts_config.get("persona_template"):
             template = self.prompts_config["persona_template"]
             try:
@@ -382,7 +384,7 @@ class LLMService:
 
         lines = ["Active system messages addressed to you for this round."]
         lines.append(
-            "These are mandatory platform or moderator instructions for the content you are about to write. Follow them exactly."
+            prompt_store.get("llm_service__system_messages_block__1")
         )
         for item in messages:
             if not isinstance(item, dict):
@@ -431,15 +433,21 @@ class LLMService:
 
         # Build topic instruction with opinion if available
         if topic and topic_opinion:
-            topic_instruction = f" You MUST write about the topic: {topic}. Your stance is: {topic_opinion}. Express this viewpoint clearly."
+            topic_instruction = prompt_store.prompt(
+                                    "llm_service__generate_post__1",
+                                    topic=topic,
+                                    topic_opinion=topic_opinion,
+                                )
         elif topic:
             topic_instruction = f" You MUST write about the topic: {topic}."
         else:
             topic_instruction = ""
         if memory_blocks["post_style"]:
             topic_instruction += (
-                f" Use this only as a style/tone memory, not as a topic list:\n"
-                f"{memory_blocks['post_style']}\n"
+                prompt_store.prompt(
+                    "llm_service__generate_post__2",
+                    post_style=memory_blocks['post_style'],
+                )
             )
 
         # Format user message with all placeholders
@@ -502,9 +510,9 @@ class LLMService:
         try:
             result = chain.invoke({}).strip().upper()
 
-            if "LIKE" in result:
+            if protocol_tokens.has_token(result, protocol_tokens.LIKE):
                 return "LIKE"
-            if "COMMENT" in result:
+            if protocol_tokens.has_token(result, protocol_tokens.COMMENT):
                 return "COMMENT"
             return "IGNORE"
         except Exception as e:
@@ -620,8 +628,11 @@ class LLMService:
                 thread_context_lines.append(f"{username}: {tweet}")
             thread_context_str = "\n".join(thread_context_lines)
             thread_context_instruction = (
-                f"Previous discussion in this thread (for context only):\n{thread_context_str}\n\n"
-                f"Now respond specifically to {author_name}'s post above. "
+                prompt_store.prompt(
+                    "llm_service__generate_comment__1",
+                    thread_context_str=thread_context_str,
+                    author_name=author_name,
+                )
             )
 
         # Format templates
@@ -647,8 +658,10 @@ class LLMService:
             user_msg += f"\n\nMemory context:\n{memory_blocks['reply_context']}"
         if memory_blocks["reply_cues"]:
             user_msg += (
-                f"\n\nUse these continuity cues only if they fit naturally:\n"
-                f"{memory_blocks['reply_cues']}"
+                prompt_store.prompt(
+                    "llm_service__generate_comment__2",
+                    reply_cues=memory_blocks['reply_cues'],
+                )
             )
 
         # Log the prompt for debugging
@@ -738,8 +751,10 @@ class LLMService:
             user_msg += f"\n\nMemory context:\n{memory_blocks['reply_context']}"
         if memory_blocks["reply_cues"]:
             user_msg += (
-                f"\n\nUse these continuity cues only if they fit naturally:\n"
-                f"{memory_blocks['reply_cues']}"
+                prompt_store.prompt(
+                    "llm_service__generate_comment__2",
+                    reply_cues=memory_blocks['reply_cues'],
+                )
             )
 
         prompt = ChatPromptTemplate.from_messages([("system", system_msg), ("user", user_msg)])
@@ -772,11 +787,12 @@ class LLMService:
                 (
                     "user",
                     (
-                        "Annotate the interaction for stress/reward scoring.\n"
-                        f"Actor user id: {actor_user_id}\n"
-                        f"Recipient user id: {recipient_user_id}\n"
-                        f"Text:\n{text}\n"
-                        "Return JSON only."
+                        prompt_store.prompt(
+                            "llm_service__annotate_stress_reward_text__1",
+                            actor_user_id=actor_user_id,
+                            recipient_user_id=recipient_user_id,
+                            text=text,
+                        )
                     ),
                 ),
             ]
@@ -848,22 +864,22 @@ class LLMService:
             chain = prompt | self.llm | StrOutputParser()
             result = chain.invoke({}).strip().upper()
 
-            if "REPORT_TOXIC" in result or ("REPORT" in result and "TOXIC" in result):
+            if protocol_tokens.has_token(result, protocol_tokens.REPORT_TOXIC) or (protocol_tokens.has_token(result, protocol_tokens.REPORT) and protocol_tokens.has_token(result, protocol_tokens.TOXIC)):
                 return "REPORT_TOXIC"
-            if "REPORT_OFFENSIVE" in result or ("REPORT" in result and "OFFENSIVE" in result):
+            if protocol_tokens.has_token(result, protocol_tokens.REPORT_OFFENSIVE) or (protocol_tokens.has_token(result, protocol_tokens.REPORT) and protocol_tokens.has_token(result, protocol_tokens.OFFENSIVE)):
                 return "REPORT_OFFENSIVE"
             # Parse LLM response - look for valid reactions
-            if "LOVE" in result:
+            if protocol_tokens.has_token(result, protocol_tokens.LOVE):
                 return "LOVE"
-            if "LIKE" in result:
+            if protocol_tokens.has_token(result, protocol_tokens.LIKE):
                 return "LIKE"
-            if "LAUGH" in result:
+            if protocol_tokens.has_token(result, protocol_tokens.LAUGH):
                 return "LAUGH"
-            if "ANGRY" in result or "DISLIKE" in result:
+            if protocol_tokens.has_token(result, protocol_tokens.ANGRY) or protocol_tokens.has_token(result, protocol_tokens.DISLIKE):
                 return "ANGRY"  # Map DISLIKE to ANGRY
-            if "SAD" in result:
+            if protocol_tokens.has_token(result, protocol_tokens.SAD):
                 return "SAD"
-            if "IGNORE" in result:
+            if protocol_tokens.has_token(result, protocol_tokens.IGNORE):
                 return "IGNORE"
 
             # Default to fallback reaction if unclear
@@ -966,21 +982,21 @@ class LLMService:
             result = chain.invoke({}).strip().upper()
 
             # Parse LLM response - look for valid actions
-            if "COMMENT" in result:
+            if protocol_tokens.has_token(result, protocol_tokens.COMMENT):
                 return "COMMENT"
-            if "SHARE" in result:
+            if protocol_tokens.has_token(result, protocol_tokens.SHARE):
                 return "SHARE"
-            if "LOVE" in result:
+            if protocol_tokens.has_token(result, protocol_tokens.LOVE):
                 return "LOVE"
-            if "LIKE" in result:
+            if protocol_tokens.has_token(result, protocol_tokens.LIKE):
                 return "LIKE"
-            if "LAUGH" in result:
+            if protocol_tokens.has_token(result, protocol_tokens.LAUGH):
                 return "LAUGH"
-            if "ANGRY" in result:
+            if protocol_tokens.has_token(result, protocol_tokens.ANGRY):
                 return "ANGRY"
-            if "SAD" in result:
+            if protocol_tokens.has_token(result, protocol_tokens.SAD):
                 return "SAD"
-            if "IGNORE" in result:
+            if protocol_tokens.has_token(result, protocol_tokens.IGNORE):
                 return "IGNORE"
 
             # Default to fallback reaction if unclear
@@ -1035,20 +1051,22 @@ class LLMService:
             return "no_change"
 
         desired_reply = "FOLLOW" if normalized_action == "follow" else "UNFOLLOW"
-        action_text = "followed" if normalized_action == "follow" else "unfollowed"
+        action_text = prompt_store.get("reciprocal_action_follow" if normalized_action == "follow" else "reciprocal_action_unfollow")
         prompt = (
-            f"System: {persona}\n"
-            "You are deciding whether to reciprocate a direct social-link change.\n"
-            f"Another user has just {action_text} you.\n"
-            f"Their profile:\n{source_summary}\n\n"
-            f"Reply with ONLY '{desired_reply}' or 'NOCHANGE'."
+            prompt_store.prompt(
+                "llm_service__generate_reciprocal_follow_decision__1",
+                persona=persona,
+                action_text=action_text,
+                source_summary=source_summary,
+                desired_reply=desired_reply,
+            )
         )
         try:
             result = self._generate_text(prompt).strip().upper()
         except Exception:
             return "no_change"
 
-        if desired_reply in result:
+        if protocol_tokens.has_token(result, desired_reply):
             return normalized_action
         return "no_change"
 
@@ -1158,11 +1176,11 @@ class LLMService:
         # Get prompts from configuration
         system_template = self.prompts_config.get("extract_emotions", {}).get(
             "system_template",
-            "You are an emotion classification assistant. Identify which emotions from the GoEmotions taxonomy the given text elicits.",
+            prompt_store.get("llm_service__extract_emotions__1"),
         )
         user_template = self.prompts_config.get("extract_emotions", {}).get(
             "user_template",
-            'Identify emotions from this text. Choose ONLY from: {emotion_list}\n\nText: "{text}"\n\nReturn emotions as comma-separated list:',
+            prompt_store.get("llm_service__extract_emotions__2"),
         )
 
         # Build emotion list for the prompt
@@ -1265,13 +1283,13 @@ class LLMService:
             config = self.prompts_config.get("infer_article_opinion", {})
             system_template = config.get(
                 "system_template",
-                "You are an opinion classification assistant. Analyze articles and determine their stance on topics.",
+                prompt_store.get("llm_service__infer_article_opinion__1"),
             )
             user_template = config.get(
                 "user_template",
                 "Analyze this article and determine its stance on the topic '{topic}'.\n\n"
                 + "Article excerpt:\n{article_text}\n\n"
-                + "What is the article's stance? Choose ONLY ONE from these options:\n{opinion_options}\n\n"
+                + prompt_store.get("llm_service__infer_article_opinion__2")
                 + "Your choice (ONE WORD ONLY):",
             )
 
@@ -1362,11 +1380,11 @@ class LLMService:
         # Get prompts from configuration
         config = self.prompts_config.get("generate_image_commentary", {})
         system_template = config.get(
-            "system_template", "{persona} You are sharing an image on social media."
+            "system_template", prompt_store.get("llm_service__generate_image_commentary__1")
         )
         user_template = config.get(
             "user_template",
-            'You are sharing an image described as: "{image_description}"\n\n{topics_instruction}Write a brief, engaging post to share this image (max 280 characters).',
+            prompt_store.get("llm_service__generate_image_commentary__2"),
         )
 
         # Format templates
@@ -1425,14 +1443,13 @@ class LLMService:
                 prompt_text += f"Opinion: '{op}' ({count})\n"
 
         prompt_text += (
-            "\nWhat do you think about the expressed opinion? "
-            "Answer with a single word among the options: AGREE|DISAGREE|NEUTRAL."
+            prompt_store.get("llm_service__evaluate_opinion__1")
         )
 
         # Get prompts from configuration with defaults
         system_template = self.prompts_config.get("evaluate_opinion", {}).get(
             "system_template",
-            "You are evaluating opinions on various topics. Consider the content and opinions presented.",
+            prompt_store.get("llm_service__evaluate_opinion__2"),
         )
 
         prompt = ChatPromptTemplate.from_messages(
@@ -1444,11 +1461,11 @@ class LLMService:
             response = chain.invoke({}).strip().upper()
 
             # Parse response - look for valid reactions
-            if "AGREE" in response:
+            if protocol_tokens.has_token(response, protocol_tokens.AGREE):
                 return "AGREE"
-            elif "DISAGREE" in response:
+            elif protocol_tokens.has_token(response, protocol_tokens.DISAGREE):
                 return "DISAGREE"
-            elif "NEUTRAL" in response:
+            elif protocol_tokens.has_token(response, protocol_tokens.NEUTRAL):
                 return "NEUTRAL"
 
             # Default to neutral if unclear

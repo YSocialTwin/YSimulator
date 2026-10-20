@@ -420,9 +420,7 @@ class TestHybridSQLBackend:
 
     def test_hybrid_sql_basic(self):
         """Test basic SQL hybrid recommendation."""
-        from YSimulator.YServer.recsys.content_recsys_db import (
-            recommend_hybrid_linear_ranker,
-        )
+        from YSimulator.YServer.recsys.content_recsys_db import recommend_hybrid_linear_ranker
 
         session = Mock()
         q = Mock()
@@ -469,9 +467,7 @@ class TestHybridSQLBackend:
 
     def test_hybrid_sql_no_candidates(self):
         """Test SQL hybrid with no candidates (should fallback)."""
-        from YSimulator.YServer.recsys.content_recsys_db import (
-            recommend_hybrid_linear_ranker,
-        )
+        from YSimulator.YServer.recsys.content_recsys_db import recommend_hybrid_linear_ranker
 
         # Mock session that returns no results
         session = Mock()

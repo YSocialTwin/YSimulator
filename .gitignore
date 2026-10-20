@@ -214,3 +214,4 @@ logs/
 
 # Simulation state files
 simulation.db
+.playwright-cli

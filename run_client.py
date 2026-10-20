@@ -375,6 +375,11 @@ if __name__ == "__main__":
             print(f"❌ Error: Required file '{prompts_file}' not found.")
             sys.exit(1)
 
+    from YSimulator import prompt_store
+
+    prompt_language = prompt_store.use_language_from_folder(prompts_file.parent)
+    ray_env = {"runtime_env": {"env_vars": prompt_store.env_for_workers()}} if prompt_store.env_for_workers() else {}
+
     # Load simulation config first to get client name
     try:
         with open(sim_config_file, "r") as f:
@@ -504,7 +509,7 @@ if __name__ == "__main__":
     namespace = resolve_client_namespace(config_dir, sim_config)
     wait_for_server_ready(config_dir, timeout_seconds=180)
     connect_start = time.time()
-    ray.init(address=ray_address, namespace=namespace, ignore_reinit_error=True)
+    ray.init(address=ray_address, namespace=namespace, ignore_reinit_error=True, **ray_env)
     connect_time = (time.time() - connect_start) * 1000
 
     logger.info(

@@ -17,6 +17,8 @@ except ImportError:
     REDIS_AVAILABLE = False
     redis = None
 
+from YSimulator.hashtag_text import normalize_hashtag
+
 from .base_repository import (
     FollowRepository,
     InterestRepository,
@@ -672,10 +674,13 @@ class RedisPostRepository(PostRepository):
             return False
 
     def add_or_get_hashtag(self, hashtag: str) -> Optional[str]:
-        """Add or get hashtag ID."""
+        """Add or get hashtag ID (canonical text: no '#', case-insensitive identity)."""
+        hashtag = normalize_hashtag(hashtag)
+        if not hashtag:
+            return None
         try:
             # Check if hashtag exists in Redis
-            hashtag_lookup_key = self._redis_key("hashtags", f"lookup:{hashtag}")
+            hashtag_lookup_key = self._redis_key("hashtags", f"lookup:{hashtag.casefold()}")
             existing_id = self.redis_client.get(hashtag_lookup_key)
 
             if existing_id:

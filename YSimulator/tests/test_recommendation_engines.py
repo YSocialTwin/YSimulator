@@ -183,6 +183,36 @@ class TestContentRecommender:
             return_value=["post7", "post8"]
         )
 
+        recommender = ContentRecommender(mock_db_adapter_redis, visibility_rounds=36)
+
+        # Test CollaborativeUserUser
+        result = recommender.get_recommended_posts(
+            agent_id="agent1", mode="CollaborativeUserUser", limit=2, day=1, slot=5
+        )
+        assert len(result) == 2
+        assert mock_recsys_redis.recommend_collaborative_user_user_redis.called
+
+        # Test CollaborativeItemItem
+        result = recommender.get_recommended_posts(
+            agent_id="agent1", mode="CollaborativeItemItem", limit=2, day=1, slot=5
+        )
+        assert len(result) == 2
+        assert mock_recsys_redis.recommend_collaborative_item_item_redis.called
+
+        # Test ContentBasedFeatures
+        result = recommender.get_recommended_posts(
+            agent_id="agent1", mode="ContentBasedFeatures", limit=2, day=1, slot=5
+        )
+        assert len(result) == 2
+        assert mock_recsys_redis.recommend_content_based_features_redis.called
+
+        # Test ContentBasedVector
+        result = recommender.get_recommended_posts(
+            agent_id="agent1", mode="ContentBasedVector", limit=2, day=1, slot=5
+        )
+        assert len(result) == 2
+        assert mock_recsys_redis.recommend_content_based_vector_redis.called
+
     def test_shadow_ban_filter_removes_banned_authors(self, tmp_path: Path):
         db_path = tmp_path / "shadow_ban_filter.db"
         engine = create_engine(f"sqlite:///{db_path}")
@@ -225,36 +255,6 @@ class TestContentRecommender:
         with patch("YSimulator.YServer.recommendation.content_recommender.inspect") as mock_inspect:
             mock_inspect.return_value.get_table_names.return_value = []
             assert recommender._filter_shadow_banned_posts(["post1"], day=0, slot=1) == ["post1"]
-
-        recommender = ContentRecommender(mock_db_adapter_redis, visibility_rounds=36)
-
-        # Test CollaborativeUserUser
-        result = recommender.get_recommended_posts(
-            agent_id="agent1", mode="CollaborativeUserUser", limit=2, day=1, slot=5
-        )
-        assert len(result) == 2
-        assert mock_recsys_redis.recommend_collaborative_user_user_redis.called
-
-        # Test CollaborativeItemItem
-        result = recommender.get_recommended_posts(
-            agent_id="agent1", mode="CollaborativeItemItem", limit=2, day=1, slot=5
-        )
-        assert len(result) == 2
-        assert mock_recsys_redis.recommend_collaborative_item_item_redis.called
-
-        # Test ContentBasedFeatures
-        result = recommender.get_recommended_posts(
-            agent_id="agent1", mode="ContentBasedFeatures", limit=2, day=1, slot=5
-        )
-        assert len(result) == 2
-        assert mock_recsys_redis.recommend_content_based_features_redis.called
-
-        # Test ContentBasedVector
-        result = recommender.get_recommended_posts(
-            agent_id="agent1", mode="ContentBasedVector", limit=2, day=1, slot=5
-        )
-        assert len(result) == 2
-        assert mock_recsys_redis.recommend_content_based_vector_redis.called
 
     def test_calculate_visibility_params(self, mock_db_adapter):
         """Test visibility parameter calculation."""

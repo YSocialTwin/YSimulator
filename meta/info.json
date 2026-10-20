@@ -2,9 +2,10 @@
   "plugin_name": "YSimulator",
   "category": "Simulation Runtime Stack",
   "group": "HPC",
-  "description": "Distributed HPC simulation runtime for large-scale YSocial experiments.",
+  "description": "Runs large-scale simulations in a distributed way on HPC clusters.",
   "authors": [
     "YSocialTwin"
   ],
-  "repository_url": "https://github.com/YSocialTwin/YSimulator"
+  "repository_url": "https://github.com/YSocialTwin/YSimulator",
+  "license": "GPL-3.0-only"
 }

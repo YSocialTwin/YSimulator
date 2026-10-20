@@ -1,6 +1,19 @@
 # YSimulator
 
-A distributed social media simulation system using Ray for orchestration and LLM-based agent behaviors.
+> Runs large-scale simulations in a distributed way on HPC clusters.
+
+## Overview
+
+YSimulator is a distributed social media simulation system that uses [Ray](https://www.ray.io/) for orchestration and LLM-based agent behaviours. It is the HPC simulator of [YSocial](https://github.com/YSocialTwin/YSocial). In [YSocial](https://github.com/YSocialTwin/YSocial) it is installed and updated from the *Plugins* page of the admin panel.
+
+It uses a distributed coordinator-worker pattern:
+
+- **Server (Orchestrator)**: coordinates temporal progression and manages barriers
+- **Clients (Workers)**: execute simulation steps independently
+- **Database Middleware**: abstracts storage (SQL + optional Redis)
+- **Ray**: enables distributed execution without manual networking
+
+For component diagrams and data flow, see [docs/architecture/ARCHITECTURE.md](docs/architecture/ARCHITECTURE.md) and [docs/architecture/DIAGRAMS.md](docs/architecture/DIAGRAMS.md).
 
 ## Features
 
@@ -17,89 +30,34 @@ A distributed social media simulation system using Ray for orchestration and LLM
 - **UUID-Based IDs**: Universal identifiers for distributed compatibility
 - **Performance Optimization**: vLLM backend support for 8-30x faster LLM inference through batch processing
 
-## Documentation
+## Requirements
 
-**📚 [Online Documentation](https://ysocialtwin.github.io/YSimulator/)** - Complete documentation hosted on GitHub Pages
-
-> **Tip**: Browse the full documentation online with search functionality, or explore the markdown files directly in the [docs/](docs/) directory.
-
-**[Complete Documentation Index](docs/getting-started/INDEX.md)** - Navigate all documentation organized by topic and use case
-
-> **New in 2.1**: Documentation has been reorganized into thematic subdirectories for better navigation and discoverability.
-
-### Quick Links
-
-**Getting Started:**
-- **[Configuration Guide](docs/configuration/CONFIG.md)** - Complete guide to all configuration options (1,550 lines)
-- **[Architecture Overview](docs/architecture/ARCHITECTURE.md)** - System design and components (960+ lines)
-
-**Core Features:**
-- **[Recommendation Systems](docs/features/RECOMMENDATION_SYSTEMS.md)** - Content & follow recommendations with 15 algorithms (1,200 lines)
-- **[Opinion Dynamics](docs/features/OPINION_DYNAMICS.md)** - Bounded confidence and LLM evaluation models (1,200 lines)
-- **[Interests & Topics](docs/features/INTERESTS.md)** - Interest management with attention windows (300 lines)
-
-**Agent System:**
-- **[Agent Actions](docs/agents/AGENT_ACTIONS.md)** - All available agent actions (700+ lines)
-- **[Agent Types](docs/agents/AGENT_TYPES.md)** - Agent types and archetypes (670+ lines)
-- **[Agent Temporal Activities](docs/agents/AGENT_TEMPORAL_ACTIVITIES.md)** - Temporal patterns and dynamics (990+ lines)
-
-**System & Performance:**
-- **[vLLM Integration Guide](docs/configuration/VLLM_INTEGRATION_GUIDE.md)** - High-performance LLM backend with batch inference (8x-30x speedup)
-- **[vLLM Batch Inference](docs/features/VLLM_BATCH_INFERENCE.md)** - Comprehensive batch inference implementation (10x-50x speedup)
-- **[Database & Storage](docs/data-storage/REDIS_DATABASE_ANALYSIS.md)** - Redis/SQL hybrid architecture, 89% Redis coverage (480 lines)
-- **[Redis Integration](docs/data-storage/RECSYS_REDIS_SUPPORT.md)** - Caching strategies and implementation (870 lines)
-- **[Performance Optimization](docs/analysis/BOTTLENECK_ANALYSIS_SUMMARY.md)** - Bottleneck analysis and optimization strategies
-
-**Development:**
-- **[Extension Guide](docs/development/EXTENDING.md)** - How to add new agent actions and features (1,210+ lines)
-- **[System Diagrams](docs/architecture/DIAGRAMS.md)** - Visual architecture and interaction diagrams (800 lines)
-- **[Code Formatting](docs/development/FORMATTING.md)** - Development guidelines and tooling
-
-**Monitoring:**
-- **[Logging Configuration](docs/logging/LOGGING_CONFIG.md)** - Comprehensive logging setup (420 lines)
-- **[Server Logging](docs/logging/SERVER_LOGGING.md)** - Server log analysis (380 lines)
-- **[Action Logging](docs/logging/ACTION_LOGGING.md)** - Client action tracking (160 lines)
-
-**Browse by Use Case**: See the [Documentation Index](docs/getting-started/INDEX.md) for recommended reading paths by role (Researcher, Developer, Admin) and feature cross-references.
-
-## Configuration
-
-The simulator uses JSON configuration files stored in a single directory. See [docs/configuration/CONFIG.md](docs/configuration/CONFIG.md) for detailed documentation.
-
-### Configuration Files
-
-All configuration files are kept in the same directory:
-
-- `server_config.json` - Server parameters (name, namespace, address, port, database)
-- `simulation_config.json` - Client parameters, LLM settings, simulation duration
-- `agent_population.json` - Agent profiles and distribution
-- `llm_prompts.json` - LLM prompt templates and personas
-- `network.csv` - (Optional) Initial social network topology defining follow relationships
+- Python 3 and the dependencies in `requirements.txt` (Ray included)
+- An LLM backend: Ollama or vLLM
+- A database: SQLite (default), PostgreSQL or MySQL, with optional Redis caching
 
 ## Installation
 
-### Install Dependencies
-
 ```bash
+git clone https://github.com/YSocialTwin/YSimulator.git
+cd YSimulator
 pip install -r requirements.txt
 ```
 
-### Initialize Database (Optional)
-
-If using PostgreSQL or MySQL, initialize the database schema:
+If you use PostgreSQL or MySQL, initialise the database schema:
 
 ```bash
 python scripts/init_db.py --config my_config
 ```
 
-## Quick Start
+## Usage
 
 ### 1. Prepare Configuration
 
 ```bash
 # Copy example configuration to a directory
 mkdir my_config
-cp example_conf/*.json my_config/
+cp example/<scenario>/*.json my_config/
 
 # Edit as needed
 nano my_config/server_config.json
@@ -131,7 +89,7 @@ python run_server.py
 python run_client.py
 ```
 
-## Output Files
+### Output files
 
 All output files are created in the configuration directory:
 
@@ -139,41 +97,21 @@ All output files are created in the configuration directory:
 - `logs/` - Rotating JSON logs for server and client
 - `ray_config.temp` - Temporary Ray cluster address file (auto-created by server, used by clients)
 
-## Customization
+## Configuration
 
-Edit the JSON configuration files to customize:
-- Number of agents and their characteristics
-- LLM model and parameters
-- Simulation duration
-- Agent personas and behaviors
-- Database location
+The simulator uses JSON configuration files stored in a single directory. See [docs/configuration/CONFIG.md](docs/configuration/CONFIG.md) for the complete documentation.
 
-See [docs/configuration/CONFIG.md](docs/configuration/CONFIG.md) for full configuration options and examples.
+All configuration files are kept in the same directory:
 
-## Architecture
+- `server_config.json` - Server parameters (name, namespace, address, port, database)
+- `simulation_config.json` - Client parameters, LLM settings, simulation duration
+- `agent_population.json` - Agent profiles and distribution
+- `llm_prompts.json` - LLM prompt templates and personas
+- `network.csv` - (Optional) Initial social network topology defining follow relationships
 
-YSimulator uses a distributed coordinator-worker pattern:
+Edit the files to customise the number of agents and their characteristics, the LLM model and parameters, the simulation duration, the agent personas and behaviours, and the database location.
 
-- **Server (Orchestrator)**: Coordinates temporal progression and manages barriers
-- **Clients (Workers)**: Execute simulation steps independently
-- **Database Middleware**: Abstracts storage (SQL + optional Redis)
-- **Ray**: Enables distributed execution without manual networking
-
-For detailed architecture information, including component diagrams and data flow, see [docs/architecture/ARCHITECTURE.md](docs/architecture/ARCHITECTURE.md) and [docs/architecture/DIAGRAMS.md](docs/architecture/DIAGRAMS.md).
-
-## Extending YSimulator
-
-To add new agent actions or customize behavior:
-
-1. Define the data model (SQLAlchemy)
-2. Add storage methods to DatabaseMiddleware
-3. Create server handler method
-4. Implement client-side action logic
-5. Integrate into the action loop
-
-See [docs/development/EXTENDING.md](docs/development/EXTENDING.md) for step-by-step instructions and examples.
-
-## Project Structure
+## Project structure
 
 ```
 YSimulator/
@@ -192,6 +130,45 @@ YSimulator/
 ├── run_client.py       # Client entry point
 └── requirements.txt    # Python dependencies
 ```
+
+## Documentation
+
+**[Online documentation](https://ysocialtwin.github.io/YSimulator/)** (GitHub Pages, with search) and the [documentation index](docs/getting-started/INDEX.md), organised by topic and by use case.
+
+### Quick links
+
+**Getting Started:**
+- **[Configuration Guide](docs/configuration/CONFIG.md)** - Complete guide to all configuration options
+- **[Architecture Overview](docs/architecture/ARCHITECTURE.md)** - System design and components
+
+**Core Features:**
+- **[Recommendation Systems](docs/features/RECOMMENDATION_SYSTEMS.md)** - Content & follow recommendations with 15 algorithms
+- **[Opinion Dynamics](docs/features/OPINION_DYNAMICS.md)** - Bounded confidence and LLM evaluation models
+- **[Interests & Topics](docs/features/INTERESTS.md)** - Interest management with attention windows
+
+**Agent System:**
+- **[Agent Actions](docs/agents/AGENT_ACTIONS.md)** - All available agent actions
+- **[Agent Types](docs/agents/AGENT_TYPES.md)** - Agent types and archetypes
+- **[Agent Temporal Activities](docs/agents/AGENT_TEMPORAL_ACTIVITIES.md)** - Temporal patterns and dynamics
+
+**System & Performance:**
+- **[vLLM Integration Guide](docs/configuration/VLLM_INTEGRATION_GUIDE.md)** - High-performance LLM backend with batch inference (8x-30x speedup)
+- **[vLLM Batch Inference](docs/features/VLLM_BATCH_INFERENCE.md)** - Comprehensive batch inference implementation (10x-50x speedup)
+- **[Database & Storage](docs/data-storage/REDIS_COVERAGE_ANALYSIS.md)** - Redis/SQL hybrid architecture and Redis coverage
+- **[Redis Integration](docs/data-storage/REDIS_RECOMMENDATION_SYSTEMS.md)** - Caching strategies for the recommendation systems
+- **[Performance Optimization](docs/analysis/BOTTLENECK_ANALYSIS_SUMMARY.md)** - Bottleneck analysis and optimization strategies
+
+**Development:**
+- **[Extension Guide](docs/development/EXTENDING.md)** - How to add new agent actions and features
+- **[System Diagrams](docs/architecture/DIAGRAMS.md)** - Visual architecture and interaction diagrams
+- **[Code Formatting](docs/development/FORMATTING.md)** - Development guidelines and tooling
+
+**Monitoring:**
+- **[Logging Configuration](docs/logging/LOGGING_CONFIG.md)** - Comprehensive logging setup
+- **[Server Logging](docs/logging/SERVER_LOGGING.md)** - Server log analysis
+- **[Action Logging](docs/logging/ACTION_LOGGING.md)** - Client action tracking
+
+**Browse by Use Case**: See the [Documentation Index](docs/getting-started/INDEX.md) for recommended reading paths by role (Researcher, Developer, Admin) and feature cross-references.
 
 ## Testing
 
@@ -214,20 +191,11 @@ python -m pytest YSimulator/tests/ -n 4
 
 **Note:** Some tests use module-level mocking (e.g., `test_server.py` mocks `ray.remote`). When running the full test suite, use `pytest-xdist` with the `-n` flag to run tests in separate worker processes, which prevents mock interference between test modules.
 
-## Utilities
-
-The `scripts/` directory contains utility scripts:
-
-- **init_db.py**: Initialize database schema for PostgreSQL/MySQL
-- **convert_ids_to_uuid.py**: Migrate existing data to UUID format
-- **validate_network_loading.py**: Validate network topology files
-- **postgresql_server.sql**: PostgreSQL database schema
-
 ## Contributing
 
-Code contributions should follow the formatting guidelines in [docs/development/FORMATTING.md](docs/development/FORMATTING.md).
+Contributions are welcome. Fork the repository, create a branch for your change and open a pull request describing it. Code contributions should follow the formatting guidelines in [docs/development/FORMATTING.md](docs/development/FORMATTING.md).
 
-### Development Setup
+### Development setup
 
 1. Install development dependencies:
    ```bash
@@ -240,3 +208,45 @@ Code contributions should follow the formatting guidelines in [docs/development/
    ```
 
 The pre-commit hooks will automatically run `black`, `isort`, and `flake8` on every commit to ensure code quality and consistency.
+
+### Extending YSimulator
+
+To add new agent actions or customize behavior:
+
+1. Define the data model (SQLAlchemy)
+2. Add storage methods to DatabaseMiddleware
+3. Create server handler method
+4. Implement client-side action logic
+5. Integrate into the action loop
+
+See [docs/development/EXTENDING.md](docs/development/EXTENDING.md) for step-by-step instructions and examples.
+
+### Utilities
+
+The `scripts/` directory contains utility scripts:
+
+- **init_db.py**: Initialize database schema for PostgreSQL/MySQL
+- **convert_ids_to_uuid.py**: Migrate existing data to UUID format
+- **validate_network_loading.py**: Validate network topology files
+- **postgresql_server.sql**: PostgreSQL database schema
+
+## Citation
+
+If you use YSocial in your research, please cite:
+
+```bibtex
+@article{rossetti2026ysocial,
+  title={YSocial: An artificial intelligence powered social media virtual twin},
+  author={Rossetti, Giulio and Stella, Massimo and Cazabet, R{\'e}my and Abramski, Katherine and Citraro, Salvatore and Cau, Erica and Failla, Andrea and Morini, Virginia and Pansanella, Valentina},
+  journal={Big Data \& Society},
+  volume={13},
+  number={3},
+  pages={20539517261431576},
+  year={2026},
+  publisher={SAGE Publications Sage UK: London, England}
+}
+```
+
+## License
+
+Released under the GNU General Public License v3.0. See [LICENSE](LICENSE) for details.

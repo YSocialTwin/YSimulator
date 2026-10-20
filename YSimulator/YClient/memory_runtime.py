@@ -13,6 +13,8 @@ from typing import Any, Dict, List, Optional
 
 import ray
 
+from YSimulator import prompt_store
+
 
 def _load_memory_package():
     try:
@@ -29,8 +31,9 @@ def _load_memory_package():
         from yclient_memory.config import MemoryConfig
     except ImportError as exc:
         raise RuntimeError(
-            "The external memory integration requires the pip package "
-            "'yclient-memory'. Install it before enabling agent memory."
+            "The agent memory integration requires the 'Agent Memory' plugin of YWeb "
+            "(external/y_memory_subsystem, install it from the plugin page) or the pip "
+            "package 'yclient-memory'. Install one of them before enabling agent memory."
         ) from exc
     return {
         "BrowseMemoryRequest": BrowseMemoryRequest,
@@ -43,6 +46,48 @@ def _load_memory_package():
         "MemoryConfig": MemoryConfig,
         "build_memory_engine": build_memory_engine,
     }
+
+_LANGUAGE_WARNED = False
+
+
+def _warn_if_language_unsupported(MemoryConfig, language):
+    """yclient-memory < 0.2.0 has no language support: it keeps rendering English."""
+    global _LANGUAGE_WARNED
+    if _LANGUAGE_WARNED or not language or language == "en":
+        return
+    if "language" not in getattr(MemoryConfig, "__dataclass_fields__", {}):
+        _LANGUAGE_WARNED = True
+        import logging
+
+        logging.getLogger(__name__).warning(
+            "yclient-memory is older than 0.2.0 and ignores the prompt language %r: "
+            "memory blocks stay in English. Update the Agent Memory plugin.",
+            language,
+        )
+
+
+_PACKAGE_LOGGED = False
+
+
+def _log_memory_package_once(language):
+    """One INFO line saying which yclient_memory is loaded (plugin checkout or pip)."""
+    global _PACKAGE_LOGGED
+    if _PACKAGE_LOGGED:
+        return
+    _PACKAGE_LOGGED = True
+    try:
+        import logging
+
+        import yclient_memory
+
+        logging.getLogger(__name__).info(
+            "yclient_memory %s loaded from %s (memory language: %s)",
+            getattr(yclient_memory, "__version__", "?"),
+            getattr(yclient_memory, "__file__", "?"),
+            language or "en",
+        )
+    except Exception:  # logging must never break the simulation
+        pass
 
 
 class YSimulatorMemoryRuntime:
@@ -399,6 +444,8 @@ class YSimulatorMemoryManager:
         if agent_id in self._engines:
             return self._engines[agent_id]
         raw = {
+            # Language of the simulation prompts: the memory package renders its texts in it.
+            "memory_language": prompt_store.current_language(),
             "memory_enabled": bool(self.agent_memory_config.get("memory_enabled", False)),
             "memory_backend": self.agent_memory_config.get("memory_backend", "hybrid_semantic"),
             "memory_prompt_mode": self.agent_memory_config.get(
@@ -507,6 +554,8 @@ class YSimulatorMemoryManager:
                 self.agent_memory_config.get("memory_importance_mode", "")
             ),
         }
+        _warn_if_language_unsupported(self._pkg["MemoryConfig"], raw.get("memory_language"))
+        _log_memory_package_once(raw.get("memory_language"))
         config = self._pkg["MemoryConfig"].from_mapping(raw)
         engine = self._pkg["build_memory_engine"](
             backend=str(raw["memory_backend"] or "hybrid_semantic"),

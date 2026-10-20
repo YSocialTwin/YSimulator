@@ -29,12 +29,12 @@ So:
 ## What the code does today
 
 ### 1. Backend selection is binary
-In [run_client.py](/Users/rossetti/PycharmProjects/YSimulator/run_client.py), the LLM backend is chosen from:
+In [run_client.py](../../run_client.py), the LLM backend is chosen from:
 - `vllm`
 - `ollama` (default / non-vLLM path)
 
 ### 2. Batch usage is inferred from vLLM-only methods
-In [batch_processor.py](/Users/rossetti/PycharmProjects/YSimulator/YSimulator/YClient/simulation/batch_processor.py), batching is enabled by capability checks such as the presence of methods like:
+In [batch_processor.py](../../YSimulator/YClient/simulation/batch_processor.py), batching is enabled by capability checks such as the presence of methods like:
 - `generate_post_batch`
 - `decide_reaction_batch`
 - `generate_comment_batch`
@@ -43,7 +43,7 @@ In [batch_processor.py](/Users/rossetti/PycharmProjects/YSimulator/YSimulator/YC
 That means the client currently treats “supports batching” as “looks like `VLLMService`”.
 
 ### 3. The non-vLLM service is Ollama through LangChain
-In [llm_service.py](/Users/rossetti/PycharmProjects/YSimulator/YSimulator/YClient/LLM_interactions/llm_service.py), the non-vLLM actor wraps `ChatOllama` and mostly performs one prompt at a time via `chain.invoke(...)`.
+In [llm_service.py](../../YSimulator/YClient/LLM_interactions/llm_service.py), the non-vLLM actor wraps `ChatOllama` and mostly performs one prompt at a time via `chain.invoke(...)`.
 
 ### 4. LangChain `batch()` is not enough by itself
 In the installed LangChain stack, the generic runnable/chat-model `batch()` path is not proof of true provider-native batching.
@@ -106,7 +106,7 @@ For vLLM this would return `True` for the existing native batch operations.
 This removes the current brittle check in `BatchProcessor._is_vllm_backend()` that infers batching from method names.
 
 ### 2. Replace backend-name logic with capability-driven dispatch
-In [batch_processor.py](/Users/rossetti/PycharmProjects/YSimulator/YSimulator/YClient/simulation/batch_processor.py):
+In [batch_processor.py](../../YSimulator/YClient/simulation/batch_processor.py):
 - replace `_is_vllm_backend()` with something like `_get_batch_capabilities()`
 - route each operation independently:
   - batched post generation only if `supports_batch_posts`
@@ -160,8 +160,8 @@ This keeps the default safe.
 
 ### A. Service capability reporting
 Files:
-- [llm_service.py](/Users/rossetti/PycharmProjects/YSimulator/YSimulator/YClient/LLM_interactions/llm_service.py)
-- [vllm_service.py](/Users/rossetti/PycharmProjects/YSimulator/YSimulator/YClient/LLM_interactions/vllm_service.py)
+- [llm_service.py](../../YSimulator/YClient/LLM_interactions/llm_service.py)
+- [vllm_service.py](../../YSimulator/YClient/LLM_interactions/vllm_service.py)
 
 Changes:
 - add `get_capabilities()` to both actors
@@ -170,7 +170,7 @@ Changes:
 
 ### B. BatchProcessor dispatch refactor
 File:
-- [batch_processor.py](/Users/rossetti/PycharmProjects/YSimulator/YSimulator/YClient/simulation/batch_processor.py)
+- [batch_processor.py](../../YSimulator/YClient/simulation/batch_processor.py)
 
 Changes:
 - remove the backend-name assumption
@@ -179,7 +179,7 @@ Changes:
 
 ### C. Optional config plumbing
 Files:
-- [run_client.py](/Users/rossetti/PycharmProjects/YSimulator/run_client.py)
+- [run_client.py](../../run_client.py)
 - maybe docs/config files
 
 Changes:
@@ -291,7 +291,7 @@ So a successful batch probe against some endpoint does **not** imply that the en
 ## Why literal switching to `VLLMService` is the wrong abstraction
 
 ### 1. `VLLMService` is an engine host, not a generic remote adapter
-In [vllm_service.py](/Users/rossetti/PycharmProjects/YSimulator/YSimulator/YClient/LLM_interactions/vllm_service.py), `VLLMService`:
+In [vllm_service.py](../../YSimulator/YClient/LLM_interactions/vllm_service.py), `VLLMService`:
 - imports and initializes the Python `vllm` engine locally
 - selects GPUs
 - allocates GPU memory
@@ -340,7 +340,7 @@ The feasible version is:
 ## Recommended architecture for this strategy
 
 ### Option A: capability upgrade inside `LLMService`
-Add startup capability detection to [llm_service.py](/Users/rossetti/PycharmProjects/YSimulator/YSimulator/YClient/LLM_interactions/llm_service.py):
+Add startup capability detection to [llm_service.py](../../YSimulator/YClient/LLM_interactions/llm_service.py):
 - probe endpoint once at actor init
 - store capability flags, e.g.
 ```python

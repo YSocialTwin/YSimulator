@@ -6,7 +6,7 @@ from YSimulator.YServer.classes.models import Base, Round, SysMessage, User_mgmt
 from YSimulator.YServer.repositories.sql_repository import SQLPostRepository
 
 
-def test_sql_post_repository_get_active_system_messages_uses_round_day_hour(tmp_path):
+def test_sql_post_repository_get_active_system_messages_uses_round_day_hour_and_duration(tmp_path):
     engine = create_engine(f"sqlite:///{tmp_path / 'system_messages.db'}")
     Base.metadata.create_all(engine)
 
@@ -23,7 +23,7 @@ def test_sql_post_repository_get_active_system_messages_uses_round_day_hour(tmp_
                 to_uid="user-1",
                 message="Use MOD NOTICE.",
                 from_round="r1",
-                to_round="r2",
+                duration=1,
             ),
             SysMessage(
                 id="m2",
@@ -31,7 +31,7 @@ def test_sql_post_repository_get_active_system_messages_uses_round_day_hour(tmp_
                 to_uid="user-1",
                 message="Expired.",
                 from_round="r1",
-                to_round="r1",
+                duration=0,
             ),
         ]
     )
@@ -48,7 +48,7 @@ def test_sql_post_repository_get_active_system_messages_uses_round_day_hour(tmp_
             "message": "Use MOD NOTICE.",
             "to_uid": "user-1",
             "from_round": "r1",
-            "to_round": "r2",
+            "duration": 1,
         }
     ]
 

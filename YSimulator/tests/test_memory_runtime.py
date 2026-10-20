@@ -420,3 +420,19 @@ def test_llm_provider_is_client_side(monkeypatch):
     # Provider must never be on the server — it is a Python callable living
     # in the client actor process.
     assert callable(runtime._llm_provider)
+
+
+def test_memory_engine_gets_the_simulation_prompt_language(monkeypatch):
+    from YSimulator import prompt_store
+    from YSimulator.YClient import memory_runtime
+
+    monkeypatch.setattr(memory_runtime, "_load_memory_package", _fake_memory_package)
+    monkeypatch.setattr(memory_runtime.ray, "get", lambda value: value)
+    monkeypatch.setattr(prompt_store, "current_language", lambda: "it")
+
+    manager = YSimulatorMemoryManager(
+        _make_client(),
+        simulation_config={"agents": {"memory_enabled": True, "memory_backend": "hybrid_semantic"}},
+    )
+    engine = manager._get_engine("agent-1")
+    assert engine.config.raw["memory_language"] == "it"
