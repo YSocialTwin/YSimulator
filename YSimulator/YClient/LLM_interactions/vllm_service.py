@@ -11,6 +11,7 @@ import os
 from typing import Any, Dict, List, Optional, Tuple
 
 import ray
+
 from YSimulator import prompt_store, protocol_tokens
 
 # Initialize logger
@@ -34,7 +35,9 @@ def _append_custom_features_to_persona(persona: str, agent_attrs: Optional[Dict[
     if not parts:
         return persona
 
-    return f"{persona.rstrip()} " + prompt_store.prompt("custom_features_persona", details="; ".join(parts))
+    return f"{persona.rstrip()} " + prompt_store.prompt(
+        "custom_features_persona", details="; ".join(parts)
+    )
 
 
 def _stress_prompt_block(agent_attrs: Optional[Dict[str, Any]]) -> str:
@@ -43,12 +46,10 @@ def _stress_prompt_block(agent_attrs: Optional[Dict[str, Any]]) -> str:
     scale = attrs.get("stress_level_scale")
     if not label or scale is None:
         return ""
-    return (
-        prompt_store.prompt(
-            "llm_service__stress_prompt_block__1",
-            label=label,
-            scale=scale,
-        )
+    return prompt_store.prompt(
+        "llm_service__stress_prompt_block__1",
+        label=label,
+        scale=scale,
     )
 
 
@@ -821,7 +822,9 @@ class VLLMService:
             str: Formatted persona string
         """
         # If agent attributes are provided, use the persona template
-        agent_attrs = prompt_store.localize_attrs(agent_attrs)  # profile values in the prompt language
+        agent_attrs = prompt_store.localize_attrs(
+            agent_attrs
+        )  # profile values in the prompt language
         if agent_attrs and self.prompts_config.get("persona_template"):
             template = self.prompts_config["persona_template"]
             try:
@@ -865,9 +868,7 @@ class VLLMService:
             return ""
 
         lines = ["Active system messages addressed to you for this round."]
-        lines.append(
-            prompt_store.get("llm_service__system_messages_block__1")
-        )
+        lines.append(prompt_store.get("llm_service__system_messages_block__1"))
         for item in messages:
             if not isinstance(item, dict):
                 continue
@@ -932,20 +933,18 @@ class VLLMService:
             # Build topic instruction with opinion if available
             if topic and topic_opinion:
                 topic_instruction = prompt_store.prompt(
-                                        "llm_service__generate_post__1",
-                                        topic=topic,
-                                        topic_opinion=topic_opinion,
-                                    )
+                    "llm_service__generate_post__1",
+                    topic=topic,
+                    topic_opinion=topic_opinion,
+                )
             elif topic:
                 topic_instruction = f" You MUST write about the topic: {topic}."
             else:
                 topic_instruction = ""
             if memory_blocks["post_style"]:
-                topic_instruction += (
-                    prompt_store.prompt(
-                        "llm_service__generate_post__2",
-                        post_style=memory_blocks['post_style'],
-                    )
+                topic_instruction += prompt_store.prompt(
+                    "llm_service__generate_post__2",
+                    post_style=memory_blocks["post_style"],
                 )
 
             # Format user message with all placeholders
@@ -1161,10 +1160,10 @@ class VLLMService:
                         # Build topic instruction
                         if topic and topic_opinion:
                             topic_instruction = prompt_store.prompt(
-                                                    "llm_service__generate_post__1",
-                                                    topic=topic,
-                                                    topic_opinion=topic_opinion,
-                                                )
+                                "llm_service__generate_post__1",
+                                topic=topic,
+                                topic_opinion=topic_opinion,
+                            )
                         elif topic:
                             topic_instruction = f" You MUST write about the topic: {topic}."
                         else:
@@ -1487,12 +1486,10 @@ class VLLMService:
                 tweet = ctx.get("tweet", "")
                 thread_context_lines.append(f"{username}: {tweet}")
             thread_context_str = "\n".join(thread_context_lines)
-            thread_context_instruction = (
-                prompt_store.prompt(
-                    "llm_service__generate_comment__1",
-                    thread_context_str=thread_context_str,
-                    author_name=author_name,
-                )
+            thread_context_instruction = prompt_store.prompt(
+                "llm_service__generate_comment__1",
+                thread_context_str=thread_context_str,
+                author_name=author_name,
             )
 
         # Format templates
@@ -1517,11 +1514,9 @@ class VLLMService:
         if memory_blocks["reply_context"]:
             user_msg += f"\n\nMemory context:\n{memory_blocks['reply_context']}"
         if memory_blocks["reply_cues"]:
-            user_msg += (
-                prompt_store.prompt(
-                    "llm_service__generate_comment__2",
-                    reply_cues=memory_blocks['reply_cues'],
-                )
+            user_msg += prompt_store.prompt(
+                "llm_service__generate_comment__2",
+                reply_cues=memory_blocks["reply_cues"],
             )
 
         # Log the prompt for debugging
@@ -1612,12 +1607,10 @@ class VLLMService:
                             tweet = ctx.get("tweet", "")
                             thread_context_lines.append(f"{username}: {tweet}")
                         thread_context_str = "\n".join(thread_context_lines)
-                        thread_context_instruction = (
-                            prompt_store.prompt(
-                                "llm_service__generate_comment__1",
-                                thread_context_str=thread_context_str,
-                                author_name=author_name,
-                            )
+                        thread_context_instruction = prompt_store.prompt(
+                            "llm_service__generate_comment__1",
+                            thread_context_str=thread_context_str,
+                            author_name=author_name,
                         )
 
                     # Format templates
@@ -1772,11 +1765,9 @@ class VLLMService:
         if memory_blocks["reply_context"]:
             user_msg += f"\n\nMemory context:\n{memory_blocks['reply_context']}"
         if memory_blocks["reply_cues"]:
-            user_msg += (
-                prompt_store.prompt(
-                    "llm_service__generate_comment__2",
-                    reply_cues=memory_blocks['reply_cues'],
-                )
+            user_msg += prompt_store.prompt(
+                "llm_service__generate_comment__2",
+                reply_cues=memory_blocks["reply_cues"],
             )
 
         prompt = self._format_prompt(system_msg, user_msg)
@@ -1805,13 +1796,11 @@ class VLLMService:
             logger.warning(f"{prompt_key} prompt not found in config")
             return "{}"
 
-        user_msg = (
-            prompt_store.prompt(
-                "llm_service__annotate_stress_reward_text__1",
-                actor_user_id=actor_user_id,
-                recipient_user_id=recipient_user_id,
-                text=text,
-            )
+        user_msg = prompt_store.prompt(
+            "llm_service__annotate_stress_reward_text__1",
+            actor_user_id=actor_user_id,
+            recipient_user_id=recipient_user_id,
+            text=text,
         )
         prompt = self._format_prompt(system_prompt, user_msg)
 
@@ -1863,9 +1852,15 @@ class VLLMService:
             outputs = self.llm.generate([prompt], self.sampling_params)
             result = outputs[0].outputs[0].text.strip().upper()
 
-            if protocol_tokens.has_token(result, protocol_tokens.REPORT_TOXIC) or (protocol_tokens.has_token(result, protocol_tokens.REPORT) and protocol_tokens.has_token(result, protocol_tokens.TOXIC)):
+            if protocol_tokens.has_token(result, protocol_tokens.REPORT_TOXIC) or (
+                protocol_tokens.has_token(result, protocol_tokens.REPORT)
+                and protocol_tokens.has_token(result, protocol_tokens.TOXIC)
+            ):
                 return "REPORT_TOXIC"
-            if protocol_tokens.has_token(result, protocol_tokens.REPORT_OFFENSIVE) or (protocol_tokens.has_token(result, protocol_tokens.REPORT) and protocol_tokens.has_token(result, protocol_tokens.OFFENSIVE)):
+            if protocol_tokens.has_token(result, protocol_tokens.REPORT_OFFENSIVE) or (
+                protocol_tokens.has_token(result, protocol_tokens.REPORT)
+                and protocol_tokens.has_token(result, protocol_tokens.OFFENSIVE)
+            ):
                 return "REPORT_OFFENSIVE"
             if protocol_tokens.has_token(result, protocol_tokens.LOVE):
                 return "LOVE"
@@ -1873,7 +1868,9 @@ class VLLMService:
                 return "LIKE"
             if protocol_tokens.has_token(result, protocol_tokens.LAUGH):
                 return "LAUGH"
-            if protocol_tokens.has_token(result, protocol_tokens.ANGRY) or protocol_tokens.has_token(result, protocol_tokens.DISLIKE):
+            if protocol_tokens.has_token(
+                result, protocol_tokens.ANGRY
+            ) or protocol_tokens.has_token(result, protocol_tokens.DISLIKE):
                 return "ANGRY"
             if protocol_tokens.has_token(result, protocol_tokens.SAD):
                 return "SAD"
@@ -1990,20 +1987,20 @@ class VLLMService:
             return "no_change"
 
         desired_reply = "FOLLOW" if normalized_action == "follow" else "UNFOLLOW"
-        action_text = prompt_store.get("reciprocal_action_follow" if normalized_action == "follow" else "reciprocal_action_unfollow")
-        system_msg = (
-            prompt_store.prompt(
-                "vllm_service__generate_reciprocal_follow_decision__1",
-                persona=persona,
-            )
+        action_text = prompt_store.get(
+            "reciprocal_action_follow"
+            if normalized_action == "follow"
+            else "reciprocal_action_unfollow"
         )
-        user_msg = (
-            prompt_store.prompt(
-                "vllm_service__generate_reciprocal_follow_decision__2",
-                action_text=action_text,
-                source_summary=source_summary,
-                desired_reply=desired_reply,
-            )
+        system_msg = prompt_store.prompt(
+            "vllm_service__generate_reciprocal_follow_decision__1",
+            persona=persona,
+        )
+        user_msg = prompt_store.prompt(
+            "vllm_service__generate_reciprocal_follow_decision__2",
+            action_text=action_text,
+            source_summary=source_summary,
+            desired_reply=desired_reply,
         )
         prompt = self._format_prompt(system_msg, user_msg)
         try:
@@ -2516,9 +2513,7 @@ class VLLMService:
             for op, count in peers_opinions:
                 prompt_text += f"Opinion: '{op}' ({count})\n"
 
-        prompt_text += (
-            prompt_store.get("llm_service__evaluate_opinion__1")
-        )
+        prompt_text += prompt_store.get("llm_service__evaluate_opinion__1")
 
         system_template = self.prompts_config.get("evaluate_opinion", {}).get(
             "system_template",
@@ -2601,9 +2596,7 @@ class VLLMService:
                         for op, count in peers_opinions:
                             prompt_text += f"Opinion: '{op}' ({count})\n"
 
-                    prompt_text += (
-                        prompt_store.get("llm_service__evaluate_opinion__1")
-                    )
+                    prompt_text += prompt_store.get("llm_service__evaluate_opinion__1")
 
                     prompt = self._format_prompt(system_template, prompt_text)
                     prompts.append(prompt)

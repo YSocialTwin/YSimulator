@@ -11,6 +11,7 @@ import ray
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_ollama import ChatOllama
+
 from YSimulator import prompt_store, protocol_tokens
 
 # Initialize logger
@@ -43,7 +44,9 @@ def _append_custom_features_to_persona(persona: str, agent_attrs: Optional[Dict[
     if not parts:
         return persona
 
-    return f"{persona.rstrip()} " + prompt_store.prompt("custom_features_persona", details="; ".join(parts))
+    return f"{persona.rstrip()} " + prompt_store.prompt(
+        "custom_features_persona", details="; ".join(parts)
+    )
 
 
 def _stress_prompt_block(agent_attrs: Optional[Dict[str, Any]]) -> str:
@@ -52,12 +55,10 @@ def _stress_prompt_block(agent_attrs: Optional[Dict[str, Any]]) -> str:
     scale = attrs.get("stress_level_scale")
     if not label or scale is None:
         return ""
-    return (
-        prompt_store.prompt(
-            "llm_service__stress_prompt_block__1",
-            label=label,
-            scale=scale,
-        )
+    return prompt_store.prompt(
+        "llm_service__stress_prompt_block__1",
+        label=label,
+        scale=scale,
     )
 
 
@@ -339,7 +340,9 @@ class LLMService:
             str: Formatted persona string
         """
         # If agent attributes are provided, use the persona template
-        agent_attrs = prompt_store.localize_attrs(agent_attrs)  # profile values in the prompt language
+        agent_attrs = prompt_store.localize_attrs(
+            agent_attrs
+        )  # profile values in the prompt language
         if agent_attrs and self.prompts_config.get("persona_template"):
             template = self.prompts_config["persona_template"]
             try:
@@ -383,9 +386,7 @@ class LLMService:
             return ""
 
         lines = ["Active system messages addressed to you for this round."]
-        lines.append(
-            prompt_store.get("llm_service__system_messages_block__1")
-        )
+        lines.append(prompt_store.get("llm_service__system_messages_block__1"))
         for item in messages:
             if not isinstance(item, dict):
                 continue
@@ -434,20 +435,18 @@ class LLMService:
         # Build topic instruction with opinion if available
         if topic and topic_opinion:
             topic_instruction = prompt_store.prompt(
-                                    "llm_service__generate_post__1",
-                                    topic=topic,
-                                    topic_opinion=topic_opinion,
-                                )
+                "llm_service__generate_post__1",
+                topic=topic,
+                topic_opinion=topic_opinion,
+            )
         elif topic:
             topic_instruction = f" You MUST write about the topic: {topic}."
         else:
             topic_instruction = ""
         if memory_blocks["post_style"]:
-            topic_instruction += (
-                prompt_store.prompt(
-                    "llm_service__generate_post__2",
-                    post_style=memory_blocks['post_style'],
-                )
+            topic_instruction += prompt_store.prompt(
+                "llm_service__generate_post__2",
+                post_style=memory_blocks["post_style"],
             )
 
         # Format user message with all placeholders
@@ -627,12 +626,10 @@ class LLMService:
                 tweet = ctx.get("tweet", "")
                 thread_context_lines.append(f"{username}: {tweet}")
             thread_context_str = "\n".join(thread_context_lines)
-            thread_context_instruction = (
-                prompt_store.prompt(
-                    "llm_service__generate_comment__1",
-                    thread_context_str=thread_context_str,
-                    author_name=author_name,
-                )
+            thread_context_instruction = prompt_store.prompt(
+                "llm_service__generate_comment__1",
+                thread_context_str=thread_context_str,
+                author_name=author_name,
             )
 
         # Format templates
@@ -657,11 +654,9 @@ class LLMService:
         if memory_blocks["reply_context"]:
             user_msg += f"\n\nMemory context:\n{memory_blocks['reply_context']}"
         if memory_blocks["reply_cues"]:
-            user_msg += (
-                prompt_store.prompt(
-                    "llm_service__generate_comment__2",
-                    reply_cues=memory_blocks['reply_cues'],
-                )
+            user_msg += prompt_store.prompt(
+                "llm_service__generate_comment__2",
+                reply_cues=memory_blocks["reply_cues"],
             )
 
         # Log the prompt for debugging
@@ -750,11 +745,9 @@ class LLMService:
         if memory_blocks["reply_context"]:
             user_msg += f"\n\nMemory context:\n{memory_blocks['reply_context']}"
         if memory_blocks["reply_cues"]:
-            user_msg += (
-                prompt_store.prompt(
-                    "llm_service__generate_comment__2",
-                    reply_cues=memory_blocks['reply_cues'],
-                )
+            user_msg += prompt_store.prompt(
+                "llm_service__generate_comment__2",
+                reply_cues=memory_blocks["reply_cues"],
             )
 
         prompt = ChatPromptTemplate.from_messages([("system", system_msg), ("user", user_msg)])
@@ -864,9 +857,15 @@ class LLMService:
             chain = prompt | self.llm | StrOutputParser()
             result = chain.invoke({}).strip().upper()
 
-            if protocol_tokens.has_token(result, protocol_tokens.REPORT_TOXIC) or (protocol_tokens.has_token(result, protocol_tokens.REPORT) and protocol_tokens.has_token(result, protocol_tokens.TOXIC)):
+            if protocol_tokens.has_token(result, protocol_tokens.REPORT_TOXIC) or (
+                protocol_tokens.has_token(result, protocol_tokens.REPORT)
+                and protocol_tokens.has_token(result, protocol_tokens.TOXIC)
+            ):
                 return "REPORT_TOXIC"
-            if protocol_tokens.has_token(result, protocol_tokens.REPORT_OFFENSIVE) or (protocol_tokens.has_token(result, protocol_tokens.REPORT) and protocol_tokens.has_token(result, protocol_tokens.OFFENSIVE)):
+            if protocol_tokens.has_token(result, protocol_tokens.REPORT_OFFENSIVE) or (
+                protocol_tokens.has_token(result, protocol_tokens.REPORT)
+                and protocol_tokens.has_token(result, protocol_tokens.OFFENSIVE)
+            ):
                 return "REPORT_OFFENSIVE"
             # Parse LLM response - look for valid reactions
             if protocol_tokens.has_token(result, protocol_tokens.LOVE):
@@ -875,7 +874,9 @@ class LLMService:
                 return "LIKE"
             if protocol_tokens.has_token(result, protocol_tokens.LAUGH):
                 return "LAUGH"
-            if protocol_tokens.has_token(result, protocol_tokens.ANGRY) or protocol_tokens.has_token(result, protocol_tokens.DISLIKE):
+            if protocol_tokens.has_token(
+                result, protocol_tokens.ANGRY
+            ) or protocol_tokens.has_token(result, protocol_tokens.DISLIKE):
                 return "ANGRY"  # Map DISLIKE to ANGRY
             if protocol_tokens.has_token(result, protocol_tokens.SAD):
                 return "SAD"
@@ -1051,15 +1052,17 @@ class LLMService:
             return "no_change"
 
         desired_reply = "FOLLOW" if normalized_action == "follow" else "UNFOLLOW"
-        action_text = prompt_store.get("reciprocal_action_follow" if normalized_action == "follow" else "reciprocal_action_unfollow")
-        prompt = (
-            prompt_store.prompt(
-                "llm_service__generate_reciprocal_follow_decision__1",
-                persona=persona,
-                action_text=action_text,
-                source_summary=source_summary,
-                desired_reply=desired_reply,
-            )
+        action_text = prompt_store.get(
+            "reciprocal_action_follow"
+            if normalized_action == "follow"
+            else "reciprocal_action_unfollow"
+        )
+        prompt = prompt_store.prompt(
+            "llm_service__generate_reciprocal_follow_decision__1",
+            persona=persona,
+            action_text=action_text,
+            source_summary=source_summary,
+            desired_reply=desired_reply,
         )
         try:
             result = self._generate_text(prompt).strip().upper()
@@ -1442,9 +1445,7 @@ class LLMService:
             for op, count in peers_opinions:
                 prompt_text += f"Opinion: '{op}' ({count})\n"
 
-        prompt_text += (
-            prompt_store.get("llm_service__evaluate_opinion__1")
-        )
+        prompt_text += prompt_store.get("llm_service__evaluate_opinion__1")
 
         # Get prompts from configuration with defaults
         system_template = self.prompts_config.get("evaluate_opinion", {}).get(

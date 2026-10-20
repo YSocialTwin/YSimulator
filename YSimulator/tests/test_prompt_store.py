@@ -138,7 +138,10 @@ def test_italian_pack_is_complete_and_translated():
 
 @pytest.fixture
 def clean_language(monkeypatch):
-    for name in (ps.ENV_VAR, ps.FOLDER_VAR):  # set then delete, so the original (absent) state is restored
+    for name in (
+        ps.ENV_VAR,
+        ps.FOLDER_VAR,
+    ):  # set then delete, so the original (absent) state is restored
         monkeypatch.setenv(name, "x")
         monkeypatch.delenv(name)
     monkeypatch.setattr(ps, "_language", None)
@@ -154,13 +157,21 @@ def _run_folder(tmp_path, experiment="it", clients=None):
         json.dumps({"experiment": experiment, "clients": clients or {}}), encoding="utf-8"
     )
     (tmp_path / "profile_values.it.json").write_text(
-        json.dumps({"nationality": {"American": "statunitense"}, "gender": {"male": "uomo"}, "leaning": {"centrist": "centrista"}}),
+        json.dumps(
+            {
+                "nationality": {"American": "statunitense"},
+                "gender": {"male": "uomo"},
+                "leaning": {"centrist": "centrista"},
+            }
+        ),
         encoding="utf-8",
     )
     return tmp_path
 
 
-def test_language_is_english_unless_a_folder_or_the_environment_says_otherwise(clean_language, tmp_path):
+def test_language_is_english_unless_a_folder_or_the_environment_says_otherwise(
+    clean_language, tmp_path
+):
     assert ps.current_language() == "en"
     assert ps.language_from_folder(tmp_path) == "en"
     folder = _run_folder(tmp_path, "it", {"c2": "en"})
@@ -185,7 +196,9 @@ def test_environment_language_wins_over_the_record(clean_language, tmp_path, mon
     assert ps.localize(object()) is not None
 
 
-def test_profile_values_read_in_the_prompt_language_without_touching_the_agent(clean_language, tmp_path):
+def test_profile_values_read_in_the_prompt_language_without_touching_the_agent(
+    clean_language, tmp_path
+):
     class Agent:
         nationality = "American"
         gender = "male"
@@ -203,7 +216,11 @@ def test_profile_values_read_in_the_prompt_language_without_touching_the_agent(c
     text = ps.render("{self.gender} {self.nationality}, {self.age}", self=view)
     assert text == "uomo statunitense, 31"
     attrs = {"nationality": "American", "political_leaning": "centrist", "name": "Ann"}
-    assert ps.localize_attrs(attrs) == {"nationality": "statunitense", "political_leaning": "centrista", "name": "Ann"}
+    assert ps.localize_attrs(attrs) == {
+        "nationality": "statunitense",
+        "political_leaning": "centrista",
+        "name": "Ann",
+    }
     assert attrs["nationality"] == "American"
     assert ps.env_for_workers()[ps.ENV_VAR] == "it"
 
@@ -218,7 +235,8 @@ def test_single_values_such_as_the_follow_action_are_localized(clean_language, t
 
     folder = _run_folder(tmp_path, "it")
     (folder / "profile_values.it.json").write_text(
-        json.dumps({"action": {"follow": "seguire", "unfollow": "smettere di seguire"}}), encoding="utf-8"
+        json.dumps({"action": {"follow": "seguire", "unfollow": "smettere di seguire"}}),
+        encoding="utf-8",
     )
     assert ps.localize_value("action", "follow") == "follow"  # English until a language is active
     ps.use_language_from_folder(folder)

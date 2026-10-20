@@ -12,7 +12,6 @@ Extracted from client.py as part of Phase 2 refactoring.
 Updated in Phase 3 to use LLM service layer.
 """
 
-from YSimulator import protocol_tokens
 import logging
 import time
 import uuid
@@ -21,6 +20,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 import ray
 
+from YSimulator import protocol_tokens
 from YSimulator.YClient.classes.ray_models import ActionDTO
 from YSimulator.YClient.llm_utils import (
     BatchHandler,

@@ -36,7 +36,6 @@ from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
 from YSimulator.hashtag_text import normalize_hashtag
-
 from YSimulator.YServer.classes.models import (
     Agent_Opinion,
     Article,

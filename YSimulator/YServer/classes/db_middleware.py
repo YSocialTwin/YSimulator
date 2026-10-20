@@ -22,7 +22,6 @@ from sqlalchemy import create_engine, func
 from sqlalchemy.orm import Session
 
 from YSimulator.hashtag_text import normalize_hashtag
-
 from YSimulator.YServer.classes.models import (
     Agent_Opinion,
     Base,
@@ -2818,7 +2817,9 @@ class DatabaseMiddleware:
         try:
             if self.use_redis:
                 # Check if hashtag exists in Redis
-                hashtag_lookup_key = self._redis_key("hashtags", f"lookup:{hashtag_text.casefold()}")
+                hashtag_lookup_key = self._redis_key(
+                    "hashtags", f"lookup:{hashtag_text.casefold()}"
+                )
                 existing_id = self.redis_client.get(hashtag_lookup_key)
 
                 if existing_id:
