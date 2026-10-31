@@ -63,6 +63,7 @@ class Simulator:
         memory_after_submit_fn=None,
         prepare_active_agents_fn=None,
         prepare_actions_fn=None,
+        barrier_poll_seconds: float = 1.0,
     ):
         """
         Initialize the Simulator.
@@ -112,6 +113,8 @@ class Simulator:
         self.memory_after_submit_fn = memory_after_submit_fn
         self.prepare_active_agents_fn = prepare_active_agents_fn
         self.prepare_actions_fn = prepare_actions_fn
+        # Seconds slept while the server answers WAIT (round barrier closed).
+        self.barrier_poll_seconds = barrier_poll_seconds
 
     def run(self, calculate_opinion_updates_fn) -> None:
         """
@@ -208,7 +211,7 @@ class Simulator:
                 instruction = ray.get(self.server.get_instruction.remote(self.client_id))
 
                 if instruction.status == "WAIT":
-                    time.sleep(1)
+                    time.sleep(self.barrier_poll_seconds)
                     continue
 
                 # Check if we've reached our personal maximum day (client-side tracking)

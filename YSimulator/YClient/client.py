@@ -212,6 +212,10 @@ class SimulationClient:
         self.num_days = simulation_config["simulation"]["num_days"]
         self.num_slots_per_day = simulation_config["simulation"]["num_slots_per_day"]
         self.heartbeat_interval = simulation_config["simulation"].get("heartbeat_interval", 5)
+        # Poll interval while waiting for the round barrier (federated runs lower it).
+        self.barrier_poll_seconds = float(
+            simulation_config["simulation"].get("barrier_poll_seconds", 1.0)
+        )
 
         # Load activity profiles (maps profile name to list of active hours)
         self.activity_profiles = self._parse_activity_profiles(
@@ -552,6 +556,7 @@ class SimulationClient:
             memory_after_submit_fn=self._record_memory_after_submit,
             prepare_active_agents_fn=self.prepare_stress_reward_active_agents,
             prepare_actions_fn=self.prepare_stress_reward_actions,
+            barrier_poll_seconds=self.barrier_poll_seconds,
         )
 
         self.logger.info("Simulation orchestrator initialized (Phase 2)")
