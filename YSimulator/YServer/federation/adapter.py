@@ -8,7 +8,7 @@ Bus and membership (F3.4c), same design as YServer:
 - export_outbox turns the root posts that the agents marked for cross-post (attribute `crosspost` of the POST action), or
   all root posts of active authors with export_policy = "all", into content.v1 for the coordinator.
 - ingest_inbox materialises crosspost.v1 as a post of the author, once per fed_msg_id (INV-05), with a federation_ref row.
-Attention and affective reports are filled in by F4.
+Affective report (F4.1): native stress/reward read from the stress_reward table. Attention: F4.3.
 
 `host` is the object that owns the database: it needs `engine`, `post_service`, `current_round_id` and `recent_posts_cache`
 (the OrchestratorServer; a small stand-in in tests)."""
@@ -216,7 +216,60 @@ class YSimulatorAdapter(PlatformAdapter):
         return report
 
     def affective_report(self, day):
-        return []  # F4
+        """Native stress/reward of the active accounts at the last round of the canonical day (F4.1): the value that
+        server.get_stress_reward computes (latest aggregate + later variations in the 24-round window, clamped), read
+        without writing; actions = posts and reactions of the account in the day, exposures = posts recommended to it."""
+        from sqlalchemy import and_, func, or_
+
+        from YSimulator.YServer.classes.models import Post, Reaction, Recommendation, Round, StressReward
+        from ysocial_federation.schemas import AffectiveSample
+        from .tables import FederationMembership
+
+        with self._lock, self._session() as s:
+            rounds = s.scalars(select(Round).where(Round.day == int(day)).order_by(Round.hour)).all()
+            if not rounds:
+                return []
+            last = rounds[-1]
+            ids = [r.id for r in rounds]
+            td, th = int(last.day or 0), int(last.hour or 0)
+
+            def before(d, h):
+                return or_(Round.day < d, and_(Round.day == d, Round.hour < h))
+
+            def at_or_before(d, h):
+                return or_(Round.day < d, and_(Round.day == d, Round.hour <= h))
+
+            def at_or_after(d, h):
+                return or_(Round.day > d, and_(Round.day == d, Round.hour >= h))
+
+            window = s.scalars(select(Round).where(at_or_before(td, th)).order_by(Round.day.desc(), Round.hour.desc())
+                               .limit(25)).all()
+            first = window[-1] if window else last
+
+            def value(uid, variable):
+                row = s.execute(select(StressReward, Round).join(Round, Round.id == StressReward.tid).where(
+                    StressReward.uid == uid, StressReward.variable == variable, StressReward.type == "aggregate",
+                    before(td, th)).order_by(Round.day.desc(), Round.hour.desc())).first()
+                base, lower = 0.0, at_or_after(int(first.day or 0), int(first.hour or 0))
+                if row is not None:
+                    base, lower = float(row[0].value), at_or_after(int(row[1].day or 0), int(row[1].hour or 0))
+                total = s.scalar(select(func.coalesce(func.sum(StressReward.value), 0.0)).join(Round, Round.id == StressReward.tid)
+                                 .where(StressReward.uid == uid, StressReward.variable == variable,
+                                        StressReward.type == "variation", lower, at_or_before(td, th)))
+                return max(0.0, min(1.0, base + float(total or 0.0)))
+
+            out = []
+            for m in s.scalars(select(FederationMembership).where(FederationMembership.state == "active")
+                               .order_by(FederationMembership.user_id)).all():
+                uid = m.user_id
+                posts = s.scalar(select(func.count(Post.id)).where(Post.user_id == uid, Post.round.in_(ids)))
+                reacts = s.scalar(select(func.count(Reaction.id)).where(Reaction.user_id == uid, Reaction.round.in_(ids)))
+                exposures = 0
+                for rec in s.scalars(select(Recommendation).where(Recommendation.user_id == uid, Recommendation.round.in_(ids))).all():
+                    exposures += len([p for p in (rec.post_ids or "").strip("[]").split(",") if p.strip().strip("\"'")])
+                out.append(AffectiveSample(self.agent_of(uid), int(day), value(uid, "stress"), value(uid, "reward"),
+                                           int(posts or 0) + int(reacts or 0), exposures))
+            return out
 
     def apply_attention(self, day, multipliers):
         return None  # F4

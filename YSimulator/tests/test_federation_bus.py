@@ -179,3 +179,37 @@ def test_conformance_suite(host):
     case = ConformanceCase(factory, (1, 1), lambda r: (r[0], r[1] + 1) if r[1] < 24 else (r[0] + 1, 1), "hpc", 1,
                            agent_ids=["g1", "g2"], sample_inbox=sample_inbox)
     assert "ingest_is_idempotent" in run_all(case)
+
+
+def test_affective_report_equals_what_the_runtime_computes(host):
+    import logging
+
+    from YSimulator.YServer.classes.models import Reaction, Recommendation, StressReward
+
+    a = adapter_for(host)
+    a.apply_membership([MembershipChange("g1", "active", 0, "initial"), MembershipChange("g2", "active", 0, "initial"),
+                        MembershipChange("g3", "dormant", 0, "initial")])
+    new_post(host, 1, "one")
+    with Session(host.engine) as s:
+        s.add(Round(id="r1-2", day=1, hour=2))
+        s.add(Round(id="r2-1", day=2, hour=1))
+        rows = [("stress", 0.4, "aggregate", ROUND), ("stress", 0.3, "variation", "r1-2"), ("stress", -0.1, "variation", "r1-2"),
+                ("reward", 0.9, "variation", "r1-2"), ("reward", 0.5, "variation", "r1-2"), ("stress", 0.7, "variation", "r2-1")]
+        for i, (var, val, typ, tid) in enumerate(rows):
+            s.add(StressReward(id=f"s{i}", uid=U[1], variable=var, value=val, type=typ, tid=tid))
+        s.add(Reaction(id="x1", post_id="p", user_id=U[1], type="like", round=ROUND))
+        s.add(Recommendation(id="c1", user_id=U[1], post_ids="a,b,c", round=ROUND))
+        s.commit()
+        before = s.query(StressReward).count()
+    samples = {x.global_agent_id: x for x in a.affective_report(1)}
+    with Session(host.engine) as s:
+        assert s.query(StressReward).count() == before  # read only
+    assert set(samples) == {"g1", "g2"}
+    server = SimpleNamespace(db=SimpleNamespace(engine=host.engine), simulation_config={"stress_reward": {"enabled": True}},
+                             logger=logging.getLogger("t"))
+    native = _unwrap("get_stress_reward")(server, U[1], "r1-2")  # the runtime's own computation at the last round of the day
+    assert (samples["g1"].stress, samples["g1"].reward) == (pytest.approx(native["stress"]), pytest.approx(native["reward"]))
+    assert (samples["g1"].stress, samples["g1"].reward) == (pytest.approx(0.6), 1.0)
+    assert samples["g1"].actions == 2 and samples["g1"].exposures == 3
+    assert (samples["g2"].stress, samples["g2"].reward, samples["g2"].actions) == (0.0, 0.0, 0)
+    assert a.affective_report(9) == []
