@@ -69,3 +69,25 @@ def test_crosspost_choice_is_a_seeded_draw_with_its_own_generator():
     federation.mark_posts(acts)
     assert not hasattr(acts[0], "crosspost")
     federation.install({})
+
+
+def test_attention_multiplier_scales_the_actions_with_its_own_generator(monkeypatch):
+    import ray
+
+    federation.install({"federation": {"enabled": True, "seed": 3}})
+    monkeypatch.setattr(ray, "get", lambda ref: ref)
+    server = SimpleNamespace(get_federation_attention=SimpleNamespace(remote=lambda: {"a": 2.0, "b": 0.5, "c": 1.0}))
+    state = random.getstate()
+    assert federation.scale_actions(3, "a") == 3  # nothing known yet: unchanged
+    federation.refresh_attention(server)
+    assert federation.scale_actions(3, "a") == 6 and federation.scale_actions(3, "c") == 3 and federation.scale_actions(3, "z") == 3
+    half = [federation.scale_actions(1, "b") for _ in range(200)]
+    assert set(half) == {0, 1} and 70 < sum(half) < 130 and random.getstate() == state
+    federation.install({"federation": {"enabled": True, "seed": 3}})
+    federation.refresh_attention(server)
+    assert [federation.scale_actions(1, "b") for _ in range(200)] == half  # reproducible
+    monkeypatch.setattr(ray, "get", lambda ref: (_ for _ in ()).throw(OSError("down")))
+    federation.refresh_attention(server)  # unreachable: the last known multipliers stay
+    assert federation.scale_actions(3, "a") == 6
+    federation.install({})
+    assert federation.scale_actions(5, "a") == 5  # federation off: identity

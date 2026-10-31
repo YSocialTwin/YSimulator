@@ -15,6 +15,7 @@ import logging
 import random
 from typing import List, Tuple
 
+from YSimulator.YClient import federation as _federation
 from YSimulator.YClient.action_generators import ActionGeneratorFactory
 from YSimulator.YClient.classes.ray_models import ActionDTO, AgentProfile
 
@@ -156,6 +157,7 @@ class RoundExecutor:
                     int(round(float(agent.daily_activity_level) * activity_multiplier)),
                 )
                 num_actions = random.randint(1, effective_daily_activity)
+                num_actions = _federation.scale_actions(num_actions, agent.id)  # federation attention (F4.3)
 
             for action_idx in range(num_actions):
                 action_type, agent_type, target = self.select_action_fn(agent, recent_posts)

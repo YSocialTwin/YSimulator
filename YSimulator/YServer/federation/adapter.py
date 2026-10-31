@@ -8,7 +8,7 @@ Bus and membership (F3.4c), same design as YServer:
 - export_outbox turns the root posts that the agents marked for cross-post (attribute `crosspost` of the POST action), or
   all root posts of active authors with export_policy = "all", into content.v1 for the coordinator.
 - ingest_inbox materialises crosspost.v1 as a post of the author, once per fed_msg_id (INV-05), with a federation_ref row.
-Affective report (F4.1): native stress/reward read from the stress_reward table. Attention: F4.3.
+Affective report (F4.1): native stress/reward read from the stress_reward table. Attention (F4.3): multipliers stored per account, read by the client.
 
 `host` is the object that owns the database: it needs `engine`, `post_service`, `current_round_id` and `recent_posts_cache`
 (the OrchestratorServer; a small stand-in in tests)."""
@@ -272,4 +272,24 @@ class YSimulatorAdapter(PlatformAdapter):
             return out
 
     def apply_attention(self, day, multipliers):
-        return None  # F4
+        """Store the multipliers of the day (F4.3): accounts that are not in the dictionary go back to 1; unknown agents are
+        ignored. The client reads them with server.get_federation_attention and applies them to how many actions an agent
+        takes in a slot."""
+        from YSimulator.YServer.classes.models import User_mgmt
+        from .tables import FederationAttention
+
+        with self._lock, self._session() as s:
+            known = set(s.scalars(select(User_mgmt.id)).all())
+            s.query(FederationAttention).delete()
+            for gid, value in sorted((multipliers or {}).items()):
+                uid = self.user_of(gid)
+                if uid in known and float(value) != 1.0:
+                    s.add(FederationAttention(user_id=uid, day=int(day), multiplier=float(value)))
+            s.commit()
+
+    def attention_multipliers(self):
+        """{local agent id: multiplier} of the current day (accounts not listed: 1)."""
+        from .tables import FederationAttention
+
+        with self._lock, self._session() as s:
+            return {r.user_id: r.multiplier for r in s.scalars(select(FederationAttention)).all()}

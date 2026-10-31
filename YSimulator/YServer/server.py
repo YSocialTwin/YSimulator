@@ -2493,6 +2493,12 @@ class OrchestratorServer:
             suggestions = self._federation_adapter.filter_users(suggestions)
         return suggestions
 
+    def get_federation_attention(self, client_id: str = None) -> Dict[str, float]:
+        """{local agent id: attention multiplier of the day} (federation only; agents not listed: 1)."""
+        if self._federation_adapter is None:
+            return {}
+        return self._federation_adapter.attention_multipliers()
+
     def get_federation_inactive_agents(self, client_id: str = None) -> List[str]:
         """Local ids of the agents that are not active on this platform (federation only): the clients do not let them act."""
         if self._federation_adapter is None:

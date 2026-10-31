@@ -213,3 +213,15 @@ def test_affective_report_equals_what_the_runtime_computes(host):
     assert samples["g1"].actions == 2 and samples["g1"].exposures == 3
     assert (samples["g2"].stress, samples["g2"].reward, samples["g2"].actions) == (0.0, 0.0, 0)
     assert a.affective_report(9) == []
+
+
+def test_attention_multipliers_are_stored_per_account_and_served_to_the_client(host):
+    a = adapter_for(host)
+    a.apply_attention(1, {"g1": 1.5, "g2": 1.0, "g3": 0.4, "nobody": 3.0})
+    assert a.attention_multipliers() == {U[1]: 1.5, U[3]: 0.4}  # 1.0 needs no row, unknown agents are ignored
+    server = SimpleNamespace(_federation_adapter=a)
+    assert _unwrap("get_federation_attention")(server) == {U[1]: 1.5, U[3]: 0.4}
+    a.apply_attention(2, {"g2": 2.0})  # a new day replaces the previous multipliers
+    assert adapter_for(host).attention_multipliers() == {U[2]: 2.0}  # and they survive a restart
+    a.apply_attention(3, {})
+    assert a.attention_multipliers() == {} and _unwrap("get_federation_attention")(SimpleNamespace(_federation_adapter=None)) == {}
