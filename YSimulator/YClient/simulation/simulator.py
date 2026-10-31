@@ -24,6 +24,7 @@ from YSimulator.YClient.simulation.batch_processor import BatchProcessor
 from YSimulator.YClient.simulation.lifecycle_manager import LifecycleManager
 from YSimulator.YClient.simulation.round_executor import RoundExecutor
 from YSimulator.YClient.simulation.secondary_follow_processor import SecondaryFollowProcessor
+from YSimulator.YClient import federation as _federation
 
 
 class Simulator:
@@ -276,6 +277,7 @@ class Simulator:
 
                 # Submit actions
                 submit_start = time.time()
+                _federation.mark_posts(actions)  # no-op unless the federation is on
                 ray.get(self.server.submit_actions.remote(self.client_id, actions))
                 submit_time = (time.time() - submit_start) * 1000
                 if self.memory_after_submit_fn:

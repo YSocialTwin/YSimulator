@@ -22,7 +22,9 @@ def build_gate(server, simulation_config):
 
     section = dict(section)
     section.setdefault("exp_id", os.path.basename(str(server.config_path)) or None)
-    adapter = YSimulatorAdapter(section["member"], int(section.get("federation_id", 1)))
+    adapter = YSimulatorAdapter(section["member"], int(section.get("federation_id", 1)), host=server,
+                                accounts=section.get("accounts"), export_policy=section.get("export_policy", "marked"))
+    server._federation_adapter = adapter
     gate = SafeGate(FederationGate(adapter, section))
     gate.start((server.day, server.slot))
     return gate

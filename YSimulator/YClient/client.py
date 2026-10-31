@@ -212,6 +212,9 @@ class SimulationClient:
         self.num_days = simulation_config["simulation"]["num_days"]
         self.num_slots_per_day = simulation_config["simulation"]["num_slots_per_day"]
         self.heartbeat_interval = simulation_config["simulation"].get("heartbeat_interval", 5)
+        from YSimulator.YClient import federation as _federation
+
+        _federation.install(simulation_config)  # no-op unless the "federation" section is enabled
         # Poll interval while waiting for the round barrier (federated runs lower it).
         self.barrier_poll_seconds = float(
             simulation_config["simulation"].get("barrier_poll_seconds", 1.0)

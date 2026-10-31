@@ -414,6 +414,7 @@ class OrchestratorServer:
 
         # Federation (opt-in): None means standalone, exactly as before.
         self._federation_gate = None
+        self._federation_adapter = None
         self._advance_pending = False  # the gate held the round back; retried from get_instruction
         self._advance_lock = threading.RLock()
         if (self.simulation_config.get("federation") or {}).get("enabled"):
@@ -1601,6 +1602,9 @@ class OrchestratorServer:
                 # Collect new post IDs from successful results
                 if result.success and result.new_ids:
                     new_ids.extend(result.new_ids)
+                    # federation (opt-in): the agent chose to cross-post this post
+                    if self._federation_adapter is not None and getattr(act, "crosspost", False):
+                        self._federation_adapter.mark_for_export(result.new_ids[0])
 
                 if (
                     result.success
@@ -2172,14 +2176,19 @@ class OrchestratorServer:
             limit = self.default_recommendation_limit
 
         # Delegate to ContentRecommender
+        fetch_limit = limit
+        if self._federation_adapter is not None and self._federation_adapter.inactive_agent_ids():
+            fetch_limit = limit * 2  # some will be dropped: accounts that are not active are invisible
         post_ids = self.content_recommender.get_recommended_posts(
             agent_id=agent_id,
             mode=mode,
-            limit=limit,
+            limit=fetch_limit,
             followers_ratio=followers_ratio,
             day=self.day,
             slot=self.slot,
         )
+        if self._federation_adapter is not None:  # accounts that are not active are invisible
+            post_ids = self._federation_adapter.filter_posts(post_ids)[:limit]
 
         # Save recommendations to database (and Redis if enabled)
         if post_ids:
@@ -2325,7 +2334,10 @@ class OrchestratorServer:
         Returns:
             List[str]: List of post UUIDs from other users on this topic
         """
-        return self.post_service.search_posts_by_topic(topic_id, agent_id, limit)
+        found = self.post_service.search_posts_by_topic(topic_id, agent_id, limit)
+        if self._federation_adapter is not None:  # accounts that are not active are invisible
+            found = self._federation_adapter.filter_posts(found)
+        return found
 
     @log_server_request
     def get_post_topics(self, post_id: str, client_id: str = None) -> List[str]:
@@ -2474,9 +2486,18 @@ class OrchestratorServer:
             List[str]: List of user UUIDs recommended for the agent to follow
         """
         if self.db.use_redis:
-            return self._get_follow_suggestions_redis(agent_id, mode, n_neighbors, leaning_bias)
+            suggestions = self._get_follow_suggestions_redis(agent_id, mode, n_neighbors, leaning_bias)
         else:
-            return self._get_follow_suggestions_sql(agent_id, mode, n_neighbors, leaning_bias)
+            suggestions = self._get_follow_suggestions_sql(agent_id, mode, n_neighbors, leaning_bias)
+        if self._federation_adapter is not None:  # accounts that are not active are invisible
+            suggestions = self._federation_adapter.filter_users(suggestions)
+        return suggestions
+
+    def get_federation_inactive_agents(self, client_id: str = None) -> List[str]:
+        """Local ids of the agents that are not active on this platform (federation only): the clients do not let them act."""
+        if self._federation_adapter is None:
+            return []
+        return sorted(self._federation_adapter.inactive_agent_ids())
 
     def _get_follow_suggestions_sql(
         self, agent_id: str, mode: str, n_neighbors: int, leaning_bias: int
