@@ -86,6 +86,10 @@ def build_server_simulation_config(config: dict) -> dict:
                 "backward_rounds": 24,
             }
 
+    federation_config = config.get("federation")
+    if isinstance(federation_config, dict):
+        simulation_config["federation"] = deepcopy(federation_config)
+
     return simulation_config
 
 

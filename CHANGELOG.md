@@ -4,6 +4,9 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+### Added
+- Federation (opt-in): `YSimulator/YServer/federation/` (adapter, gate wrapper) and a clock gate in `_check_barrier_and_advance`, retried from `get_instruction` while the coordinator holds the round back; enabled by the `federation` section of the server configuration, otherwise standalone behaviour is unchanged.
+
 ## [2.1.0] - 2026-10-20
 
 ### Added

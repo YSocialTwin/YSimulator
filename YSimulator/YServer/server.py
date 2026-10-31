@@ -11,6 +11,7 @@ import json
 import logging
 import os
 import shutil
+import threading
 import time
 import uuid
 from datetime import datetime, timezone
@@ -410,6 +411,15 @@ class OrchestratorServer:
                 }
             },
         )
+
+        # Federation (opt-in): None means standalone, exactly as before.
+        self._federation_gate = None
+        self._advance_pending = False  # the gate held the round back; retried from get_instruction
+        self._advance_lock = threading.RLock()
+        if (self.simulation_config.get("federation") or {}).get("enabled"):
+            from YSimulator.YServer.federation import build_gate
+
+            self._federation_gate = build_gate(self, self.simulation_config)
 
     @property
     def day(self) -> int:
@@ -1456,6 +1466,9 @@ class OrchestratorServer:
         # Check if completing this client unblocks the barrier
         self._check_barrier_and_advance()
 
+        if self._federation_gate is not None and not self._get_active_clients():
+            self._federation_gate.on_finished()
+
         return result
 
     @log_server_request
@@ -1540,6 +1553,10 @@ class OrchestratorServer:
         """
         # Check for stale clients before processing
         self._check_for_stale_clients()
+
+        # The federation gate held the round back: ask again (clients poll here while they wait)
+        if self._advance_pending:
+            self._check_barrier_and_advance()
 
         # 1. Pause if not enough players
         active_clients = self._get_active_clients()
@@ -1983,8 +2000,16 @@ class OrchestratorServer:
         """
         Check if all active clients have submitted actions and advance simulation state.
 
-        Delegates to BarrierHandler and RoundManager for coordination logic.
+        Delegates to BarrierHandler and RoundManager for coordination logic. With a federation gate the
+        advance also needs the coordinator's consent (the local barrier is the "ready" of this member).
         """
+        if self._federation_gate is None:
+            self._check_barrier_and_advance_locked()
+            return
+        with self._advance_lock:  # get_instruction polls concurrently: one advance at a time
+            self._check_barrier_and_advance_locked()
+
+    def _check_barrier_and_advance_locked(self) -> None:
         active_clients = self._get_active_clients()
 
         # Check if barrier should be released
@@ -1993,6 +2018,13 @@ class OrchestratorServer:
         )
 
         if should_advance:
+            if self._federation_gate is not None and not self._federation_gate.on_barrier_ready(
+                (self.day, self.slot)
+            ):
+                self._advance_pending = True
+                return
+            self._advance_pending = False
+
             # Advance simulation using RoundManager BEFORE clearing submitted clients
             # This prevents race condition where fast clients could get the same slot twice
             result = self.round_manager.advance_simulation(
@@ -2007,6 +2039,9 @@ class OrchestratorServer:
                 self.day
             ):
                 self.archetype_manager.perform_transitions(self.day)
+
+            if self._federation_gate is not None:
+                self._federation_gate.on_round_opened((self.day, self.slot))
 
     def _perform_archetype_transitions(self) -> None:
         """
