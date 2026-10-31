@@ -225,3 +225,28 @@ def test_attention_multipliers_are_stored_per_account_and_served_to_the_client(h
     assert adapter_for(host).attention_multipliers() == {U[2]: 2.0}  # and they survive a restart
     a.apply_attention(3, {})
     assert a.attention_multipliers() == {} and _unwrap("get_federation_attention")(SimpleNamespace(_federation_adapter=None)) == {}
+
+
+def test_exposures_with_materialised_crossposts_are_emitted_only_when_asked_and_stay_the_same_on_retry(host):
+    from YSimulator.YServer.classes.models import Follow, Reaction, Recommendation
+
+    a = adapter_for(host, emit_exposures=True)
+    assert a.ingest_inbox(0, [crosspost(0, U[1], "from the forum")]).materialized == 1
+    with Session(host.engine) as s:
+        ref = s.scalar(select(FederationRef.local_id).where(FederationRef.local_kind == "post"))
+        s.add(Follow(id="f1", user_id=U[2], follower_id=U[1], action="follow", round=ROUND))
+        s.add(Follow(id="f2", user_id=U[3], follower_id=U[1], action="follow", round=ROUND))
+        s.add(Follow(id="f3", user_id=U[1], follower_id=U[3], action="follow", round=ROUND))
+        s.add(Recommendation(id="c2", user_id=U[2], post_ids=f"{ref},other", round=ROUND))
+        s.add(Recommendation(id="c1", user_id=U[1], post_ids=ref, round=ROUND))  # the author: not a viewer
+        s.add(Recommendation(id="c3", user_id=U[3], post_ids="other", round=ROUND))
+        s.add(Reaction(id="x1", post_id=ref, user_id=U[3], type="like", round=ROUND))
+        s.commit()
+    out = [e for e in a.export_outbox(0) if e.payload_type == "exposure.v1"]
+    got = [(e.payload["viewer_global_agent_id"], e.payload["kind"], e.payload["tie"], e.payload["exact"]) for e in out]
+    assert got == [("g2", "view", "follow", False), ("g3", "interact", "mutual", True)]
+    assert all(e.payload["source_ref"] == "ysocial://1/forum/post/0" and e.payload["tick"] == 0 for e in out)
+    assert [e.fed_msg_id for e in a.export_outbox(0) if e.payload_type == "exposure.v1"] == [e.fed_msg_id for e in out]
+    assert a.export_outbox(1) == []
+    off = adapter_for(host)
+    assert off.emit_exposures is False and [e for e in off.export_outbox(0) if e.payload_type == "exposure.v1"] == []

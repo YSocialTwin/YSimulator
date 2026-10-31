@@ -31,7 +31,7 @@ log = logging.getLogger("ysimulator.federation")
 class YSimulatorAdapter(PlatformAdapter):
     platform = "microblogging"
 
-    def __init__(self, member, federation_id=1, host=None, accounts=None, export_policy="marked"):
+    def __init__(self, member, federation_id=1, host=None, accounts=None, export_policy="marked", emit_exposures=False):
         """accounts: {global_agent_id: local agent id}; without an entry the global id is the local agent id."""
         if export_policy not in ("marked", "all"):
             raise ValueError("export_policy must be 'marked' or 'all'")
@@ -39,6 +39,7 @@ class YSimulatorAdapter(PlatformAdapter):
         self.federation_id = federation_id
         self.host = host
         self.export_policy = export_policy
+        self.emit_exposures = bool(emit_exposures)
         self._accounts = {str(k): str(v) for k, v in (accounts or {}).items()}
         self._by_user = {v: k for k, v in self._accounts.items()}
         self._lock = threading.RLock()
@@ -160,7 +161,64 @@ class YSimulatorAdapter(PlatformAdapter):
                 post = s.get(Post, row.post_id)
                 out.append(Envelope.create(self.federation_id, self.member, COORDINATOR, tick, row.seq, "content.v1",
                                            self._content(s, post)))
+            if self.emit_exposures:
+                for row in self._exposure_rows(s, tick):
+                    out.append(Envelope.create(self.federation_id, self.member, COORDINATOR, tick, len(out), "exposure.v1", {
+                        "viewer_global_agent_id": self.agent_of(row.viewer_uid), "source_ref": row.source_ref, "tick": tick,
+                        "exact": bool(row.exact), "kind": row.kind, "tie": row.tie}))
             return out
+
+    def _tie(self, s, viewer, author):
+        """none / follow / mutual between a viewer and the author of a post, from the latest follow rows."""
+        from YSimulator.YServer.classes.models import Follow, Round
+
+        def follows(a, b):
+            row = s.execute(select(Follow, Round).outerjoin(Round, Round.id == Follow.round).where(
+                Follow.user_id == a, Follow.follower_id == b).order_by(Round.day.desc(), Round.hour.desc())).first()
+            return row is not None and row[0].action == "follow"
+        if not follows(viewer, author):
+            return "none"
+        return "mutual" if follows(author, viewer) else "follow"
+
+    def _exposure_rows(self, s, tick):
+        """Views (posts recommended in the round: approximate, exact = false) and interactions (reaction, comment or share:
+        exact) of active accounts with the materialised cross-posts of the round of the tick, in a stable order."""
+        from YSimulator.YServer.classes.models import Post, Reaction, Recommendation, Round
+        from .tables import FederationExposure, FederationRef, FederationState
+
+        def stored():
+            return list(s.scalars(select(FederationExposure).where(FederationExposure.tick == tick).order_by(FederationExposure.seq)).all())
+        done = s.get(FederationState, "exposure_tick")
+        if done is not None and int(done.value) >= tick:
+            return stored()
+        day, hour = self.from_tick(tick)
+        rnd = s.scalars(select(Round).where(Round.day == day, Round.hour == hour)).first()
+        refs = {r.local_id: r.source_ref for r in s.scalars(select(FederationRef).where(FederationRef.local_kind == "post")).all()} if rnd else {}
+        if refs:
+            author = {pid: uid for pid, uid in s.execute(select(Post.id, Post.user_id).where(Post.id.in_(list(refs)))).all()}
+            found = {}
+
+            def add(viewer, pid, kind, exact):
+                if viewer is None or viewer == author.get(pid) or not self._active(s, viewer):
+                    return
+                found.setdefault((str(viewer), refs[pid], kind), (pid, exact))
+            for rec in s.scalars(select(Recommendation).where(Recommendation.round == rnd.id)).all():
+                for raw in (rec.post_ids or "").replace("[", "").replace("]", "").replace('"', "").split(","):
+                    if raw.strip() in refs:
+                        add(rec.user_id, raw.strip(), "view", False)
+            for r in s.scalars(select(Reaction).where(Reaction.round == rnd.id, Reaction.post_id.in_(list(refs)))).all():
+                add(r.user_id, r.post_id, "interact", True)
+            for c in s.scalars(select(Post).where(Post.round == rnd.id, Post.comment_to.in_(list(refs)) | Post.shared_from.in_(list(refs)))).all():
+                add(c.user_id, c.comment_to if c.comment_to in refs else c.shared_from, "interact", True)
+            for seq, ((viewer, ref, kind), (pid, exact)) in enumerate(sorted(found.items())):
+                s.add(FederationExposure(tick=tick, seq=seq, viewer_uid=viewer, source_ref=ref, kind=kind,
+                                         tie=self._tie(s, viewer, author[pid]), exact=int(exact)))
+        if done is None:
+            s.add(FederationState(key="exposure_tick", value=str(tick)))
+        else:
+            done.value = str(tick)
+        s.commit()
+        return stored()
 
     def mark_for_export(self, post_id):
         """The agent chose to cross-post this post (D-07): it will be exported at the next barrier."""
