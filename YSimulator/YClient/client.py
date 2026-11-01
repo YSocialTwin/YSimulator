@@ -215,6 +215,8 @@ class SimulationClient:
         from YSimulator.YClient import federation as _federation
 
         _federation.install(simulation_config)  # no-op unless the "federation" section is enabled
+        if _federation.agent_action():
+            _federation.set_adapt(self._crosspost_adapt)  # the model's version of a post for another platform
         # Poll interval while waiting for the round barrier (federated runs lower it).
         self.barrier_poll_seconds = float(
             simulation_config["simulation"].get("barrier_poll_seconds", 1.0)
@@ -701,6 +703,23 @@ class SimulationClient:
             "directness": self._stress_reward_clamp01(data.get("directness", 1.0)),
             "support_strength": self._stress_reward_clamp01(data.get("support_strength", 0.0)),
         }
+
+    def _crosspost_adapt(self, agent_id, dest, text):
+        """The model's version of the agent's post for the destination platform (cross-post as an agent action, F6.2).
+
+        None when it cannot be done (no model, no prompt for that platform, an error or an empty reply): the caller then
+        uses the rule text."""
+        from YSimulator.YClient import federation as _federation
+
+        if not self.llm or _federation.adapt_prompt_key(dest) is None:
+            return None
+        try:
+            llm_actor = _get_llm_actor_for_manager(self.llm, agent_id)
+            reply = ray.get(llm_actor.adapt_crosspost.remote(dest, text, _federation.source_platform()))
+        except Exception as exc:  # a failing model must not stop the post
+            self.logger.warning(f"cross-post adaptation failed for {agent_id}: {exc}")
+            return None
+        return _federation.parse_reply(dest, reply)
 
     def _target_user_id_from_post(self, post_id: Optional[str]) -> Optional[str]:
         if not post_id:

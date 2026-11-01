@@ -5,6 +5,7 @@ All notable changes to this project are documented here. The format follows [Kee
 ## [Unreleased]
 
 ### Added
+- Cross-post as an agent action (opt-in, `federation.crosspost_mode: agent_action`): the client draws once per platform where the agent is also active (`get_federation_destinations`) with `crosspost_propensity` and sets `crosspost_to` ([{member, text}]) on the POST action, with the model's version of the text (prompts `crosspost_adapt_<platform>`, EN and IT; `LLMService.adapt_crosspost`) or the rule text; the server adapter sends one `crosspost.v1` per chosen destination instead of `content.v1`. Default mode unchanged.
 - Federation local churn (F4.5, opt-in): `churned_agents(day)` gives the accounts whose `left_on` round is in the days up to the given one and that the federation still sees as active, so the coordinator records them as left with reason churn.
 - Federation exposures (F4.4b, opt-in `federation.exposures`): with `federation.exposures` the adapter also hands `exposure.v1` to the bus: recommended posts that are materialised cross-posts are views (approximate), reactions, comments and shares are interactions (exact); tie from the follow table; table `federation_exposure_log`, fixed per tick.
 - Federation attention (opt-in): `apply_attention` stores the multiplier of the day per account (table `federation_attention`); `get_federation_attention` serves it and the client scales the actions of each agent in the slot; with the federation off or multiplier 1 nothing changes.

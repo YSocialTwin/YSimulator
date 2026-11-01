@@ -1604,7 +1604,11 @@ class OrchestratorServer:
                     new_ids.extend(result.new_ids)
                     # federation (opt-in): the agent chose to cross-post this post
                     if self._federation_adapter is not None and getattr(act, "crosspost", False):
-                        self._federation_adapter.mark_for_export(result.new_ids[0])
+                        targets = getattr(act, "crosspost_to", None)
+                        if isinstance(targets, list):
+                            self._federation_adapter.mark_for_export(result.new_ids[0], targets)
+                        else:
+                            self._federation_adapter.mark_for_export(result.new_ids[0])
 
                 if (
                     result.success
@@ -2498,6 +2502,13 @@ class OrchestratorServer:
         if self._federation_adapter is None:
             return {}
         return self._federation_adapter.attention_multipliers()
+
+    def get_federation_destinations(self, agent_id: str, client_id: str = None) -> List[str]:
+        """Members where this agent can cross-post now (federation, crosspost.mode = agent_action only)."""
+        adapter = self._federation_adapter
+        if adapter is None or not hasattr(adapter, "destination_members"):
+            return []
+        return adapter.destination_members(agent_id)
 
     def get_federation_inactive_agents(self, client_id: str = None) -> List[str]:
         """Local ids of the agents that are not active on this platform (federation only): the clients do not let them act."""

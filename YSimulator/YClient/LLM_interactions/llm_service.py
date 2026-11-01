@@ -761,6 +761,16 @@ class LLMService:
             # Fallback if LLM fails
             return "Sharing this!"
 
+    def adapt_crosspost(self, dest: str, text: str, source_platform: str = "") -> str:
+        """The agent's post rewritten for another platform (cross-post as an agent action); "" when it fails."""
+        try:
+            message = prompt_store.prompt(f"crosspost_adapt_{dest}", source_platform=source_platform, text=text)
+            chain = ChatPromptTemplate.from_messages([("user", "{message}")]) | self.llm | StrOutputParser()
+            return chain.invoke({"message": message}).strip()
+        except Exception as exc:
+            logger.warning(f"cross-post adaptation failed: {exc}")
+            return ""
+
     def annotate_stress_reward_text(
         self,
         text: str,
