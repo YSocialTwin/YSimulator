@@ -26,7 +26,8 @@ def build_gate(server, simulation_config):
                                 accounts=section.get("accounts"), export_policy=section.get("export_policy", "marked"),
                                 emit_exposures=bool(section.get("exposures", False)),
                                 crosspost_mode=section.get("crosspost_mode", "coordinator_rule"),
-                                create_topics=bool(section.get("create_topics", True)))
+                                create_topics=bool(section.get("create_topics", True)),
+                                bindings_file=section.get("bindings_file"))
     server._federation_adapter = adapter
     gate = SafeGate(FederationGate(adapter, section))
     gate.start((server.day, server.slot))

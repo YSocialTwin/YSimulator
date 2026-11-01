@@ -20,6 +20,7 @@ import uuid
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from ysocial_federation.bindings import BoundAccountsMixin
 from ysocial_federation.adapter import IngestReport, PlatformAdapter
 from ysocial_federation.envelope import COORDINATOR, Envelope
 from ysocial_federation.schemas import TEXT_EXCERPT_MAX
@@ -28,12 +29,15 @@ from ysocial_federation.timebase import ONE_BASED
 log = logging.getLogger("ysimulator.federation")
 
 
-class YSimulatorAdapter(PlatformAdapter):
+class YSimulatorAdapter(BoundAccountsMixin, PlatformAdapter):
     platform = "microblogging"
 
     def __init__(self, member, federation_id=1, host=None, accounts=None, export_policy="marked", emit_exposures=False,
-                 crosspost_mode="coordinator_rule", create_topics=False):
-        """accounts: {global_agent_id: local agent id}; without an entry the global id is the local agent id."""
+                 crosspost_mode="coordinator_rule", create_topics=False, bindings_file=None):
+        """accounts: {global_agent_id: local agent id}; without an entry the global id is the local agent id.
+
+        bindings_file (INV-17): agents are bound by username; the accounts are reported to the coordinator, whose answer is kept in
+        this file. Then the local id is never the global id: an account that is not bound acts as usual and is not exported."""
         if export_policy not in ("marked", "all"):
             raise ValueError("export_policy must be 'marked' or 'all'")
         self.member = member
@@ -50,6 +54,21 @@ class YSimulatorAdapter(PlatformAdapter):
         self._by_user = {v: k for k, v in self._accounts.items()}
         self._lock = threading.RLock()
         self._inactive = None  # cache of the ids that are not active; loaded from the table on first use
+        self._init_bindings(bindings_file, self._enumerate_accounts, cast=str)
+
+    def _enumerate_accounts(self, after):
+        """Ids are UUIDs (no order): the marker is the number of accounts, so a round without new accounts costs one COUNT."""
+        from sqlalchemy import func
+
+        from YSimulator.YServer.classes.models import User_mgmt
+
+        with Session(self.host.engine) as s:
+            count = s.scalar(select(func.count()).select_from(User_mgmt))
+            if after is not None and int(after) == int(count):
+                return [], after
+            humans = self._human_uids()
+            rows = s.execute(select(User_mgmt.username, User_mgmt.id).order_by(User_mgmt.id)).all()
+        return [(u, i) for u, i in rows if i not in humans and i not in self._by_user], count
 
     # -- clock -------------------------------------------------------------------------
     def to_tick(self, local_round):
@@ -82,6 +101,8 @@ class YSimulatorAdapter(PlatformAdapter):
             return self._accounts[gid]
         if gid.startswith("human:"):
             return next((uid for uid, hid in self._humans().items() if hid == gid), gid)
+        if self._is_bound_mode:  # INV-17: the global id comes from the coordinator, never from the local id
+            return None
         return gid
 
     def agent_of(self, user_id):
@@ -89,7 +110,9 @@ class YSimulatorAdapter(PlatformAdapter):
         if uid in self._by_user:
             return self._by_user[uid]
         human = self._humans().get(uid)
-        return human if human is not None else uid  # a person has no fallback to the local id (it could be an agent's)
+        if human is not None:
+            return human
+        return self._unbound_id(uid) if self._is_bound_mode else uid  # a person has no fallback to the local id (it could be an agent's)
 
     def _human_uids(self):
         return set(self._humans())
@@ -108,6 +131,9 @@ class YSimulatorAdapter(PlatformAdapter):
         with self._lock, self._session() as s:
             for ch in changes:
                 uid = self.user_of(ch.global_agent_id)
+                if uid is None:
+                    log.warning("federation: membership change for unknown agent %s ignored", ch.global_agent_id)
+                    continue
                 row = s.get(FederationMembership, uid)
                 if row is None:
                     s.add(FederationMembership(user_id=uid, global_agent_id=str(ch.global_agent_id), state=ch.state,
@@ -183,7 +209,7 @@ class YSimulatorAdapter(PlatformAdapter):
                 posts = [s.get(Post, pid) for pid in candidates - done - made]
                 pending = sorted((p for p in posts if p is not None and p.moderated == 0
                                   and p.comment_to in (None, "-1", -1) and p.shared_from in (None, "-1", -1)
-                                  and self._active(s, p.user_id)),
+                                  and self._active(s, p.user_id) and self._federated(p.user_id)),
                                  key=lambda p: (p.tweet or "", p.id))  # UUIDs carry no order: the text keeps it stable
                 for seq, post in enumerate(pending):
                     s.merge(FederationExport(post_id=post.id, tick=tick, seq=seq))
@@ -209,6 +235,8 @@ class YSimulatorAdapter(PlatformAdapter):
                                            dict(content, target_account_id=req.account_id)))
             if self.emit_exposures:
                 for row in self._exposure_rows(s, tick):
+                    if not self._federated(row.viewer_uid):
+                        continue
                     out.append(Envelope.create(self.federation_id, self.member, COORDINATOR, tick, max((e.seq for e in out), default=-1) + 1, "exposure.v1", {
                         "viewer_global_agent_id": self.agent_of(row.viewer_uid), "source_ref": row.source_ref, "tick": tick,
                         "exact": bool(row.exact), "kind": row.kind, "tie": row.tie}))
