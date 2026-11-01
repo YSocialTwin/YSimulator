@@ -43,6 +43,17 @@ class FederationTopic(Base):
     source_member = Column(String(64), nullable=False)
 
 
+class FederationHuman(Base):
+    """A person on this platform (human gateway): ``human_key`` is the key YWeb gives (stable per person and experiment),
+    ``human_id`` the federation identity ``human:<id>`` once the person is enrolled in a World Simulation."""
+
+    __tablename__ = "federation_human"
+
+    human_key = Column(String(64), primary_key=True)
+    user_id = Column(String(36), nullable=False, unique=True)
+    human_id = Column(String(80), nullable=True)
+
+
 class FederationExport(Base):
     __tablename__ = "federation_export"
 

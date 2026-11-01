@@ -60,11 +60,39 @@ class YSimulatorAdapter(PlatformAdapter):
         return ONE_BASED.from_tick(tick)
 
     # -- identity and database ---------------------------------------------------------
+    def _humans(self):
+        """{local user id: identity "human:<id>"} of the accounts of people: the identity map entries with the reserved
+        prefix and the accounts the human gateway enrolled (table ``federation_human``)."""
+        out = {uid: gid for uid, gid in self._by_user.items() if gid.startswith("human:")}
+        try:
+            from sqlalchemy import inspect
+
+            from .tables import FederationHuman
+
+            if inspect(self.host.engine).has_table(FederationHuman.__tablename__):
+                with Session(self.host.engine) as s:
+                    out.update({r.user_id: r.human_id for r in s.scalars(select(FederationHuman)).all() if r.human_id})
+        except Exception:  # noqa: BLE001 - no database yet: no people
+            pass
+        return out
+
     def user_of(self, global_agent_id):
-        return self._accounts.get(str(global_agent_id), str(global_agent_id))
+        gid = str(global_agent_id)
+        if gid in self._accounts:
+            return self._accounts[gid]
+        if gid.startswith("human:"):
+            return next((uid for uid, hid in self._humans().items() if hid == gid), gid)
+        return gid
 
     def agent_of(self, user_id):
-        return self._by_user.get(str(user_id), str(user_id))
+        uid = str(user_id)
+        if uid in self._by_user:
+            return self._by_user[uid]
+        human = self._humans().get(uid)
+        return human if human is not None else uid  # a person has no fallback to the local id (it could be an agent's)
+
+    def _human_uids(self):
+        return set(self._humans())
 
     def _session(self):
         from .tables import ensure_tables
@@ -215,9 +243,10 @@ class YSimulatorAdapter(PlatformAdapter):
         if refs:
             author = {pid: uid for pid, uid in s.execute(select(Post.id, Post.user_id).where(Post.id.in_(list(refs)))).all()}
             found = {}
+            humans = self._human_uids()  # people are not part of the group mechanisms (INV-15)
 
             def add(viewer, pid, kind, exact):
-                if viewer is None or viewer == author.get(pid) or not self._active(s, viewer):
+                if viewer is None or viewer == author.get(pid) or viewer in humans or not self._active(s, viewer):
                     return
                 found.setdefault((str(viewer), refs[pid], kind), (pid, exact))
             for rec in s.scalars(select(Recommendation).where(Recommendation.round == rnd.id)).all():
@@ -395,9 +424,12 @@ class YSimulatorAdapter(PlatformAdapter):
                 return max(0.0, min(1.0, base + float(total or 0.0)))
 
             out = []
+            humans = self._human_uids()  # people are not part of the group mechanisms (INV-15)
             for m in s.scalars(select(FederationMembership).where(FederationMembership.state == "active")
                                .order_by(FederationMembership.user_id)).all():
                 uid = m.user_id
+                if uid in humans:
+                    continue
                 posts = s.scalar(select(func.count(Post.id)).where(Post.user_id == uid, Post.round.in_(ids)))
                 reacts = s.scalar(select(func.count(Reaction.id)).where(Reaction.user_id == uid, Reaction.round.in_(ids)))
                 exposures = 0
@@ -416,7 +448,10 @@ class YSimulatorAdapter(PlatformAdapter):
         with self._lock, self._session() as s:
             rounds = set(s.scalars(select(Round.id).where(Round.day <= int(day))).all())
             out = []
+            humans = self._human_uids()  # people never churn (INV-15)
             for row in s.scalars(select(FederationMembership).where(FederationMembership.state == "active")).all():
+                if row.user_id in humans:
+                    continue
                 user = s.get(User_mgmt, row.user_id)
                 if user is not None and user.left_on is not None and user.left_on in rounds:
                     out.append(row.global_agent_id)
@@ -430,7 +465,7 @@ class YSimulatorAdapter(PlatformAdapter):
         from .tables import FederationAttention
 
         with self._lock, self._session() as s:
-            known = set(s.scalars(select(User_mgmt.id)).all())
+            known = set(s.scalars(select(User_mgmt.id)).all()) - self._human_uids()  # people have no attention multiplier
             s.query(FederationAttention).delete()
             for gid, value in sorted((multipliers or {}).items()):
                 uid = self.user_of(gid)
