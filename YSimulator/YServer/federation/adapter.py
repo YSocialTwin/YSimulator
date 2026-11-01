@@ -23,7 +23,8 @@ from sqlalchemy.orm import Session
 from ysocial_federation.bindings import BoundAccountsMixin
 from ysocial_federation.adapter import IngestReport, PlatformAdapter
 from ysocial_federation.envelope import COORDINATOR, Envelope
-from ysocial_federation.schemas import TEXT_EXCERPT_MAX
+from ysocial_federation import content_policy
+from ysocial_federation.schemas import LINK_MAX, TEXT_EXCERPT_MAX
 from ysocial_federation.timebase import ONE_BASED
 
 log = logging.getLogger("ysimulator.federation")
@@ -33,7 +34,7 @@ class YSimulatorAdapter(BoundAccountsMixin, PlatformAdapter):
     platform = "microblogging"
 
     def __init__(self, member, federation_id=1, host=None, accounts=None, export_policy="marked", emit_exposures=False,
-                 crosspost_mode="coordinator_rule", create_topics=False, bindings_file=None):
+                 crosspost_mode="coordinator_rule", create_topics=False, bindings_file=None, crosspost_content=None):
         """accounts: {global_agent_id: local agent id}; without an entry the global id is the local agent id.
 
         bindings_file (INV-17): agents are bound by username; the accounts are reported to the coordinator, whose answer is kept in
@@ -48,6 +49,7 @@ class YSimulatorAdapter(BoundAccountsMixin, PlatformAdapter):
         if crosspost_mode not in ("coordinator_rule", "agent_action"):
             raise ValueError("crosspost_mode must be 'coordinator_rule' or 'agent_action'")
         self.crosspost_mode = crosspost_mode
+        self.crosspost_content = content_policy.normalize(crosspost_content)  # P13: with "news" the article link travels
         self.create_topics = bool(create_topics)  # topic migration: create the topics a cross-post carries and the platform lacks
         self._destinations = {}  # {global_agent_id: [{"member", "local_account_id"}]}, set by the gate before each export
         self._accounts = {str(k): str(v) for k, v in (accounts or {}).items()}
@@ -282,11 +284,26 @@ class YSimulatorAdapter(BoundAccountsMixin, PlatformAdapter):
         topics = [i.interest for i in s.scalars(select(Interest).join(PostTopic, PostTopic.topic_id == Interest.iid)
                                                 .where(PostTopic.post_id == post.id).order_by(Interest.interest)).all()]
         image = s.get(Image, post.image_id) if post.image_id else None
-        return {"global_agent_id": self.agent_of(post.user_id),
-                "source_ref": f"ysocial://{self.federation_id}/{self.member}/post/{post.id}",
-                "kind": "post", "text_excerpt": (post.tweet or "")[:TEXT_EXCERPT_MAX],
-                "image_ref": image.url if image is not None and image.url else None,
-                "topics": topics, "lang": (user.language if user is not None and user.language else "en")}
+        content = {"global_agent_id": self.agent_of(post.user_id),
+                   "source_ref": f"ysocial://{self.federation_id}/{self.member}/post/{post.id}",
+                   "kind": "post", "text_excerpt": (post.tweet or "")[:TEXT_EXCERPT_MAX],
+                   "image_ref": image.url if image is not None and image.url else None,
+                   "topics": topics, "lang": (user.language if user is not None and user.language else "en")}
+        link = self._news_link(s, post) if "news" in self.crosspost_content else None
+        if link:
+            content["link"] = link  # P13: written only when the policy asks for news (otherwise the message is unchanged)
+        return content
+
+    def _news_link(self, s, post):
+        """Link of the article the post is about (or, for a share, of the post it shares); None when there is none."""
+        from YSimulator.YServer.classes.models import Article, Post
+
+        for p in (post, s.get(Post, post.shared_from) if post.shared_from not in (None, -1, "-1") else None):
+            if p is not None and p.news_id not in (None, "", "-1", -1):
+                art = s.get(Article, str(p.news_id))
+                if art is not None and art.link:
+                    return art.link[:LINK_MAX]
+        return None
 
     def export_outbox(self, tick):
         """content.v1 for the posts chosen at this barrier: the ones marked by the agents and, with export_policy
