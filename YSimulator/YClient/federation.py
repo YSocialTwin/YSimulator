@@ -14,7 +14,7 @@ import random
 import re
 
 _state = {"enabled": False, "propensity": 0.0, "rng": None, "inactive": set(), "attention": {},
-          "mode": "coordinator_rule", "member": None, "adapt": None}
+          "mode": "coordinator_rule", "member": None, "adapt": None, "adopt": False}
 
 # Longest text each destination accepts (characters); the rules and the parser of an LLM reply both apply them.
 LIMITS = {"microblogging": 280, "forum": 2000, "photo_sharing": 300, "instant_messaging": 400, "dating": 200}
@@ -25,10 +25,11 @@ def install(config):
     section = (config or {}).get("federation") or {}
     enabled = bool(section.get("enabled"))
     _state.update(enabled=enabled, propensity=0.0, rng=None, inactive=set(), attention={},
-                  mode="coordinator_rule", member=None, adapt=None)
+                  mode="coordinator_rule", member=None, adapt=None, adopt=False)
     if enabled:
         _state.update(propensity=float(section.get("crosspost_propensity", 0.0)), rng=random.Random(section.get("seed", 0)),
-                      mode=str(section.get("crosspost_mode") or "coordinator_rule"), member=section.get("member"))
+                      mode=str(section.get("crosspost_mode") or "coordinator_rule"), member=section.get("member"),
+                      adopt=bool(section.get("adopt")))
     return enabled
 
 
@@ -47,6 +48,30 @@ def inactive_ids(server):
     except Exception:  # noqa: BLE001 - keep the last known list
         pass
     return set(_state["inactive"])
+
+
+def adopt_provisioned(server, client_id, agent_profiles):
+    """INV-19: accounts the server created because an agent of another platform decided to join this one get an agent here.
+
+    Only with `federation.adopt` in the client configuration. The server lists the profiles of the accounts this client has to play
+    (`get_federation_provisioned`, without the ids in `agent_profiles`); they are reported as adopted and appended to
+    `agent_profiles` (the list the scheduler, the executor and the lifecycle manager share), so they act from the next slot like
+    any other agent. They are registered on the server already. Returns the number adopted; never raises for an unreachable server
+    (asked again at the next slot)."""
+    if not (_state["enabled"] and _state["adopt"]):
+        return 0
+    try:
+        import ray
+
+        known = {str(a.id) for a in agent_profiles}
+        fresh = [p for p in ray.get(server.get_federation_provisioned.remote(client_id, sorted(known))) if str(p.id) not in known]
+        if not fresh:
+            return 0
+        ray.get(server.federation_adopted.remote(client_id, [str(p.id) for p in fresh]))  # before: a failure here is retried
+        agent_profiles.extend(fresh)
+        return len(fresh)
+    except Exception:  # noqa: BLE001 - try again at the next slot
+        return 0
 
 
 def refresh_attention(server):

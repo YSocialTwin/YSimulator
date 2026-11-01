@@ -423,6 +423,11 @@ class OrchestratorServer:
             self._federation_gate = build_gate(self, self.simulation_config)
 
     @property
+    def engine(self):
+        """SQLAlchemy engine of the experiment database (what the federation adapter reads and writes through)."""
+        return self.db.engine
+
+    @property
     def day(self) -> int:
         """Get current simulation day from RoundManager."""
         return self.round_manager.day
@@ -2502,6 +2507,22 @@ class OrchestratorServer:
         if self._federation_adapter is None:
             return {}
         return self._federation_adapter.attention_multipliers()
+
+    def get_federation_provisioned(self, client_id: str = None, known: list = ()) -> list:
+        """Profiles of the accounts the federation created here (INV-19) that this client has to give an agent to, except the ids it
+        plays already (federation only; [] when it is off)."""
+        adapter = self._federation_adapter
+        if adapter is None or not hasattr(adapter, "provisioned_accounts"):
+            return []
+        return adapter.provisioned_accounts(client_id, known)
+
+    def federation_adopted(self, client_id: str, agent_ids: list) -> bool:
+        """The client now plays these provisioned accounts (False when the federation is off)."""
+        adapter = self._federation_adapter
+        if adapter is None or not hasattr(adapter, "mark_adopted"):
+            return False
+        adapter.mark_adopted(client_id, agent_ids)
+        return True
 
     def get_federation_destinations(self, agent_id: str, client_id: str = None) -> List[str]:
         """Members where this agent can cross-post now (federation, crosspost.mode = agent_action only)."""

@@ -10,8 +10,8 @@ Bus and membership (F3.4c), same design as YServer:
 - ingest_inbox materialises crosspost.v1 as a post of the author, once per fed_msg_id (INV-05), with a federation_ref row.
 Affective report (F4.1): native stress/reward read from the stress_reward table. Attention (F4.3): multipliers stored per account, read by the client.
 
-`host` is the object that owns the database: it needs `engine`, `post_service`, `current_round_id` and `recent_posts_cache`
-(the OrchestratorServer; a small stand-in in tests)."""
+`host` is the object that owns the database: it needs `engine`, `post_service`, `current_round_id`, `recent_posts_cache` and, to
+create accounts on request (INV-19), `register_agents` (the OrchestratorServer; a small stand-in in tests)."""
 
 import logging
 import threading
@@ -123,6 +123,103 @@ class YSimulatorAdapter(BoundAccountsMixin, PlatformAdapter):
         engine = self.host.engine
         ensure_tables(engine)
         return Session(engine)
+
+    # -- accounts created on request (protocol 1.2, INV-19) ------------------------------------
+    PROVISION_FIELDS = ("leaning", "age", "oe", "co", "ex", "ag", "ne", "language", "education_level", "gender", "nationality",
+                        "toxicity", "profession", "archetype", "cluster", "llm", "daily_activity_level", "round_actions",
+                        "activity_profile", "recsys_type", "frecsys_type")
+    PROVISION_NAMESPACE = uuid.UUID("5c3c7f0e-6a41-4c0e-9d57-0f3d1b8a2e11")
+
+    @classmethod
+    def provisioned_user_id(cls, username):
+        """Deterministic UUID of the account created for `username` (the same name always gives the same id)."""
+        return str(uuid.uuid5(cls.PROVISION_NAMESPACE, f"ysimulator:federation:{username}"))
+
+    def _provision_profile(self, req, name):
+        """AgentProfile of the agent that joins: harmless defaults for the platform's fields (profile traits, leaning, age, gender,
+        nationality, toxicity, profession, language) and the interests of the request; what the request carries (the fields
+        at the top level or under `extras`) wins."""
+        from YSimulator.YClient.classes.ray_models import AgentProfile
+
+        extras = req.get("extras") if isinstance(req.get("extras"), dict) else {}
+        fields = {"leaning": "neutral", "age": 30, "oe": "medium", "co": "medium", "ex": "medium", "ag": "medium", "ne": "medium",
+                  "language": "en", "education_level": "", "gender": "non-binary", "nationality": "", "toxicity": "no",
+                  "profession": "", "llm": False, "cluster": 0}
+        for key in self.PROVISION_FIELDS:
+            value = req.get(key, extras.get(key))
+            if value is not None and value != "":
+                fields[key] = value
+        topics = [str(t) for t in (req.get("interests") or [])]
+        return AgentProfile(id=self.provisioned_user_id(name), username=name, email=f"{name}@federation.local", password="federation",
+                            user_type="user", joined_on=self.host.current_round_id, is_page=0, left_on=None,
+                            interests=(topics, [1] * len(topics)) if topics else None, **fields)
+
+    def provision_accounts(self, requests):
+        """Create the account of each agent that decided to join this platform (username = the agent's name; UUID id, profile
+        defaults, interests and any profile field from the request) through the server's own registration, and report which were
+        created. A name that is already an account is bound as it is, never created twice; one that cannot be a username
+        (1-50 characters) is skipped."""
+        import dataclasses
+        import json
+
+        from YSimulator.YServer.classes.models import User_mgmt
+
+        from .tables import FederationProvisioned
+
+        done = []
+        for req in requests:
+            gid, name = str(req["global_agent_id"]), str(req["username"])
+            with self._lock:
+                with Session(self.host.engine) as s:
+                    uid = s.scalar(select(User_mgmt.id).where(User_mgmt.username == name))
+                if uid is None:
+                    if not name.strip() or len(name) > 50:
+                        log.warning("federation: cannot create an account named %r (1-50 characters)", name)
+                        continue
+                    profile = self._provision_profile(req, name)
+                    self.host.register_agents([profile])
+                    uid = profile.id
+                    with self._session() as s:
+                        s.add(FederationProvisioned(user_id=uid, global_agent_id=gid, username=name,
+                                                    profile_json=json.dumps(dataclasses.asdict(profile))))
+                        s.commit()
+                self.record_provisioned(gid, uid, name)
+            done.append({"global_agent_id": gid, "local_account_id": str(uid)})
+        return done
+
+    def provisioned_accounts(self, client_id, known=()):
+        """Profiles of the accounts created here that `client_id` has to give an agent, except the ids in `known` (the ones it plays
+        already): the ones nobody adopted that it claims (the first client to ask) and the ones it adopted (offered again so that
+        a restarted client gets its agents back)."""
+        import json
+
+        from YSimulator.YClient.classes.ray_models import AgentProfile
+
+        from .tables import FederationProvisioned
+
+        out, known = [], {str(k) for k in known}
+        with self._lock, self._session() as s:
+            for row in s.scalars(select(FederationProvisioned).order_by(FederationProvisioned.user_id)).all():
+                if row.claimed_by not in (None, client_id) or row.user_id in known:
+                    continue
+                if row.claimed_by is None:
+                    row.claimed_by = client_id
+                data = json.loads(row.profile_json)
+                if data.get("interests"):
+                    data["interests"] = (list(data["interests"][0]), list(data["interests"][1]))
+                out.append(AgentProfile(**data))
+            s.commit()
+        return out
+
+    def mark_adopted(self, client_id, user_ids):
+        from .tables import FederationProvisioned
+
+        with self._lock, self._session() as s:
+            for uid in user_ids:
+                row = s.get(FederationProvisioned, str(uid))
+                if row is not None and row.claimed_by in (None, client_id):
+                    row.adopted, row.claimed_by = True, client_id
+            s.commit()
 
     # -- membership --------------------------------------------------------------------
     def apply_membership(self, changes):

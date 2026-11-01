@@ -4,10 +4,12 @@ federation_membership: state of each local account as the coordinator told it (d
 federation_ref:        every content materialised from a cross-post (origin = federation) with its source.
 federation_export:     posts handed to the bus, with tick and sequence number, so that exporting the same tick again
                        gives the same messages (INV-05); tick NULL = marked by the agent, not exported yet.
+federation_provisioned: accounts created on the coordinator's request (INV-19), the profile each was built from and the client that
+                       adopted it.
 federation_state:      small key/value store (watermark of the posts that existed before the federation started).
 They live in a metadata of their own: the existing tables and their creation do not change."""
 
-from sqlalchemy import Column, Float, Integer, String, Text
+from sqlalchemy import Boolean, Column, Float, Integer, String, Text
 from sqlalchemy.orm import declarative_base
 
 Base = declarative_base()
@@ -75,6 +77,22 @@ class FederationCrosspost(Base):
     account_id = Column(String(64), nullable=True)
     tick = Column(Integer, nullable=True)
     seq = Column(Integer, nullable=True)
+
+
+class FederationProvisioned(Base):
+    """INV-19: an account created here because the coordinator asked for it (the agent of a client of another platform decided to
+    join). A client of this platform adopts it (gives it an agent that acts); `claimed_by` is the first client that was offered it
+    (two clients never adopt the same account), `adopted` tells it is in play. `profile_json` is the profile the account was
+    built from, so that a restarted client gets the same agent back."""
+
+    __tablename__ = "federation_provisioned"
+
+    user_id = Column(String(36), primary_key=True)
+    global_agent_id = Column(String(64), nullable=False, unique=True)
+    username = Column(String(50), nullable=False)
+    profile_json = Column(Text, nullable=False, default="{}")
+    claimed_by = Column(String(64), nullable=True)
+    adopted = Column(Boolean, nullable=False, default=False)
 
 
 class FederationAttention(Base):

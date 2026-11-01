@@ -91,3 +91,32 @@ def test_attention_multiplier_scales_the_actions_with_its_own_generator(monkeypa
     assert federation.scale_actions(3, "a") == 6
     federation.install({})
     assert federation.scale_actions(5, "a") == 5  # federation off: identity
+
+
+def test_an_adopted_agent_is_in_the_list_the_scheduler_samples(monkeypatch):
+    """INV-19: the adopted profile joins the shared population list, so it is sampled from the next slot like any agent."""
+    import ray
+
+    from YSimulator.YClient.simulation.agent_scheduler import AgentScheduler
+
+    federation.install({"federation": {"enabled": True, "adopt": True}})
+    monkeypatch.setattr(ray, "get", lambda ref: ref)
+    newcomer = SimpleNamespace(id="n", activity_profile="p", is_page=0, username="newcomer")
+    seen = []
+    server = SimpleNamespace(
+        get_federation_provisioned=SimpleNamespace(remote=lambda cid, known: [newcomer] if "n" not in known else []),
+        federation_adopted=SimpleNamespace(remote=lambda cid, ids: seen.append((cid, ids)) or True),
+        get_federation_inactive_agents=SimpleNamespace(remote=lambda: []),
+        get_federation_attention=SimpleNamespace(remote=lambda: {}))
+    agents = [SimpleNamespace(id="a", activity_profile="p", is_page=0, username="a")]
+    sch = AgentScheduler.__new__(AgentScheduler)
+    sch.agent_profiles, sch.hourly_activity, sch.activity_profiles = agents, {1: 1.0}, {"p": list(range(24))}
+    sch.archetypes_enabled, sch.archetype_distribution, sch.churn_enabled = False, None, False
+    sch.server, sch.logger = server, SimpleNamespace(info=lambda *a, **k: None, debug=lambda *a, **k: None, warning=lambda *a, **k: None)
+    sch._get_churned_agents = lambda: set()
+    sch._promote_agents_with_pending_mentions = lambda active, churned: active
+    assert [a.id for a in AgentScheduler.select_active_agents(sch, 1)[0]] == ["a"]
+    assert federation.adopt_provisioned(server, "c1", agents) == 1 and seen == [("c1", ["n"])]
+    assert sorted(a.id for a in AgentScheduler.select_active_agents(sch, 1)[0]) == ["a", "n"]
+    assert federation.adopt_provisioned(server, "c1", agents) == 0 and len(agents) == 2
+    federation.install({})

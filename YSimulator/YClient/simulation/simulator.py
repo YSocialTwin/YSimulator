@@ -235,6 +235,10 @@ class Simulator:
                     completed_successfully = True
                     break
 
+                _federation.adopt_provisioned(  # agents for the accounts the federation created here (INV-19); no-op unless `adopt`
+                    self.server, self.client_id, self.agent_profiles
+                )
+
                 # Process simulation round
                 sim_start = time.time()
                 actions, active_agent_ids = self._simulate_round(
