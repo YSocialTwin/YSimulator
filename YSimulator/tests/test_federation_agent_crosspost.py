@@ -165,3 +165,39 @@ def test_the_five_prompts_exist_in_both_languages_and_render():
         for lang in ("en", "it"):
             text = prompt_store.prompt(federation.adapt_prompt_key(dest), language=lang, source_platform="forum", text="SAMPLE")
             assert "SAMPLE" in text and "{" not in text
+
+
+# -- topic migration ---------------------------------------------------------------------------------------
+def test_topics_are_matched_ignoring_case_and_missing_ones_are_created_once(host):  # noqa: F811
+    from sqlalchemy import select as sel
+
+    from YSimulator.YServer.classes.models import Interest, PostTopic
+    from YSimulator.YServer.federation.tables import FederationTopic
+    from tests.test_federation_bus import crosspost
+
+    a = adapter_for(host, create_topics=True)
+    assert a.ingest_inbox(5, [crosspost(0, U[1], "x", topics=["Music", "Chess", "chess", " "])]).materialized == 1
+    with Session(host.engine) as s:
+        post = s.scalars(sel(Post).where(Post.tweet == "x")).one()
+        names = sorted(s.scalar(sel(Interest.interest).where(Interest.iid == t.topic_id))
+                       for t in s.scalars(sel(PostTopic).where(PostTopic.post_id == post.id)).all())
+        assert names == ["Chess", "music"]  # "Music" matched the existing "music"; "Chess" was created, once
+        assert [(t.name, t.source_member, t.created_tick) for t in s.scalars(sel(FederationTopic)).all()] == [("Chess", "forum", 5)]
+    assert a.ingest_inbox(6, [crosspost(1, U[2], "y", topics=["CHESS"])]).materialized == 1  # reused, not created again
+    with Session(host.engine) as s:
+        assert len(s.scalars(sel(FederationTopic)).all()) == 1
+        assert len(s.scalars(sel(Interest).where(Interest.interest.in_(["Chess", "CHESS"]))).all()) == 1
+
+
+def test_a_redelivered_message_creates_no_topic_twice(host):  # noqa: F811
+    from sqlalchemy import select as sel
+
+    from YSimulator.YServer.classes.models import PostTopic
+    from tests.test_federation_bus import crosspost
+
+    a = adapter_for(host, create_topics=True)
+    env = crosspost(0, U[1], "x", topics=["Gardening"])
+    a.ingest_inbox(5, [env])
+    a.ingest_inbox(6, [env])
+    with Session(host.engine) as s:
+        assert len(s.scalars(sel(PostTopic)).all()) == 1

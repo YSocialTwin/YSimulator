@@ -32,7 +32,7 @@ class YSimulatorAdapter(PlatformAdapter):
     platform = "microblogging"
 
     def __init__(self, member, federation_id=1, host=None, accounts=None, export_policy="marked", emit_exposures=False,
-                 crosspost_mode="coordinator_rule"):
+                 crosspost_mode="coordinator_rule", create_topics=False):
         """accounts: {global_agent_id: local agent id}; without an entry the global id is the local agent id."""
         if export_policy not in ("marked", "all"):
             raise ValueError("export_policy must be 'marked' or 'all'")
@@ -44,6 +44,7 @@ class YSimulatorAdapter(PlatformAdapter):
         if crosspost_mode not in ("coordinator_rule", "agent_action"):
             raise ValueError("crosspost_mode must be 'coordinator_rule' or 'agent_action'")
         self.crosspost_mode = crosspost_mode
+        self.create_topics = bool(create_topics)  # topic migration: create the topics a cross-post carries and the platform lacks
         self._destinations = {}  # {global_agent_id: [{"member", "local_account_id"}]}, set by the gate before each export
         self._accounts = {str(k): str(v) for k, v in (accounts or {}).items()}
         self._by_user = {v: k for k, v in self._accounts.items()}
@@ -290,12 +291,29 @@ class YSimulatorAdapter(PlatformAdapter):
                               .order_by(FederationCrosspost.seq)).all())
 
     # -- bus: ingest -------------------------------------------------------------------
-    def _topic_ids(self, names):
-        ids = []
+    def _topic_ids(self, s, names, tick, source_member):
+        """Topic migration: ids of the platform's topics for the names a cross-post carries, matched ignoring case; the
+        ones the platform does not have are created (and recorded in federation_topic). Payload order, no duplicates."""
+        from sqlalchemy import func
+
+        from YSimulator.YServer.classes.models import Interest
+        from .tables import FederationTopic
+
+        ids, seen = [], set()
         for name in names or []:
-            tid = self.host.post_service.get_topic_by_name(str(name))
-            if tid and tid not in ids:
-                ids.append(tid)
+            name = " ".join(str(name).split())
+            if not name or name.lower() in seen:
+                continue
+            seen.add(name.lower())
+            iid = s.scalars(select(Interest.iid).where(func.lower(Interest.interest) == name.lower()).order_by(Interest.iid)).first()
+            if iid is None and not self.create_topics:
+                continue
+            if iid is None:
+                iid = str(uuid.uuid4())
+                s.add(Interest(iid=iid, interest=name))
+                s.add(FederationTopic(name=name, interest_id=iid, created_tick=int(tick), source_member=source_member))
+                s.flush()
+            ids.append(iid)
         return ids
 
     def ingest_inbox(self, tick, envelopes):
@@ -323,7 +341,7 @@ class YSimulatorAdapter(PlatformAdapter):
                 post_id = str(uuid.uuid4())
                 s.add(Post(id=post_id, tweet=payload["text_excerpt"], user_id=uid, comment_to="-1", thread_id=post_id,
                            round=self.host.current_round_id))
-                for topic_id in self._topic_ids(payload.get("topics")):
+                for topic_id in self._topic_ids(s, payload.get("topics"), tick, env.source_member):
                     s.add(PostTopic(id=str(uuid.uuid4()), post_id=post_id, topic_id=topic_id))
                 s.add(FederationRef(local_kind="post", local_id=post_id, source_ref=payload["source_ref"],
                                     fed_msg_id=env.fed_msg_id))

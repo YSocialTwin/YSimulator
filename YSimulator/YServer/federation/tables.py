@@ -32,6 +32,17 @@ class FederationRef(Base):
     fed_msg_id = Column(String(200), nullable=False, unique=True)
 
 
+class FederationTopic(Base):
+    """A topic created on this platform because content that came from another platform carried it."""
+
+    __tablename__ = "federation_topic"
+
+    name = Column(String(200), primary_key=True)
+    interest_id = Column(String(36), nullable=False)
+    created_tick = Column(Integer, nullable=False)
+    source_member = Column(String(64), nullable=False)
+
+
 class FederationExport(Base):
     __tablename__ = "federation_export"
 
