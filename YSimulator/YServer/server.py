@@ -2531,6 +2531,13 @@ class OrchestratorServer:
             return []
         return adapter.destination_members(agent_id)
 
+    def get_federation_destination_info(self, agent_id: str, client_id: str = None) -> List[dict]:
+        """P15: the destinations with their platform type and name ([{member, platform, name}]); several members may share a type."""
+        adapter = self._federation_adapter
+        if adapter is None or not hasattr(adapter, "destination_info"):
+            return []
+        return adapter.destination_info(agent_id)
+
     def get_federation_inactive_agents(self, client_id: str = None) -> List[str]:
         """Local ids of the agents that are not active on this platform (federation only): the clients do not let them act."""
         if self._federation_adapter is None:

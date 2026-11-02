@@ -717,7 +717,7 @@ class SimulationClient:
             return None
         try:
             llm_actor = _get_llm_actor_for_manager(self.llm, agent_id)
-            reply = ray.get(llm_actor.adapt_crosspost.remote(dest, text, _federation.source_platform()))
+            reply = ray.get(llm_actor.adapt_crosspost.remote(_federation.platform_of(dest), text, _federation.source_platform()))
         except Exception as exc:  # a failing model must not stop the post
             self.logger.warning(f"cross-post adaptation failed for {agent_id}: {exc}")
             return None
