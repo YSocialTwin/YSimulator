@@ -761,6 +761,15 @@ class LLMService:
             # Fallback if LLM fails
             return "Sharing this!"
 
+    def decide_crosspost(self, name: str, profile: str, trigger: str, text: str, destinations: str) -> str:
+        """The raw reply of the model to the cross-post decision (crosspost.decision = llm: a JSON object, read by
+        federation.parse_decision). Errors propagate: the client then falls back to the Bernoulli draw."""
+        phrase = prompt_store.get("crosspost_decide_publish")
+        message = prompt_store.prompt("crosspost_decide", name=name, profile=profile, trigger=phrase, text=text,
+                                      destinations=destinations)
+        chain = ChatPromptTemplate.from_messages([("user", "{message}")]) | self.llm | StrOutputParser()
+        return chain.invoke({"message": message}).strip()
+
     def adapt_crosspost(self, dest: str, text: str, source_platform: str = "") -> str:
         """The agent's post rewritten for another platform (cross-post as an agent action); "" when it fails."""
         try:

@@ -281,7 +281,7 @@ class Simulator:
 
                 # Submit actions
                 submit_start = time.time()
-                _federation.mark_posts(actions, self.server)  # no-op unless the federation is on
+                _federation.mark_posts(actions, self.server, day=instruction.day)  # no-op unless the federation is on
                 ray.get(self.server.submit_actions.remote(self.client_id, actions))
                 submit_time = (time.time() - submit_start) * 1000
                 if self.memory_after_submit_fn:

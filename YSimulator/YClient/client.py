@@ -217,6 +217,8 @@ class SimulationClient:
         _federation.install(simulation_config)  # no-op unless the "federation" section is enabled
         if _federation.agent_action():
             _federation.set_adapt(self._crosspost_adapt)  # the model's version of a post for another platform
+        if _federation.decision_for("publish") and self.llm:
+            _federation.set_decider(self._crosspost_decide, self._crosspost_has_model)  # crosspost.decision = llm: the agent's model decides
         # Poll interval while waiting for the round barrier (federated runs lower it).
         self.barrier_poll_seconds = float(
             simulation_config["simulation"].get("barrier_poll_seconds", 1.0)
@@ -720,6 +722,28 @@ class SimulationClient:
             self.logger.warning(f"cross-post adaptation failed for {agent_id}: {exc}")
             return None
         return _federation.parse_reply(dest, reply)
+
+    def _crosspost_profile(self, agent_id):
+        profiles = getattr(self, "_crosspost_profiles", None)
+        if profiles is None or len(profiles) != len(self.agent_profiles):
+            profiles = self._crosspost_profiles = {str(p.id): p for p in self.agent_profiles}
+        return profiles.get(str(agent_id))
+
+    def _crosspost_has_model(self, agent_id):
+        """True when the agent plays with a model (a rule-based agent keeps the Bernoulli draw of the cross-post choice)."""
+        profile = self._crosspost_profile(agent_id)
+        return bool(self.llm) and profile is not None and bool(getattr(profile, "llm", False))
+
+    def _crosspost_decide(self, agent_id, trigger, text, dest_lines, context=None):
+        """The raw reply of the model of the agent to the prompt `crosspost_decide` (crosspost.decision = llm). One call;
+        errors propagate (the caller falls back to the draw)."""
+        profile = self._crosspost_profile(agent_id)
+        if not self._crosspost_has_model(agent_id):
+            raise RuntimeError("the agent has no model")
+        facts = [getattr(profile, a, None) for a in ("age", "gender", "nationality", "profession", "leaning", "education_level")]
+        described = ", ".join(str(f) for f in facts if f not in (None, "", 0))
+        llm_actor = _get_llm_actor_for_manager(self.llm, agent_id)
+        return ray.get(llm_actor.decide_crosspost.remote(getattr(profile, "username", str(agent_id)), described, trigger, text, dest_lines))
 
     def _target_user_id_from_post(self, post_id: Optional[str]) -> Optional[str]:
         if not post_id:
