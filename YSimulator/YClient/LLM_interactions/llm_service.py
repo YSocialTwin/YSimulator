@@ -10,9 +10,10 @@ os.environ.setdefault("LANGCHAIN_VERBOSE", "false")
 import ray
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_ollama import ChatOllama
+from langchain_ollama import ChatOllama  # noqa: F401  (kept for code that patches it)
 
 from YSimulator import prompt_store, protocol_tokens
+from YSimulator.YClient.llm_utils.chat_model import build_chat_model
 
 # Initialize logger
 logger = logging.getLogger(__name__)
@@ -118,56 +119,22 @@ class LLMService:
         # Store prompts configuration
         self.prompts_config = prompts_config
 
-        # Build base_url from address and port, tolerating missing config values.
-        llm_address = str((llm_config or {}).get("address") or "localhost").strip()
-        llm_port = (llm_config or {}).get("port", 11434)
-        llm_model = str((llm_config or {}).get("model") or "llama3.2")
-        llm_temperature = (llm_config or {}).get("temperature", 0.7)
-
-        if llm_address.startswith("http://") or llm_address.startswith("https://"):
-            logger.warning(
-                f"LLM config address should not include protocol (http://). Removing it from {llm_address}"
-            )
-            llm_address = llm_address.replace("http://", "").replace("https://", "")
-        if ":" in llm_address:
-            logger.warning(f"LLM config address include port.")
-            base_url = f"http://{llm_address}".replace("/v1", "")
-        else:
-            base_url = f"http://{llm_address}:{llm_port}".replace("/v1", "")
-
+        # Build the chat model from address, port and API key (keeps https, sends the key, picks the protocol).
         llm_config = dict(llm_config or {})
-        llm_config["address"] = llm_address
-        llm_config["port"] = llm_port
-        llm_config["model"] = llm_model
-        llm_config["temperature"] = llm_temperature
+        llm_config["model"] = str(llm_config.get("model") or "llama3.2")
+        llm_config["temperature"] = llm_config.get("temperature", 0.7)
 
         # Initialize LLM with configuration
-        self.llm = ChatOllama(model=llm_model, temperature=llm_temperature, base_url=base_url)
+        self.llm = build_chat_model(llm_config, default_model="llama3.2", default_temperature=0.7)
 
         # Initialize vision LLM if config provided
         self.llm_v = None
         if llm_v_config:
             llm_v_config = dict(llm_v_config or {})
-            llm_v_address = str(llm_v_config.get("address") or "localhost").strip()
-            llm_v_port = llm_v_config.get("port", 11434)
-            llm_v_model = str(llm_v_config.get("model") or "llama3.2")
-            llm_v_temperature = llm_v_config.get("temperature", 0.5)
-
-            if llm_v_address.startswith("http://") or llm_v_address.startswith("https://"):
-                logger.warning(
-                    f"LLM config address should not include protocol (http://). Removing it from {llm_v_address}"
-                )
-                llm_v_address = llm_v_address.replace("http://", "").replace("https://", "")
-            if ":" in llm_v_address:
-                logger.warning(f"LLM config address include port.")
-                base_url_v = f"http://{llm_v_address}".replace("/v1", "")
-            else:
-                base_url_v = f"http://{llm_v_address}:{llm_v_port}".replace("/v1", "")
-
-            self.llm_v = ChatOllama(
-                model=llm_v_model,
-                temperature=llm_v_temperature,
-                base_url=base_url_v,
+            llm_v_config["model"] = str(llm_v_config.get("model") or "llama3.2")
+            llm_v_config["temperature"] = llm_v_config.get("temperature", 0.5)
+            self.llm_v = build_chat_model(
+                llm_v_config, default_model="llama3.2", default_temperature=0.5
             )
 
         # Set up prompt logging if enabled

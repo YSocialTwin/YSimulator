@@ -4,6 +4,9 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+### Fixed
+- LLM endpoints that need an API key (OpenAI, DeepSeek, authenticated Ollama): the standard `LLMService` kept only the native Ollama protocol over plain `http` and ignored `llm_api_key`. `llm_utils/chat_model.py` now keeps the scheme and path of `address`, sends the key as a bearer token and speaks the OpenAI-compatible protocol (`langchain-openai`) to hosted providers (`llm.api_format`: `auto`, `openai`, `ollama`); the batch probes send the key too and skip Ollama's API on OpenAI-style endpoints.
+
 ### Added
 - Federation topic migration (opt-in, `federation.create_topics`, default on in the runtime): topics carried by a cross-post are matched ignoring case with the platform's interests, missing ones are created (`federation_topic` records name, tick and source platform) and attached to the post; idempotent per message.
 - Cross-post as an agent action (opt-in, `federation.crosspost_mode: agent_action`): the client draws once per platform where the agent is also active (`get_federation_destinations`) with `crosspost_propensity` and sets `crosspost_to` ([{member, text}]) on the POST action, with the model's version of the text (prompts `crosspost_adapt_<platform>`, EN and IT; `LLMService.adapt_crosspost`) or the rule text; the server adapter sends one `crosspost.v1` per chosen destination instead of `content.v1`. Default mode unchanged.
