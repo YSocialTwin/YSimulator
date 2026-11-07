@@ -50,7 +50,7 @@ def make_server(gate=None, active=("a",), submitted=("a",)):
 
     rm.advance_simulation = advance
     s = _Server(
-        _federation_gate=gate, _advance_pending=False, _advance_lock=threading.RLock(),
+        _federation_gate=gate, _advance_pending=False, _started=False, _advance_lock=threading.RLock(),
         round_manager=rm, submitted_clients=set(submitted), active=set(active),
         barrier_handler=SimpleNamespace(check_barrier_and_should_advance=lambda act, sub: set(act) <= set(sub)),
         client_manager=SimpleNamespace(clear_submitted_clients=Mock(), complete_client=Mock(return_value=True)),
@@ -130,3 +130,18 @@ def test_complete_client_reports_the_end_of_the_run():
     s = make_server(gate, active=(), submitted=())
     fn(s, "a")
     assert gate.calls[-1] == ("finished",)
+
+
+def test_a_client_left_alone_after_the_other_completed_is_not_kept_waiting():
+    """min_to_start is a condition to start the simulation, not to go on with it."""
+    fn = getattr(CLASS.get_instruction, "__wrapped__", None)
+    if fn is None:
+        pytest.skip("get_instruction is not unwrappable")
+    s = make_server(active=("a",), submitted=())
+    s.min_to_start = 2
+    s.recent_posts_cache = []
+    assert fn(s, "a").status == "WAIT"  # one client is not enough to start
+    s.active = {"a", "b"}
+    assert fn(s, "a").status == "PROCEED"
+    s.active = {"a"}  # b completed first and left
+    assert fn(s, "a").status == "PROCEED"

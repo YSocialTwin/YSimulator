@@ -416,6 +416,7 @@ class OrchestratorServer:
         self._federation_gate = None
         self._federation_adapter = None
         self._advance_pending = False  # the gate held the round back; retried from get_instruction
+        self._started = False  # the clients were enough to start (min_to_start) at least once
         self._advance_lock = threading.RLock()
         if (self.simulation_config.get("federation") or {}).get("enabled"):
             from YSimulator.YServer.federation import build_gate
@@ -1564,10 +1565,12 @@ class OrchestratorServer:
         if self._advance_pending:
             self._check_barrier_and_advance()
 
-        # 1. Pause if not enough players
-        active_clients = self._get_active_clients()
-        if len(active_clients) < self.min_to_start:
-            return SimulationInstruction(status="WAIT")
+        # 1. Pause if not enough players to START. min_to_start is a condition to start, not to continue: once the
+        # simulation is going, a client that completes its days must not leave the others waiting forever
+        if not self._started:
+            if len(self._get_active_clients()) < self.min_to_start:
+                return SimulationInstruction(status="WAIT")
+            self._started = True
 
         # 2. Wait if this client already finished the current slot
         if client_id in self.submitted_clients:
