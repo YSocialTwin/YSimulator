@@ -13,9 +13,8 @@ import sys
 import unittest
 from unittest.mock import MagicMock, patch
 
-# Mock torch before importing gpu_utils
-sys.modules["torch"] = MagicMock()
-sys.modules["torch.cuda"] = MagicMock()
+# torch is mocked per test (see ``_torch_only``): replacing it in sys.modules here would leak into every
+# test module collected afterwards and break the import of transformers.
 
 # Test tolerance for memory estimation (10% tolerance for rounding and estimation errors)
 MEMORY_ESTIMATION_TOLERANCE = 0.1
