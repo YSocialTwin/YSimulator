@@ -4,6 +4,7 @@ redis>=4.0.0,<6.0.0
 langchain>=0.3
 langchain-core>=0.3
 langchain-ollama>=0.1.0,<1.0.0
+langchain-openai>=0.2
 yclient-memory>=0.1.0
 feedparser>=6.0.0,<7.0.0
 requests>=2.28.0,<3.0.0

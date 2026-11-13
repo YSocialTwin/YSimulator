@@ -19,6 +19,7 @@ from pathlib import Path
 
 import ray
 
+from YSimulator.YClient import federation as _federation
 from YSimulator.YClient.simulation.agent_scheduler import AgentScheduler
 from YSimulator.YClient.simulation.batch_processor import BatchProcessor
 from YSimulator.YClient.simulation.lifecycle_manager import LifecycleManager
@@ -63,6 +64,7 @@ class Simulator:
         memory_after_submit_fn=None,
         prepare_active_agents_fn=None,
         prepare_actions_fn=None,
+        barrier_poll_seconds: float = 1.0,
     ):
         """
         Initialize the Simulator.
@@ -112,6 +114,8 @@ class Simulator:
         self.memory_after_submit_fn = memory_after_submit_fn
         self.prepare_active_agents_fn = prepare_active_agents_fn
         self.prepare_actions_fn = prepare_actions_fn
+        # Seconds slept while the server answers WAIT (round barrier closed).
+        self.barrier_poll_seconds = barrier_poll_seconds
 
     def run(self, calculate_opinion_updates_fn) -> None:
         """
@@ -208,7 +212,7 @@ class Simulator:
                 instruction = ray.get(self.server.get_instruction.remote(self.client_id))
 
                 if instruction.status == "WAIT":
-                    time.sleep(1)
+                    time.sleep(self.barrier_poll_seconds)
                     continue
 
                 # Check if we've reached our personal maximum day (client-side tracking)
@@ -230,6 +234,10 @@ class Simulator:
                     )
                     completed_successfully = True
                     break
+
+                _federation.adopt_provisioned(  # agents for the accounts the federation created here (INV-19); no-op unless `adopt`
+                    self.server, self.client_id, self.agent_profiles
+                )
 
                 # Process simulation round
                 sim_start = time.time()
@@ -273,6 +281,9 @@ class Simulator:
 
                 # Submit actions
                 submit_start = time.time()
+                _federation.mark_posts(
+                    actions, self.server, day=instruction.day
+                )  # no-op unless the federation is on
                 ray.get(self.server.submit_actions.remote(self.client_id, actions))
                 submit_time = (time.time() - submit_start) * 1000
                 if self.memory_after_submit_fn:

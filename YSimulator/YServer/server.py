@@ -11,6 +11,7 @@ import json
 import logging
 import os
 import shutil
+import threading
 import time
 import uuid
 from datetime import datetime, timezone
@@ -410,6 +411,22 @@ class OrchestratorServer:
                 }
             },
         )
+
+        # Federation (opt-in): None means standalone, exactly as before.
+        self._federation_gate = None
+        self._federation_adapter = None
+        self._advance_pending = False  # the gate held the round back; retried from get_instruction
+        self._started = False  # the clients were enough to start (min_to_start) at least once
+        self._advance_lock = threading.RLock()
+        if (self.simulation_config.get("federation") or {}).get("enabled"):
+            from YSimulator.YServer.federation import build_gate
+
+            self._federation_gate = build_gate(self, self.simulation_config)
+
+    @property
+    def engine(self):
+        """SQLAlchemy engine of the experiment database (what the federation adapter reads and writes through)."""
+        return self.db.engine
 
     @property
     def day(self) -> int:
@@ -1456,6 +1473,9 @@ class OrchestratorServer:
         # Check if completing this client unblocks the barrier
         self._check_barrier_and_advance()
 
+        if self._federation_gate is not None and not self._get_active_clients():
+            self._federation_gate.on_finished()
+
         return result
 
     @log_server_request
@@ -1541,10 +1561,16 @@ class OrchestratorServer:
         # Check for stale clients before processing
         self._check_for_stale_clients()
 
-        # 1. Pause if not enough players
-        active_clients = self._get_active_clients()
-        if len(active_clients) < self.min_to_start:
-            return SimulationInstruction(status="WAIT")
+        # The federation gate held the round back: ask again (clients poll here while they wait)
+        if self._advance_pending:
+            self._check_barrier_and_advance()
+
+        # 1. Pause if not enough players to START. min_to_start is a condition to start, not to continue: once the
+        # simulation is going, a client that completes its days must not leave the others waiting forever
+        if not self._started:
+            if len(self._get_active_clients()) < self.min_to_start:
+                return SimulationInstruction(status="WAIT")
+            self._started = True
 
         # 2. Wait if this client already finished the current slot
         if client_id in self.submitted_clients:
@@ -1584,6 +1610,13 @@ class OrchestratorServer:
                 # Collect new post IDs from successful results
                 if result.success and result.new_ids:
                     new_ids.extend(result.new_ids)
+                    # federation (opt-in): the agent chose to cross-post this post
+                    if self._federation_adapter is not None and getattr(act, "crosspost", False):
+                        targets = getattr(act, "crosspost_to", None)
+                        if isinstance(targets, list):
+                            self._federation_adapter.mark_for_export(result.new_ids[0], targets)
+                        else:
+                            self._federation_adapter.mark_for_export(result.new_ids[0])
 
                 if (
                     result.success
@@ -1983,8 +2016,16 @@ class OrchestratorServer:
         """
         Check if all active clients have submitted actions and advance simulation state.
 
-        Delegates to BarrierHandler and RoundManager for coordination logic.
+        Delegates to BarrierHandler and RoundManager for coordination logic. With a federation gate the
+        advance also needs the coordinator's consent (the local barrier is the "ready" of this member).
         """
+        if self._federation_gate is None:
+            self._check_barrier_and_advance_locked()
+            return
+        with self._advance_lock:  # get_instruction polls concurrently: one advance at a time
+            self._check_barrier_and_advance_locked()
+
+    def _check_barrier_and_advance_locked(self) -> None:
         active_clients = self._get_active_clients()
 
         # Check if barrier should be released
@@ -1993,6 +2034,13 @@ class OrchestratorServer:
         )
 
         if should_advance:
+            if self._federation_gate is not None and not self._federation_gate.on_barrier_ready(
+                (self.day, self.slot)
+            ):
+                self._advance_pending = True
+                return
+            self._advance_pending = False
+
             # Advance simulation using RoundManager BEFORE clearing submitted clients
             # This prevents race condition where fast clients could get the same slot twice
             result = self.round_manager.advance_simulation(
@@ -2007,6 +2055,9 @@ class OrchestratorServer:
                 self.day
             ):
                 self.archetype_manager.perform_transitions(self.day)
+
+            if self._federation_gate is not None:
+                self._federation_gate.on_round_opened((self.day, self.slot))
 
     def _perform_archetype_transitions(self) -> None:
         """
@@ -2137,14 +2188,21 @@ class OrchestratorServer:
             limit = self.default_recommendation_limit
 
         # Delegate to ContentRecommender
+        fetch_limit = limit
+        if self._federation_adapter is not None and self._federation_adapter.inactive_agent_ids():
+            fetch_limit = (
+                limit * 2
+            )  # some will be dropped: accounts that are not active are invisible
         post_ids = self.content_recommender.get_recommended_posts(
             agent_id=agent_id,
             mode=mode,
-            limit=limit,
+            limit=fetch_limit,
             followers_ratio=followers_ratio,
             day=self.day,
             slot=self.slot,
         )
+        if self._federation_adapter is not None:  # accounts that are not active are invisible
+            post_ids = self._federation_adapter.filter_posts(post_ids)[:limit]
 
         # Save recommendations to database (and Redis if enabled)
         if post_ids:
@@ -2290,7 +2348,10 @@ class OrchestratorServer:
         Returns:
             List[str]: List of post UUIDs from other users on this topic
         """
-        return self.post_service.search_posts_by_topic(topic_id, agent_id, limit)
+        found = self.post_service.search_posts_by_topic(topic_id, agent_id, limit)
+        if self._federation_adapter is not None:  # accounts that are not active are invisible
+            found = self._federation_adapter.filter_posts(found)
+        return found
 
     @log_server_request
     def get_post_topics(self, post_id: str, client_id: str = None) -> List[str]:
@@ -2439,9 +2500,58 @@ class OrchestratorServer:
             List[str]: List of user UUIDs recommended for the agent to follow
         """
         if self.db.use_redis:
-            return self._get_follow_suggestions_redis(agent_id, mode, n_neighbors, leaning_bias)
+            suggestions = self._get_follow_suggestions_redis(
+                agent_id, mode, n_neighbors, leaning_bias
+            )
         else:
-            return self._get_follow_suggestions_sql(agent_id, mode, n_neighbors, leaning_bias)
+            suggestions = self._get_follow_suggestions_sql(
+                agent_id, mode, n_neighbors, leaning_bias
+            )
+        if self._federation_adapter is not None:  # accounts that are not active are invisible
+            suggestions = self._federation_adapter.filter_users(suggestions)
+        return suggestions
+
+    def get_federation_attention(self, client_id: str = None) -> Dict[str, float]:
+        """{local agent id: attention multiplier of the day} (federation only; agents not listed: 1)."""
+        if self._federation_adapter is None:
+            return {}
+        return self._federation_adapter.attention_multipliers()
+
+    def get_federation_provisioned(self, client_id: str = None, known: list = ()) -> list:
+        """Profiles of the accounts the federation created here (INV-19) that this client has to give an agent to, except the ids it
+        plays already (federation only; [] when it is off)."""
+        adapter = self._federation_adapter
+        if adapter is None or not hasattr(adapter, "provisioned_accounts"):
+            return []
+        return adapter.provisioned_accounts(client_id, known)
+
+    def federation_adopted(self, client_id: str, agent_ids: list) -> bool:
+        """The client now plays these provisioned accounts (False when the federation is off)."""
+        adapter = self._federation_adapter
+        if adapter is None or not hasattr(adapter, "mark_adopted"):
+            return False
+        adapter.mark_adopted(client_id, agent_ids)
+        return True
+
+    def get_federation_destinations(self, agent_id: str, client_id: str = None) -> List[str]:
+        """Members where this agent can cross-post now (federation, crosspost.mode = agent_action only)."""
+        adapter = self._federation_adapter
+        if adapter is None or not hasattr(adapter, "destination_members"):
+            return []
+        return adapter.destination_members(agent_id)
+
+    def get_federation_destination_info(self, agent_id: str, client_id: str = None) -> List[dict]:
+        """P15: the destinations with their platform type and name ([{member, platform, name}]); several members may share a type."""
+        adapter = self._federation_adapter
+        if adapter is None or not hasattr(adapter, "destination_info"):
+            return []
+        return adapter.destination_info(agent_id)
+
+    def get_federation_inactive_agents(self, client_id: str = None) -> List[str]:
+        """Local ids of the agents that are not active on this platform (federation only): the clients do not let them act."""
+        if self._federation_adapter is None:
+            return []
+        return sorted(self._federation_adapter.inactive_agent_ids())
 
     def _get_follow_suggestions_sql(
         self, agent_id: str, mode: str, n_neighbors: int, leaning_bias: int

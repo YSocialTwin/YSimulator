@@ -16,6 +16,7 @@ import requests
 from langchain_ollama import ChatOllama
 
 from YSimulator.YClient.LLM_interactions.vllm_service import VLLMService
+from YSimulator.YClient.llm_utils.chat_model import ollama_client_kwargs, uses_openai_protocol
 
 logger = logging.getLogger(__name__)
 
@@ -215,6 +216,9 @@ def _probe_ollama_batch_support(
         }
         if "timeout" in llm_config:
             probe_kwargs["timeout"] = llm_config["timeout"]
+        client_kwargs = ollama_client_kwargs(llm_config)
+        if client_kwargs:
+            probe_kwargs["client_kwargs"] = client_kwargs
 
         probe_model = ChatOllama(**probe_kwargs)
         probe_inputs = [
@@ -244,6 +248,9 @@ def resolve_remote_batch_provider(
 
     if api_format != "auto":
         probe_order = [api_format]
+    elif uses_openai_protocol(llm_config) and backend != "ollama":
+        # A hosted OpenAI-compatible provider (API key or https) does not speak Ollama's native API.
+        probe_order = ["openai"]
     elif backend == "ollama":
         # Avoid probing OpenAI-compatible /v1/completions first on Ollama
         # endpoints, which produces a misleading 400 during normal startup.
@@ -364,6 +371,9 @@ class RemoteBatchLLMService(_VLLMServiceBase):
         }
         if "timeout" in config:
             llm_kwargs["timeout"] = config["timeout"]
+        client_kwargs = ollama_client_kwargs(config)
+        if client_kwargs:
+            llm_kwargs["client_kwargs"] = client_kwargs
         return _OllamaChatModelAdapter(ChatOllama(**llm_kwargs))
 
     def get_capabilities(self) -> Dict[str, Any]:

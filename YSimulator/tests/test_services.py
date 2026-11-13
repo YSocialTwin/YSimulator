@@ -416,7 +416,7 @@ class TestRecommendationService:
 
         assert result is True
         mock_interest_repo.add_agent_opinion.assert_called_once_with(
-            agent_id, topic_id, opinion, round_id
+            agent_id=agent_id, topic_id=topic_id, opinion=opinion, round_id=round_id
         )
 
     def test_get_latest_agent_opinion(self, service, mock_interest_repo):

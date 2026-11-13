@@ -18,7 +18,7 @@ def _ensure_sys_messages_duration_schema(engine, inspector) -> None:
     dialect = engine.dialect.name
     with engine.begin() as conn:
         if dialect == "sqlite":
-            conn.execute(text("""
+            sql = """
                     CREATE TABLE sys_messages__new (
                         id VARCHAR(36) PRIMARY KEY,
                         type TEXT NOT NULL,
@@ -27,9 +27,10 @@ def _ensure_sys_messages_duration_schema(engine, inspector) -> None:
                         from_round VARCHAR(36) REFERENCES rounds(id),
                         duration INTEGER
                     )
-                    """))
+                    """
+            conn.execute(text(sql))
             if has_to_round:
-                conn.execute(text("""
+                sql = """
                         INSERT INTO sys_messages__new (id, type, to_uid, message, from_round, duration)
                         SELECT
                             sm.id,
@@ -48,20 +49,22 @@ def _ensure_sys_messages_duration_schema(engine, inspector) -> None:
                         FROM sys_messages sm
                         LEFT JOIN rounds rf ON rf.id = sm.from_round
                         LEFT JOIN rounds rt ON rt.id = sm.to_round
-                        """))
+                        """
+                conn.execute(text(sql))
             else:
-                conn.execute(text("""
+                sql = """
                         INSERT INTO sys_messages__new (id, type, to_uid, message, from_round, duration)
                         SELECT id, type, to_uid, message, from_round, duration
                         FROM sys_messages
-                        """))
+                        """
+                conn.execute(text(sql))
             conn.execute(text("DROP TABLE sys_messages"))
             conn.execute(text("ALTER TABLE sys_messages__new RENAME TO sys_messages"))
         else:
             if not has_duration:
                 conn.execute(text("ALTER TABLE sys_messages ADD COLUMN duration INTEGER"))
             if has_to_round:
-                conn.execute(text("""
+                sql = """
                         UPDATE sys_messages AS sm
                         SET duration = CASE
                             WHEN sm.duration IS NOT NULL THEN sm.duration
@@ -74,7 +77,8 @@ def _ensure_sys_messages_duration_schema(engine, inspector) -> None:
                         END
                         FROM rounds AS rf, rounds AS rt
                         WHERE rf.id = sm.from_round AND rt.id = sm.to_round
-                        """))
+                        """
+                conn.execute(text(sql))
                 conn.execute(text("ALTER TABLE sys_messages DROP COLUMN to_round"))
 
 

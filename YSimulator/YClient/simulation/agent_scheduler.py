@@ -17,6 +17,7 @@ from typing import Dict, List, Set, Tuple
 
 import ray
 
+from YSimulator.YClient import federation as _federation
 from YSimulator.YClient.classes.ray_models import AgentProfile
 
 
@@ -83,6 +84,11 @@ class AgentScheduler:
         """
         # Get list of churned agents from server to filter them out
         churned_agent_ids = self._get_churned_agents()
+        if (
+            _federation.enabled()
+        ):  # agents that are not active on this platform do not act (like churned ones)
+            churned_agent_ids = set(churned_agent_ids) | _federation.inactive_ids(self.server)
+            _federation.refresh_attention(self.server)
 
         # Get hourly activity probability for this slot (default to 0.04 if not specified)
         hourly_prob = self.hourly_activity.get(slot, 0.04)
