@@ -50,12 +50,23 @@ def make_server(gate=None, active=("a",), submitted=("a",)):
 
     rm.advance_simulation = advance
     s = _Server(
-        _federation_gate=gate, _advance_pending=False, _started=False, _advance_lock=threading.RLock(),
-        round_manager=rm, submitted_clients=set(submitted), active=set(active),
-        barrier_handler=SimpleNamespace(check_barrier_and_should_advance=lambda act, sub: set(act) <= set(sub)),
-        client_manager=SimpleNamespace(clear_submitted_clients=Mock(), complete_client=Mock(return_value=True)),
+        _federation_gate=gate,
+        _advance_pending=False,
+        _started=False,
+        _advance_lock=threading.RLock(),
+        round_manager=rm,
+        submitted_clients=set(submitted),
+        active=set(active),
+        barrier_handler=SimpleNamespace(
+            check_barrier_and_should_advance=lambda act, sub: set(act) <= set(sub)
+        ),
+        client_manager=SimpleNamespace(
+            clear_submitted_clients=Mock(), complete_client=Mock(return_value=True)
+        ),
         archetype_manager=SimpleNamespace(should_perform_transitions=lambda d: False),
-        _recompute_all_agent_interests=Mock(), min_to_start=1, recent_posts_cache=[],
+        _recompute_all_agent_interests=Mock(),
+        min_to_start=1,
+        recent_posts_cache=[],
         _check_for_stale_clients=Mock(),
     )
     s._get_active_clients = lambda: s.active

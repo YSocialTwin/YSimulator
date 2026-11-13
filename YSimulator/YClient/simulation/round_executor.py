@@ -157,7 +157,9 @@ class RoundExecutor:
                     int(round(float(agent.daily_activity_level) * activity_multiplier)),
                 )
                 num_actions = random.randint(1, effective_daily_activity)
-                num_actions = _federation.scale_actions(num_actions, agent.id)  # federation attention (F4.3)
+                num_actions = _federation.scale_actions(
+                    num_actions, agent.id
+                )  # federation attention (F4.3)
 
             for action_idx in range(num_actions):
                 action_type, agent_type, target = self.select_action_fn(agent, recent_posts)

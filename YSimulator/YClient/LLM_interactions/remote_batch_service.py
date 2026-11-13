@@ -15,11 +15,11 @@ import ray
 import requests
 from langchain_ollama import ChatOllama
 
+from YSimulator.YClient.LLM_interactions.vllm_service import VLLMService
 from YSimulator.YClient.llm_utils.chat_model import (
     ollama_client_kwargs,
     uses_openai_protocol,
 )
-from YSimulator.YClient.LLM_interactions.vllm_service import VLLMService
 
 logger = logging.getLogger(__name__)
 

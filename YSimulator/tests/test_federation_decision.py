@@ -11,13 +11,19 @@ import pytest
 from YSimulator import prompt_store
 from YSimulator.YClient import federation
 
-
 DECIDE_KEY = "crosspost_decide"  # not a literal at the call: the call-site ratchet checks the real call sites only
 INTERACTION_KEY = "crosspost_decide_interaction"
 
 
 def _on(monkeypatch, dests, mode="agent_action", propensity=1.0, decision="llm", **kw):
-    section = dict(enabled=True, seed=3, member="hpc", crosspost_mode=mode, crosspost_propensity=propensity, **kw)
+    section = dict(
+        enabled=True,
+        seed=3,
+        member="hpc",
+        crosspost_mode=mode,
+        crosspost_propensity=propensity,
+        **kw,
+    )
     if decision is not None:
         section["crosspost_decision"] = decision
     federation.install({"federation": section})
@@ -37,7 +43,12 @@ class Fake:
 
 
 def _acts(n=1, kind="POST"):
-    return [SimpleNamespace(action_type=kind, agent_id=f"a{i}", content=f"post number {i} about the park") for i in range(n)]
+    return [
+        SimpleNamespace(
+            action_type=kind, agent_id=f"a{i}", content=f"post number {i} about the park"
+        )
+        for i in range(n)
+    ]
 
 
 def _marks(acts):
@@ -67,7 +78,15 @@ def test_random_mode_is_bit_identical_and_never_asks(monkeypatch):
 
 def test_agent_action_the_model_chooses_and_the_generator_is_untouched(monkeypatch):
     _on(monkeypatch, ["dating", "forum"], propensity=0.0)
-    ask = Fake(json.dumps({"crosspost": True, "destinations": ["forum", "myspace"], "text": {"forum": "Title\nBody"}}))
+    ask = Fake(
+        json.dumps(
+            {
+                "crosspost": True,
+                "destinations": ["forum", "myspace"],
+                "text": {"forum": "Title\nBody"},
+            }
+        )
+    )
     before = federation._state["rng"].getstate()
     acts = _acts(2)
     federation.mark_posts(acts, object(), day=2)
@@ -78,7 +97,10 @@ def test_agent_action_the_model_chooses_and_the_generator_is_untouched(monkeypat
 
 def test_coordinator_rule_the_model_only_marks(monkeypatch):
     _on(monkeypatch, ["forum"], mode="coordinator_rule", propensity=0.0)
-    Fake(lambda agent, text: '{"crosspost": %s, "destinations": ["forum"]}' % ("true" if agent == "a0" else "false"))
+    Fake(
+        lambda agent, text: '{"crosspost": %s, "destinations": ["forum"]}'
+        % ("true" if agent == "a0" else "false")
+    )
     acts = _acts(2)
     federation.mark_posts(acts, object(), day=2)
     assert _marks(acts) == [(True, None), (False, None)]
@@ -113,13 +135,24 @@ def test_all_destinations_unknown_means_no_cross_post(monkeypatch):
 
 
 def test_cap_per_agent_per_day(monkeypatch):
-    _on(monkeypatch, ["forum"], mode="coordinator_rule", propensity=1.0, crosspost_decision_max_per_day=2)
+    _on(
+        monkeypatch,
+        ["forum"],
+        mode="coordinator_rule",
+        propensity=1.0,
+        crosspost_decision_max_per_day=2,
+    )
     ask = Fake('{"crosspost": false}')
     for day, expected in ((1, 2), (1, 2), (2, 3)):
-        acts = [SimpleNamespace(action_type="POST", agent_id="a0", content="some text") for _ in range(1 if day == 2 else 3)]
+        acts = [
+            SimpleNamespace(action_type="POST", agent_id="a0", content="some text")
+            for _ in range(1 if day == 2 else 3)
+        ]
         federation.mark_posts(acts, object(), day=day)
         if day == 1 and expected == 2 and len(ask.calls) == 2:
-            assert _marks(acts)[2][0] is True  # the third post of the day: cap reached, the Bernoulli draw (propensity 1)
+            assert (
+                _marks(acts)[2][0] is True
+            )  # the third post of the day: cap reached, the Bernoulli draw (propensity 1)
     assert len(ask.calls) == 3
 
 
@@ -129,7 +162,9 @@ def test_rule_based_agent_keeps_the_draw_and_is_not_asked(monkeypatch):
     acts = _acts(30)
     federation.mark_posts(acts, object(), day=1)
     ref = random.Random(3)
-    assert [m[0] for m in _marks(acts)] == [ref.random() < 0.5 for _ in range(30)] and ask.calls == []
+    assert [m[0] for m in _marks(acts)] == [
+        ref.random() < 0.5 for _ in range(30)
+    ] and ask.calls == []
 
 
 def test_no_destination_and_content_not_eligible_are_not_asked(monkeypatch):
@@ -153,17 +188,43 @@ def test_only_the_publish_trigger_is_supported_by_this_client(monkeypatch):
 
 def test_the_prompts_exist_and_the_agent_side(monkeypatch):
     for lang in ("en", "it"):
-        text = prompt_store.prompt(DECIDE_KEY, language=lang, name="Ann", profile="34", text="SAMPLE",
-                                   trigger=prompt_store.get("crosspost_decide_publish", lang), destinations="- forum (2000)")
+        text = prompt_store.prompt(
+            DECIDE_KEY,
+            language=lang,
+            name="Ann",
+            profile="34",
+            text="SAMPLE",
+            trigger=prompt_store.get("crosspost_decide_publish", lang),
+            destinations="- forum (2000)",
+        )
         assert "SAMPLE" in text and '"crosspost"' in text and "{name}" not in text
     from YSimulator.YClient.client import SimulationClient
 
-    cls = getattr(SimulationClient, "__ray_metadata__").modified_class if hasattr(SimulationClient, "__ray_metadata__") else SimulationClient
+    cls = (
+        getattr(SimulationClient, "__ray_metadata__").modified_class
+        if hasattr(SimulationClient, "__ray_metadata__")
+        else SimulationClient
+    )
     client = object.__new__(cls)
     client.llm = object()
-    client.agent_profiles = [SimpleNamespace(id="a0", llm=True, username="Ann", age=30, gender="f", nationality="it",
-                                             profession="nurse", leaning="center", education_level="bsc"),
-                             SimpleNamespace(id="a1", llm=False, username="Bob")]
-    assert client._crosspost_has_model("a0") and not client._crosspost_has_model("a1") and not client._crosspost_has_model("zz")
+    client.agent_profiles = [
+        SimpleNamespace(
+            id="a0",
+            llm=True,
+            username="Ann",
+            age=30,
+            gender="f",
+            nationality="it",
+            profession="nurse",
+            leaning="center",
+            education_level="bsc",
+        ),
+        SimpleNamespace(id="a1", llm=False, username="Bob"),
+    ]
+    assert (
+        client._crosspost_has_model("a0")
+        and not client._crosspost_has_model("a1")
+        and not client._crosspost_has_model("zz")
+    )
     client.llm = None
     assert not client._crosspost_has_model("a0")

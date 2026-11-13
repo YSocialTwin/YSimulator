@@ -7,9 +7,9 @@ import pytest
 pytest.importorskip("ysocial_federation", reason="the federation SDK is not installed")
 
 from sqlalchemy.orm import Session  # noqa: E402
+from tests.test_federation_bus import ROUND, U, adapter_for, host, new_post  # noqa: E402,F401
 
 from YSimulator.YServer.classes.models import Article, Post  # noqa: E402
-from tests.test_federation_bus import ROUND, U, adapter_for, host, new_post  # noqa: E402,F401
 
 
 def _content(host, policy):  # noqa: F811
@@ -17,8 +17,27 @@ def _content(host, policy):  # noqa: F811
     plain = new_post(host, 1, "no article")
     nid, pid = str(uuid.uuid4()), str(uuid.uuid4())
     with Session(host.engine) as s:
-        s.add(Article(id=nid, title="t", summary="s", website_id="w", fetched_on="0", link="https://example.org/story"))
-        s.add(Post(id=pid, tweet="headline without url", user_id=U[1], comment_to="-1", thread_id=pid, round=ROUND, news_id=nid))
+        s.add(
+            Article(
+                id=nid,
+                title="t",
+                summary="s",
+                website_id="w",
+                fetched_on="0",
+                link="https://example.org/story",
+            )
+        )
+        s.add(
+            Post(
+                id=pid,
+                tweet="headline without url",
+                user_id=U[1],
+                comment_to="-1",
+                thread_id=pid,
+                round=ROUND,
+                news_id=nid,
+            )
+        )
         s.commit()
         return a._content(s, s.get(Post, pid)), a._content(s, s.get(Post, plain))
 

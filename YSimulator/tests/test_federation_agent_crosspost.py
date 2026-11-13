@@ -11,15 +11,20 @@ import pytest
 pytest.importorskip("ysocial_federation", reason="the federation SDK is not installed")
 
 from sqlalchemy.orm import Session  # noqa: E402
+from tests.test_federation_bus import ROUND, U, adapter_for, host, new_post  # noqa: E402,F401
 
 from YSimulator import prompt_store  # noqa: E402
 from YSimulator.YClient import federation  # noqa: E402
 from YSimulator.YServer.classes.models import Post  # noqa: E402
 from YSimulator.YServer.federation.adapter import YSimulatorAdapter  # noqa: E402
-from tests.test_federation_bus import ROUND, U, adapter_for, host, new_post  # noqa: E402,F401
 
-DEST = {"g1": [{"member": "forum", "local_account_id": "201"}, {"member": "dating", "local_account_id": "301"}],
-        "g2": [{"member": "forum", "local_account_id": "202"}]}
+DEST = {
+    "g1": [
+        {"member": "forum", "local_account_id": "201"},
+        {"member": "dating", "local_account_id": "301"},
+    ],
+    "g2": [{"member": "forum", "local_account_id": "202"}],
+}
 
 
 def agent_adapter(host, **kw):  # noqa: F811
@@ -28,29 +33,50 @@ def agent_adapter(host, **kw):  # noqa: F811
     return a
 
 
-def test_the_agent_sends_a_crosspost_with_its_own_text_to_each_chosen_destination(host):  # noqa: F811
+def test_the_agent_sends_a_crosspost_with_its_own_text_to_each_chosen_destination(
+    host,
+):  # noqa: F811
     a = agent_adapter(host)
     pid = new_post(host, 1, "original")
-    a.mark_for_export(pid, [{"member": "forum", "text": "Title\nbody"}, {"member": "dating", "text": "hi there"}])
+    a.mark_for_export(
+        pid, [{"member": "forum", "text": "Title\nbody"}, {"member": "dating", "text": "hi there"}]
+    )
     out = a.export_outbox(3)
-    assert [(e.payload_type, e.target_member, e.payload["target_account_id"], e.payload["text_excerpt"]) for e in out] == [
-        ("crosspost.v1", "dating", "301", "hi there"), ("crosspost.v1", "forum", "201", "Title\nbody")]
-    assert [e.seq for e in out] == [1, 2]  # seq 0 belongs to the post itself: no content.v1 is sent for it
+    assert [
+        (e.payload_type, e.target_member, e.payload["target_account_id"], e.payload["text_excerpt"])
+        for e in out
+    ] == [
+        ("crosspost.v1", "dating", "301", "hi there"),
+        ("crosspost.v1", "forum", "201", "Title\nbody"),
+    ]
+    assert [e.seq for e in out] == [
+        1,
+        2,
+    ]  # seq 0 belongs to the post itself: no content.v1 is sent for it
     assert all(e.source_member == "hpc" and e.tick_emitted == 3 for e in out)
-    assert out[0].payload["global_agent_id"] == "g1" and out[0].payload["source_ref"].startswith("ysocial://1/hpc/post/")
+    assert out[0].payload["global_agent_id"] == "g1" and out[0].payload["source_ref"].startswith(
+        "ysocial://1/hpc/post/"
+    )
     a.set_destinations({})  # a retry keeps the account fixed at the first export
     assert [e.to_dict() for e in a.export_outbox(3)] == [e.to_dict() for e in out]
     assert a.export_outbox(4) == []
 
 
-def test_a_destination_without_an_active_account_is_dropped_and_a_plain_mark_still_sends_content(host):  # noqa: F811
+def test_a_destination_without_an_active_account_is_dropped_and_a_plain_mark_still_sends_content(
+    host,
+):  # noqa: F811
     a = agent_adapter(host)
     p2 = new_post(host, 2, "two")
-    a.mark_for_export(p2, [{"member": "forum", "text": "ok"}, {"member": "dating", "text": "no account"}])
+    a.mark_for_export(
+        p2, [{"member": "forum", "text": "ok"}, {"member": "dating", "text": "no account"}]
+    )
     p1 = new_post(host, 1, "nowhere")
     a.mark_for_export(p1, [])
     out = a.export_outbox(3)
-    assert sorted((e.payload_type, e.target_member) for e in out) == [("content.v1", "coordinator"), ("crosspost.v1", "forum")]
+    assert sorted((e.payload_type, e.target_member) for e in out) == [
+        ("content.v1", "coordinator"),
+        ("crosspost.v1", "forum"),
+    ]
     assert len({e.seq for e in out}) == len(out)
 
 
@@ -65,7 +91,9 @@ def test_exposure_numbers_never_reuse_a_sequence_number(host):  # noqa: F811
 def test_targets_are_ignored_in_coordinator_rule_mode(host):  # noqa: F811
     a = adapter_for(host)
     a.mark_for_export(new_post(host, 1, "x"), [{"member": "forum", "text": "t"}])
-    assert [(e.payload_type, e.target_member) for e in a.export_outbox(3)] == [("content.v1", "coordinator")]
+    assert [(e.payload_type, e.target_member) for e in a.export_outbox(3)] == [
+        ("content.v1", "coordinator")
+    ]
 
 
 def test_destination_members_and_an_unknown_mode(host):  # noqa: F811
@@ -77,14 +105,26 @@ def test_destination_members_and_an_unknown_mode(host):  # noqa: F811
 
 # -- client -----------------------------------------------------------------------------------------------------
 def _server(dests):
-    return SimpleNamespace(get_federation_destinations=SimpleNamespace(remote=lambda agent_id: dests))
+    return SimpleNamespace(
+        get_federation_destinations=SimpleNamespace(remote=lambda agent_id: dests)
+    )
 
 
 def _on(monkeypatch, propensity=1.0, mode="agent_action"):
     import ray
 
     monkeypatch.setattr(ray, "get", lambda ref: ref)
-    federation.install({"federation": dict(enabled=True, seed=3, member="hpc", crosspost_mode=mode, crosspost_propensity=propensity)})
+    federation.install(
+        {
+            "federation": dict(
+                enabled=True,
+                seed=3,
+                member="hpc",
+                crosspost_mode=mode,
+                crosspost_propensity=propensity,
+            )
+        }
+    )
 
 
 def post_action(text="I love the new park downtown. Everyone should go."):
@@ -109,8 +149,13 @@ def test_client_agent_action_chooses_destinations_and_texts(monkeypatch):
     federation.set_adapt(lambda agent, dest, text: "from the model" if dest == "dating" else None)
     federation.mark_posts(acts, _server(["forum", "dating"]))
     assert acts[0].crosspost is True
-    assert acts[0].crosspost_to == [{"member": "dating", "text": "from the model"},
-                                    {"member": "forum", "text": "I love the new park downtown.\nI love the new park downtown. Everyone should go."}]
+    assert acts[0].crosspost_to == [
+        {"member": "dating", "text": "from the model"},
+        {
+            "member": "forum",
+            "text": "I love the new park downtown.\nI love the new park downtown. Everyone should go.",
+        },
+    ]
     assert not hasattr(acts[1], "crosspost")
     federation.install({})
 
@@ -140,17 +185,24 @@ def test_client_one_draw_per_destination_from_its_own_generator(monkeypatch):
     federation.install({})
 
 
-@pytest.mark.parametrize("dest,reply,expected", [
-    ("microblogging", '"Great park! #city"', "Great park! #city"),
-    ("microblogging", "<think>hm</think>\nPost: nice day out", "nice day out"),
-    ("microblogging", "x" * 400, "x" * 280),
-    ("microblogging", "  ", None),
-    ("forum", "Title: The new park\nIt opened last week. Has anyone been?", "The new park\nIt opened last week. Has anyone been?"),
-    ("forum", "", None),
-    ("photo_sharing", "```\nGolden hour ✨\n```", "Golden hour ✨"),
-    ("instant_messaging", "«hey, did you see it?»", "hey, did you see it?"),
-    ("dating", "y" * 250, "y" * 200),
-])
+@pytest.mark.parametrize(
+    "dest,reply,expected",
+    [
+        ("microblogging", '"Great park! #city"', "Great park! #city"),
+        ("microblogging", "<think>hm</think>\nPost: nice day out", "nice day out"),
+        ("microblogging", "x" * 400, "x" * 280),
+        ("microblogging", "  ", None),
+        (
+            "forum",
+            "Title: The new park\nIt opened last week. Has anyone been?",
+            "The new park\nIt opened last week. Has anyone been?",
+        ),
+        ("forum", "", None),
+        ("photo_sharing", "```\nGolden hour ✨\n```", "Golden hour ✨"),
+        ("instant_messaging", "«hey, did you see it?»", "hey, did you see it?"),
+        ("dating", "y" * 250, "y" * 200),
+    ],
+)
 def test_recorded_model_replies_are_parsed(dest, reply, expected):
     assert federation.parse_reply(dest, reply) == expected
 
@@ -163,37 +215,59 @@ def test_the_five_prompts_exist_in_both_languages_and_render():
             assert f"crosspost_adapt_{dest}" in pack
     for dest in federation.LIMITS:
         for lang in ("en", "it"):
-            text = prompt_store.prompt(federation.adapt_prompt_key(dest), language=lang, source_platform="forum", text="SAMPLE")
+            text = prompt_store.prompt(
+                federation.adapt_prompt_key(dest),
+                language=lang,
+                source_platform="forum",
+                text="SAMPLE",
+            )
             assert "SAMPLE" in text and "{" not in text
 
 
 # -- topic migration ---------------------------------------------------------------------------------------
 def test_topics_are_matched_ignoring_case_and_missing_ones_are_created_once(host):  # noqa: F811
     from sqlalchemy import select as sel
+    from tests.test_federation_bus import crosspost
 
     from YSimulator.YServer.classes.models import Interest, PostTopic
     from YSimulator.YServer.federation.tables import FederationTopic
-    from tests.test_federation_bus import crosspost
 
     a = adapter_for(host, create_topics=True)
-    assert a.ingest_inbox(5, [crosspost(0, U[1], "x", topics=["Music", "Chess", "chess", " "])]).materialized == 1
+    assert (
+        a.ingest_inbox(
+            5, [crosspost(0, U[1], "x", topics=["Music", "Chess", "chess", " "])]
+        ).materialized
+        == 1
+    )
     with Session(host.engine) as s:
         post = s.scalars(sel(Post).where(Post.tweet == "x")).one()
-        names = sorted(s.scalar(sel(Interest.interest).where(Interest.iid == t.topic_id))
-                       for t in s.scalars(sel(PostTopic).where(PostTopic.post_id == post.id)).all())
-        assert names == ["Chess", "music"]  # "Music" matched the existing "music"; "Chess" was created, once
-        assert [(t.name, t.source_member, t.created_tick) for t in s.scalars(sel(FederationTopic)).all()] == [("Chess", "forum", 5)]
-    assert a.ingest_inbox(6, [crosspost(1, U[2], "y", topics=["CHESS"])]).materialized == 1  # reused, not created again
+        names = sorted(
+            s.scalar(sel(Interest.interest).where(Interest.iid == t.topic_id))
+            for t in s.scalars(sel(PostTopic).where(PostTopic.post_id == post.id)).all()
+        )
+        assert names == [
+            "Chess",
+            "music",
+        ]  # "Music" matched the existing "music"; "Chess" was created, once
+        assert [
+            (t.name, t.source_member, t.created_tick) for t in s.scalars(sel(FederationTopic)).all()
+        ] == [("Chess", "forum", 5)]
+    assert (
+        a.ingest_inbox(6, [crosspost(1, U[2], "y", topics=["CHESS"])]).materialized == 1
+    )  # reused, not created again
     with Session(host.engine) as s:
         assert len(s.scalars(sel(FederationTopic)).all()) == 1
-        assert len(s.scalars(sel(Interest).where(Interest.interest.in_(["Chess", "CHESS"]))).all()) == 1
+        assert (
+            len(s.scalars(sel(Interest).where(Interest.interest.in_(["Chess", "CHESS"]))).all())
+            == 1
+        )
 
 
 def test_a_redelivered_message_creates_no_topic_twice(host):  # noqa: F811
     from sqlalchemy import select as sel
+    from tests.test_federation_bus import crosspost
 
     from YSimulator.YServer.classes.models import PostTopic
-    from tests.test_federation_bus import crosspost
 
     a = adapter_for(host, create_topics=True)
     env = crosspost(0, U[1], "x", topics=["Gardening"])

@@ -6,7 +6,8 @@ nothing: no call to the server, no random draw (INV-01).
 - inactive_ids(server): local ids of the agents that are not active on the platform (dormant or left); the scheduler
   treats them like churned agents, so they are not sampled and do not act.
 - mark_posts(actions): sets `crosspost = True` on the POST actions whose agent chose to cross-post (D-07): a Bernoulli
-  draw with `federation.crosspost_propensity` (default 0 = never) from a generator of its own (`federation.seed`)."""
+  draw with `federation.crosspost_propensity` (default 0 = never) from a generator of its own (`federation.seed`).
+"""
 
 from __future__ import annotations
 
@@ -17,25 +18,68 @@ import re
 import threading
 from concurrent.futures import ThreadPoolExecutor
 
-_state = {"enabled": False, "propensity": 0.0, "rng": None, "inactive": set(), "attention": {},
-          "mode": "coordinator_rule", "member": None, "peers": {}, "label": None, "adapt": None, "adopt": False, "decision": "random",
-          "triggers": ("publish",), "max_per_day": 5, "content": frozenset(), "counts": {}, "decider": None}
+_state = {
+    "enabled": False,
+    "propensity": 0.0,
+    "rng": None,
+    "inactive": set(),
+    "attention": {},
+    "mode": "coordinator_rule",
+    "member": None,
+    "peers": {},
+    "label": None,
+    "adapt": None,
+    "adopt": False,
+    "decision": "random",
+    "triggers": ("publish",),
+    "max_per_day": 5,
+    "content": frozenset(),
+    "counts": {},
+    "decider": None,
+}
 
 # Longest text each destination accepts (characters); the rules and the parser of an LLM reply both apply them.
-LIMITS = {"microblogging": 280, "forum": 2000, "photo_sharing": 300, "instant_messaging": 400, "dating": 200}
+LIMITS = {
+    "microblogging": 280,
+    "forum": 2000,
+    "photo_sharing": 300,
+    "instant_messaging": 400,
+    "dating": 200,
+}
 
 
 def install(config):
     """Read config["federation"]; call once when the client starts."""
     section = (config or {}).get("federation") or {}
     enabled = bool(section.get("enabled"))
-    _state.update(enabled=enabled, propensity=0.0, rng=None, inactive=set(), attention={},
-                  mode="coordinator_rule", member=None, peers={}, label=None, adapt=None, adopt=False, decision="random",
-                  triggers=("publish",), max_per_day=5, content=frozenset(), counts={}, decider=None)
+    _state.update(
+        enabled=enabled,
+        propensity=0.0,
+        rng=None,
+        inactive=set(),
+        attention={},
+        mode="coordinator_rule",
+        member=None,
+        peers={},
+        label=None,
+        adapt=None,
+        adopt=False,
+        decision="random",
+        triggers=("publish",),
+        max_per_day=5,
+        content=frozenset(),
+        counts={},
+        decider=None,
+    )
     if enabled:
-        _state.update(propensity=float(section.get("crosspost_propensity", 0.0)), rng=random.Random(section.get("seed", 0)),
-                      mode=str(section.get("crosspost_mode") or "coordinator_rule"), member=section.get("member"), label=section.get("name"),
-                      adopt=bool(section.get("adopt")))
+        _state.update(
+            propensity=float(section.get("crosspost_propensity", 0.0)),
+            rng=random.Random(section.get("seed", 0)),
+            mode=str(section.get("crosspost_mode") or "coordinator_rule"),
+            member=section.get("member"),
+            label=section.get("name"),
+            adopt=bool(section.get("adopt")),
+        )
         _state.update(read_decision(section))
         _state["triggers"] = tuple(t for t in _state["triggers"] if t in SUPPORTED_TRIGGERS)
     return enabled
@@ -72,10 +116,16 @@ def adopt_provisioned(server, client_id, agent_profiles):
         import ray
 
         known = {str(a.id) for a in agent_profiles}
-        fresh = [p for p in ray.get(server.get_federation_provisioned.remote(client_id, sorted(known))) if str(p.id) not in known]
+        fresh = [
+            p
+            for p in ray.get(server.get_federation_provisioned.remote(client_id, sorted(known)))
+            if str(p.id) not in known
+        ]
         if not fresh:
             return 0
-        ray.get(server.federation_adopted.remote(client_id, [str(p.id) for p in fresh]))  # before: a failure here is retried
+        ray.get(
+            server.federation_adopted.remote(client_id, [str(p.id) for p in fresh])
+        )  # before: a failure here is retried
         agent_profiles.extend(fresh)
         return len(fresh)
     except Exception:  # noqa: BLE001 - try again at the next slot
@@ -89,7 +139,9 @@ def refresh_attention(server):
     try:
         import ray
 
-        _state["attention"] = {str(k): float(v) for k, v in ray.get(server.get_federation_attention.remote()).items()}
+        _state["attention"] = {
+            str(k): float(v) for k, v in ray.get(server.get_federation_attention.remote()).items()
+        }
     except Exception:  # noqa: BLE001 - keep the last known multipliers
         pass
 
@@ -105,7 +157,9 @@ def scale_actions(n, agent_id):
         return n
     x = n * m
     whole = int(x)
-    k = whole if x == whole else whole + (1 if _state["rng"].random() < x - whole else 0)  # an exact count draws nothing
+    k = (
+        whole if x == whole else whole + (1 if _state["rng"].random() < x - whole else 0)
+    )  # an exact count draws nothing
     return max(n if m > 1.0 else 0, k)
 
 
@@ -130,7 +184,9 @@ def destinations(server, agent_id):
             return sorted(str(i["member"]) for i in info)
         except Exception:  # noqa: BLE001 - a server without it: the member names only
             pass
-        return sorted(str(m) for m in ray.get(server.get_federation_destinations.remote(str(agent_id))))
+        return sorted(
+            str(m) for m in ray.get(server.get_federation_destinations.remote(str(agent_id)))
+        )
     except Exception:  # noqa: BLE001 - no destination known: no cross-post this time
         return []
 
@@ -141,7 +197,8 @@ def source_platform():
 
 def platform_of(dest):
     """Platform type of a destination member (P15: several members may share a type; the member name is then
-    `<platform>-<id>`). The server answers it with the destinations; without it the member name is the type (older worlds)."""
+    `<platform>-<id>`). The server answers it with the destinations; without it the member name is the type (older worlds).
+    """
     return (_state["peers"].get(str(dest)) or {}).get("platform") or str(dest)
 
 
@@ -149,7 +206,10 @@ def _learn(items):
     """Remember the platform and the name of each destination the server listed (additive fields `platform`, `name`)."""
     for it in items or ():
         if isinstance(it, dict) and it.get("member") and it.get("platform"):
-            _state["peers"][str(it["member"])] = {"platform": str(it["platform"]), "name": str(it.get("name") or it["member"])}
+            _state["peers"][str(it["member"])] = {
+                "platform": str(it["platform"]),
+                "name": str(it.get("name") or it["member"]),
+            }
 
 
 def _destination_line(dest):
@@ -179,25 +239,38 @@ def rule_text(dest, text):
     text = " ".join(str(text or "").split()) if dest != "forum" else str(text or "").strip()
     if dest == "forum" and "\n" not in text:
         title = _cut(re.split(r"(?<=[.!?])\s", text, maxsplit=1)[0], 80)
-        return f"{title}\n{text}"[:LIMITS["forum"]]
+        return f"{title}\n{text}"[: LIMITS["forum"]]
     return _cut(text, LIMITS.get(dest, 280))
 
 
 def parse_reply(dest, reply, fallback=None):
     """Clean the reply of a model asked to adapt a text: no reasoning block, fences, labels or quotes; at most the
-    platform limit; for a forum a title line then a body. The fallback (default: nothing) when little is left."""
+    platform limit; for a forum a title line then a body. The fallback (default: nothing) when little is left.
+    """
     dest = platform_of(dest)
     text = re.sub(r"<think>.*?</think>", "", str(reply or ""), flags=re.S | re.I)
     text = re.sub(r"^```[a-z]*\n?|```$", "", text.strip(), flags=re.M).strip()
-    text = re.sub(r"^(post|caption|message|text|testo|didascalia|messaggio|frase)\s*:\s*", "", text, flags=re.I).strip()
-    if len(text) >= 2 and (text[0], text[-1]) in {('"', '"'), ("'", "'"), ("\u201c", "\u201d"), ("\u00ab", "\u00bb")}:
+    text = re.sub(
+        r"^(post|caption|message|text|testo|didascalia|messaggio|frase)\s*:\s*",
+        "",
+        text,
+        flags=re.I,
+    ).strip()
+    if len(text) >= 2 and (text[0], text[-1]) in {
+        ('"', '"'),
+        ("'", "'"),
+        ("\u201c", "\u201d"),
+        ("\u00ab", "\u00bb"),
+    }:
         text = text[1:-1].strip()
     if dest == "forum":
         lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
         if not lines:
             return fallback
         title = re.sub(r"^(title|titolo)\s*:\s*|^#+\s*", "", lines[0], flags=re.I).strip()
-        body = " ".join(re.sub(r"^(body|corpo)\s*:\s*", "", ln, flags=re.I) for ln in lines[1:]).strip()
+        body = " ".join(
+            re.sub(r"^(body|corpo)\s*:\s*", "", ln, flags=re.I) for ln in lines[1:]
+        ).strip()
         if not title:
             return fallback
         return _cut(f"{_cut(title, 120)}\n{body or title}", LIMITS["forum"])
@@ -251,7 +324,8 @@ def mark_posts(actions, server=None, day=None):
 
     With crosspost.decision = llm (trigger `publish`; the `interaction` trigger is not supported by this client: its
     shares are never exported) the model of each agent decides, one call per POST in parallel and each bounded by
-    DECISION_TIMEOUT; any failure falls back to the Bernoulli draw. `day` is the simulated day (cap per agent per day)."""
+    DECISION_TIMEOUT; any failure falls back to the Bernoulli draw. `day` is the simulated day (cap per agent per day).
+    """
     if not _state["enabled"]:
         return actions
     llm = decision_for("publish") and _state["decider"] is not None
@@ -260,10 +334,18 @@ def mark_posts(actions, server=None, day=None):
     posts = [a for a in actions if getattr(a, "action_type", None) == "POST"]
     decided = {}
     if llm and posts:
+
         def one(act):
             agent_id = getattr(act, "agent_id", None)
-            return decide(agent_id, getattr(act, "content", None), "publish", _asker(agent_id), day=day,
-                          dests=(lambda: destinations(server, agent_id)) if server is not None else [])
+            return decide(
+                agent_id,
+                getattr(act, "content", None),
+                "publish",
+                _asker(agent_id),
+                day=day,
+                dests=(lambda: destinations(server, agent_id)) if server is not None else [],
+            )
+
         with ThreadPoolExecutor(max_workers=min(8, len(posts))) as pool:
             decided = dict(zip((id(a) for a in posts), pool.map(one, posts)))
     for act in posts:
@@ -271,7 +353,12 @@ def mark_posts(actions, server=None, day=None):
         verdict = decided.get(id(act))
         if verdict is not None and verdict["source"] != "fallback":
             adapt = _state["adapt"]
-            fields = decision_fields(verdict, agent_id, text, (lambda d, t, a=agent_id: adapt(a, d, t)) if adapt else None)
+            fields = decision_fields(
+                verdict,
+                agent_id,
+                text,
+                (lambda d, t, a=agent_id: adapt(a, d, t)) if adapt else None,
+            )
         else:
             fields = _draw_fields(server, agent_id, text)
             if verdict is not None:
@@ -289,7 +376,9 @@ def mark_posts(actions, server=None, day=None):
 # crosspost.mode = agent_action, towards which platforms. Any failure falls back to the draw, so a run never stalls.
 DECISIONS = ("random", "llm")
 TRIGGERS = ("publish", "interaction")
-SUPPORTED_TRIGGERS = ("publish",)  # this client exports no share: only the publish trigger is decided
+SUPPORTED_TRIGGERS = (
+    "publish",
+)  # this client exports no share: only the publish trigger is decided
 DEFAULT_MAX_PER_DAY = 5  # model calls per agent per simulated day (0 = no limit)
 DECISION_TIMEOUT = 60.0  # seconds a decision may take before the draw is used instead
 ROUNDS_PER_DAY = 24  # World Simulation: simulated clock with hourly slots
@@ -314,22 +403,26 @@ def _content_options(content):
 
 def _eligible(text, own=True, has_image=False):
     """Client-side view of crosspost.content (the coordinator stays the authority): False only when the agent's OWN content
-    can certainly not be eligible. The content of others is left to the coordinator (it knows the link and the image)."""
+    can certainly not be eligible. The content of others is left to the coordinator (it knows the link and the image).
+    """
     opts = _state["content"]
     if not opts or not own or "own_content" in opts:
         return True
-    return ("news" in opts and bool(URL_RE.search(str(text or "")))) or ("images" in opts and bool(has_image))
+    return ("news" in opts and bool(URL_RE.search(str(text or "")))) or (
+        "images" in opts and bool(has_image)
+    )
 
 
 def parse_decision(reply, allowed):
     """The decision in a model reply: {"crosspost": bool, "destinations": [allowed names, in the order of `allowed`],
     "text": {destination: cleaned text}}, or None when there is no valid JSON object with a boolean `crosspost`.
-    Unknown destinations are ignored; texts are cleaned and cut like an adaptation (`parse_reply`)."""
+    Unknown destinations are ignored; texts are cleaned and cut like an adaptation (`parse_reply`).
+    """
     raw = re.sub(r"<think>.*?</think>", "", str(reply or ""), flags=re.S | re.I)
     decoder, obj = json.JSONDecoder(), None
     for match in re.finditer(r"\{", raw):
         try:
-            found, _ = decoder.raw_decode(raw[match.start():])
+            found, _ = decoder.raw_decode(raw[match.start() :])
         except ValueError:
             continue
         if isinstance(found, dict) and "crosspost" in found:
@@ -339,7 +432,11 @@ def parse_decision(reply, allowed):
         return None
     flag = obj["crosspost"]
     if isinstance(flag, str):
-        flag = True if flag.strip().lower() in _TRUE else False if flag.strip().lower() in _FALSE else None
+        flag = (
+            True
+            if flag.strip().lower() in _TRUE
+            else False if flag.strip().lower() in _FALSE else None
+        )
     if not isinstance(flag, bool):
         return None
     asked = obj.get("destinations")
@@ -381,12 +478,20 @@ def _ask_with_timeout(ask, args, timeout):
 
 def _note(user_id, trigger, source, crosspost, dests, reason=""):
     """One log line per decision, the record YWeb analytics read: `federation_decision agent=.. trigger=.. source=llm|fallback
-    crosspost=0|1 destinations=a,b [reason=..]`. For `fallback` the crosspost value is the outcome of the Bernoulli draw."""
+    crosspost=0|1 destinations=a,b [reason=..]`. For `fallback` the crosspost value is the outcome of the Bernoulli draw.
+    """
     _stats[source] += 1
     if crosspost and source == "llm":
         _stats["crossposts_llm"] += 1
-    log.info("federation_decision agent=%s trigger=%s source=%s crosspost=%d destinations=%s%s", user_id, trigger, source,
-             1 if crosspost else 0, ",".join(dests), f" reason={reason}" if reason else "")
+    log.info(
+        "federation_decision agent=%s trigger=%s source=%s crosspost=%d destinations=%s%s",
+        user_id,
+        trigger,
+        source,
+        1 if crosspost else 0,
+        ",".join(dests),
+        f" reason={reason}" if reason else "",
+    )
 
 
 def note_fallback(user_id, trigger, fields, reason):
@@ -402,26 +507,36 @@ def decision_for(trigger):
 
 def _precheck(user_id, text, trigger, own, has_image, dests, round_id, day):
     """What can be said before asking the model: {"source": "skip"} (no destination, content not eligible: nothing to do),
-    {"source": "fallback", "reason": "cap"} (the agent used its calls of the day) or None (ask the model)."""
+    {"source": "fallback", "reason": "cap"} (the agent used its calls of the day) or None (ask the model).
+    """
     if not dests or not _eligible(text, own, has_image):
         _stats["skipped"] += 1
         return {"source": "skip", "crosspost": False, "destinations": [], "text": {}}
     cap = int(_state["max_per_day"])
     try:  # the simulated day: given (clients that know it) or derived from the round id (hourly slots)
-        which = int(day) if day is not None else (int(round_id) // ROUNDS_PER_DAY if round_id is not None else None)
+        which = (
+            int(day)
+            if day is not None
+            else (int(round_id) // ROUNDS_PER_DAY if round_id is not None else None)
+        )
     except (TypeError, ValueError):
         which = None
     if cap > 0 and which is not None:
         with _lock:
             if _state["counts"].get((user_id, which), 0) >= cap:
                 return {"source": "fallback", "reason": "cap"}
-            _state["counts"] = {k: v for k, v in _state["counts"].items() if k[1] >= which - 1}  # keep today and yesterday
+            _state["counts"] = {
+                k: v for k, v in _state["counts"].items() if k[1] >= which - 1
+            }  # keep today and yesterday
             _state["counts"][(user_id, which)] = _state["counts"].get((user_id, which), 0) + 1
     return None
 
 
 def _failed(exc):
-    return {"source": "fallback", "reason": "timeout" if isinstance(exc, TimeoutError) else f"error:{type(exc).__name__}"}
+    return {
+        "source": "fallback",
+        "reason": "timeout" if isinstance(exc, TimeoutError) else f"error:{type(exc).__name__}",
+    }
 
 
 def _conclude(user_id, trigger, reply, dests):
@@ -429,7 +544,9 @@ def _conclude(user_id, trigger, reply, dests):
     parsed = parse_decision(reply, dests)
     if parsed is None:
         return {"source": "fallback", "reason": "invalid"}
-    if _state["mode"] == "agent_action":  # the model chooses the destinations; none valid means no cross-post
+    if (
+        _state["mode"] == "agent_action"
+    ):  # the model chooses the destinations; none valid means no cross-post
         parsed["crosspost"] = bool(parsed["crosspost"] and parsed["destinations"])
     else:  # coordinator_rule: the model only marks the content, the coordinator's probabilities choose where it goes
         parsed["destinations"], parsed["text"] = [], {}
@@ -437,22 +554,38 @@ def _conclude(user_id, trigger, reply, dests):
     return dict(parsed, source="llm")
 
 
-def decide(user_id, text, trigger, ask, round_id=None, own=True, has_image=False, context=None, dests=None, day=None):
+def decide(
+    user_id,
+    text,
+    trigger,
+    ask,
+    round_id=None,
+    own=True,
+    has_image=False,
+    context=None,
+    dests=None,
+    day=None,
+):
     """The model's decision for one event, or None when this event is not decided by a model (random mode, trigger not
     selected, rule-based agent: `ask` is None, nothing to say): the caller keeps the Bernoulli draw as before.
 
     Otherwise {"source": "skip"} (no destination, content not eligible: no call, nothing to do), {"source": "fallback",
     "reason": ..} (cap reached, timeout, model error, invalid JSON: the caller makes the draw and calls `note_fallback`) or
     {"source": "llm", "crosspost": bool, "destinations": [...], "text": {...}}. At most ONE call to `ask(trigger, text,
-    destination_lines, context)` per event and `decision_max_per_day` per agent per day; the Bernoulli generator is not used."""
+    destination_lines, context)` per event and `decision_max_per_day` per agent per day; the Bernoulli generator is not used.
+    """
     if not decision_for(trigger) or ask is None or user_id is None or not str(text or "").strip():
         return None
-    dests = destinations(user_id) if dests is None else (dests() if callable(dests) else list(dests))
+    dests = (
+        destinations(user_id) if dests is None else (dests() if callable(dests) else list(dests))
+    )
     early = _precheck(user_id, text, trigger, own, has_image, dests, round_id, day)
     if early is not None:
         return early
     try:
-        reply = _ask_with_timeout(ask, (trigger, text, destination_lines(dests), context), DECISION_TIMEOUT)
+        reply = _ask_with_timeout(
+            ask, (trigger, text, destination_lines(dests), context), DECISION_TIMEOUT
+        )
     except Exception as exc:  # noqa: BLE001 - a failing or slow model must not stop the agent
         return _failed(exc)
     return _conclude(user_id, trigger, reply, dests)
@@ -478,10 +611,17 @@ def read_decision(section):
         log.warning("federation: unknown crosspost_decision %r, using 'random'", decision)
         decision = "random"
     asked = section.get("crosspost_decision_triggers")
-    triggers = tuple(t for t in TRIGGERS if t in asked) if isinstance(asked, (list, tuple)) else TRIGGERS
+    triggers = (
+        tuple(t for t in TRIGGERS if t in asked) if isinstance(asked, (list, tuple)) else TRIGGERS
+    )
     try:
         cap = max(0, int(section.get("crosspost_decision_max_per_day", DEFAULT_MAX_PER_DAY)))
     except (TypeError, ValueError):
         cap = DEFAULT_MAX_PER_DAY
-    return {"decision": decision, "triggers": triggers, "max_per_day": cap,
-            "content": _content_options(section.get("crosspost_content")), "counts": {}}
+    return {
+        "decision": decision,
+        "triggers": triggers,
+        "max_per_day": cap,
+        "content": _content_options(section.get("crosspost_content")),
+        "counts": {},
+    }

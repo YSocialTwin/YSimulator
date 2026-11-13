@@ -1,4 +1,5 @@
 """The WAIT poll interval of the client simulator is configurable (default 1 s)."""
+
 import inspect
 
 from YSimulator.YClient.simulation import simulator as sim_mod

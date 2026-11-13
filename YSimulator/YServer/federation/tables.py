@@ -47,7 +47,8 @@ class FederationTopic(Base):
 
 class FederationHuman(Base):
     """A person on this platform (human gateway): ``human_key`` is the key YWeb gives (stable per person and experiment),
-    ``human_id`` the federation identity ``human:<id>`` once the person is enrolled in a World Simulation."""
+    ``human_id`` the federation identity ``human:<id>`` once the person is enrolled in a World Simulation.
+    """
 
     __tablename__ = "federation_human"
 
@@ -67,7 +68,8 @@ class FederationExport(Base):
 class FederationCrosspost(Base):
     """The agent chose to cross-post a post to another platform with this text (F6.2, crosspost.mode = agent_action).
 
-    account_id, tick and seq are fixed at the first export of the post, so that a retry sends the same message."""
+    account_id, tick and seq are fixed at the first export of the post, so that a retry sends the same message.
+    """
 
     __tablename__ = "federation_crosspost"
 

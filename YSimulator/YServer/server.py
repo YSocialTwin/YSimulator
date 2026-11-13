@@ -2190,7 +2190,9 @@ class OrchestratorServer:
         # Delegate to ContentRecommender
         fetch_limit = limit
         if self._federation_adapter is not None and self._federation_adapter.inactive_agent_ids():
-            fetch_limit = limit * 2  # some will be dropped: accounts that are not active are invisible
+            fetch_limit = (
+                limit * 2
+            )  # some will be dropped: accounts that are not active are invisible
         post_ids = self.content_recommender.get_recommended_posts(
             agent_id=agent_id,
             mode=mode,
@@ -2498,9 +2500,13 @@ class OrchestratorServer:
             List[str]: List of user UUIDs recommended for the agent to follow
         """
         if self.db.use_redis:
-            suggestions = self._get_follow_suggestions_redis(agent_id, mode, n_neighbors, leaning_bias)
+            suggestions = self._get_follow_suggestions_redis(
+                agent_id, mode, n_neighbors, leaning_bias
+            )
         else:
-            suggestions = self._get_follow_suggestions_sql(agent_id, mode, n_neighbors, leaning_bias)
+            suggestions = self._get_follow_suggestions_sql(
+                agent_id, mode, n_neighbors, leaning_bias
+            )
         if self._federation_adapter is not None:  # accounts that are not active are invisible
             suggestions = self._federation_adapter.filter_users(suggestions)
         return suggestions

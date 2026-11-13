@@ -45,13 +45,20 @@ def test_an_authenticated_ollama_keeps_the_native_protocol_and_sends_the_key():
 
 def test_api_format_forces_the_protocol():
     assert cm.uses_openai_protocol(cfg(api_format="openai"))
-    assert not cm.uses_openai_protocol(cfg(address="https://x.example/v1", llm_api_key="k", api_format="ollama"))
+    assert not cm.uses_openai_protocol(
+        cfg(address="https://x.example/v1", llm_api_key="k", api_format="ollama")
+    )
 
 
 def test_the_chat_model_gets_the_key_and_the_url():
     pytest.importorskip("langchain_openai")
     model = cm.build_chat_model(
-        cfg(address="https://api.deepseek.com/v1", model="deepseek-chat", llm_api_key="sk-secret", llm_max_tokens=-1)
+        cfg(
+            address="https://api.deepseek.com/v1",
+            model="deepseek-chat",
+            llm_api_key="sk-secret",
+            llm_max_tokens=-1,
+        )
     )
     assert model.model_name == "deepseek-chat"
     assert str(model.openai_api_base) == "https://api.deepseek.com/v1"

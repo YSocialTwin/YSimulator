@@ -23,7 +23,11 @@ class SafeGate:
         try:
             self.gate.on_round_opened(local_round)
         except Exception as exc:  # noqa: BLE001
-            log.error("federation: opening of round %s failed, it will be redone at the next barrier: %s", local_round, exc)
+            log.error(
+                "federation: opening of round %s failed, it will be redone at the next barrier: %s",
+                local_round,
+                exc,
+            )
 
     def on_finished(self):
         try:

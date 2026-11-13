@@ -29,7 +29,9 @@ OPS = ("ensure", "state", "actions")
 
 
 class HumanGateway:
-    def __init__(self, engine, crosspost_mode: str = "coordinator_rule", member: Optional[str] = None):
+    def __init__(
+        self, engine, crosspost_mode: str = "coordinator_rule", member: Optional[str] = None
+    ):
         self.engine = engine
         self.crosspost_mode = crosspost_mode
         self.member = member
@@ -54,12 +56,17 @@ class HumanGateway:
 
         if human_key is not None:
             return s.get(FederationHuman, human_key)
-        return s.scalars(select(FederationHuman).where(FederationHuman.user_id == str(user_id))).first()
+        return s.scalars(
+            select(FederationHuman).where(FederationHuman.user_id == str(user_id))
+        ).first()
 
     # -- account ---------------------------------------------------------------------------------
-    def ensure(self, human_key: Any, username: Any, language: Any = None, human_id: Any = None) -> tuple:
+    def ensure(
+        self, human_key: Any, username: Any, language: Any = None, human_id: Any = None
+    ) -> tuple:
         """Create the account of a person (idempotent); a name used by an account that is not theirs is refused."""
         from YSimulator.YServer.classes.models import User_mgmt
+
         from .tables import FederationHuman
 
         if not isinstance(human_key, str) or not 1 <= len(human_key) <= 64:
@@ -71,12 +78,29 @@ class HumanGateway:
         with self._session() as s:
             row, created = self._human(s, human_key), False
             if row is None:
-                if s.scalars(select(User_mgmt).where(User_mgmt.username == username)).first() is not None:
+                if (
+                    s.scalars(select(User_mgmt).where(User_mgmt.username == username)).first()
+                    is not None
+                ):
                     return 409, {"ok": False, "code": "username_taken"}
                 uid = str(uuid.uuid4())
-                s.add(User_mgmt(id=uid, username=username, email=f"{username}@human.local", password="", user_type="human",
-                                leaning="neutral", age=30, language=str(language or "en"), owner="human", joined_on=self._round(s),
-                                round_actions=1, daily_activity_level=1, is_page=0))
+                s.add(
+                    User_mgmt(
+                        id=uid,
+                        username=username,
+                        email=f"{username}@human.local",
+                        password="",
+                        user_type="human",
+                        leaning="neutral",
+                        age=30,
+                        language=str(language or "en"),
+                        owner="human",
+                        joined_on=self._round(s),
+                        round_actions=1,
+                        daily_activity_level=1,
+                        is_page=0,
+                    )
+                )
                 row = FederationHuman(human_key=human_key, user_id=uid, human_id=human_id)
                 s.add(row)
                 created = True
@@ -86,15 +110,25 @@ class HumanGateway:
                 row.human_id = human_id
             s.commit()
             user = s.get(User_mgmt, row.user_id)
-            return 200, {"ok": True, "account_id": row.user_id, "username": user.username if user else username,
-                         "human_id": row.human_id, "created": created}
+            return 200, {
+                "ok": True,
+                "account_id": row.user_id,
+                "username": user.username if user else username,
+                "human_id": row.human_id,
+                "created": created,
+            }
 
     def state(self, account_id: Any) -> tuple:
         with self._session() as s:
             row = self._human(s, user_id=account_id)
             if row is None:
                 return 403, {"ok": False, "code": "not_a_human_account"}
-            return 200, {"ok": True, "account_id": row.user_id, "human_id": row.human_id, "round": self._round(s)}
+            return 200, {
+                "ok": True,
+                "account_id": row.user_id,
+                "human_id": row.human_id,
+                "round": self._round(s),
+            }
 
     # -- actions ---------------------------------------------------------------------------------
     def actions(self, account_id: Any, actions: Any) -> tuple:
@@ -152,14 +186,30 @@ class HumanGateway:
         targets = act.get("crosspost_to")
         if targets is None:
             return None
-        if not isinstance(targets, list) or not targets or not all(
-                isinstance(t, dict) and isinstance(t.get("member"), str) and t["member"] and isinstance(t.get("text"), str)
-                for t in targets):
+        if (
+            not isinstance(targets, list)
+            or not targets
+            or not all(
+                isinstance(t, dict)
+                and isinstance(t.get("member"), str)
+                and t["member"]
+                and isinstance(t.get("text"), str)
+                for t in targets
+            )
+        ):
             raise ValueError("crosspost_to")
         return [{"member": t["member"], "text": t["text"]} for t in targets]
 
     def _publish(self, s, uid, rnd, kind, act) -> dict:
-        from YSimulator.YServer.classes.models import Hashtag, Interest, Mention, Post, PostHashtag, PostTopic, User_mgmt
+        from YSimulator.YServer.classes.models import (
+            Hashtag,
+            Interest,
+            Mention,
+            Post,
+            PostHashtag,
+            PostTopic,
+            User_mgmt,
+        )
 
         text = self._text(act, required=kind != "share")
         if kind == "share" and not text:
@@ -193,7 +243,9 @@ class HumanGateway:
         for name in dict.fromkeys(re.findall(r"@(\w+)", text)):
             u = s.scalars(select(User_mgmt).where(User_mgmt.username == name)).first()
             if u is not None:
-                s.add(Mention(id=str(uuid.uuid4()), user_id=u.id, post_id=pid, round=rnd, answered=0))
+                s.add(
+                    Mention(id=str(uuid.uuid4()), user_id=u.id, post_id=pid, round=rnd, answered=0)
+                )
         for name in dict.fromkeys(" ".join(t.split()) for t in topics if t.strip()):
             iid = s.scalars(select(Interest.iid).where(Interest.interest == name)).first()
             if iid is None:
@@ -213,7 +265,10 @@ class HumanGateway:
             s.add(FederationExport(post_id=post_id, tick=None, seq=None))
         if self.crosspost_mode == "agent_action":
             for t in targets:
-                if t["member"] != self.member and s.get(FederationCrosspost, (post_id, t["member"])) is None:
+                if (
+                    t["member"] != self.member
+                    and s.get(FederationCrosspost, (post_id, t["member"])) is None
+                ):
                     s.add(FederationCrosspost(post_id=post_id, member=t["member"], text=t["text"]))
 
     def _reaction(self, s, uid, rnd, act) -> dict:
@@ -224,7 +279,11 @@ class HumanGateway:
         pid = self._ref(act, "post_id")
         if s.get(Post, pid) is None:
             raise LookupError("post")
-        s.add(Reaction(id=str(uuid.uuid4()), post_id=pid, user_id=uid, type=act["reaction"], round=rnd))
+        s.add(
+            Reaction(
+                id=str(uuid.uuid4()), post_id=pid, user_id=uid, type=act["reaction"], round=rnd
+            )
+        )
         return {}
 
     def _follow(self, s, uid, rnd, kind, act) -> dict:
@@ -246,7 +305,12 @@ def dispatch(gw: HumanGateway, op: str, body: Any) -> tuple:
         return 400, {"ok": False, "code": "invalid_request"}
     try:
         if op == "ensure":
-            return gw.ensure(body.get("human_key"), body.get("username"), body.get("language"), body.get("human_id"))
+            return gw.ensure(
+                body.get("human_key"),
+                body.get("username"),
+                body.get("language"),
+                body.get("human_id"),
+            )
         if op == "state":
             return gw.state(body.get("account_id"))
         return gw.actions(body.get("account_id"), body.get("actions"))
