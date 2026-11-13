@@ -132,7 +132,11 @@ class RecommendationService:
             return False
 
         try:
-            return self.interest_repo.add_agent_opinion(agent_id, topic_id, opinion, round_id)
+            # Keyword arguments: the SQL repository takes (agent_id, round_id, topic_id, opinion, ...) while the
+            # abstract interface and the Redis repository order them differently.
+            return self.interest_repo.add_agent_opinion(
+                agent_id=agent_id, topic_id=topic_id, opinion=opinion, round_id=round_id
+            )
         except Exception as e:
             self.logger.error(f"Error in recommendation service add_agent_opinion: {e}")
             return False
