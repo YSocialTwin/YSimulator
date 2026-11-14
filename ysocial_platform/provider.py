@@ -25,6 +25,12 @@ class Microblogging(PlatformProvider):
     label = N_("Microblogging")
     icon = "message-circle"
     order = 10
+
+    @property
+    def human_gateway(self):
+        """How a person of a World Simulation gets an account here and acts (``gateway.py``)."""
+        return importlib.import_module(f"{__package__}.gateway").HUMAN_GATEWAY
+
     federation_traits = FederationTraits(
         mdi_icon="mdi-message-text-outline",
         local_kind="post",
@@ -35,6 +41,7 @@ class Microblogging(PlatformProvider):
         text_limit=280,
         decision_triggers=("publish",),
         simulators=(HPC,),
+        topic_migration_key="create_topics",
     )
     default_platform = True
     simulator_types = (HPC,)
