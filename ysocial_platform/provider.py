@@ -31,6 +31,7 @@ class Microblogging(PlatformProvider):
         """How a person of a World Simulation gets an account here and acts (``gateway.py``)."""
         return importlib.import_module(f"{__package__}.gateway").HUMAN_GATEWAY
 
+    server_label = "YSimulator"
     federation_traits = FederationTraits(
         mdi_icon="mdi-message-text-outline",
         local_kind="post",
