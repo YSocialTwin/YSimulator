@@ -1,9 +1,9 @@
-"""The microblogging platform: what YSocial needs to know to run, show and manage a microblogging experiment.
+"""The microblogging platform on the Ray runtime ("HPC"): what YSocial needs to run, show and manage an HPC experiment.
 
-One provider answers for both runtimes: the Flask pair (YServer/YClient, "Standard") and the Ray runtime (this
-repository, "HPC"). The provider is declared in ``meta/registry.json`` (``platform`` section) and loaded by YSocial at
-startup. It talks to the core through ``y_web.sdk`` only; the pages of the platform (``routes/``, ``templates/``,
-``static/``) are part of this repository.
+The Flask pair (YServer/YClient, "Standard") has its own provider in the YServer repository; the two are variants of
+the same platform key and share the ``@microblogging/`` pages of this repository only for HPC. The provider is declared
+in ``meta/registry.json`` (``platform`` section) and loaded by YSocial at startup. It talks to the core through
+``y_web.sdk`` only.
 """
 
 from __future__ import annotations
@@ -14,10 +14,8 @@ from typing import Any, Mapping, Optional
 from y_web.sdk import (
     HPC,
     N_,
-    STANDARD,
     CreationRules,
     PlatformProvider,
-    StandardRuntime,
 )
 from y_web.sdk import gettext as _
 
@@ -28,14 +26,9 @@ class Microblogging(PlatformProvider):
     icon = "message-circle"
     order = 10
     default_platform = True
+    simulator_types = (HPC,)
 
     prompt_pack = ("prompts.json", "prompts.json")
-    standard_runtime = StandardRuntime(
-        server_repo="YServer",
-        client_repo="YClient",
-        fake_agent_module="y_client.classes",
-        activity_profiles=True,
-    )
     profile_template = "@microblogging/microblogging/profile.html"
     has_interview = True
 
@@ -46,26 +39,13 @@ class Microblogging(PlatformProvider):
         return f"/{exp_id}/feed/{user_id}/feed/rf/1"
 
     def creation_rules(self, simulator_type: str) -> CreationRules:
-        return CreationRules(
-            database="server", copies_clean_database=simulator_type == STANDARD
-        )
+        return CreationRules(database="server", copies_clean_database=False)
 
     def resolve_simulator(self, simulator_type: str, available: Mapping[str, bool]):
-        # either runtime will do: ask for the one that is installed
-        if simulator_type == HPC:
-            if available["hpc"]:
-                return HPC, None
-            if available["microblogging"]:
-                return STANDARD, None
-            return HPC, _(
-                "HPC microblogging experiments are unavailable because YMicroblogging is not present."
-            )
-        if available["microblogging"]:
-            return STANDARD, None
         if available["hpc"]:
             return HPC, None
-        return STANDARD, _(
-            "Microblogging experiments are unavailable because neither YServer/YClient nor YMicroblogging is present."
+        return HPC, _(
+            "HPC microblogging experiments are unavailable because YMicroblogging is not present."
         )
 
     def render_interview(self, exp_id: int, context: dict) -> Any:
