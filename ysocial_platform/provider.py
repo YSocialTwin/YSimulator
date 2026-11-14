@@ -41,6 +41,10 @@ class Microblogging(PlatformProvider):
         "server_dir_repo": "YServer",
         "supports_federation": True,
     }
+    runtime_keys = ("hpc_simulator",)
+    availability_key = "hpc"
+    catalog_names_win = True
+    page_resources = True
     tag_runtime_sets = (("hpc_simulator",),)
     federation_traits = FederationTraits(
         mdi_icon="mdi-message-text-outline",
