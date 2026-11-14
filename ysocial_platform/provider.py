@@ -1,9 +1,8 @@
 """The microblogging platform on the Ray runtime ("HPC"): what YSocial needs to run, show and manage an HPC experiment.
 
-The Flask pair (YServer/YClient, "Standard") has its own provider in the YServer repository; the two are variants of
-the same platform key and share the ``@microblogging/`` pages of this repository only for HPC. The provider is declared
-in ``meta/registry.json`` (``platform`` section) and loaded by YSocial at startup. It talks to the core through
-``y_web.sdk`` only.
+The provider is declared in ``meta/registry.json`` (``platform`` section) and loaded by YSocial at startup. It talks to
+the core through ``y_web.sdk`` only; the pages of the platform (``routes/``, ``templates/``, ``static/``) are part of this
+repository and work without any other microblogging repository installed.
 """
 
 from __future__ import annotations

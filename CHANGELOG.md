@@ -4,6 +4,9 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+### Changed
+- `ysocial_platform/` serves the HPC runtime only (`simulator_types = (HPC,)`): the Flask pair YServer/YClient has its own platform in its repository, so the provider declares no Standard runtime. The pages of the platform stay here and work on their own.
+
 ### Added
 - `ysocial_platform/` integrates microblogging with YSocial as a platform (provider, feed/hashtag/interest/emotion/friends/thread/profile pages, publishing action, templates and static files moved from YSocial; `meta/registry.json`)
 

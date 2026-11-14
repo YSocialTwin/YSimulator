@@ -45,11 +45,7 @@ from y_web.sdk.social import (
     build_thread_tree,
 )
 from y_web.sdk.social import content_recsys_info as _content_recsys_info
-from y_web.sdk.social import (
-    experiment_db_bind,
-    get_adhoc_agent_badge,
-    get_author_type_badge,
-)
+from y_web.sdk.social import experiment_db_bind, get_adhoc_agent_badge, get_author_type_badge
 from y_web.sdk.social import get_discussions as _get_discussions
 from y_web.sdk.social import (
     get_posts_associated_to_emotion,
@@ -402,7 +398,7 @@ def get_post_hashtags(exp_id, hashtag_id, page=1):
     Returns:
         Rendered template with hashtag posts
     """
-    # Handle both int and UUID hashtag_id formats (Standard vs HPC experiments)
+    # Handle both int and UUID hashtag_id formats
     try:
         hashtag_id = int(hashtag_id)
     except (ValueError, TypeError):
@@ -481,7 +477,7 @@ def get_post_interest(exp_id, interest_id, page=1):
     Returns:
         Rendered template with interest-related posts
     """
-    # Handle both int and UUID interest_id formats (Standard vs HPC experiments)
+    # Handle both int and UUID interest_id formats
     try:
         interest_id = int(interest_id)
     except (ValueError, TypeError):
@@ -561,7 +557,7 @@ def get_post_emotion(exp_id, emotion_id, page=1):
     Returns:
         Rendered template with emotion-tagged posts
     """
-    # Handle both int and UUID emotion_id formats (Standard vs HPC experiments)
+    # Handle both int and UUID emotion_id formats
     try:
         emotion_id = int(emotion_id)
     except (ValueError, TypeError):
@@ -638,7 +634,7 @@ def get_friends(exp_id, user_id, page=1):
     Returns:
         Rendered template showing followers and followees
     """
-    # Handle both int and UUID user_id formats (Standard vs HPC experiments)
+    # Handle both int and UUID user_id formats
     try:
         user_id = int(user_id)
     except (ValueError, TypeError):
@@ -834,7 +830,7 @@ def api_header_search(exp_id):
 def get_thread(exp_id, post_id):
     # get thread_id for post_id
     """Get thread."""
-    # Handle both int and UUID post_id formats (Standard vs HPC experiments)
+    # Handle both int and UUID post_id formats
     try:
         post_id = int(post_id)
     except (ValueError, TypeError):
@@ -862,9 +858,7 @@ def get_thread(exp_id, post_id):
     )
     thread_root_id = root_post.id
 
-    from y_web.sdk.social import (
-        hidden_author_ids_for_viewer as _hidden_author_ids_for_viewer,
-    )
+    from y_web.sdk.social import hidden_author_ids_for_viewer as _hidden_author_ids_for_viewer
     from y_web.sdk.social import hidden_post_ids_in_thread as _hidden_post_ids_in_thread
 
     hidden_ids = _hidden_author_ids_for_viewer(exp_id, exp_user_id)
@@ -1252,7 +1246,7 @@ def api_hashtag_posts(exp_id, hashtag_id, page=1):
 
     Returns rendered HTML for posts.
     """
-    # Handle both int and UUID hashtag_id formats (Standard vs HPC experiments)
+    # Handle both int and UUID hashtag_id formats
     try:
         hashtag_id = int(hashtag_id)
     except (ValueError, TypeError):
@@ -1282,7 +1276,7 @@ def api_interest_posts(exp_id, interest_id, page=1):
 
     Returns rendered HTML for posts.
     """
-    # Handle both int and UUID interest_id formats (Standard vs HPC experiments)
+    # Handle both int and UUID interest_id formats
     try:
         interest_id = int(interest_id)
     except (ValueError, TypeError):
@@ -1312,7 +1306,7 @@ def api_emotion_posts(exp_id, emotion_id, page=1):
 
     Returns rendered HTML for posts.
     """
-    # Handle both int and UUID emotion_id formats (Standard vs HPC experiments)
+    # Handle both int and UUID emotion_id formats
     try:
         emotion_id = int(emotion_id)
     except (ValueError, TypeError):
@@ -1346,7 +1340,7 @@ def api_profile_posts(exp_id, user_id, page=1, mode="recent"):
 
     Returns rendered HTML for posts.
     """
-    # Handle both int and UUID user_id formats (Standard vs HPC experiments)
+    # Handle both int and UUID user_id formats
     try:
         user_id = int(user_id)
     except (ValueError, TypeError):
