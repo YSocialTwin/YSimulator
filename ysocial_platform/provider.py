@@ -36,6 +36,7 @@ class Microblogging(PlatformProvider):
     plugin_agents = True
     stress_reward_page = True
     stress_reward_in_form = True
+    tag_runtime_sets = (("hpc_simulator",),)
     federation_traits = FederationTraits(
         mdi_icon="mdi-message-text-outline",
         local_kind="post",
