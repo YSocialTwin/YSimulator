@@ -149,6 +149,15 @@ YSimulator/
 └── requirements.txt    # Python dependencies
 ```
 
+## YSocial integration
+
+`ysocial_platform/` is what YSocial loads to offer microblogging (Standard with YServer/YClient, and HPC with this
+repository) as a platform: the provider (`provider.py`, declared in `meta/registry.json`), the pages of the feed, the
+hashtags, the interests, the emotions, the friends, the threads and the profile, the publishing action, the templates and
+the static files of those pages. It talks to the application through `y_web.sdk` only and is never imported by the
+runtime. The header, the profile editor and the chat panel are shared with the other platforms and stay in YSocial.
+A YSocial without this repository has no microblogging; installing it adds the platform at the next start.
+
 ## Documentation
 
 **[Online documentation](https://ysocialtwin.github.io/YSimulator/)** (GitHub Pages, with search) and the [documentation index](docs/getting-started/INDEX.md), organised by topic and by use case.

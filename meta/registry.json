@@ -1,0 +1,7 @@
+{
+  "platform": {
+    "key": "microblogging",
+    "api_version": "1.0",
+    "provider": "ysocial_platform.provider:Microblogging"
+  }
+}

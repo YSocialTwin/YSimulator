@@ -4,6 +4,9 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+### Added
+- `ysocial_platform/` integrates microblogging with YSocial as a platform (provider, feed/hashtag/interest/emotion/friends/thread/profile pages, publishing action, templates and static files moved from YSocial; `meta/registry.json`)
+
 ### Fixed
 - LLM endpoints that need an API key (OpenAI, DeepSeek, authenticated Ollama): the standard `LLMService` kept only the native Ollama protocol over plain `http` and ignored `llm_api_key`. `llm_utils/chat_model.py` now keeps the scheme and path of `address`, sends the key as a bearer token and speaks the OpenAI-compatible protocol (`langchain-openai`) to hosted providers (`llm.api_format`: `auto`, `openai`, `ollama`); the batch probes send the key too and skip Ollama's API on OpenAI-style endpoints.
 
