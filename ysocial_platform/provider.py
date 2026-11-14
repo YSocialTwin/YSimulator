@@ -32,6 +32,10 @@ class Microblogging(PlatformProvider):
         return importlib.import_module(f"{__package__}.gateway").HUMAN_GATEWAY
 
     server_label = "YSimulator"
+    embedding_in_details = True
+    plugin_agents = True
+    stress_reward_page = True
+    stress_reward_in_form = True
     federation_traits = FederationTraits(
         mdi_icon="mdi-message-text-outline",
         local_kind="post",
