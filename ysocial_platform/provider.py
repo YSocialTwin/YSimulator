@@ -15,6 +15,7 @@ from y_web.sdk import (
     N_,
     CreationRules,
     FederationTraits,
+    FrontendSetting,
     PlatformProvider,
 )
 from y_web.sdk import gettext as _
@@ -25,6 +26,35 @@ class Microblogging(PlatformProvider):
     label = N_("Microblogging")
     icon = "message-circle"
     order = 10
+
+    # what the admin "frontend settings" page offers for this platform (the boxes are in templates/slots/)
+    frontend_settings = (
+        FrontendSetting(
+            "filter_bubble_alpha", 2.0
+        ),  # opinion similarity width (Gaussian)
+        FrontendSetting("filter_bubble_beta", 0.0),  # recency decay (0 = disabled)
+        FrontendSetting(
+            "filter_bubble_gamma", 0.0
+        ),  # engagement amplification (0 = disabled)
+        FrontendSetting(
+            "filter_bubble_lr", 0.05
+        ),  # EMA learning rate of the real-time interest update
+        FrontendSetting(
+            "filter_bubble_sort",
+            "score",
+            choices=(
+                {"name": "score", "label": N_("Score only")},
+                {"name": "recency", "label": N_("Recency first")},
+                {"name": "engagement", "label": N_("Engagement first")},
+                {"name": "hybrid", "label": N_("Hybrid (score × recency)")},
+            ),
+        ),
+        FrontendSetting(
+            "filter_bubble_wr", 1.0
+        ),  # weight of reactions in the engagement score
+        FrontendSetting("filter_bubble_wc", 1.5),  # weight of comments
+        FrontendSetting("filter_bubble_ws", 2.0),  # weight of shares
+    )
 
     @property
     def human_gateway(self):
