@@ -23,6 +23,10 @@ from y_web.sdk import gettext as _
 
 class Microblogging(PlatformProvider):
     key = "microblogging"
+    #: texts of the plugin catalogue / repository metadata that the core translation catalogue carries
+    catalog_texts = (
+        N_("Ray-based runtime for microblogging experiments (posts, timelines, follows) built for large-scale simulations, on a single machine or on HPC clusters."),
+    )
     label = N_("Microblogging")
     icon = "message-circle"
     order = 10
