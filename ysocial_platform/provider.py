@@ -27,6 +27,10 @@ class Microblogging(PlatformProvider):
     icon = "message-circle"
     order = 10
 
+    reads_server_config = (
+        True  # pages read the memory and stress/reward settings of its server config
+    )
+
     @property
     def recsys_catalog(self):
         """The recommenders this platform adds to the catalogue (``catalog.py``)."""
