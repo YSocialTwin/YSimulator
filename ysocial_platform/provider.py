@@ -31,6 +31,11 @@ class Microblogging(PlatformProvider):
         """How a person of a World Simulation gets an account here and acts (``gateway.py``)."""
         return importlib.import_module(f"{__package__}.gateway").HUMAN_GATEWAY
 
+    @property
+    def human_recsys(self):
+        """The recommender systems of the people who use the frontend (``recsys/``)."""
+        return importlib.import_module(f"{__package__}.recsys").RECSYS
+
     server_label = "YSimulator"
     embedding_in_details = True
     plugin_agents = True

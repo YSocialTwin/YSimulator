@@ -45,7 +45,11 @@ from y_web.sdk.social import (
     build_thread_tree,
 )
 from y_web.sdk.social import content_recsys_info as _content_recsys_info
-from y_web.sdk.social import experiment_db_bind, get_adhoc_agent_badge, get_author_type_badge
+from y_web.sdk.social import (
+    experiment_db_bind,
+    get_adhoc_agent_badge,
+    get_author_type_badge,
+)
 from y_web.sdk.social import get_discussions as _get_discussions
 from y_web.sdk.social import (
     get_posts_associated_to_emotion,
@@ -53,8 +57,6 @@ from y_web.sdk.social import (
     get_posts_associated_to_interest,
     get_report_count,
     get_safe_profile_pic,
-    get_suggested_posts,
-    get_suggested_users,
     get_trending_emotions,
     get_trending_hashtags,
     get_trending_topics,
@@ -66,6 +68,8 @@ from y_web.sdk.social import (
 from y_web.sdk.social import logged_user as _forum_logged_user
 from y_web.sdk.web import choose_active_experiment
 from y_web.sdk.web import load_ui_settings as _load_ui_settings
+
+from ..recsys import RECSYS, get_suggested_posts, get_suggested_users
 
 main = routes.blueprint("main")
 
@@ -379,7 +383,7 @@ def feed(exp_id, user_id="all", timeline="timeline", mode="rf", page=1):
             spages=spages,
             ui=ui,
             recsys_info=_content_recsys_info(
-                getattr(logged_user, "recsys_type", None), ui
+                getattr(logged_user, "recsys_type", None), ui, recsys=RECSYS
             ),
             frontend_adds_on_modules=active_modules_context(exp_id),
         )
@@ -858,7 +862,9 @@ def get_thread(exp_id, post_id):
     )
     thread_root_id = root_post.id
 
-    from y_web.sdk.social import hidden_author_ids_for_viewer as _hidden_author_ids_for_viewer
+    from y_web.sdk.social import (
+        hidden_author_ids_for_viewer as _hidden_author_ids_for_viewer,
+    )
     from y_web.sdk.social import hidden_post_ids_in_thread as _hidden_post_ids_in_thread
 
     hidden_ids = _hidden_author_ids_for_viewer(exp_id, exp_user_id)
