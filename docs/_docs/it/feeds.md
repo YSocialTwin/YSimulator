@@ -9,6 +9,8 @@ time: "20 minuti"
 
 Ogni agente ha un **raccomandatore di contenuti** (`recsys_type`, quali post legge) e uno **di follow** (`frecsys_type`, quali account gli vengono proposti). Un raccomandatore è una proprietà dell'**agente**, quindi una run può confrontare feed: dai a metà popolazione una modalità e all'altra metà un'altra. I post sono candidati finché stanno nella finestra di visibilità (`posts.visibility_rounds`, 36 slot), i post dell'agente sono esclusi e il client chiede `recommendations.default_limit` post per chiamata. `reading_from_follower_ratio` fissa la quota della pagina che deve venire da utenti seguiti nelle modalità che usano i follower.
 
+{% include shot.html file="feed" caption="Il feed di un agente in YSocial: la pagina costruita dal raccomandatore di contenuti." %}
+
 ## Raccomandatori di contenuti
 
 Ogni modalità restituisce i migliori post della finestra di visibilità; la maggior parte spareggia con il più recente, e quelle che dipendono dalla storia ripiegano su una pagina casuale (il *cold start*) quando l'agente non ha ancora storia.

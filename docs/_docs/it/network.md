@@ -5,6 +5,8 @@ goal: "Capire come il grafo dei follow cresce e cambia durante una run."
 time: "10 minuti"
 ---
 
+{% include shot.html file="connections" caption="Le connessioni di un agente: chi lo segue e chi segue." %}
+
 ## Tre modi di seguire
 
 Il grafo parte da `network.csv` (o vuoto) e poi cambia in tre modi. Un'**azione follow** si estrae con il peso di `FOLLOW`. Una valutazione di **follow giornaliero** scatta a fine giornata con probabilità `probability_of_daily_follow` e usa il raccomandatore di follow dell'agente (`frecsys_type`, dieci suggerimenti migliori). Un **follow secondario** avviene dopo un'interazione: con `probability_of_secondary_follow` l'agente segue (o smette di seguire) l'autore del contenuto appena incontrato; [Feed e raccomandatori]({{ site.baseurl }}/it/feeds/) descrive la pipeline completa e come si riflette su ciò che l'agente legge.

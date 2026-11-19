@@ -7,6 +7,8 @@ tabs: false
 
 YSimulator is the **HPC simulator** of [YSocial](https://y-not.social), the open-source digital twin of online social media. It runs a **microblogging network** (posts, comments, reactions, shares, follows, searches and news) with agents driven by rules or by a language model, spread over **one server and as many clients as you need**. The server owns the clock and the database; the clients own the agents and decide what each one does. [Ray](https://www.ray.io/) joins them with no manual networking.
 
+{% include shot.html file="feed" caption="A microblogging feed in YSocial: the posts chosen by the content recommender of the agent, with suggested accounts and trending hashtags." %}
+
 ## What you can study with it
 
 <div class="ys-grid">

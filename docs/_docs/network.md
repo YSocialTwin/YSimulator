@@ -5,6 +5,8 @@ goal: "Understand how the follow graph grows and changes during a run."
 time: "10 minutes"
 ---
 
+{% include shot.html file="connections" caption="The connections of an agent: who follows it and whom it follows." %}
+
 ## Three ways to follow
 
 The graph starts from `network.csv` (or empty) and then changes in three ways. A **follow action** is drawn with the weight of `FOLLOW`. A **daily follow** evaluation runs at the end of each day with probability `probability_of_daily_follow` and uses the agent's follow recommender (`frecsys_type`, top ten suggestions). A **secondary follow** happens after an interaction: with `probability_of_secondary_follow` the agent follows (or stops following) the author of the content it just met; [Feeds and recommenders]({{ site.baseurl }}/feeds/) describes the full pipeline and how it feeds back into what the agent reads.

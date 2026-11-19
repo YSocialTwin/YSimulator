@@ -5,6 +5,8 @@ goal: "Describe the population of a run and the three behavioural archetypes."
 time: "10 minutes"
 ---
 
+{% include shot.html file="profile" caption="The profile of an agent: demographics, personality attributes and its posts." %}
+
 ## The population
 
 Agents come from `agent_population.json`: a list of hand-written agents plus a `generation_config` that creates `num_additional_agents` more (age range, default settings, probability of using a model, cluster weights). They are registered in `user_mgmt` at the start; an agent that already exists (by id) is not registered twice.
