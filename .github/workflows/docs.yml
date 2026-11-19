@@ -1,13 +1,8 @@
 name: Deploy MkDocs Documentation
 
+# Manual only: the GitHub Pages site (Jekyll, docs/_config.yml) is published by pages.yml.
+# Running this workflow replaces it with the MkDocs build of the legacy pages.
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - 'docs/**'
-      - 'mkdocs.yml'
-      - '.github/workflows/docs.yml'
   workflow_dispatch:
 
 permissions:

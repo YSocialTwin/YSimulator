@@ -1,0 +1,51 @@
+# Sidebar and menu, per language. `id` is the file name in _docs/ (and _docs/it/) without extension; the order is the reading order.
+en:
+  - group: "Intro"
+    pages:
+      - {id: index, title: What is YSimulator}
+      - {id: how-it-works, title: How it works}
+  - group: "The world"
+    pages:
+      - {id: agents, title: Agents and archetypes}
+      - {id: actions, title: What agents do}
+      - {id: network, title: Follow dynamics}
+  - group: "Dynamics"
+    pages:
+      - {id: feeds, title: Feeds and recommenders}
+      - {id: opinions, title: Opinion dynamics}
+      - {id: lifecycle, title: Churn, new agents and stress}
+      - {id: llm, title: Language models and memory}
+  - group: "Run it"
+    pages:
+      - {id: configuration, title: Configuration}
+      - {id: running, title: Running an experiment}
+  - group: "Reference"
+    pages:
+      - {id: parameters, title: Parameters}
+      - {id: database-schema, title: Database schema}
+      - {id: glossary, title: Glossary}
+it:
+  - group: "Intro"
+    pages:
+      - {id: index, title: Che cos'è YSimulator}
+      - {id: how-it-works, title: Come funziona}
+  - group: "Il mondo"
+    pages:
+      - {id: agents, title: Agenti e archetipi}
+      - {id: actions, title: Che cosa fanno gli agenti}
+      - {id: network, title: Dinamica dei follow}
+  - group: "Dinamiche"
+    pages:
+      - {id: feeds, title: Feed e raccomandatori}
+      - {id: opinions, title: Dinamica delle opinioni}
+      - {id: lifecycle, title: Abbandono, nuovi agenti e stress}
+      - {id: llm, title: Modelli linguistici e memoria}
+  - group: "Usalo"
+    pages:
+      - {id: configuration, title: Configurazione}
+      - {id: running, title: Eseguire un esperimento}
+  - group: "Riferimento"
+    pages:
+      - {id: parameters, title: Parametri}
+      - {id: database-schema, title: Schema del database}
+      - {id: glossary, title: Glossario}
