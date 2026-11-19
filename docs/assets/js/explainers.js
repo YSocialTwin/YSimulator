@@ -127,7 +127,6 @@
     draw();
   };
 
-
   /* ---------- actions: archetype-limited action draw ---------- */
   LABS.actions = function (host) {
     var W = { post: 3, comment: 5, read: 2, share: 1, search: 5, follow: 0.1 };
@@ -158,43 +157,184 @@
     draw();
   };
 
-
-  /* ---------- recsys: content recommender modes ---------- */
+  /* ---------- recsys: the fifteen content recommenders ---------- */
   LABS.recsys = function (host) {
-    var S = { mode: 'ReverseChronoFollowersPopularity', n: 8, ratio: 0.6, vis: 36, seed: 2 }, out = h('div', { class: 'ys-out' });
-    var posts = (function () { var r = rng(11), a = []; for (var i = 0; i < 40; i++) a.push({ id: 'p' + (i + 1), age: Math.floor(r() * 60), likes: Math.floor(Math.pow(r(), 3) * 30), fol: r() < 0.3 }); return a; })();
+    var MODES = ['random', 'ReverseChrono', 'ReverseChronoPopularity', 'ReverseChronoFollowers', 'ReverseChronoFollowersPopularity', 'ReverseChronoComments', 'CommonInterests', 'common_user_interests', 'SimilarUsersReactions', 'SimilarUsersPosts', 'CollaborativeUserUser', 'CollaborativeItemItem', 'ContentBasedFeatures', 'ContentBasedVector', 'HybridLinearRanker'];
+    var WHY = {
+      random: ['Random order among the visible posts: the control group.', 'Ordine casuale tra i post visibili: il gruppo di controllo.', function () { return ''; }],
+      ReverseChrono: ['Newest first.', 'Dal più recente.', function (p) { return t('age ', 'età ') + p.age; }],
+      ReverseChronoPopularity: ['Most reactions first, newest first on ties; if the page is not full it is completed newest first.', 'Prima le più reazioni, a parità le più recenti; se la pagina non è piena si completa con le più recenti.', function (p) { return p.likes + ' ♥'; }],
+      ReverseChronoFollowers: ['A share followers_ratio of the page comes from followed authors, newest first; the rest is newest first from everyone.', 'Una quota followers_ratio della pagina viene da autori seguiti, dal più recente; il resto è dal più recente tra tutti.', function (p) { return p.fol ? t('followed', 'seguito') : ''; }],
+      ReverseChronoFollowersPopularity: ['Same split, but each part is ordered by reactions (newest on ties); a last pass fills with newest posts.', 'Stessa divisione, ma ciascuna parte è ordinata per reazioni (a parità le più recenti); un ultimo passaggio completa con le più recenti.', function (p) { return p.likes + ' ♥'; }],
+      ReverseChronoComments: ['Top-level posts with the most comments first, newest first on ties: where the conversation is.', 'Prima i post con più commenti, a parità i più recenti: dove c’è conversazione.', function (p) { return p.comments + ' 💬'; }],
+      CommonInterests: ['Posts whose topics match the reader’s interests: followed authors first (a share followers_ratio, more matching topics first), then anyone; a random fallback if nothing matches.', 'Post i cui argomenti coincidono con gli interessi del lettore: prima gli autori seguiti (una quota followers_ratio, prima chi ha più argomenti in comune), poi tutti; ripiego casuale se nulla coincide.', function (p) { return p.match + t(' topics', ' argomenti'); }],
+      common_user_interests: ['Posts that users sharing the reader’s interests reacted to (followed users first), ordered by how many reacted.', 'Post a cui hanno reagito utenti con interessi in comune col lettore (prima gli utenti seguiti), per numero di reazioni.', function (p) { return p.ireact + t(' reactions', ' reazioni'); }],
+      SimilarUsersReactions: ['Posts liked by users who share the reader’s age group, gender or political leaning; newest first; random if none.', 'Post piaciuti a utenti con la stessa fascia di età, genere o orientamento politico del lettore; dal più recente; casuale se nessuno.', function (p) { return p.simLike ? t('liked by a similar user', 'piaciuto a un simile') : ''; }],
+      SimilarUsersPosts: ['Posts written by users who share the reader’s age group, gender or political leaning; newest first; random if none.', 'Post scritti da utenti con la stessa fascia di età, genere o orientamento politico del lettore; dal più recente; casuale se nessuno.', function (p) { return p.simAuth ? t('similar author', 'autore simile') : ''; }],
+      CollaborativeUserUser: ['Finds the 50 users whose likes overlap most with the reader’s and recommends what they liked, by number of such likers.', 'Trova i 50 utenti i cui like si sovrappongono di più con quelli del lettore e raccomanda ciò che è piaciuto a loro, per numero di questi utenti.', function (p) { return p.cf + t(' similar users', ' simili'); }],
+      CollaborativeItemItem: ['Posts that the people who liked the reader’s liked posts also liked (co-occurrence), excluding what the reader already liked.', 'Post piaciuti anche a chi ha messo like ai post piaciuti al lettore (co-occorrenza), escludendo ciò che il lettore ha già apprezzato.', function (p) { return p.co + t(' co-likes', ' co-like'); }],
+      ContentBasedFeatures: ['Counts how many topics of a post are among the topics of what the reader liked; skips posts already reacted to.', 'Conta quanti argomenti di un post sono tra quelli dei post piaciuti al lettore; salta i post già reagiti.', function (p) { return p.match + t(' topics', ' argomenti'); }],
+      ContentBasedVector: ['Like the previous one, but each matching topic weighs as many times as the reader liked it (sum of weights).', 'Come la precedente, ma ogni argomento in comune pesa quante volte il lettore lo ha apprezzato (somma dei pesi).', function (p) { return t('weight ', 'peso ') + p.weight; }],
+      HybridLinearRanker: ['Candidates from followers, popularity and collaborative filtering, then 0.28·recency + 0.25·followed + 0.15·affinity + 0.08·recent affinity + 0.16·topic similarity + 0.08·similar author.', 'Candidati da follower, popolarità e filtro collaborativo, poi 0,28·recenza + 0,25·seguito + 0,15·affinità + 0,08·affinità recente + 0,16·similarità argomenti + 0,08·autore simile.', function (p) { return t('score ', 'punteggio ') + num(p.score); }]
+    };
+    var S = { mode: 'ReverseChronoFollowersPopularity', n: 8, ratio: 0.6, vis: 36 }, out = h('div', { class: 'ys-out' });
+    var W = { 0: 6, 1: 3, 2: 1, 3: 0 }, liked = { 0: 1, 1: 1, 2: 1 };
+    var posts = (function () {
+      var r = rng(11), a = [];
+      for (var i = 0; i < 40; i++) {
+        var tp = [], nt = 1 + Math.floor(r() * 2); while (tp.length < nt) { var q = Math.floor(r() * 4); if (tp.indexOf(q) < 0) tp.push(q); }
+        var p = { id: 'p' + (i + 1), age: Math.floor(r() * 60), likes: Math.floor(Math.pow(r(), 3) * 30), comments: Math.floor(Math.pow(r(), 3) * 12), topics: tp, fol: r() < 0.3, simLike: r() < 0.3, simAuth: r() < 0.35, cf: Math.floor(Math.pow(r(), 2) * 7), co: Math.floor(Math.pow(r(), 2) * 8), ireact: Math.floor(Math.pow(r(), 2) * 9), aff: r(), seen: r() < 0.12 };
+        p.match = tp.filter(function (x) { return liked[x]; }).length; p.weight = tp.reduce(function (s, x) { return s + (W[x] || 0); }, 0); p.sim = p.weight / 10;
+        p.score = 0.28 * Math.exp(-p.age / 10) + 0.25 * (p.fol ? 1 : 0) + 0.15 * p.aff + 0.08 * p.aff * 0.5 + 0.16 * Math.min(1, p.match / 2) + 0.08 * (p.simAuth ? 1 : 0);
+        a.push(p);
+      }
+      return a;
+    })();
     function pick() {
-      var vis = posts.filter(function (p) { return p.age <= S.vis; }), r = rng(S.seed);
-      var byTime = function (a, b) { return a.age - b.age; };
-      var byTimePop = function (a, b) { return a.age - b.age || b.likes - a.likes; };
-      var res;
-      if (S.mode === 'random') { var c = vis.slice(); res = []; while (res.length < S.n && c.length) res.push(c.splice(Math.floor(r() * c.length), 1)[0]); return res; }
-      if (S.mode === 'ReverseChrono') return vis.slice().sort(byTime).slice(0, S.n);
-      if (S.mode === 'ReverseChronoPopularity') return vis.slice().sort(byTimePop).slice(0, S.n);
-      var f = vis.filter(function (p) { return p.fol; }), o = vis.filter(function (p) { return !p.fol; });
-      var cmp = S.mode === 'ReverseChronoFollowers' ? byTime : byTimePop;
-      var nf = Math.round(S.n * S.ratio);
-      res = f.sort(cmp).slice(0, nf); res = res.concat(o.sort(cmp).slice(0, S.n - res.length));
-      if (res.length < S.n) res = res.concat(f.sort(cmp).slice(res.length, S.n));
-      return res.slice(0, S.n);
+      var vis = posts.filter(function (p) { return p.age <= S.vis; }), r = rng(2), n = S.n, m = S.mode;
+      var T = function (a, b) { return a.age - b.age; }, P = function (a, b) { return b.likes - a.likes || a.age - b.age; };
+      function by() { var ks = arguments; return function (a, b) { for (var i = 0; i < ks.length; i++) { var d = ks[i](a, b); if (d) return d; } return 0; }; }
+      function fill(res, pool, cmp) { var left = pool.filter(function (p) { return res.indexOf(p) < 0; }).sort(cmp); return res.concat(left.slice(0, n - res.length)); }
+      function split(cmp, f) { var fo = vis.filter(function (p) { return p.fol && (!f || f(p)); }).sort(cmp).slice(0, Math.round(n * S.ratio)); return fill(fo, vis, cmp); }
+      function rand() { var c = vis.slice(), res = []; while (res.length < n && c.length) res.push(c.splice(Math.floor(r() * c.length), 1)[0]); return res; }
+      function ranked(f, cmp) { var res = vis.filter(f).sort(cmp).slice(0, n); return res.length ? res : rand(); }
+      if (m === 'random') return rand();
+      if (m === 'ReverseChrono') return vis.slice().sort(T).slice(0, n);
+      if (m === 'ReverseChronoPopularity') return vis.slice().sort(P).slice(0, n);
+      if (m === 'ReverseChronoFollowers') return split(T);
+      if (m === 'ReverseChronoFollowersPopularity') return split(P);
+      if (m === 'ReverseChronoComments') return vis.slice().sort(by(function (a, b) { return b.comments - a.comments; }, T)).slice(0, n);
+      if (m === 'CommonInterests') { var c1 = by(function (a, b) { return b.match - a.match; }, T); var fo = vis.filter(function (p) { return p.fol && p.match > 0; }).sort(c1).slice(0, Math.round(n * S.ratio)); var res = fill(fo, vis.filter(function (p) { return p.match > 0; }), c1); return res.length ? res : rand(); }
+      if (m === 'common_user_interests') { var c2 = by(function (a, b) { return b.ireact - a.ireact; }, T); var fo2 = vis.filter(function (p) { return p.fol && p.ireact > 0; }).sort(c2).slice(0, Math.round(n * S.ratio)); return fill(fo2, vis.filter(function (p) { return p.ireact > 0; }), c2); }
+      if (m === 'SimilarUsersReactions') return ranked(function (p) { return p.simLike; }, T);
+      if (m === 'SimilarUsersPosts') return ranked(function (p) { return p.simAuth; }, T);
+      if (m === 'CollaborativeUserUser') return ranked(function (p) { return p.cf > 0; }, by(function (a, b) { return b.cf - a.cf; }, T));
+      if (m === 'CollaborativeItemItem') return ranked(function (p) { return p.co > 0 && !p.seen; }, by(function (a, b) { return b.co - a.co; }, T));
+      if (m === 'ContentBasedFeatures') return ranked(function (p) { return p.match > 0 && !p.seen; }, by(function (a, b) { return b.match - a.match; }, T));
+      if (m === 'ContentBasedVector') return ranked(function (p) { return p.weight > 0 && !p.seen; }, by(function (a, b) { return b.weight - a.weight; }, T));
+      return vis.slice().sort(function (a, b) { return b.score - a.score; }).slice(0, n);
     }
     function draw() {
       out.textContent = '';
-      var res = pick(), fol = res.filter(function (p) { return p.fol; }).length, age = res.length ? res.reduce(function (a, p) { return a + p.age; }, 0) / res.length : 0, lk = res.length ? res.reduce(function (a, p) { return a + p.likes; }, 0) / res.length : 0;
-      out.appendChild(table([t('Post', 'Post'), t('Age (slots)', 'Età (slot)'), t('Reactions', 'Reazioni'), t('From a followed user', 'Da un utente seguito')], res.map(function (p) { return [p.id, p.age, p.likes, p.fol ? '●' : '']; })));
-      out.appendChild(h('div', { class: 'ys-kpis' }, [kpi(t('Posts shown', 'Post mostrati'), res.length), kpi(t('From followed users', 'Da utenti seguiti'), fol + '/' + res.length), kpi(t('Mean age', 'Età media'), num(age)), kpi(t('Mean reactions', 'Reazioni medie'), num(lk))]));
-      out.appendChild(h('p', { class: 'ys-lab-hint', text: t('40 synthetic posts, 30% from accounts the reader follows. Simplified: the followers modes fill a share followers_ratio of the page from followed users, each part newest first (with reactions as tie-break in the Popularity modes); the runtime applies the same idea in SQL or Redis.', '40 post sintetici, il 30% da account seguiti dal lettore. Semplificato: le modalità con follower riempiono una quota followers_ratio della pagina con utenti seguiti, ciascuna parte dal più recente (con le reazioni come spareggio nelle modalità Popularity); il runtime applica la stessa idea in SQL o Redis.') }));
+      var res = pick(), fol = res.filter(function (p) { return p.fol; }).length, age = res.length ? res.reduce(function (a, p) { return a + p.age; }, 0) / res.length : 0, lk = res.length ? res.reduce(function (a, p) { return a + p.likes; }, 0) / res.length : 0, mt = res.filter(function (p) { return p.match > 0; }).length;
+      var wy = WHY[S.mode], key = wy[2];
+      out.appendChild(msg(t(wy[0], wy[1])));
+      out.appendChild(table([t('Post', 'Post'), t('Age (slots)', 'Età (slot)'), t('Reactions', 'Reazioni'), t('Topics', 'Argomenti'), t('Followed author', 'Autore seguito'), t('What ranks it', 'Che cosa lo posiziona')], res.map(function (p) { return [p.id, p.age, p.likes, p.topics.map(function (x) { return [t('sport','sport'), t('politics','politica'), t('music','musica'), t('cooking','cucina')][x]; }).join(', '), p.fol ? '●' : '', key(p)]; })));
+      out.appendChild(h('div', { class: 'ys-kpis' }, [kpi(t('Posts shown', 'Post mostrati'), res.length), kpi(t('From followed users', 'Da utenti seguiti'), fol + '/' + res.length), kpi(t('On the reader’s topics', 'Sugli argomenti del lettore'), mt + '/' + res.length), kpi(t('Mean age', 'Età media'), num(age)), kpi(t('Mean reactions', 'Reazioni medie'), num(lk))]));
+      out.appendChild(h('p', { class: 'ys-lab-hint', text: t('40 synthetic posts, one reader who follows 30% of the authors and has liked posts on sport (6 times), politics (3) and music (1). Simplified: each mode applies its ordering rule to these features; the runtime computes the same in SQL or Redis over the real history, and many modes fall back to random or newest-first when they find nothing.', '40 post sintetici, un lettore che segue il 30% degli autori e ha apprezzato post di sport (6 volte), politica (3) e musica (1). Semplificato: ogni modalità applica la sua regola di ordinamento a queste caratteristiche; il runtime calcola lo stesso in SQL o Redis sulla storia reale, e molte modalità ripiegano su casuale o sui più recenti se non trovano nulla.') }));
     }
-    shell(host, t('One feed, five recommenders', 'Un feed, cinque raccomandatori'), [
-      select('recsys.content', [['random', 'random'], ['ReverseChrono', 'ReverseChrono'], ['ReverseChronoPopularity', 'ReverseChronoPopularity'], ['ReverseChronoFollowers', 'ReverseChronoFollowers'], ['ReverseChronoFollowersPopularity', 'ReverseChronoFollowersPopularity']], S.mode, function (v) { S.mode = v; draw(); }),
-      slider('n_posts', 3, 15, 1, 8, null, function (v) { S.n = v; draw(); }),
-      slider('followers_ratio', 0, 1, 0.1, 0.6, num, function (v) { S.ratio = v; draw(); }),
-      slider('visibility_rounds', 6, 60, 6, 36, null, function (v) { S.vis = v; draw(); })
+    shell(host, t('One feed, fifteen recommenders', 'Un feed, quindici raccomandatori'), [
+      select('recsys_type', MODES.map(function (x) { return [x, x]; }), S.mode, function (v) { S.mode = v; draw(); }),
+      slider('recommendations.default_limit', 3, 15, 1, 8, null, function (v) { S.n = v; draw(); }),
+      slider('reading_from_follower_ratio', 0, 1, 0.1, 0.6, num, function (v) { S.ratio = v; draw(); }),
+      slider('posts.visibility_rounds', 6, 60, 6, 36, null, function (v) { S.vis = v; draw(); })
     ], out);
     draw();
   };
-
-
+  /* ---------- follow: the twelve follow recommenders ---------- */
+  LABS.follow = function (host) {
+    var MODES = ['random', 'common_neighbors', 'jaccard', 'adamic_adar', 'resource_allocation', 'preferential_attachment', 'activity', 'cosine_similarity', 'co_engagement', 'random_walk_restart', 'reactions_on_content', 'two_hop_ego_sampling'];
+    var INFO = {
+      random: ['Random accounts the agent does not follow yet.', 'Account casuali che l’agente non segue ancora.', 'baseline'],
+      common_neighbors: ['Friends of friends: ranks accounts followed by the people the agent follows, by how many of them follow the account. Random fill if the agent follows nobody.', 'Amici di amici: ordina gli account seguiti da chi l’agente segue, per quanti di questi li seguono. Riempimento casuale se l’agente non segue nessuno.', 'amici in comune'],
+      jaccard: ['Common neighbours divided by the size of the union of the two following lists: penalises accounts that follow everybody.', 'Vicini in comune divisi per la dimensione dell’unione delle due liste di seguiti: penalizza gli account che seguono tutti.', 'Jaccard'],
+      adamic_adar: ['Each common neighbour counts 1/log(its degree): shared friends who are rare weigh more than hubs.', 'Ogni vicino in comune conta 1/log(suo grado): gli amici condivisi poco connessi pesano più degli hub.', 'Adamic/Adar'],
+      resource_allocation: ['Like Adamic/Adar but 1/degree: hubs weigh even less.', 'Come Adamic/Adar ma 1/grado: gli hub pesano ancora meno.', 'RA'],
+      preferential_attachment: ['Accounts with the most followers first: the rich get richer.', 'Prima gli account con più follower: i ricchi diventano più ricchi.', 'follower'],
+      activity: ['Accounts that posted most in the last recent_rounds (10) rounds.', 'Account che hanno pubblicato di più negli ultimi recent_rounds (10) turni.', 'post recenti'],
+      cosine_similarity: ['Cosine similarity of profile vectors (interests and personality traits) over a random sample of 100 candidates.', 'Similarità del coseno tra i vettori di profilo (interessi e tratti di personalità) su un campione casuale di 100 candidati.', 'coseno'],
+      co_engagement: ['Accounts that liked or commented on the same posts as the agent.', 'Account che hanno messo like o commentato gli stessi post dell’agente.', 'post in comune'],
+      random_walk_restart: ['k = 10 random walks of length 3 from the agent, restarting at the agent with probability 0.15; the most visited accounts win.', 'k = 10 passeggiate casuali di lunghezza 3 dall’agente, con ripartenza dall’agente con probabilità 0,15; vincono gli account più visitati.', 'visite'],
+      reactions_on_content: ['Accounts that reacted most to the agent’s own posts: those who already pay attention to it.', 'Account che hanno reagito di più ai post dell’agente: chi già gli presta attenzione.', 'reazioni'],
+      two_hop_ego_sampling: ['Samples 1-hop and 2-hop neighbours and scores 2-hop ones: 0.3·recent posts + 0.4·interactions with 1-hop neighbours + 0.3·triangles that following would close.', 'Campiona vicini a 1 e 2 salti e valuta quelli a 2 salti: 0,3·post recenti + 0,4·interazioni con i vicini a 1 salto + 0,3·triangoli che il follow chiuderebbe.', 'punteggio']
+    };
+    var N = 24, S = { mode: 'common_neighbors', seed: 3 }, out = h('div', { class: 'ys-out' });
+    var G = (function () {
+      var r = rng(5), f = [], i, j, post = [], vec = [], coe = [], rea = [], inter = [];
+      for (i = 0; i < N; i++) { f.push({}); post.push(Math.floor(Math.pow(r(), 2) * 9)); vec.push([r(), r(), r(), r()]); coe.push(Math.floor(Math.pow(r(), 2) * 6)); rea.push(Math.floor(Math.pow(r(), 3) * 6)); inter.push(Math.floor(r() * 5)); }
+      for (i = 0; i < N; i++) { var k = 2 + Math.floor(r() * 3); for (j = 0; j < k; j++) { var c = Math.floor(Math.pow(r(), 1.6) * N); if (c !== i) f[i][c] = 1; } }
+      f[0] = { 1: 1, 2: 1, 3: 1, 4: 1 };
+      var fol = []; for (i = 0; i < N; i++) fol.push(0); for (i = 0; i < N; i++) Object.keys(f[i]).forEach(function (c) { fol[c]++; });
+      return { f: f, fol: fol, post: post, vec: vec, coe: coe, rea: rea, inter: inter };
+    })();
+    function deg(x) { return Object.keys(G.f[x]).length + G.fol[x]; }
+    function score(c, r) {
+      var A = G.f[0], m = S.mode, common = Object.keys(A).filter(function (x) { return G.f[x][c]; });
+      var nc = common.length;
+      if (m === 'random') return r();
+      if (m === 'common_neighbors') return nc;
+      if (m === 'jaccard') { var u = Object.keys(A).length + Object.keys(G.f[c]).length - nc; return u ? nc / u : 0; }
+      if (m === 'adamic_adar') return common.reduce(function (s, x) { return s + 1 / Math.log(Math.max(2, deg(x))); }, 0);
+      if (m === 'resource_allocation') return common.reduce(function (s, x) { return s + 1 / Math.max(1, deg(x)); }, 0);
+      if (m === 'preferential_attachment') return G.fol[c];
+      if (m === 'activity') return G.post[c];
+      if (m === 'cosine_similarity') { var a = G.vec[0], b = G.vec[c], d = 0, na = 0, nb = 0; for (var i = 0; i < 4; i++) { d += a[i] * b[i]; na += a[i] * a[i]; nb += b[i] * b[i]; } return d / Math.sqrt(na * nb); }
+      if (m === 'co_engagement') return G.coe[c];
+      if (m === 'reactions_on_content') return G.rea[c];
+      if (m === 'random_walk_restart') return (G.visits || {})[c] || 0;
+      var tri = nc;
+      return 0.3 * G.post[c] / 9 + 0.4 * G.inter[c] / 5 + 0.3 * Math.min(1, tri / 3);
+    }
+    function walks(r) {
+      var v = {};
+      for (var k = 0; k < 10; k++) { var at = 0; for (var s = 0; s < 3; s++) { if (r() < 0.15) { at = 0; continue; } var nb = Object.keys(G.f[at]); if (!nb.length) { at = 0; continue; } at = +nb[Math.floor(r() * nb.length)]; if (at !== 0) v[at] = (v[at] || 0) + 1; } }
+      G.visits = v;
+    }
+    function draw() {
+      out.textContent = '';
+      var r = rng(S.seed); walks(rng(S.seed + 100));
+      var A = G.f[0], cand = []; for (var c = 1; c < N; c++) if (!A[c]) cand.push(c);
+      var sc = cand.map(function (c) { return { c: c, s: score(c, r) }; }).sort(function (a, b) { return b.s - a.s || a.c - b.c; }).slice(0, 5);
+      var info = INFO[S.mode];
+      out.appendChild(msg(t(info[0], info[1])));
+      out.appendChild(table([t('Rank', 'Posizione'), t('Account', 'Account'), t('Followers', 'Follower'), t('Common friends', 'Amici in comune'), t('Score', 'Punteggio')], sc.map(function (x, i) { return [i + 1, 'u' + x.c, G.fol[x.c], Object.keys(A).filter(function (a) { return G.f[a][x.c]; }).length, num(x.s)]; })));
+      out.appendChild(h('div', { class: 'ys-kpis' }, [kpi(t('Agent follows', 'L’agente segue'), Object.keys(A).length), kpi(t('Candidates', 'Candidati'), cand.length), kpi(t('Suggestions per call', 'Suggerimenti per chiamata'), 10), kpi(t('Top-5 mean followers', 'Follower medi nei primi 5'), num(sc.reduce(function (a, x) { return a + G.fol[x.c]; }, 0) / Math.max(1, sc.length)))]));
+      out.appendChild(h('p', { class: 'ys-lab-hint', text: t('A synthetic network of 24 accounts; the agent (u0) follows u1–u4. The real recommender returns the best 10; a rule-based agent then picks one of them at random and a language-model agent chooses.', 'Una rete sintetica di 24 account; l’agente (u0) segue u1–u4. Il raccomandatore vero restituisce i 10 migliori; un agente a regole ne sceglie poi uno a caso e un agente a modello linguistico sceglie.') }));
+    }
+    shell(host, t('One agent, twelve follow recommenders', 'Un agente, dodici raccomandatori di follow'), [
+      select('frecsys_type', MODES.map(function (x) { return [x, x]; }), S.mode, function (v) { S.mode = v; draw(); }),
+      slider('seed', 1, 9, 1, 3, null, function (v) { S.seed = v; draw(); })
+    ], out);
+    draw();
+  };
+  /* ---------- secondary: follow and unfollow after an interaction ---------- */
+  LABS.secondary = function (host) {
+    var S = { p: 0.1, back: 0.3, kind: 'rule', fit: 0.5, n: 300, seed: 4 }, out = h('div', { class: 'ys-out' });
+    function run() {
+      var r = rng(S.seed), M = 40, fol = {}, i, a = 0, nf = 0, nu = 0, nb = 0, cand = 0, before = 0, after = 0, decisions = 0;
+      for (i = 0; i < M; i++) fol[i] = r() < 0.25;
+      before = Object.keys(fol).filter(function (k) { return fol[k]; }).length;
+      var start = fol, shown = { f: 0, o: 0 };
+      for (i = 0; i < S.n; i++) {
+        var au = Math.floor(r() * M); if (r() < 0.55) { var fl = Object.keys(fol).filter(function (k) { return fol[k]; }); if (fl.length) au = +fl[Math.floor(r() * fl.length)]; }
+        shown[fol[au] ? 'f' : 'o']++;
+        if (r() >= S.p) continue;
+        cand++;
+        var d;
+        if (S.kind === 'rule') { var x = r(); d = x < 1 / 3 ? 'follow' : x < 2 / 3 ? 'unfollow' : 'none'; }
+        else { var fits = r() < S.fit; d = fits ? 'follow' : (fol[au] ? 'unfollow' : 'none'); }
+        if (d === 'follow' && !fol[au]) { fol[au] = true; nf++; decisions++; if (r() < S.back) nb++; }
+        else if (d === 'unfollow' && fol[au]) { fol[au] = false; nu++; decisions++; if (r() < S.back) nb++; }
+      }
+      after = Object.keys(fol).filter(function (k) { return fol[k]; }).length;
+      return { cand: cand, nf: nf, nu: nu, nb: nb, before: before, after: after, shown: shown };
+    }
+    function draw() {
+      out.textContent = '';
+      var R = run();
+      out.appendChild(h('div', { class: 'ys-kpis' }, [kpi(t('Interactions evaluated', 'Interazioni valutate'), R.cand + '/' + S.n), kpi(t('New follows', 'Nuovi follow'), R.nf), kpi(t('Unfollows', 'Unfollow'), R.nu), kpi(t('Reciprocal follow-backs', 'Follow reciproci'), '≈ ' + R.nb), kpi(t('Followed authors', 'Autori seguiti'), R.before + ' → ' + R.after)]));
+      out.appendChild(bars([[t('Interactions with followed authors', 'Interazioni con autori seguiti'), R.shown.f], [t('Interactions with other authors', 'Interazioni con altri autori'), R.shown.o]], Math.max(R.shown.f, R.shown.o, 1)));
+      out.appendChild(h('p', { class: 'ys-lab-hint', text: t('One agent over 300 interactions with 40 authors, 25% followed at the start; a feed that favours followed authors shows them more often (55% here), so the follows and unfollows it triggers feed back into what the agent reads. Rule-based agents draw follow, unfollow or no change with equal chance; language-model agents read the post and answer. A reciprocal answer is counted as a probability, it is evaluated on the other side of the edge.', 'Un agente su 300 interazioni con 40 autori, il 25% seguito all’inizio; un feed che favorisce gli autori seguiti li mostra più spesso (qui il 55%), quindi i follow e unfollow che innesca si riflettono su ciò che l’agente legge. Gli agenti a regole estraggono follow, unfollow o nessun cambio con uguale probabilità; gli agenti a modello leggono il post e rispondono. La risposta reciproca è contata come probabilità: si valuta dall’altro lato dell’arco.') }));
+    }
+    shell(host, t('After an interaction: follow or unfollow the author', 'Dopo un’interazione: seguire o smettere di seguire l’autore'), [
+      slider('probability_of_secondary_follow', 0, 1, 0.05, 0.1, num, function (v) { S.p = v; draw(); }),
+      slider('probability_of_follow_back', 0, 1, 0.05, 0.3, num, function (v) { S.back = v; draw(); }),
+      seg(t('Agent', 'Agente'), [['rule', t('rule-based', 'a regole')], ['llm', t('language model', 'a modello')]], S.kind, function (v) { S.kind = v; draw(); }),
+      slider(t('LLM: share of posts that fit the agent', 'LLM: quota di post affini all’agente'), 0, 1, 0.05, 0.5, num, function (v) { S.fit = v; draw(); }),
+      slider('seed', 1, 9, 1, 4, null, function (v) { S.seed = v; draw(); })
+    ], out);
+    draw();
+  };
   /* ---------- decay: follow_action_decay ---------- */
   LABS.decay = function (host) {
     var S = { fn: 'exponential', half: 168, rate: 0.01, min: 0.1, w: 0.1 }, out = h('div', { class: 'ys-out' });
@@ -219,7 +359,6 @@
     ], out);
     draw();
   };
-
 
   /* ---------- churn: population size over days ---------- */
   LABS.churn = function (host) {
@@ -252,7 +391,6 @@
     ], out);
     draw();
   };
-
 
   LABS.opinions = function (host) {
     var S = { eps: 0.25, mu: 0.5, theta: 0, n: 60, step: 0, timer: null, ops: [], seed: 4 }, out = h('div', { class: 'ys-out' }), rnd;
@@ -288,7 +426,6 @@
     reset();
   };
 
-
   /* ---------- boot ---------- */
   function boot() {
     Array.prototype.forEach.call(doc.querySelectorAll('.ys-lab[data-lab]'), function (el) {
@@ -299,4 +436,3 @@
   }
   if (doc.readyState === 'loading') doc.addEventListener('DOMContentLoaded', boot); else boot();
 })();
-
