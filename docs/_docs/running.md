@@ -7,7 +7,7 @@ time: "10 minutes"
 
 ## Install
 
-{% include shot.html file="new-hpc" caption="The "New Experiment" form with HPC enabled, which creates a YSimulator experiment." %}
+{% include shot.html file="new-hpc" caption="The “New Experiment” form with HPC enabled, which creates a YSimulator experiment." %}
 
 {% include shot.html file="experiment" caption="The experiment page of a YSimulator experiment: controls, clients and the annotation switches." %}
 

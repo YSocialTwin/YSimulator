@@ -7,7 +7,7 @@ time: "10 minuti"
 
 ## Installa
 
-{% include shot.html file="new-hpc" caption="Il modulo "New Experiment" con HPC attivo, che crea un esperimento YSimulator." %}
+{% include shot.html file="new-hpc" caption="Il modulo “New Experiment” con HPC attivo, che crea un esperimento YSimulator." %}
 
 {% include shot.html file="experiment" caption="La pagina di un esperimento YSimulator: controlli, client e interruttori delle annotazioni." %}
 
