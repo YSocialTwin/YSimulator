@@ -51,6 +51,10 @@ class Microblogging(PlatformProvider):
 
     # what the admin "frontend settings" page offers for this platform (the boxes are in templates/slots/)
     frontend_settings = (
+        # tabs next to "Home" in the feed (each one forces a chronological recommender for that view)
+        FrontendSetting("feed_tab_recent", True),  # Recent  -> ReverseChrono
+        FrontendSetting("feed_tab_friends", True),  # Friends -> ReverseChronoFollowers
+        FrontendSetting("feed_tab_popular", True),  # Popular -> ReverseChronoPopularity
         FrontendSetting(
             "filter_bubble_alpha", 2.0
         ),  # opinion similarity width (Gaussian)
@@ -120,6 +124,7 @@ class Microblogging(PlatformProvider):
 
     prompt_pack = ("prompts.json", "prompts.json")
     profile_template = "@microblogging/microblogging/profile.html"
+    edit_profile_template = "@microblogging/microblogging/edit_profile.html"
     has_interview = True
 
     def attach_routes(self) -> None:
