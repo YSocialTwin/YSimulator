@@ -4,6 +4,9 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+### Added
+- Fixed-order recommenders: `fixed:<name>` (defined by the experiment's scenario in Scenario Design) is a supported content recommender; the feed shows only the posts listed in `fixed_recsys_order`, in that order. Reader: `y_web/sdk/fixed_recsys.py` of the core. Test: `YSimulator/tests/test_fixed_recsys_modes.py`.
+
 ### Changed
 - `ysocial_platform/` serves the HPC runtime only (`simulator_types = (HPC,)`): the Flask pair YServer/YClient has its own platform in its repository, so the provider declares no Standard runtime. The pages of the platform stay here and work on their own.
 
