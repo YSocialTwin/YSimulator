@@ -19,10 +19,13 @@ from y_web.sdk import (
     PlatformProvider,
 )
 from y_web.sdk import gettext as _
+from .scenario_design import build_driver
 
 
 class Microblogging(PlatformProvider):
     key = "microblogging"
+    #: Scenario Design plugin: the driver that serves this platform (None when the plugin is absent)
+    scenario_design_driver = staticmethod(build_driver)
     #: texts of the plugin catalogue / repository metadata that the core translation catalogue carries
     catalog_texts = (
         N_("Ray-based runtime for microblogging experiments (posts, timelines, follows) built for large-scale simulations, on a single machine or on HPC clusters."),
