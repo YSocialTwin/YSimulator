@@ -20,7 +20,7 @@ def test_an_older_core_without_the_fixed_reader_degrades_to_no_fixed_modes(monke
     import importlib
     import sys
 
-    monkeypatch.setitem(sys.modules, "y_web.sdk.fixed_recsys", None)   # makes the import fail
+    monkeypatch.setitem(sys.modules, "y_web.sdk.fixed_recsys", None)  # makes the import fail
     try:
         reloaded = importlib.reload(modes)
         assert not reloaded.is_supported_content_recsys_mode("fixed:Alpha")

@@ -2,6 +2,7 @@
 
 Needs the Scenario Design plugin (``external/ScenarioDesign``) next to this repository; skipped without it.
 """
+
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -35,7 +36,13 @@ def fresh():
 
 def test_the_driver_is_a_complete_scenario_driver():
     from modules.scenario_editor.backend.drivers.base import (
-        DRIVER_API_VERSION, REQUIRED_METHODS, SUPPORTED_CONTENT_MODELS, DriverInfo, ScenarioDriver, api_major)
+        DRIVER_API_VERSION,
+        REQUIRED_METHODS,
+        SUPPORTED_CONTENT_MODELS,
+        DriverInfo,
+        ScenarioDriver,
+        api_major,
+    )
 
     driver = scenario_design.build_driver()
     assert isinstance(driver, ScenarioDriver)
@@ -51,16 +58,20 @@ def test_the_driver_is_a_complete_scenario_driver():
 def test_it_serves_only_the_experiments_of_this_platform():
     driver = scenario_design.build_driver()
     assert driver.matches(exp(PLATFORM, SIMULATOR))
-    for platform, simulator in [('microblogging', 'Standard'), ('forum', 'HPC')]:
+    for platform, simulator in [("microblogging", "Standard"), ("forum", "HPC")]:
         assert not driver.matches(exp(platform, simulator))
 
 
 def test_the_provider_declares_it():
     from ysocial_platform import provider
 
-    declared = [cls for cls in vars(provider).values()
-                if isinstance(cls, type) and getattr(cls, "key", None) == PLATFORM
-                and "scenario_design_driver" in vars(cls)]
+    declared = [
+        cls
+        for cls in vars(provider).values()
+        if isinstance(cls, type)
+        and getattr(cls, "key", None) == PLATFORM
+        and "scenario_design_driver" in vars(cls)
+    ]
     assert declared, "no provider of this platform declares scenario_design_driver"
     assert declared[0].scenario_design_driver() is scenario_design.build_driver()
 
