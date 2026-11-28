@@ -215,3 +215,7 @@ logs/
 # Simulation state files
 simulation.db
 .playwright-cli
+# Jekyll documentation site (docs/)
+docs/_site/
+docs/.jekyll-cache/
+docs/.sass-cache/

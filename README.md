@@ -9,7 +9,7 @@
 <p align="center">
   <a href="https://github.com/YSocialTwin/YSocial"><b>YSocial</b></a> &nbsp;·&nbsp;
   <a href="https://y-not.social/plugins">Plugins</a> &nbsp;·&nbsp;
-  <a href="#documentation">Documentation</a> &nbsp;·&nbsp;
+  <a href="https://ysocialtwin.github.io/YSimulator/">Documentation</a> &nbsp;·&nbsp;
   <a href="https://y-not.social/">Website</a>
 </p>
 
@@ -149,9 +149,27 @@ YSimulator/
 └── requirements.txt    # Python dependencies
 ```
 
+## YSocial integration
+
+`ysocial_platform/` is what YSocial loads to offer microblogging on the HPC runtime as a platform: the provider (`provider.py`, declared in `meta/registry.json`), the pages of the feed, the
+hashtags, the interests, the emotions, the friends, the threads and the profile, the publishing action, the templates and
+the static files of those pages. It talks to the application through `y_web.sdk` only and is never imported by the
+runtime. The header, the profile editor and the chat panel are shared with the other platforms and stay in YSocial.
+A YSocial without this repository has no microblogging; installing it adds the platform at the next start.
+
 ## Documentation
 
-**[Online documentation](https://ysocialtwin.github.io/YSimulator/)** (GitHub Pages, with search) and the [documentation index](docs/getting-started/INDEX.md), organised by topic and by use case.
+The documentation is also a guided website (English and Italian) with interactive explainers, in `docs/` (Jekyll, published on GitHub Pages by `.github/workflows/pages.yml`; the earlier MkDocs pages stay in `docs/` and can be published with the manual workflow `.github/workflows/docs.yml`). To build and read it locally you need Ruby 3.x with Bundler:
+
+```bash
+cd docs
+bundle install                 # once: installs Jekyll (see docs/Gemfile)
+bundle exec jekyll serve       # builds and serves, rebuilding on every change
+```
+
+The parameter and database-schema pages are generated: `python scripts/make_parameters_data.py` and `python scripts/make_schema_data.py` (add `--check` to verify the catalogue).
+
+**[Online documentation](https://ysocialtwin.github.io/YSimulator/)** (GitHub Pages) and the [documentation index](docs/getting-started/INDEX.md), organised by topic and by use case.
 
 ### Quick links
 

@@ -1,0 +1,2533 @@
+{
+ "schema_version": null,
+ "groups": [
+  {
+   "id": "run",
+   "title": "The run and its clock",
+   "title_it": "La run e il suo orologio",
+   "tables": [
+    "rounds"
+   ]
+  },
+  {
+   "id": "people",
+   "title": "Accounts and the follow graph",
+   "title_it": "Account e grafo dei follow",
+   "tables": [
+    "user_mgmt",
+    "follow",
+    "agent_custom_features"
+   ]
+  },
+  {
+   "id": "content",
+   "title": "Posts, comments and media",
+   "title_it": "Post, commenti e media",
+   "tables": [
+    "post",
+    "mentions",
+    "images"
+   ]
+  },
+  {
+   "id": "reactions",
+   "title": "Reactions",
+   "title_it": "Reazioni",
+   "tables": [
+    "reactions",
+    "voting"
+   ]
+  },
+  {
+   "id": "feeds",
+   "title": "Feeds, hashtags and topics",
+   "title_it": "Feed, hashtag e argomenti",
+   "tables": [
+    "recommendations",
+    "hashtags",
+    "post_hashtags",
+    "post_topics",
+    "interests",
+    "user_interest"
+   ]
+  },
+  {
+   "id": "news",
+   "title": "News",
+   "title_it": "Notizie",
+   "tables": [
+    "websites",
+    "articles",
+    "article_topics"
+   ]
+  },
+  {
+   "id": "annotations",
+   "title": "Annotations",
+   "title_it": "Annotazioni",
+   "tables": [
+    "emotions",
+    "post_emotions",
+    "post_sentiment",
+    "post_toxicity"
+   ]
+  },
+  {
+   "id": "moderation",
+   "title": "Reports and messages",
+   "title_it": "Segnalazioni e messaggi",
+   "tables": [
+    "reported",
+    "sys_messages"
+   ]
+  },
+  {
+   "id": "opinions",
+   "title": "Opinions",
+   "title_it": "Opinioni",
+   "tables": [
+    "agent_opinion"
+   ]
+  },
+  {
+   "id": "behaviour",
+   "title": "Stress and reward",
+   "title_it": "Stress e ricompensa",
+   "tables": [
+    "stress_reward"
+   ]
+  },
+  {
+   "id": "memory",
+   "title": "Agent memory",
+   "title_it": "Memoria degli agenti",
+   "tables": [
+    "memory_interaction_events",
+    "memory_social_cards",
+    "memory_thread_cards",
+    "memory_community_digests",
+    "memory_items"
+   ]
+  }
+ ],
+ "docs": {
+  "how-it-works": {
+   "en": "How it works",
+   "it": "Come funziona"
+  },
+  "agents": {
+   "en": "Agents and archetypes",
+   "it": "Agenti e archetipi"
+  },
+  "actions": {
+   "en": "What agents do",
+   "it": "Che cosa fanno gli agenti"
+  },
+  "network": {
+   "en": "Follow dynamics",
+   "it": "Dinamica dei follow"
+  },
+  "feeds": {
+   "en": "Feeds and recommenders",
+   "it": "Feed e raccomandatori"
+  },
+  "opinions": {
+   "en": "Opinion dynamics",
+   "it": "Dinamica delle opinioni"
+  },
+  "lifecycle": {
+   "en": "Churn, new agents and stress",
+   "it": "Abbandono, nuovi agenti e stress"
+  },
+  "llm": {
+   "en": "Language models and memory",
+   "it": "Modelli linguistici e memoria"
+  }
+ },
+ "tables": {
+  "agent_custom_features": {
+   "note": "Free key-value features attached to an agent.",
+   "doc": "agents",
+   "columns": [
+    {
+     "name": "id",
+     "type": "VARCHAR(36)",
+     "pk": true,
+     "null": false,
+     "default": null,
+     "fk": null,
+     "desc": "Primary key."
+    },
+    {
+     "name": "agent_id",
+     "type": "VARCHAR(36)",
+     "pk": false,
+     "null": false,
+     "default": null,
+     "fk": "user_mgmt.id",
+     "desc": "Agent concerned (user_mgmt.id)."
+    },
+    {
+     "name": "feature_type",
+     "type": "VARCHAR(20)",
+     "pk": false,
+     "null": false,
+     "default": "custom",
+     "fk": null,
+     "desc": "Kind of feature."
+    },
+    {
+     "name": "key",
+     "type": "VARCHAR(120)",
+     "pk": false,
+     "null": false,
+     "default": null,
+     "fk": null,
+     "desc": "Name."
+    },
+    {
+     "name": "value",
+     "type": "TEXT",
+     "pk": false,
+     "null": true,
+     "default": "",
+     "fk": null,
+     "desc": "Value."
+    }
+   ],
+   "rules": []
+  },
+  "agent_opinion": {
+   "note": "Opinion of an agent on a topic in a round, with the interlocutor and the post that caused the change.",
+   "doc": "opinions",
+   "columns": [
+    {
+     "name": "id",
+     "type": "VARCHAR(36)",
+     "pk": true,
+     "null": false,
+     "default": null,
+     "fk": null,
+     "desc": "Primary key."
+    },
+    {
+     "name": "agent_id",
+     "type": "VARCHAR(36)",
+     "pk": false,
+     "null": false,
+     "default": null,
+     "fk": null,
+     "desc": "Agent concerned (user_mgmt.id)."
+    },
+    {
+     "name": "tid",
+     "type": "VARCHAR(36)",
+     "pk": false,
+     "null": false,
+     "default": null,
+     "fk": null,
+     "desc": "Round concerned (rounds.id)."
+    },
+    {
+     "name": "topic_id",
+     "type": "VARCHAR(36)",
+     "pk": false,
+     "null": false,
+     "default": null,
+     "fk": "interests.iid",
+     "desc": "Topic (interests.iid)."
+    },
+    {
+     "name": "id_interacted_with",
+     "type": "VARCHAR(36)",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Account whose content changed the opinion."
+    },
+    {
+     "name": "id_post",
+     "type": "VARCHAR(36)",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": "post.id",
+     "desc": "Post that caused the change."
+    },
+    {
+     "name": "opinion",
+     "type": "FLOAT",
+     "pk": false,
+     "null": false,
+     "default": null,
+     "fk": null,
+     "desc": "Opinion in [0, 1]."
+    },
+    {
+     "name": "stubborn",
+     "type": "BOOLEAN",
+     "pk": false,
+     "null": false,
+     "default": "False",
+     "fk": null,
+     "desc": "1 if the agent does not change its mind."
+    }
+   ],
+   "rules": []
+  },
+  "article_topics": {
+   "note": "Topics assigned to an article.",
+   "doc": "actions",
+   "columns": [
+    {
+     "name": "id",
+     "type": "VARCHAR(36)",
+     "pk": true,
+     "null": false,
+     "default": null,
+     "fk": null,
+     "desc": "Primary key."
+    },
+    {
+     "name": "article_id",
+     "type": "VARCHAR(36)",
+     "pk": false,
+     "null": false,
+     "default": null,
+     "fk": "articles.id",
+     "desc": "News article (articles.id)."
+    },
+    {
+     "name": "topic_id",
+     "type": "VARCHAR(36)",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": "interests.iid",
+     "desc": "Topic (interests.iid)."
+    }
+   ],
+   "rules": [
+    "unique article_topic: (article_id, topic_id)"
+   ]
+  },
+  "articles": {
+   "note": "News articles fetched from the websites.",
+   "doc": "actions",
+   "columns": [
+    {
+     "name": "id",
+     "type": "VARCHAR(36)",
+     "pk": true,
+     "null": false,
+     "default": null,
+     "fk": null,
+     "desc": "Primary key."
+    },
+    {
+     "name": "title",
+     "type": "TEXT",
+     "pk": false,
+     "null": false,
+     "default": null,
+     "fk": null,
+     "desc": "Title."
+    },
+    {
+     "name": "summary",
+     "type": "TEXT",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Summary."
+    },
+    {
+     "name": "website_id",
+     "type": "VARCHAR(36)",
+     "pk": false,
+     "null": false,
+     "default": null,
+     "fk": "websites.id",
+     "desc": "News source (websites.id)."
+    },
+    {
+     "name": "fetched_on",
+     "type": "VARCHAR(36)",
+     "pk": false,
+     "null": false,
+     "default": null,
+     "fk": null,
+     "desc": "Round of the fetch."
+    },
+    {
+     "name": "link",
+     "type": "TEXT",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Address of the item."
+    }
+   ],
+   "rules": []
+  },
+  "emotions": {
+   "note": "Catalogue of the emotion labels (28 of the GoEmotions taxonomy in the forum).",
+   "doc": "llm",
+   "columns": [
+    {
+     "name": "id",
+     "type": "VARCHAR(36)",
+     "pk": true,
+     "null": false,
+     "default": null,
+     "fk": null,
+     "desc": "Primary key."
+    },
+    {
+     "name": "emotion",
+     "type": "TEXT",
+     "pk": false,
+     "null": false,
+     "default": null,
+     "fk": null,
+     "desc": "Name."
+    },
+    {
+     "name": "icon",
+     "type": "TEXT",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Icon."
+    }
+   ],
+   "rules": []
+  },
+  "follow": {
+   "note": "Every follow and unfollow as an event: one row per pair and action, with the round of the change.",
+   "doc": "network",
+   "columns": [
+    {
+     "name": "id",
+     "type": "VARCHAR(36)",
+     "pk": true,
+     "null": false,
+     "default": null,
+     "fk": null,
+     "desc": "Primary key."
+    },
+    {
+     "name": "user_id",
+     "type": "VARCHAR(36)",
+     "pk": false,
+     "null": false,
+     "default": null,
+     "fk": "user_mgmt.id",
+     "desc": "Account that is followed."
+    },
+    {
+     "name": "follower_id",
+     "type": "VARCHAR(36)",
+     "pk": false,
+     "null": false,
+     "default": null,
+     "fk": "user_mgmt.id",
+     "desc": "Account that follows."
+    },
+    {
+     "name": "action",
+     "type": "TEXT",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "follow or unfollow (the last action of the pair)."
+    },
+    {
+     "name": "round",
+     "type": "VARCHAR(36)",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Round of the action."
+    }
+   ],
+   "rules": []
+  },
+  "hashtags": {
+   "note": "Distinct hashtags of the run.",
+   "doc": "actions",
+   "columns": [
+    {
+     "name": "id",
+     "type": "VARCHAR(36)",
+     "pk": true,
+     "null": false,
+     "default": null,
+     "fk": null,
+     "desc": "Primary key."
+    },
+    {
+     "name": "hashtag",
+     "type": "TEXT",
+     "pk": false,
+     "null": false,
+     "default": null,
+     "fk": null,
+     "desc": "The hashtag."
+    }
+   ],
+   "rules": []
+  },
+  "images": {
+   "note": "Images (with their description from the vision model) attached to posts.",
+   "doc": "actions",
+   "columns": [
+    {
+     "name": "id",
+     "type": "VARCHAR(36)",
+     "pk": true,
+     "null": false,
+     "default": null,
+     "fk": null,
+     "desc": "Primary key."
+    },
+    {
+     "name": "url",
+     "type": "TEXT",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Address of the image."
+    },
+    {
+     "name": "description",
+     "type": "TEXT",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Description."
+    },
+    {
+     "name": "article_id",
+     "type": "VARCHAR(36)",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": "articles.id",
+     "desc": "News article (articles.id)."
+    }
+   ],
+   "rules": []
+  },
+  "interests": {
+   "note": "Catalogue of interests and topics.",
+   "doc": "agents",
+   "columns": [
+    {
+     "name": "iid",
+     "type": "VARCHAR(36)",
+     "pk": true,
+     "null": false,
+     "default": null,
+     "fk": null,
+     "desc": "Primary key."
+    },
+    {
+     "name": "interest",
+     "type": "TEXT",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Name."
+    }
+   ],
+   "rules": []
+  },
+  "memory_community_digests": {
+   "note": "Periodic digest of the community: top topics, norms, memes, polarising issues (only with memory on).",
+   "doc": "llm",
+   "columns": [
+    {
+     "name": "id",
+     "type": "INTEGER",
+     "pk": true,
+     "null": false,
+     "default": null,
+     "fk": null,
+     "desc": "Primary key."
+    },
+    {
+     "name": "run_id",
+     "type": "VARCHAR(128)",
+     "pk": false,
+     "null": false,
+     "default": null,
+     "fk": null,
+     "desc": "Run the memory belongs to."
+    },
+    {
+     "name": "round_id",
+     "type": "INTEGER",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Round concerned (rounds.id)."
+    },
+    {
+     "name": "digest_text",
+     "type": "TEXT",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Digest."
+    },
+    {
+     "name": "top_topics_json",
+     "type": "TEXT",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Top topics (JSON)."
+    },
+    {
+     "name": "norms_json",
+     "type": "TEXT",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Norms (JSON)."
+    },
+    {
+     "name": "memes_json",
+     "type": "TEXT",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Memes (JSON)."
+    },
+    {
+     "name": "polarizing_issues_json",
+     "type": "TEXT",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Polarising issues (JSON)."
+    }
+   ],
+   "rules": [
+    "unique uq_memory_community_digest: (run_id)"
+   ]
+  },
+  "memory_interaction_events": {
+   "note": "Events recorded for the agent memory: what the agent did or saw, with importance and tone (only with memory on).",
+   "doc": "llm",
+   "columns": [
+    {
+     "name": "id",
+     "type": "INTEGER",
+     "pk": true,
+     "null": false,
+     "default": null,
+     "fk": null,
+     "desc": "Primary key."
+    },
+    {
+     "name": "run_id",
+     "type": "VARCHAR(128)",
+     "pk": false,
+     "null": false,
+     "default": null,
+     "fk": null,
+     "desc": "Run the memory belongs to."
+    },
+    {
+     "name": "round_id",
+     "type": "INTEGER",
+     "pk": false,
+     "null": false,
+     "default": null,
+     "fk": null,
+     "desc": "Round concerned (rounds.id)."
+    },
+    {
+     "name": "actor_user_id",
+     "type": "VARCHAR(36)",
+     "pk": false,
+     "null": false,
+     "default": null,
+     "fk": null,
+     "desc": "Who acted."
+    },
+    {
+     "name": "target_user_id",
+     "type": "VARCHAR(36)",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Who was addressed."
+    },
+    {
+     "name": "thread_root_id",
+     "type": "VARCHAR(36)",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Thread concerned."
+    },
+    {
+     "name": "target_post_id",
+     "type": "VARCHAR(36)",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Post addressed."
+    },
+    {
+     "name": "actor_post_id",
+     "type": "VARCHAR(36)",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Post of the actor."
+    },
+    {
+     "name": "event_type",
+     "type": "VARCHAR(32)",
+     "pk": false,
+     "null": false,
+     "default": null,
+     "fk": null,
+     "desc": "Kind of event."
+    },
+    {
+     "name": "relation_label",
+     "type": "VARCHAR(32)",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Relationship label."
+    },
+    {
+     "name": "tone_label",
+     "type": "VARCHAR(32)",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Tone."
+    },
+    {
+     "name": "topics_json",
+     "type": "TEXT",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Topics (JSON)."
+    },
+    {
+     "name": "salient_claim",
+     "type": "VARCHAR(300)",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Main claim."
+    },
+    {
+     "name": "event_text",
+     "type": "TEXT",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Text of the event."
+    },
+    {
+     "name": "weight",
+     "type": "FLOAT",
+     "pk": false,
+     "null": true,
+     "default": "1.0",
+     "fk": null,
+     "desc": "Weight."
+    },
+    {
+     "name": "importance",
+     "type": "FLOAT",
+     "pk": false,
+     "null": true,
+     "default": "0.0",
+     "fk": null,
+     "desc": "Importance."
+    },
+    {
+     "name": "last_accessed_round",
+     "type": "INTEGER",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Last round read."
+    },
+    {
+     "name": "access_count",
+     "type": "INTEGER",
+     "pk": false,
+     "null": true,
+     "default": "0",
+     "fk": null,
+     "desc": "Times read."
+    },
+    {
+     "name": "created_at",
+     "type": "DATETIME",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "When the row was written."
+    }
+   ],
+   "rules": []
+  },
+  "memory_items": {
+   "note": "Searchable memory items (events, reflections, cards) with their embeddings (only with memory on).",
+   "doc": "llm",
+   "columns": [
+    {
+     "name": "id",
+     "type": "INTEGER",
+     "pk": true,
+     "null": false,
+     "default": null,
+     "fk": null,
+     "desc": "Primary key."
+    },
+    {
+     "name": "run_id",
+     "type": "VARCHAR(128)",
+     "pk": false,
+     "null": false,
+     "default": null,
+     "fk": null,
+     "desc": "Run the memory belongs to."
+    },
+    {
+     "name": "agent_user_id",
+     "type": "VARCHAR(36)",
+     "pk": false,
+     "null": false,
+     "default": null,
+     "fk": null,
+     "desc": "Owner."
+    },
+    {
+     "name": "item_type",
+     "type": "VARCHAR(32)",
+     "pk": false,
+     "null": false,
+     "default": null,
+     "fk": null,
+     "desc": "Kind of item."
+    },
+    {
+     "name": "text",
+     "type": "TEXT",
+     "pk": false,
+     "null": false,
+     "default": null,
+     "fk": null,
+     "desc": "Text."
+    },
+    {
+     "name": "metadata_json",
+     "type": "TEXT",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Metadata (JSON)."
+    },
+    {
+     "name": "source_event_id",
+     "type": "INTEGER",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Event it comes from."
+    },
+    {
+     "name": "thread_root_id",
+     "type": "VARCHAR(36)",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Thread."
+    },
+    {
+     "name": "other_user_id",
+     "type": "VARCHAR(36)",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Other agent."
+    },
+    {
+     "name": "topic_tags_json",
+     "type": "TEXT",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Topic tags (JSON)."
+    },
+    {
+     "name": "round_id",
+     "type": "INTEGER",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Round concerned (rounds.id)."
+    },
+    {
+     "name": "importance",
+     "type": "FLOAT",
+     "pk": false,
+     "null": true,
+     "default": "0.0",
+     "fk": null,
+     "desc": "Importance."
+    },
+    {
+     "name": "recency_anchor_round",
+     "type": "INTEGER",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Round used for recency."
+    },
+    {
+     "name": "last_accessed_round",
+     "type": "INTEGER",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Last round read."
+    },
+    {
+     "name": "access_count",
+     "type": "INTEGER",
+     "pk": false,
+     "null": true,
+     "default": "0",
+     "fk": null,
+     "desc": "Times read."
+    },
+    {
+     "name": "embedding_json",
+     "type": "TEXT",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Embedding (JSON)."
+    },
+    {
+     "name": "embedding_model",
+     "type": "VARCHAR(128)",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Embedding model."
+    },
+    {
+     "name": "embedding_dim",
+     "type": "INTEGER",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Embedding size."
+    },
+    {
+     "name": "embedding_status",
+     "type": "VARCHAR(32)",
+     "pk": false,
+     "null": true,
+     "default": "unavailable",
+     "fk": null,
+     "desc": "State of the embedding."
+    },
+    {
+     "name": "created_at",
+     "type": "DATETIME",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "When the row was written."
+    },
+    {
+     "name": "updated_at",
+     "type": "DATETIME",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "When the row was last updated."
+    }
+   ],
+   "rules": []
+  },
+  "memory_social_cards": {
+   "note": "Running summary of the relation between two agents: affinity, conflict, humour and trust (only with memory on).",
+   "doc": "llm",
+   "columns": [
+    {
+     "name": "id",
+     "type": "INTEGER",
+     "pk": true,
+     "null": false,
+     "default": null,
+     "fk": null,
+     "desc": "Primary key."
+    },
+    {
+     "name": "run_id",
+     "type": "VARCHAR(128)",
+     "pk": false,
+     "null": false,
+     "default": null,
+     "fk": null,
+     "desc": "Run the memory belongs to."
+    },
+    {
+     "name": "agent_user_id",
+     "type": "VARCHAR(36)",
+     "pk": false,
+     "null": false,
+     "default": null,
+     "fk": null,
+     "desc": "Owner of the card."
+    },
+    {
+     "name": "other_user_id",
+     "type": "VARCHAR(36)",
+     "pk": false,
+     "null": false,
+     "default": null,
+     "fk": null,
+     "desc": "Other agent."
+    },
+    {
+     "name": "affinity",
+     "type": "FLOAT",
+     "pk": false,
+     "null": true,
+     "default": "0.0",
+     "fk": null,
+     "desc": "Affinity."
+    },
+    {
+     "name": "conflict",
+     "type": "FLOAT",
+     "pk": false,
+     "null": true,
+     "default": "0.0",
+     "fk": null,
+     "desc": "Conflict."
+    },
+    {
+     "name": "humor",
+     "type": "FLOAT",
+     "pk": false,
+     "null": true,
+     "default": "0.0",
+     "fk": null,
+     "desc": "Humour."
+    },
+    {
+     "name": "trust",
+     "type": "FLOAT",
+     "pk": false,
+     "null": true,
+     "default": "0.0",
+     "fk": null,
+     "desc": "Trust."
+    },
+    {
+     "name": "last_relation_label",
+     "type": "VARCHAR(32)",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Last label."
+    },
+    {
+     "name": "last_round_id",
+     "type": "INTEGER",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": ""
+    },
+    {
+     "name": "last_thread_root_id",
+     "type": "VARCHAR(36)",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Last thread."
+    },
+    {
+     "name": "last_updated_round",
+     "type": "INTEGER",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Last update."
+    },
+    {
+     "name": "event_count",
+     "type": "INTEGER",
+     "pk": false,
+     "null": true,
+     "default": "0",
+     "fk": null,
+     "desc": "Events summarised."
+    },
+    {
+     "name": "summary_text",
+     "type": "TEXT",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Summary."
+    },
+    {
+     "name": "evidence_tail_json",
+     "type": "TEXT",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Latest evidence (JSON)."
+    }
+   ],
+   "rules": [
+    "unique uq_memory_social_card: (run_id, agent_user_id, other_user_id)"
+   ]
+  },
+  "memory_thread_cards": {
+   "note": "Running summary of a thread for an agent: gist, its role, main participants (only with memory on).",
+   "doc": "llm",
+   "columns": [
+    {
+     "name": "id",
+     "type": "INTEGER",
+     "pk": true,
+     "null": false,
+     "default": null,
+     "fk": null,
+     "desc": "Primary key."
+    },
+    {
+     "name": "run_id",
+     "type": "VARCHAR(128)",
+     "pk": false,
+     "null": false,
+     "default": null,
+     "fk": null,
+     "desc": "Run the memory belongs to."
+    },
+    {
+     "name": "agent_user_id",
+     "type": "VARCHAR(36)",
+     "pk": false,
+     "null": false,
+     "default": null,
+     "fk": null,
+     "desc": "Owner of the card."
+    },
+    {
+     "name": "thread_root_id",
+     "type": "VARCHAR(36)",
+     "pk": false,
+     "null": false,
+     "default": null,
+     "fk": null,
+     "desc": "Thread."
+    },
+    {
+     "name": "gist_text",
+     "type": "TEXT",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Gist."
+    },
+    {
+     "name": "my_role",
+     "type": "VARCHAR(32)",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Role of the agent in the thread."
+    },
+    {
+     "name": "participants_top_json",
+     "type": "TEXT",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Main participants (JSON)."
+    },
+    {
+     "name": "entry_points_json",
+     "type": "TEXT",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Entry points (JSON)."
+    },
+    {
+     "name": "last_seen_round_id",
+     "type": "INTEGER",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Last round seen."
+    }
+   ],
+   "rules": [
+    "unique uq_memory_thread_card: (run_id, agent_user_id, thread_root_id)"
+   ]
+  },
+  "mentions": {
+   "note": "Accounts mentioned in a post, with the round and whether the mention was answered.",
+   "doc": "actions",
+   "columns": [
+    {
+     "name": "id",
+     "type": "VARCHAR(36)",
+     "pk": true,
+     "null": false,
+     "default": null,
+     "fk": null,
+     "desc": "Primary key."
+    },
+    {
+     "name": "user_id",
+     "type": "VARCHAR(36)",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": "user_mgmt.id",
+     "desc": "Account concerned (user_mgmt.id)."
+    },
+    {
+     "name": "post_id",
+     "type": "VARCHAR(36)",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": "post.id",
+     "desc": "Post containing the mention."
+    },
+    {
+     "name": "round",
+     "type": "VARCHAR(36)",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Round in which it happened (rounds.id)."
+    },
+    {
+     "name": "answered",
+     "type": "INTEGER",
+     "pk": false,
+     "null": true,
+     "default": "0",
+     "fk": null,
+     "desc": "1 once the mentioned account answered."
+    }
+   ],
+   "rules": []
+  },
+  "post": {
+   "note": "Every post and every comment (a comment has `comment_to`): text, author, thread, round, the news or image it shares, reaction counter and moderation flags.",
+   "doc": "actions",
+   "columns": [
+    {
+     "name": "id",
+     "type": "VARCHAR(36)",
+     "pk": true,
+     "null": false,
+     "default": null,
+     "fk": null,
+     "desc": "Primary key."
+    },
+    {
+     "name": "tweet",
+     "type": "TEXT",
+     "pk": false,
+     "null": false,
+     "default": null,
+     "fk": null,
+     "desc": "Text of the post or comment."
+    },
+    {
+     "name": "post_img",
+     "type": "VARCHAR(20)",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Image of the post."
+    },
+    {
+     "name": "user_id",
+     "type": "VARCHAR(36)",
+     "pk": false,
+     "null": false,
+     "default": null,
+     "fk": "user_mgmt.id",
+     "desc": "Author."
+    },
+    {
+     "name": "comment_to",
+     "type": "VARCHAR(36)",
+     "pk": false,
+     "null": true,
+     "default": "-1",
+     "fk": null,
+     "desc": "Post a comment answers; -1 for a post."
+    },
+    {
+     "name": "thread_id",
+     "type": "VARCHAR(36)",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Thread the item belongs to."
+    },
+    {
+     "name": "round",
+     "type": "VARCHAR(36)",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": "rounds.id",
+     "desc": "Round in which it happened (rounds.id)."
+    },
+    {
+     "name": "news_id",
+     "type": "VARCHAR(36)",
+     "pk": false,
+     "null": true,
+     "default": "-1",
+     "fk": "articles.id",
+     "desc": "News article it shares."
+    },
+    {
+     "name": "shared_from",
+     "type": "VARCHAR(36)",
+     "pk": false,
+     "null": true,
+     "default": "-1",
+     "fk": null,
+     "desc": "Post it re-shares."
+    },
+    {
+     "name": "image_id",
+     "type": "VARCHAR(36)",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": "images.id",
+     "desc": "Image attached."
+    },
+    {
+     "name": "reaction_count",
+     "type": "INTEGER",
+     "pk": false,
+     "null": true,
+     "default": "0",
+     "fk": null,
+     "desc": "Reactions received."
+    },
+    {
+     "name": "moderated",
+     "type": "INTEGER",
+     "pk": false,
+     "null": false,
+     "default": "0",
+     "fk": null,
+     "desc": "1 if moderated."
+    },
+    {
+     "name": "is_moderation_comment",
+     "type": "INTEGER",
+     "pk": false,
+     "null": false,
+     "default": "0",
+     "fk": null,
+     "desc": "1 if the comment is a moderation notice."
+    }
+   ],
+   "rules": []
+  },
+  "post_emotions": {
+   "note": "Emotions attached to a post by the annotation.",
+   "doc": "llm",
+   "columns": [
+    {
+     "name": "id",
+     "type": "VARCHAR(36)",
+     "pk": true,
+     "null": false,
+     "default": null,
+     "fk": null,
+     "desc": "Primary key."
+    },
+    {
+     "name": "post_id",
+     "type": "VARCHAR(36)",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": "post.id",
+     "desc": "Post concerned (post.id)."
+    },
+    {
+     "name": "emotion_id",
+     "type": "VARCHAR(36)",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": "emotions.id",
+     "desc": "Emotion (emotions.id)."
+    }
+   ],
+   "rules": []
+  },
+  "post_hashtags": {
+   "note": "Links a post to its hashtags.",
+   "doc": "actions",
+   "columns": [
+    {
+     "name": "id",
+     "type": "VARCHAR(36)",
+     "pk": true,
+     "null": false,
+     "default": null,
+     "fk": null,
+     "desc": "Primary key."
+    },
+    {
+     "name": "post_id",
+     "type": "VARCHAR(36)",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": "post.id",
+     "desc": "Post concerned (post.id)."
+    },
+    {
+     "name": "hashtag_id",
+     "type": "VARCHAR(36)",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": "hashtags.id",
+     "desc": "Hashtag (hashtags.id)."
+    }
+   ],
+   "rules": []
+  },
+  "post_sentiment": {
+   "note": "Sentiment (VADER: negative, neutral, positive, compound) of posts, comments and reactions.",
+   "doc": "llm",
+   "columns": [
+    {
+     "name": "id",
+     "type": "VARCHAR(36)",
+     "pk": true,
+     "null": false,
+     "default": null,
+     "fk": null,
+     "desc": "Primary key."
+    },
+    {
+     "name": "post_id",
+     "type": "VARCHAR(36)",
+     "pk": false,
+     "null": false,
+     "default": null,
+     "fk": "post.id",
+     "desc": "Post concerned (post.id)."
+    },
+    {
+     "name": "neg",
+     "type": "FLOAT",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Negative."
+    },
+    {
+     "name": "pos",
+     "type": "FLOAT",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Positive."
+    },
+    {
+     "name": "neu",
+     "type": "FLOAT",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Neutral."
+    },
+    {
+     "name": "compound",
+     "type": "FLOAT",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Compound score."
+    },
+    {
+     "name": "user_id",
+     "type": "VARCHAR(36)",
+     "pk": false,
+     "null": false,
+     "default": null,
+     "fk": "user_mgmt.id",
+     "desc": "Account concerned (user_mgmt.id)."
+    },
+    {
+     "name": "round",
+     "type": "VARCHAR(36)",
+     "pk": false,
+     "null": false,
+     "default": null,
+     "fk": "rounds.id",
+     "desc": "Round in which it happened (rounds.id)."
+    },
+    {
+     "name": "sentiment_parent",
+     "type": "TEXT",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Sentiment of the parent."
+    },
+    {
+     "name": "topic_id",
+     "type": "VARCHAR(36)",
+     "pk": false,
+     "null": false,
+     "default": null,
+     "fk": "interests.iid",
+     "desc": "Topic (interests.iid)."
+    },
+    {
+     "name": "is_post",
+     "type": "INTEGER",
+     "pk": false,
+     "null": false,
+     "default": "0",
+     "fk": null,
+     "desc": "1 for a post."
+    },
+    {
+     "name": "is_comment",
+     "type": "INTEGER",
+     "pk": false,
+     "null": false,
+     "default": "0",
+     "fk": null,
+     "desc": "1 for a comment."
+    },
+    {
+     "name": "is_reaction",
+     "type": "INTEGER",
+     "pk": false,
+     "null": false,
+     "default": "0",
+     "fk": null,
+     "desc": "1 for a reaction."
+    }
+   ],
+   "rules": []
+  },
+  "post_topics": {
+   "note": "Topic of a post.",
+   "doc": "actions",
+   "columns": [
+    {
+     "name": "id",
+     "type": "VARCHAR(36)",
+     "pk": true,
+     "null": false,
+     "default": null,
+     "fk": null,
+     "desc": "Primary key."
+    },
+    {
+     "name": "post_id",
+     "type": "VARCHAR(36)",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": "post.id",
+     "desc": "Post concerned (post.id)."
+    },
+    {
+     "name": "topic_id",
+     "type": "VARCHAR(36)",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": "interests.iid",
+     "desc": "Topic (interests.iid)."
+    }
+   ],
+   "rules": []
+  },
+  "post_toxicity": {
+   "note": "Toxicity scores of a post (Perspective API or the local model).",
+   "doc": "llm",
+   "columns": [
+    {
+     "name": "id",
+     "type": "VARCHAR(36)",
+     "pk": true,
+     "null": false,
+     "default": null,
+     "fk": null,
+     "desc": "Primary key."
+    },
+    {
+     "name": "post_id",
+     "type": "VARCHAR(36)",
+     "pk": false,
+     "null": false,
+     "default": null,
+     "fk": "post.id",
+     "desc": "Post concerned (post.id)."
+    },
+    {
+     "name": "toxicity",
+     "type": "FLOAT",
+     "pk": false,
+     "null": false,
+     "default": "0",
+     "fk": null,
+     "desc": "Toxicity."
+    },
+    {
+     "name": "severe_toxicity",
+     "type": "FLOAT",
+     "pk": false,
+     "null": true,
+     "default": "0",
+     "fk": null,
+     "desc": "Severe toxicity."
+    },
+    {
+     "name": "identity_attack",
+     "type": "FLOAT",
+     "pk": false,
+     "null": true,
+     "default": "0",
+     "fk": null,
+     "desc": "Identity attack."
+    },
+    {
+     "name": "insult",
+     "type": "FLOAT",
+     "pk": false,
+     "null": true,
+     "default": "0",
+     "fk": null,
+     "desc": "Insult."
+    },
+    {
+     "name": "profanity",
+     "type": "FLOAT",
+     "pk": false,
+     "null": true,
+     "default": "0",
+     "fk": null,
+     "desc": "Profanity."
+    },
+    {
+     "name": "threat",
+     "type": "FLOAT",
+     "pk": false,
+     "null": true,
+     "default": "0",
+     "fk": null,
+     "desc": "Threat."
+    },
+    {
+     "name": "sexually_explicit",
+     "type": "FLOAT",
+     "pk": false,
+     "null": true,
+     "default": "0",
+     "fk": null,
+     "desc": "Sexually explicit."
+    },
+    {
+     "name": "flirtation",
+     "type": "FLOAT",
+     "pk": false,
+     "null": true,
+     "default": "0",
+     "fk": null,
+     "desc": "Flirtation."
+    }
+   ],
+   "rules": []
+  },
+  "reactions": {
+   "note": "The reaction of an account to a post (like, love, laugh, angry, sad), one row each.",
+   "doc": "actions",
+   "columns": [
+    {
+     "name": "id",
+     "type": "VARCHAR(36)",
+     "pk": true,
+     "null": false,
+     "default": null,
+     "fk": null,
+     "desc": "Primary key."
+    },
+    {
+     "name": "post_id",
+     "type": "VARCHAR(36)",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": "post.id",
+     "desc": "Post reacted to."
+    },
+    {
+     "name": "user_id",
+     "type": "VARCHAR(36)",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": "user_mgmt.id",
+     "desc": "Account concerned (user_mgmt.id)."
+    },
+    {
+     "name": "type",
+     "type": "TEXT",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Kind of reaction (like, love, laugh, angry, sad)."
+    },
+    {
+     "name": "round",
+     "type": "VARCHAR(36)",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": "rounds.id",
+     "desc": "Round in which it happened (rounds.id)."
+    }
+   ],
+   "rules": []
+  },
+  "recommendations": {
+   "note": "The list of posts the recommender offered to an account in a round.",
+   "doc": "feeds",
+   "columns": [
+    {
+     "name": "id",
+     "type": "VARCHAR(36)",
+     "pk": true,
+     "null": false,
+     "default": null,
+     "fk": null,
+     "desc": "Primary key."
+    },
+    {
+     "name": "user_id",
+     "type": "VARCHAR(36)",
+     "pk": false,
+     "null": false,
+     "default": null,
+     "fk": "user_mgmt.id",
+     "desc": "Account concerned (user_mgmt.id)."
+    },
+    {
+     "name": "post_ids",
+     "type": "TEXT",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Posts offered, in order."
+    },
+    {
+     "name": "round",
+     "type": "VARCHAR(36)",
+     "pk": false,
+     "null": false,
+     "default": null,
+     "fk": "rounds.id",
+     "desc": "Round in which it happened (rounds.id)."
+    }
+   ],
+   "rules": []
+  },
+  "reported": {
+   "note": "Reports filed by an account against another account or a post.",
+   "doc": "actions",
+   "columns": [
+    {
+     "name": "id",
+     "type": "VARCHAR(36)",
+     "pk": true,
+     "null": false,
+     "default": null,
+     "fk": null,
+     "desc": "Primary key."
+    },
+    {
+     "name": "type",
+     "type": "TEXT",
+     "pk": false,
+     "null": false,
+     "default": null,
+     "fk": null,
+     "desc": "Kind of report."
+    },
+    {
+     "name": "to_uid",
+     "type": "VARCHAR(36)",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": "user_mgmt.id",
+     "desc": "Account reported."
+    },
+    {
+     "name": "to_post",
+     "type": "VARCHAR(36)",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": "post.id",
+     "desc": "Post reported."
+    },
+    {
+     "name": "from_uid",
+     "type": "VARCHAR(36)",
+     "pk": false,
+     "null": false,
+     "default": null,
+     "fk": "user_mgmt.id",
+     "desc": "Account that reported."
+    },
+    {
+     "name": "tid",
+     "type": "VARCHAR(36)",
+     "pk": false,
+     "null": false,
+     "default": null,
+     "fk": "rounds.id",
+     "desc": "Round concerned (rounds.id)."
+    }
+   ],
+   "rules": []
+  },
+  "rounds": {
+   "note": "The time axis: one row per round (a simulated hour), with day and hour; every `round` column points here.",
+   "doc": "how-it-works",
+   "columns": [
+    {
+     "name": "id",
+     "type": "VARCHAR(36)",
+     "pk": true,
+     "null": false,
+     "default": null,
+     "fk": null,
+     "desc": "Primary key."
+    },
+    {
+     "name": "day",
+     "type": "INTEGER",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Simulated day."
+    },
+    {
+     "name": "hour",
+     "type": "INTEGER",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Hour of the day (0-23)."
+    }
+   ],
+   "rules": [
+    "unique uq_round_day_hour: (day, hour)"
+   ]
+  },
+  "stress_reward": {
+   "note": "Variations of stress and reward of each account, with the event that caused them and the round.",
+   "doc": "lifecycle",
+   "columns": [
+    {
+     "name": "id",
+     "type": "VARCHAR(36)",
+     "pk": true,
+     "null": false,
+     "default": null,
+     "fk": null,
+     "desc": "Primary key."
+    },
+    {
+     "name": "uid",
+     "type": "VARCHAR(36)",
+     "pk": false,
+     "null": false,
+     "default": null,
+     "fk": "user_mgmt.id",
+     "desc": "Account concerned (user_mgmt.id)."
+    },
+    {
+     "name": "variable",
+     "type": "VARCHAR(16)",
+     "pk": false,
+     "null": false,
+     "default": null,
+     "fk": null,
+     "desc": "stress or reward."
+    },
+    {
+     "name": "value",
+     "type": "FLOAT",
+     "pk": false,
+     "null": false,
+     "default": null,
+     "fk": null,
+     "desc": "Variation."
+    },
+    {
+     "name": "type",
+     "type": "VARCHAR(16)",
+     "pk": false,
+     "null": false,
+     "default": null,
+     "fk": null,
+     "desc": "Kind of event."
+    },
+    {
+     "name": "action",
+     "type": "VARCHAR(64)",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Event that caused it."
+    },
+    {
+     "name": "tid",
+     "type": "VARCHAR(36)",
+     "pk": false,
+     "null": false,
+     "default": null,
+     "fk": "rounds.id",
+     "desc": "Round concerned (rounds.id)."
+    }
+   ],
+   "rules": [
+    "check ck_stress_reward_type: type IN ('aggregate', 'variation')",
+    "check ck_stress_reward_value: (type = 'aggregate' AND value >= 0 AND value <= 1) OR (type = 'variation' AND value >= -1 AND value <= 1)",
+    "check ck_stress_reward_variable: variable IN ('stress', 'reward')"
+   ]
+  },
+  "sys_messages": {
+   "note": "System messages to an account (for example a moderation notice), with their duration.",
+   "doc": "actions",
+   "columns": [
+    {
+     "name": "id",
+     "type": "VARCHAR(36)",
+     "pk": true,
+     "null": false,
+     "default": null,
+     "fk": null,
+     "desc": "Primary key."
+    },
+    {
+     "name": "type",
+     "type": "TEXT",
+     "pk": false,
+     "null": false,
+     "default": null,
+     "fk": null,
+     "desc": "Kind of message."
+    },
+    {
+     "name": "to_uid",
+     "type": "VARCHAR(36)",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": "user_mgmt.id",
+     "desc": "Receiver."
+    },
+    {
+     "name": "message",
+     "type": "TEXT",
+     "pk": false,
+     "null": false,
+     "default": null,
+     "fk": null,
+     "desc": "Text."
+    },
+    {
+     "name": "from_round",
+     "type": "VARCHAR(36)",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": "rounds.id",
+     "desc": "Round it starts."
+    },
+    {
+     "name": "duration",
+     "type": "INTEGER",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Rounds it lasts."
+    }
+   ],
+   "rules": []
+  },
+  "user_interest": {
+   "note": "Interests of an account, with the round in which they were recorded.",
+   "doc": "agents",
+   "columns": [
+    {
+     "name": "id",
+     "type": "VARCHAR(36)",
+     "pk": true,
+     "null": false,
+     "default": null,
+     "fk": null,
+     "desc": "Primary key."
+    },
+    {
+     "name": "user_id",
+     "type": "VARCHAR(36)",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": "user_mgmt.id",
+     "desc": "Account concerned (user_mgmt.id)."
+    },
+    {
+     "name": "interest_id",
+     "type": "VARCHAR(36)",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": "interests.iid",
+     "desc": "Interest (interests.iid)."
+    },
+    {
+     "name": "round_id",
+     "type": "VARCHAR(36)",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": "rounds.id",
+     "desc": "Round concerned (rounds.id)."
+    }
+   ],
+   "rules": []
+  },
+  "user_mgmt": {
+   "note": "One row per account (agent, page or human): persona, Big Five traits, archetype, recommenders, activity settings, joined and left rounds.",
+   "doc": "agents",
+   "columns": [
+    {
+     "name": "id",
+     "type": "VARCHAR(36)",
+     "pk": true,
+     "null": false,
+     "default": null,
+     "fk": null,
+     "desc": "Primary key."
+    },
+    {
+     "name": "username",
+     "type": "VARCHAR(50)",
+     "pk": false,
+     "null": false,
+     "default": null,
+     "fk": null,
+     "desc": "Unique name."
+    },
+    {
+     "name": "email",
+     "type": "VARCHAR(50)",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Address of the account."
+    },
+    {
+     "name": "password",
+     "type": "VARCHAR(400)",
+     "pk": false,
+     "null": false,
+     "default": null,
+     "fk": null,
+     "desc": "Password of a human account (hashed)."
+    },
+    {
+     "name": "user_type",
+     "type": "TEXT",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Kind of model that drives the agent."
+    },
+    {
+     "name": "leaning",
+     "type": "TEXT",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Political leaning."
+    },
+    {
+     "name": "age",
+     "type": "INTEGER",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Age."
+    },
+    {
+     "name": "oe",
+     "type": "TEXT",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Big Five: openness."
+    },
+    {
+     "name": "co",
+     "type": "TEXT",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Big Five: conscientiousness."
+    },
+    {
+     "name": "ex",
+     "type": "TEXT",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Big Five: extraversion."
+    },
+    {
+     "name": "ag",
+     "type": "TEXT",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Big Five: agreeableness."
+    },
+    {
+     "name": "ne",
+     "type": "TEXT",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Big Five: neuroticism."
+    },
+    {
+     "name": "recsys_type",
+     "type": "TEXT",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Content recommender of the agent."
+    },
+    {
+     "name": "language",
+     "type": "TEXT",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Language."
+    },
+    {
+     "name": "owner",
+     "type": "TEXT",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Experiment owner."
+    },
+    {
+     "name": "education_level",
+     "type": "TEXT",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Education level."
+    },
+    {
+     "name": "joined_on",
+     "type": "VARCHAR(36)",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": "rounds.id",
+     "desc": "Round of arrival."
+    },
+    {
+     "name": "frecsys_type",
+     "type": "TEXT",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Follow recommender of the agent."
+    },
+    {
+     "name": "round_actions",
+     "type": "INTEGER",
+     "pk": false,
+     "null": false,
+     "default": "3",
+     "fk": null,
+     "desc": "Actions per slot."
+    },
+    {
+     "name": "gender",
+     "type": "TEXT",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Gender."
+    },
+    {
+     "name": "nationality",
+     "type": "TEXT",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Nationality."
+    },
+    {
+     "name": "toxicity",
+     "type": "TEXT",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Toxicity level of the persona."
+    },
+    {
+     "name": "is_page",
+     "type": "INTEGER",
+     "pk": false,
+     "null": false,
+     "default": "0",
+     "fk": null,
+     "desc": "1 for a page agent (news publisher)."
+    },
+    {
+     "name": "left_on",
+     "type": "VARCHAR(36)",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Round of departure; empty while active."
+    },
+    {
+     "name": "daily_activity_level",
+     "type": "INTEGER",
+     "pk": false,
+     "null": true,
+     "default": "1",
+     "fk": null,
+     "desc": "Daily activity level."
+    },
+    {
+     "name": "profession",
+     "type": "TEXT",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Profession."
+    },
+    {
+     "name": "activity_profile",
+     "type": "TEXT",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Named activity profile."
+    },
+    {
+     "name": "archetype",
+     "type": "TEXT",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Archetype (validator, broadcaster, explorer)."
+    },
+    {
+     "name": "cover_image",
+     "type": "VARCHAR(400)",
+     "pk": false,
+     "null": false,
+     "default": "",
+     "fk": null,
+     "desc": "Cover image."
+    },
+    {
+     "name": "last_active_day",
+     "type": "INTEGER",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Last day the account acted."
+    }
+   ],
+   "rules": [
+    "unique None: (username)"
+   ]
+  },
+  "voting": {
+   "note": "Votes of an account on a content item.",
+   "doc": "actions",
+   "columns": [
+    {
+     "name": "vid",
+     "type": "VARCHAR(36)",
+     "pk": true,
+     "null": false,
+     "default": null,
+     "fk": null,
+     "desc": "Primary key."
+    },
+    {
+     "name": "round",
+     "type": "VARCHAR(36)",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Round in which it happened (rounds.id)."
+    },
+    {
+     "name": "user_id",
+     "type": "VARCHAR(36)",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": "user_mgmt.id",
+     "desc": "Account concerned (user_mgmt.id)."
+    },
+    {
+     "name": "preference",
+     "type": "TEXT",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Vote."
+    },
+    {
+     "name": "content_type",
+     "type": "TEXT",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Kind of content."
+    },
+    {
+     "name": "content_id",
+     "type": "VARCHAR(36)",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Content voted."
+    }
+   ],
+   "rules": []
+  },
+  "websites": {
+   "note": "News sources (RSS feeds) the platform reads from.",
+   "doc": "actions",
+   "columns": [
+    {
+     "name": "id",
+     "type": "VARCHAR(36)",
+     "pk": true,
+     "null": false,
+     "default": null,
+     "fk": null,
+     "desc": "Primary key."
+    },
+    {
+     "name": "name",
+     "type": "TEXT",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Name."
+    },
+    {
+     "name": "rss",
+     "type": "TEXT",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Feed address."
+    },
+    {
+     "name": "leaning",
+     "type": "TEXT",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Political leaning."
+    },
+    {
+     "name": "category",
+     "type": "TEXT",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Category."
+    },
+    {
+     "name": "last_fetched",
+     "type": "VARCHAR(36)",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Last fetch."
+    },
+    {
+     "name": "country",
+     "type": "TEXT",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Country."
+    },
+    {
+     "name": "language",
+     "type": "TEXT",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Language."
+    }
+   ],
+   "rules": []
+  }
+ }
+}

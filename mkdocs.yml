@@ -77,6 +77,18 @@ plugins:
       separator: '[\s\-,:!=\[\]()"/]+|(?!\b)(?=[A-Z][a-z])|\.(?!\d)|&[lg]t;'
 
 # Navigation structure
+# Files of the Jekyll site (docs/_config.yml), not part of this MkDocs build
+exclude_docs: |
+  _config.yml
+  _data/
+  _includes/
+  _layouts/
+  _docs/
+  assets/
+  Gemfile
+  Gemfile.lock
+  _site/
+
 nav:
   - Home: index.md
   - Getting Started:

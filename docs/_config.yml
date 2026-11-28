@@ -1,0 +1,73 @@
+# YSimulator documentation. Built by GitHub Actions (.github/workflows/pages.yml) and served by GitHub Pages.
+title: "YSimulator"
+subtitle: "The distributed simulator of YSocial: a Twitter/X-style platform on Ray"
+description: >-
+  YSimulator is the HPC simulator of YSocial: a server that owns the clock and the database and clients that host rule-based or
+  language-model agents, coordinated by a barrier on Ray. Agents post, comment, read, share, follow and search, are fed by 15 content
+  and 12 follow recommenders, and can change opinion, leave and join. This site explains how it works, how to configure it and what
+  the settings do. In English and Italian.
+
+url: "https://ysocialtwin.github.io"
+baseurl: "/YSimulator"
+
+ysocial_version: "4.0.0"
+
+repo_url: "https://github.com/YSocialTwin/YSimulator"
+ysocial_url: "https://y-not.social"
+ysocial_repo: "https://github.com/YSocialTwin/YSocial"
+
+markdown: kramdown
+kramdown:
+  input: GFM
+  syntax_highlighter: rouge
+  hard_wrap: false
+highlighter: rouge
+
+collections:
+  docs:
+    output: true
+    permalink: /:path/
+
+defaults:
+  - scope:
+      path: ""
+      type: docs
+    values:
+      layout: doc
+      lang: en
+  - scope:
+      path: "_docs/it"
+      type: docs
+    values:
+      layout: doc
+      lang: it
+
+plugins: []
+
+exclude:
+  - Gemfile
+  - Gemfile.lock
+  - README.md
+  - AGENT_POPULATION_OPTIMIZATION.md
+  - AGENT_POPULATION_PATH_FIX.md
+  - LLM_PAGE_NEWS_SHARING.md
+  - POPULATION_AND_CONTENT_REQUIREMENTS.md
+  - SESSION_SUMMARY.md
+  - index.md
+  - banner.png
+  - agents/
+  - analysis/
+  - architecture/
+  - configuration/
+  - data-storage/
+  - development/
+  - features/
+  - getting-started/
+  - logging/
+  - refactoring/
+  - testing/
+  - troubleshooting/
+  - vendor/
+  - node_modules/
+  - .sass-cache/
+  - .jekyll-cache/
